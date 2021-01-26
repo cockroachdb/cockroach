@@ -700,7 +700,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// calculate selectivity = 1/9 + 1/9 + 1/9 = 1/3 in spanStatsUnion, which
 	// is too high. Instead, we should use the value calculated from the
 	// combined spans, which in this case is simply 1/9.
-	s.Selectivity = min(s.Selectivity, spanStatsUnion.Selectivity)
+	s.Selectivity = props.MinSelectivity(s.Selectivity, spanStatsUnion.Selectivity)
 	s.RowCount = min(s.RowCount, spanStatsUnion.RowCount)
 
 	sb.finalizeFromCardinality(relProps)
@@ -807,7 +807,7 @@ func (sb *statisticsBuilder) constrainScan(
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
-	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
@@ -821,7 +821,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 		colStat.Histogram = inputColStat.Histogram
 	}
 
-	if s.Selectivity != 1 {
+	if s.Selectivity != props.OneSelectivity {
 		tableStats := sb.makeTableStatistics(scan.Table)
 		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
 	}
@@ -865,7 +865,7 @@ func (sb *statisticsBuilder) colStatSelect(
 	// filter conditions were pushed down into the input after s.Selectivity
 	// was calculated. For example, an index scan or index join created during
 	// exploration could absorb some of the filter conditions.
-	selectivity := s.RowCount / inputStats.RowCount
+	selectivity := props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 	colStat.ApplySelectivity(selectivity, inputStats.RowCount)
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
@@ -993,7 +993,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
-	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
+	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -1006,7 +1006,7 @@ func (sb *statisticsBuilder) colStatInvertedFilter(
 	inputStats := &invFilter.Input.Relational().Stats
 	colStat := sb.copyColStatFromChild(colSet, invFilter, s)
 
-	if s.Selectivity != 1 {
+	if s.Selectivity != props.OneSelectivity {
 		colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	}
 
@@ -1047,7 +1047,7 @@ func (sb *statisticsBuilder) buildJoin(
 	// are implicit equality conditions on KeyCols.
 	if h.filterIsTrue {
 		s.RowCount = leftStats.RowCount * rightStats.RowCount
-		s.Selectivity = 1
+		s.Selectivity = props.OneSelectivity
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
@@ -1070,14 +1070,14 @@ func (sb *statisticsBuilder) buildJoin(
 			// Don't set the row count to 0 since we can't guarantee that the
 			// cardinality is 0.
 			s.RowCount = epsilon
-			s.Selectivity = epsilon
+			s.Selectivity = props.MakeSelectivity(epsilon)
 		}
 		return
 	}
 
 	// Shortcut if the ON condition is false or there is a contradiction.
 	if h.filters.IsFalse() {
-		s.Selectivity = 0
+		s.Selectivity = props.ZeroSelectivity
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			s.RowCount = 0
@@ -1099,7 +1099,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 			s.RowCount = leftStats.RowCount
-			s.Selectivity = 1
+			s.Selectivity = props.OneSelectivity
 		}
 		return
 	}
@@ -1140,7 +1140,7 @@ func (sb *statisticsBuilder) buildJoin(
 			// This is like an index join, so apply a selectivity that will result
 			// in leftStats.RowCount rows.
 			if rightStats.RowCount != 0 {
-				s.ApplySelectivity(1 / rightStats.RowCount)
+				s.ApplySelectivity(props.MakeSelectivity(1 / rightStats.RowCount))
 			}
 		} else {
 			// Add the self join columns to equivReps so they are included in the
@@ -1165,7 +1165,7 @@ func (sb *statisticsBuilder) buildJoin(
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
-	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
+	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
@@ -1218,7 +1218,7 @@ func (sb *statisticsBuilder) buildJoin(
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
-		s.Selectivity = max(1-s.Selectivity, epsilon)
+		s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
 
 		// Converting column stats is error-prone. If any column stats are needed,
 		// colStatJoin will use the selectivity calculated above to estimate the
@@ -1401,7 +1401,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				rightNullCount,
 				rightProps.Stats.RowCount,
 				s.RowCount,
-				s.Selectivity*inputRowCount,
+				s.Selectivity.AsFloat()*inputRowCount,
 			)
 
 			// Ensure distinct count is non-zero.
@@ -1574,7 +1574,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		// of any filters on the input.
 		inputStats := &inputProps.Stats
 		tableStats := sb.makeTableStatistics(join.Table)
-		selectivity := inputStats.RowCount / tableStats.RowCount
+		selectivity := props.MakeSelectivity(inputStats.RowCount / tableStats.RowCount)
 		lookupColStat.ApplySelectivity(selectivity, tableStats.RowCount)
 
 		// Multiply the distinct counts in case colStat.DistinctCount is
@@ -1976,7 +1976,7 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 		hardLimit := *cnst.Value.(*tree.DInt)
 		if hardLimit > 0 {
 			s.RowCount = min(float64(hardLimit), inputStats.RowCount)
-			s.Selectivity = s.RowCount / inputStats.RowCount
+			s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 		}
 	}
 
@@ -2029,7 +2029,7 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 		} else if hardOffset > 0 {
 			s.RowCount = inputStats.RowCount - float64(hardOffset)
 		}
-		s.Selectivity = s.RowCount / inputStats.RowCount
+		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -2557,7 +2557,7 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	if colStat.Histogram != nil {
 		valuesCount := colStat.Histogram.ValuesCount()
 		if valuesCount > rowCount {
-			colStat.Histogram = colStat.Histogram.ApplySelectivity(rowCount / valuesCount)
+			colStat.Histogram = colStat.Histogram.ApplySelectivity(props.MakeSelectivity(rowCount / valuesCount))
 		}
 	}
 }
@@ -2866,7 +2866,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
-	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
 
 	// Update distinct and null counts based on equivalencies; this should
 	// happen after selectivityFromMultiColDistinctCounts and
@@ -3465,7 +3465,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 //
 func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
+) (selectivity props.Selectivity) {
 	// Respect the session setting OptimizerUseMultiColStats.
 	if !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
 		return sb.selectivityFromSingleColDistinctCounts(cols, e, s)
@@ -3476,11 +3476,11 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 	// First calculate the selectivity from equation (1) (see function comment),
 	// and collect the inputs to equation (2).
-	singleColSelectivity := 1.0
+	singleColSelectivity := props.OneSelectivity
 	newDistinctProduct, oldDistinctProduct := 1.0, 1.0
 	maxNewDistinct, maxOldDistinct := float64(0), float64(0)
 	multiColNullCount := -1.0
-	minLocalSel := math.MaxFloat64
+	minLocalSel := props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
 		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
 		if !ok {
@@ -3490,11 +3490,11 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
 		localSel := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
-		singleColSelectivity *= localSel
+		singleColSelectivity.Multiply(localSel)
 
 		// Don't bother including columns in the multi-column calculation that
 		// don't contribute to the selectivity.
-		if localSel == 1 {
+		if localSel == props.OneSelectivity {
 			multiColSet.Remove(col)
 			continue
 		}
@@ -3508,9 +3508,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		if inputColStat.DistinctCount > maxOldDistinct {
 			maxOldDistinct = inputColStat.DistinctCount
 		}
-		if localSel < minLocalSel {
-			minLocalSel = localSel
-		}
+		minLocalSel = props.MinSelectivity(localSel, minLocalSel)
 		if multiColNullCount < 0 {
 			multiColNullCount = inputStats.RowCount
 		}
@@ -3575,16 +3573,14 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 			selLowDistinctCountCols := sb.selectivityFromMultiColDistinctCounts(
 				lowDistinctCountCols, e, s,
 			)
-			if selLowDistinctCountCols < minLocalSel {
-				minLocalSel = selLowDistinctCountCols
-			}
+			minLocalSel = props.MinSelectivity(minLocalSel, selLowDistinctCountCols)
 		}
 	}
-	multiColSelectivity = min(multiColSelectivity, minLocalSel)
+	multiColSelectivity = props.MinSelectivity(multiColSelectivity, minLocalSel)
 
 	// As described in the function comment, we actually return a weighted sum
 	// of multi-column and single-column selectivity estimates.
-	return (1-multiColWeight)*singleColSelectivity + multiColWeight*multiColSelectivity
+	return props.MakeSelectivity((1-multiColWeight)*singleColSelectivity.AsFloat() + multiColWeight*multiColSelectivity.AsFloat())
 }
 
 // selectivityFromSingleColDistinctCounts calculates the selectivity of a
@@ -3594,8 +3590,8 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // comment above that function for details.
 func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
-	selectivity = 1.0
+) (selectivity props.Selectivity) {
+	selectivity = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
 		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
 		if !ok {
@@ -3603,12 +3599,10 @@ func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 		}
 
 		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
-		selectivity *= sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+		selectivity.Multiply(sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount))
 	}
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 // selectivityFromDistinctCount calculates the selectivity of a filter by using
@@ -3616,7 +3610,7 @@ func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 // columns before and after the filter was applied.
 func (sb *statisticsBuilder) selectivityFromDistinctCount(
 	colStat, inputColStat *props.ColumnStatistic, inputRowCount float64,
-) float64 {
+) props.Selectivity {
 	newDistinct := colStat.DistinctCount
 	oldDistinct := inputColStat.DistinctCount
 
@@ -3630,8 +3624,8 @@ func (sb *statisticsBuilder) selectivityFromDistinctCount(
 	}
 
 	// Calculate the selectivity of the predicate.
-	nonNullSelectivity := fraction(newDistinct, oldDistinct)
-	nullSelectivity := fraction(colStat.NullCount, inputColStat.NullCount)
+	nonNullSelectivity := props.MakeSelectivity(fraction(newDistinct, oldDistinct))
+	nullSelectivity := props.MakeSelectivity(fraction(colStat.NullCount, inputColStat.NullCount))
 	return sb.predicateSelectivity(
 		nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputRowCount,
 	)
@@ -3645,8 +3639,8 @@ func (sb *statisticsBuilder) selectivityFromDistinctCount(
 // (# values in histogram after filter) / (# values in histogram before filter).
 func (sb *statisticsBuilder) selectivityFromHistograms(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
-	selectivity = 1.0
+) (selectivity props.Selectivity) {
+	selectivity = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
 		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
 		if !ok {
@@ -3664,16 +3658,14 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		oldCount := oldHist.ValuesCount()
 
 		// Calculate the selectivity of the predicate.
-		nonNullSelectivity := fraction(newCount, oldCount)
-		nullSelectivity := fraction(colStat.NullCount, inputColStat.NullCount)
-		selectivity *= sb.predicateSelectivity(
+		nonNullSelectivity := props.MakeSelectivity(fraction(newCount, oldCount))
+		nullSelectivity := props.MakeSelectivity(fraction(colStat.NullCount, inputColStat.NullCount))
+		selectivity.Multiply(sb.predicateSelectivity(
 			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
-		)
+		))
 	}
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 // selectivityFromNullsRemoved calculates the selectivity from null-rejecting
@@ -3682,23 +3674,21 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 // should be designated by ignoreCols.
 func (sb *statisticsBuilder) selectivityFromNullsRemoved(
 	e RelExpr, notNullCols opt.ColSet, ignoreCols opt.ColSet,
-) (selectivity float64) {
-	selectivity = 1.0
+) (selectivity props.Selectivity) {
+	selectivity = props.OneSelectivity
 	notNullCols.ForEach(func(col opt.ColumnID) {
 		if !ignoreCols.Contains(col) {
 			inputColStat, inputStats := sb.colStatFromInput(opt.MakeColSet(col), e)
-			selectivity *= sb.predicateSelectivity(
-				1, /* nonNullSelectivity */
-				0, /* nullSelectivity */
+			selectivity.Multiply(sb.predicateSelectivity(
+				props.OneSelectivity,  /* nonNullSelectivity */
+				props.ZeroSelectivity, /* nullSelectivity */
 				inputColStat.NullCount,
 				inputStats.RowCount,
-			)
+			))
 		}
 	})
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 // predicateSelectivity calculates the selectivity of a predicate, using the
@@ -3713,35 +3703,31 @@ func (sb *statisticsBuilder) selectivityFromNullsRemoved(
 //     (fraction of null values preserved) * (number of null input rows)
 //
 func (sb *statisticsBuilder) predicateSelectivity(
-	nonNullSelectivity, nullSelectivity, inputNullCount, inputRowCount float64,
-) float64 {
-	outRowCount := nonNullSelectivity*(inputRowCount-inputNullCount) + nullSelectivity*inputNullCount
-	sel := outRowCount / inputRowCount
+	nonNullSelectivity, nullSelectivity props.Selectivity, inputNullCount, inputRowCount float64,
+) props.Selectivity {
+	outRowCount := nonNullSelectivity.AsFloat()*(inputRowCount-inputNullCount) + nullSelectivity.AsFloat()*inputNullCount
+	sel := props.MakeSelectivity(outRowCount / inputRowCount)
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(sel, epsilon)
+	return sel
 }
 
 // selectivityFromEquivalencies determines the selectivity of equality
 // constraints. It must be called before applyEquivalencies.
 func (sb *statisticsBuilder) selectivityFromEquivalencies(
 	equivReps opt.ColSet, filterFD *props.FuncDepSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
-	selectivity = 1.0
+) (selectivity props.Selectivity) {
+	selectivity = props.OneSelectivity
 	equivReps.ForEach(func(i opt.ColumnID) {
 		equivGroup := filterFD.ComputeEquivGroup(i)
-		selectivity *= sb.selectivityFromEquivalency(equivGroup, e, s)
+		selectivity.Multiply(sb.selectivityFromEquivalency(equivGroup, e, s))
 	})
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalency(
 	equivGroup opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
+) (selectivity props.Selectivity) {
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
@@ -3763,7 +3749,7 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 
 	// The selectivity of an equality condition var1=var2 is
 	// 1/max(distinct(var1), distinct(var2)).
-	return fraction(1, maxDistinctCount)
+	return props.MakeSelectivity(fraction(1, maxDistinctCount))
 }
 
 // selectivityFromEquivalenciesSemiJoin determines the selectivity of equality
@@ -3773,23 +3759,21 @@ func (sb *statisticsBuilder) selectivityFromEquivalenciesSemiJoin(
 	filterFD *props.FuncDepSet,
 	e RelExpr,
 	s *props.Statistics,
-) (selectivity float64) {
-	selectivity = 1.0
+) (selectivity props.Selectivity) {
+	selectivity = props.OneSelectivity
 	equivReps.ForEach(func(i opt.ColumnID) {
 		equivGroup := filterFD.ComputeEquivGroup(i)
-		selectivity *= sb.selectivityFromEquivalencySemiJoin(
+		selectivity.Multiply(sb.selectivityFromEquivalencySemiJoin(
 			equivGroup, leftOutputCols, rightOutputCols, e, s,
-		)
+		))
 	})
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 	equivGroup, leftOutputCols, rightOutputCols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity float64) {
+) (selectivity props.Selectivity) {
 	// Find the minimum (maximum) input distinct count for all columns in this
 	// equivalency group from the right (left).
 	minDistinctCountRight := math.MaxFloat64
@@ -3816,23 +3800,21 @@ func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 		maxDistinctCountLeft = s.RowCount
 	}
 
-	return fraction(minDistinctCountRight, maxDistinctCountLeft)
+	return props.MakeSelectivity(fraction(minDistinctCountRight, maxDistinctCountLeft))
 }
 
 func (sb *statisticsBuilder) selectivityFromInvertedJoinCondition(
 	e RelExpr, s *props.Statistics,
-) (selectivity float64) {
-	return unknownInvertedJoinSelectivity
+) (selectivity props.Selectivity) {
+	return props.MakeSelectivity(unknownInvertedJoinSelectivity)
 }
 
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 	numUnappliedConjuncts float64,
-) (selectivity float64) {
-	selectivity = math.Pow(unknownFilterSelectivity, numUnappliedConjuncts)
+) (selectivity props.Selectivity) {
+	selectivity = props.MakeSelectivity(math.Pow(unknownFilterSelectivity, numUnappliedConjuncts))
 
-	// Avoid setting selectivity to 0. The stats may be stale, and we
-	// can end up with weird and inefficient plans if we estimate 0 rows.
-	return max(selectivity, epsilon)
+	return selectivity
 }
 
 // tryReduceCols is used to determine which columns to use for selectivity
