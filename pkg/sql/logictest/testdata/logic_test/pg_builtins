@@ -80,3 +80,28 @@ query I
 SELECT pg_column_size(NULL::int)
 ----
 NULL
+
+statement ok
+CREATE TABLE is_visible(a int primary key);
+CREATE SCHEMA other;
+CREATE TABLE other.not_visible(a int primary key);
+
+query B
+SELECT pg_table_is_visible(c.oid)
+FROM pg_class c
+WHERE c.relname = 'is_visible'
+----
+true
+
+query B
+SELECT pg_table_is_visible(c.oid)
+FROM pg_class c
+WHERE c.relname = 'not_visible'
+----
+false
+
+# A non-existent OID should end up with NULL.
+query B
+SELECT pg_table_is_visible(1010101010)
+----
+NULL

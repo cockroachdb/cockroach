@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -203,6 +204,31 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 		Required:    required,
 		AvoidCached: p.avoidCachedDescriptors,
 	}
+}
+
+// IsTableVisible is part of the tree.EvalDatabase interface.
+func (p *planner) IsTableVisible(
+	ctx context.Context, searchPath sessiondata.SearchPath, tableId int64,
+) (bool, error) {
+	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableId))
+	if err != nil {
+		return false, err
+	}
+	schemaId := tableDesc.GetParentSchemaID()
+	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaId,
+		tree.SchemaLookupFlags{
+			Required:    true,
+			AvoidCached: p.avoidCachedDescriptors})
+	if err != nil {
+		return false, nil
+	}
+	iter := searchPath.Iter()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		if schemaDesc.Name == scName {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.
