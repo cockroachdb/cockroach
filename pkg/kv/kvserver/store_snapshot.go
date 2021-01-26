@@ -653,11 +653,11 @@ func (s *Store) checkSnapshotOverlapLocked(
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
 	// not just the first one that getOverlappingKeyRangeLocked happens to return.
-	if exRange := s.getOverlappingKeyRangeLocked(&desc); exRange != nil {
+	if it := s.getOverlappingKeyRangeLocked(&desc); it.item != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
-		exReplica, err := s.GetReplica(exRange.Desc().RangeID)
+		exReplica, err := s.GetReplica(it.Desc().RangeID)
 		msg := IntersectingSnapshotMsg
 		if err != nil {
 			log.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
