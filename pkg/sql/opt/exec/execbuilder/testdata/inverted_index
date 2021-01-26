@@ -350,24 +350,23 @@ vectorized: true
       table: d@foo_inv
       spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
-# TODO(mgartner): Add support for building inverted index constraints for chained JSON
-# fetch operators.
 query T
-EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' = '"b"'
 ----
 distribution: local
 vectorized: true
 ·
-• filter
+• index join
 │ columns: (a, b)
 │ estimated row count: 111 (missing stats)
-│ filter: ((b->'a')->'c') = '"b"'
+│ table: d@primary
+│ key columns: a
 │
 └── • scan
-      columns: (a, b)
-      estimated row count: 1,000 (missing stats)
-      table: d@primary
-      spans: FULL SCAN
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
