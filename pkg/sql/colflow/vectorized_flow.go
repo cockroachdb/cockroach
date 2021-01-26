@@ -195,6 +195,7 @@ func (f *vectorizedFlow) Setup(
 		helper,
 		vectorizedRemoteComponentCreator{},
 		recordingStats,
+		f.Gateway,
 		f.GetWaitGroup(),
 		f.GetSyncFlowConsumer(),
 		flowCtx.Cfg.NodeDialer,
@@ -438,6 +439,7 @@ type vectorizedFlowCreator struct {
 	streamIDToInputOp              map[execinfrapb.StreamID]opDAGWithMetaSources
 	streamIDToSpecIdx              map[execinfrapb.StreamID]int
 	recordingStats                 bool
+	isGatewayNode                  bool
 	vectorizedStatsCollectorsQueue []colexec.VectorizedStatsCollector
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               execinfra.RowReceiver
@@ -505,6 +507,7 @@ func newVectorizedFlowCreator(
 	helper flowCreatorHelper,
 	componentCreator remoteComponentCreator,
 	recordingStats bool,
+	isGatewayNode bool,
 	waitGroup *sync.WaitGroup,
 	syncFlowConsumer execinfra.RowReceiver,
 	nodeDialer *nodedialer.Dialer,
@@ -948,17 +951,13 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
-						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
+						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
 							// At the last outbox, we can accurately retrieve stats for the
 							// whole flow from parent monitors. These stats are added to a
 							// flow-level span.
 							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
 							span.SetSpanStats(&execinfrapb.ComponentStats{
-								Component: execinfrapb.ComponentID{
-									Type:   execinfrapb.ComponentID_FLOW,
-									FlowID: flowCtx.ID,
-									// TODO(radu): the node ID should be part of the ComponentID.
-								},
+								Component: execinfrapb.FlowComponentID(outputStream.OriginNodeID, flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
 									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
 								},
@@ -1369,7 +1368,7 @@ func ConvertToVecTree(
 		fuseOpt = flowinfra.FuseAggressively
 	}
 	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
+		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
 		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)

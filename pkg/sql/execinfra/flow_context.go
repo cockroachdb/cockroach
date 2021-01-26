@@ -62,6 +62,9 @@ type FlowCtx struct {
 	// Local is true if this flow is being run as part of a local-only query.
 	Local bool
 
+	// Gateway is true if this flow is being run on the gateway node.
+	Gateway bool
+
 	// TypeResolverFactory is used to construct transaction bound TypeResolvers
 	// to resolve type references during flow setup. It is not safe for concurrent
 	// use and is intended to be used only during flow setup and initialization.
