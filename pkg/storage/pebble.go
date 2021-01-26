@@ -335,7 +335,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		Merger:                      MVCCMerger,
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
-	opts.Experimental.L0SublevelCompactions = true
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -356,12 +355,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		}
 		l.EnsureDefaults()
 	}
-
-	// Set the value for FlushSplitBytes to 2x the L0 TargetFileSize. This
-	// should generally create flush split keys after every pair of
-	// L0 files. The 2x factor helps to reduce some cases of excessive flush
-	// splitting, and the overhead that comes with that.
-	opts.Experimental.FlushSplitBytes = 2 * opts.Levels[0].TargetFileSize
 
 	// Do not create bloom filters for the last level (i.e. the largest level
 	// which contains data in the LSM store). This configuration reduces the size
@@ -652,10 +645,11 @@ func (p *Pebble) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 // MVCCGet implements the Engine interface.
@@ -713,7 +707,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 			return r.NewMVCCIterator(iterKind, opts)
 		}
 	}
-	iter := newPebbleIterator(p.db, opts)
+	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -722,11 +716,16 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	iter := newPebbleIterator(p.db, opts)
+	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
 	return iter
+}
+
+// ConsistentIterators implements the Engine interface.
+func (p *Pebble) ConsistentIterators() bool {
+	return false
 }
 
 // ApplyBatchRepr implements the Engine interface.
@@ -1207,10 +1206,27 @@ type pebbleReadOnly struct {
 	// need separate iterators for EngineKey and MVCCKey iteration since
 	// iterators that make separated locks/intents look as interleaved need to
 	// use both simultaneously.
+	// When the first iterator is initialized, the underlying *pebble.Iterator
+	// is stashed in iter, so that subsequent iterator initialization can use
+	// Iterator.Clone to use the same underlying engine state. This relies on
+	// the fact that all pebbleIterators created here are marked as reusable,
+	// which causes pebbleIterator.Close to not close iter. iter will be closed
+	// when pebbleReadOnly.Close is called.
+	//
+	// TODO(sumeer): The lazy iterator creation is insufficient to address
+	// issues like https://github.com/cockroachdb/cockroach/issues/55461.
+	// We could create the pebble.Iterator eagerly, since a caller using
+	// pebbleReadOnly is eventually going to create one anyway. But we
+	// already have different behaviors in different Reader implementations
+	// (see Reader.ConsistentIterators) that callers don't pay attention
+	// to, and adding another such difference could be a source of bugs.
+	// See https://github.com/cockroachdb/cockroach/pull/58515#pullrequestreview-563993424
+	// for more discussion.
 	prefixIter       pebbleIterator
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
+	iter             cloneableIter
 	closed           bool
 }
 
@@ -1221,6 +1237,9 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
+	// Setting iter to nil is sufficient since it will be closed by one of the
+	// subsequent destroy calls.
+	p.iter = nil
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
 	p.prefixEngineIter.destroy()
@@ -1237,10 +1256,11 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
@@ -1290,7 +1310,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.parent.db, opts)
+		return newPebbleIterator(p.parent.db, nil, opts)
 	}
 
 	iter := &p.normalIter
@@ -1304,7 +1324,13 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.iter != nil {
 		iter.setOptions(opts)
 	} else {
-		iter.init(p.parent.db, opts)
+		iter.init(p.parent.db, p.iter, opts)
+		// The timestamp hints should be empty given the earlier code, but we are
+		// being defensive.
+		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+			// For future cloning.
+			p.iter = iter.iter
+		}
 		iter.reusable = true
 	}
 
@@ -1329,12 +1355,23 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setOptions(opts)
 	} else {
-		iter.init(p.parent.db, opts)
+		iter.init(p.parent.db, p.iter, opts)
+		// The timestamp hints should be empty given this is an EngineIterator,
+		// but we are being defensive.
+		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+			// For future cloning.
+			p.iter = iter.iter
+		}
 		iter.reusable = true
 	}
 
 	iter.inuse = true
 	return iter
+}
+
+// ConsistentIterators implements the Engine interface.
+func (p *pebbleReadOnly) ConsistentIterators() bool {
+	return true
 }
 
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
@@ -1442,10 +1479,11 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 // Get implements the Reader interface.
@@ -1495,12 +1533,17 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 			return r.NewMVCCIterator(iterKind, opts)
 		}
 	}
-	return newPebbleIterator(p.snapshot, opts)
+	return newPebbleIterator(p.snapshot, nil, opts)
 }
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
-	return newPebbleIterator(p.snapshot, opts)
+	return newPebbleIterator(p.snapshot, nil, opts)
+}
+
+// ConsistentIterators implements the Reader interface.
+func (p pebbleSnapshot) ConsistentIterators() bool {
+	return true
 }
 
 // pebbleGetProto uses Reader.MVCCGet, so it not as efficient as a function
@@ -1528,7 +1571,7 @@ func pebbleExportToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	sstFile := &MemFile{}
 	sstWriter := MakeBackupSSTWriter(sstFile)
@@ -1538,9 +1581,10 @@ func pebbleExportToSst(
 	iter := NewMVCCIncrementalIterator(
 		reader,
 		MVCCIncrementalIterOptions{
-			IterOptions: io,
-			StartTime:   startTS,
-			EndTime:     endTS,
+			EndKey:                              endKey,
+			EnableTimeBoundIteratorOptimization: useTBI,
+			StartTime:                           startTS,
+			EndTime:                             endTS,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions

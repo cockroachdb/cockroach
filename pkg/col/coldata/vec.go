@@ -96,6 +96,10 @@ type Vec interface {
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
 	// Refer to the SliceArgs comment for specifics and TestAppend for examples.
+	//
+	// NOTE: Append does *not* support the case of appending 0 values (i.e.
+	// the behavior of Append when args.SrcStartIdx == args.SrcEndIdx is
+	// undefined).
 	Append(SliceArgs)
 
 	// Copy uses CopySliceArgs to copy elements of a source Vec into this Vec. It is
@@ -124,10 +128,6 @@ type Vec interface {
 
 	// Length returns the length of the slice that is underlying this Vec.
 	Length() int
-
-	// SetLength sets the length of the slice that is underlying this Vec. Note
-	// that the length of the batch which this Vec belongs to "takes priority".
-	SetLength(int)
 
 	// Capacity returns the capacity of the Golang's slice that is underlying
 	// this Vec. Note that if there is no "slice" (like in case of flat bytes),
@@ -297,38 +297,6 @@ func (m *memColumn) Length() int {
 		return len(m.col.(Durations))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return m.col.(DatumVec).Len()
-	default:
-		panic(fmt.Sprintf("unhandled type %s", m.t))
-	}
-}
-
-func (m *memColumn) SetLength(l int) {
-	switch m.CanonicalTypeFamily() {
-	case types.BoolFamily:
-		m.col = m.col.(Bools)[:l]
-	case types.BytesFamily:
-		m.Bytes().SetLength(l)
-	case types.IntFamily:
-		switch m.t.Width() {
-		case 16:
-			m.col = m.col.(Int16s)[:l]
-		case 32:
-			m.col = m.col.(Int32s)[:l]
-		case 0, 64:
-			m.col = m.col.(Int64s)[:l]
-		default:
-			panic(fmt.Sprintf("unexpected int width: %d", m.t.Width()))
-		}
-	case types.FloatFamily:
-		m.col = m.col.(Float64s)[:l]
-	case types.DecimalFamily:
-		m.col = m.col.(Decimals)[:l]
-	case types.TimestampTZFamily:
-		m.col = m.col.(Times)[:l]
-	case types.IntervalFamily:
-		m.col = m.col.(Durations)[:l]
-	case typeconv.DatumVecCanonicalTypeFamily:
-		m.col.(DatumVec).SetLength(l)
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}

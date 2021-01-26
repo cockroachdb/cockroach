@@ -60,7 +60,7 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				newCtx, sp := tr.StartSpanCtx(ctx, "benching", tc.opts...)
 				_ = newCtx
-				_ = sp
+				sp.Finish() // clean up
 			}
 		})
 	}

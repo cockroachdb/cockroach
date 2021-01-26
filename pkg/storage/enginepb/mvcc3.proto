@@ -10,6 +10,7 @@
 
 syntax = "proto3";
 package cockroach.storage.enginepb;
+option go_package = "enginepb";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -106,6 +107,10 @@ message TxnMeta {
   //    txn record was not yet written. In that case, the pusher uses this field
   //    as an indication of a timestamp when the pushee's coordinator is known
   //    to have been alive.
+  //
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
   util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false];
   // The transaction's priority, ratcheted on transaction pushes.
   int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];

@@ -658,7 +658,7 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                       └ *rowexec.joinReader
                         └ *colexec.caseOp
                           ├ *colexec.bufferOp
-                          │ └ *colexec.hashJoiner
+                          │ └ *colexec.crossJoiner
                           │   ├ *colfetcher.ColBatchScan
                           │   └ *colfetcher.ColBatchScan
                           ├ *colexec.constBoolOp

@@ -46,6 +46,7 @@ func WriteInitialReplicaState(
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	truncStateType TruncatedStateType,
+	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -60,7 +61,12 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
-	s.UsingAppliedStateKey = true
+	if (replicaVersion != roachpb.Version{}) {
+		s.Version = &replicaVersion
+	}
+	if truncStateType != TruncatedStateLegacyReplicatedAndNoAppliedKey {
+		s.UsingAppliedStateKey = true
+	}
 
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
@@ -71,7 +77,13 @@ func WriteInitialReplicaState(
 	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if !existingGCThreshold.IsEmpty() {
-		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
+		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
+	}
+
+	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
+	} else if (existingVersion != roachpb.Version{}) {
+		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
 	newMS, err := rsl.Save(ctx, readWriter, s, truncStateType)
@@ -85,15 +97,36 @@ func WriteInitialReplicaState(
 // WriteInitialRangeState writes the initial range state. It's called during
 // bootstrap.
 func WriteInitialRangeState(
-	ctx context.Context, readWriter storage.ReadWriter, desc roachpb.RangeDescriptor,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	desc roachpb.RangeDescriptor,
+	replicaVersion roachpb.Version,
+) error {
+	const initialTruncStateType = TruncatedStateUnreplicated
+	return WriteInitialRangeStateWithTruncatedState(ctx, readWriter, desc, replicaVersion, initialTruncStateType)
+}
+
+// WriteInitialRangeStateWithTruncatedState is the same as
+// WriteInitialRangeState, but allows the caller to override the truncated state
+// type.
+//
+// TODO(irfansharif): This can be removed in the v21.2 cycle after we no longer
+// need to test the truncated state migration.
+func WriteInitialRangeStateWithTruncatedState(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	desc roachpb.RangeDescriptor,
+	replicaVersion roachpb.Version,
+	truncState TruncatedStateType,
 ) error {
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
-	initialTruncStateType := TruncatedStateUnreplicated
 	initialMS := enginepb.MVCCStats{}
+	initialTruncStateType := truncState
 
 	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialTruncStateType,
+		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
+		initialTruncStateType, replicaVersion,
 	); err != nil {
 		return err
 	}

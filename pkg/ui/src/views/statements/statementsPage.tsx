@@ -29,20 +29,21 @@ import {
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
-import {
-  selectDiagnosticsReportsPerStatement,
-} from "src/redux/statements/statementsSelectors";
+import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 
-import { StatementsPage, AggregateStatistics } from "@cockroachlabs/admin-ui-components";
-import { createOpenDiagnosticsModalAction, createStatementDiagnosticsReportAction } from "src/redux/statements";
+import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
+  createOpenDiagnosticsModalAction,
+  createStatementDiagnosticsReportAction,
+} from "src/redux/statements";
+import {
+  trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
   trackStatementsSearchAction,
   trackTableSortAction,
 } from "src/redux/analyticsActions";
-import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -73,7 +74,8 @@ export const selectStatements = createSelector(
     }
     let statements = flattenStatementStats(state.data.statements);
     const app = getMatchParamByName(props.match, appAttr);
-    const isInternal = (statement: ExecutionStatistics) => statement.app.startsWith(state.data.internal_app_name_prefix);
+    const isInternal = (statement: ExecutionStatistics) =>
+      statement.app.startsWith(state.data.internal_app_name_prefix);
 
     if (app) {
       let criteria = decodeURIComponent(app);
@@ -85,14 +87,19 @@ export const selectStatements = createSelector(
       }
 
       statements = statements.filter(
-        (statement: ExecutionStatistics) => (showInternal && isInternal(statement)) || statement.app === criteria,
+        (statement: ExecutionStatistics) =>
+          (showInternal && isInternal(statement)) || statement.app === criteria,
       );
     } else {
-      statements = statements.filter((statement: ExecutionStatistics) => !isInternal(statement));
+      statements = statements.filter(
+        (statement: ExecutionStatistics) => !isInternal(statement),
+      );
     }
 
-    const statsByStatementAndImplicitTxn: { [statement: string]: StatementsSummaryData } = {};
-    statements.forEach(stmt => {
+    const statsByStatementAndImplicitTxn: {
+      [statement: string]: StatementsSummaryData;
+    } = {};
+    statements.forEach((stmt) => {
       const key = keyByStatementAndImplicitTxn(stmt);
       if (!(key in statsByStatementAndImplicitTxn)) {
         statsByStatementAndImplicitTxn[key] = {
@@ -104,7 +111,7 @@ export const selectStatements = createSelector(
       statsByStatementAndImplicitTxn[key].stats.push(stmt.stats);
     });
 
-    return Object.keys(statsByStatementAndImplicitTxn).map(key => {
+    return Object.keys(statsByStatementAndImplicitTxn).map((key) => {
       const stmt = statsByStatementAndImplicitTxn[key];
       return {
         label: stmt.statement,
@@ -130,7 +137,12 @@ export const selectApps = createSelector(
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (state.data.internal_app_name_prefix && statement.key.key_data.app.startsWith(state.data.internal_app_name_prefix)) {
+        if (
+          state.data.internal_app_name_prefix &&
+          statement.key.key_data.app.startsWith(
+            state.data.internal_app_name_prefix,
+          )
+        ) {
           sawInternal = true;
         } else if (statement.key.key_data.app) {
           apps[statement.key.key_data.app] = true;
@@ -139,7 +151,10 @@ export const selectApps = createSelector(
         }
       },
     );
-    return [].concat(sawInternal ? ["(internal)"] : []).concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+    return []
+      .concat(sawInternal ? ["(internal)"] : [])
+      .concat(sawBlank ? ["(unset)"] : [])
+      .concat(Object.keys(apps));
   },
 );
 
@@ -169,26 +184,28 @@ export const selectLastReset = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
-const StatementsPageConnected = withRouter(connect(
-  (state: AdminUIState, props: RouteComponentProps) => ({
-    statements: selectStatements(state, props),
-    statementsError: state.cachedData.statements.lastError,
-    apps: selectApps(state),
-    totalFingerprints: selectTotalFingerprints(state),
-    lastReset: selectLastReset(state),
-  }),
-  {
-    refreshStatements,
-    refreshStatementDiagnosticsRequests,
-    dismissAlertMessage: () => createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-    onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
-    onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
-    onSearchComplete: (results: AggregateStatistics[]) => trackStatementsSearchAction(results.length),
-    onPageChanged: trackStatementsPaginationAction,
-    onSortingChange: trackTableSortAction,
-    onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) => trackDownloadDiagnosticsBundle(report.statement_fingerprint),
-  },
-)(StatementsPage));
-
-export default StatementsPageConnected;
+export default withRouter(
+  connect(
+    (state: AdminUIState, props: RouteComponentProps) => ({
+      statements: selectStatements(state, props),
+      statementsError: state.cachedData.statements.lastError,
+      apps: selectApps(state),
+      totalFingerprints: selectTotalFingerprints(state),
+      lastReset: selectLastReset(state),
+    }),
+    {
+      refreshStatements,
+      refreshStatementDiagnosticsRequests,
+      dismissAlertMessage: () =>
+        createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+      onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
+      onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
+      onSearchComplete: (results: AggregateStatistics[]) =>
+        trackStatementsSearchAction(results.length),
+      onPageChanged: trackStatementsPaginationAction,
+      onSortingChange: trackTableSortAction,
+      onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
+        trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
+    },
+  )(StatementsPage),
+);

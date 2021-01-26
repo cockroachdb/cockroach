@@ -11,16 +11,16 @@ package changefeedbase
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/errors"
 )
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
-func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *tabledesc.Immutable) error {
-	t, ok := targets[tableDesc.ID]
+func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) error {
+	t, ok := targets[tableDesc.GetID()]
 	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 
 	// Technically, the only non-user table known not to work is system.jobs
@@ -28,35 +28,30 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *tabledesc.Immuta
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
-	if tableDesc.ID < keys.MinUserDescID {
+	if tableDesc.GetID() < keys.MinUserDescID {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
 	}
 	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if len(tableDesc.Families) != 1 {
+	if len(tableDesc.GetFamilies()) != 1 {
 		return errors.Errorf(
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.Name, len(tableDesc.Families))
+			tableDesc.GetName(), len(tableDesc.GetFamilies()))
 	}
 
-	if tableDesc.State == descpb.DescriptorState_DROP {
-		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
+	if tableDesc.GetState() == descpb.DescriptorState_DROP {
+		return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
 	}
-	if tableDesc.Name != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
+	if tableDesc.GetName() != t.StatementTimeName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
 	}
-
-	// TODO(mrtracy): re-enable this when allow-backfill option is added.
-	// if tableDesc.HasColumnBackfillMutation() {
-	// 	return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
-	// }
 
 	return nil
 }

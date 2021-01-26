@@ -229,6 +229,7 @@ type DatumRowConverter struct {
 }
 
 var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
+	"datum-row-converter-batch-size",
 	5000, /* defaultValue */
 	1,    /* metamorphicValue */
 )
@@ -357,19 +358,25 @@ func NewDatumRowConverter(
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 	c.defaultCache = make([]tree.TypedExpr, len(cols))
 
+	annot := make(tree.Annotations, 1)
+	var cellInfoAnnot CellInfoAnnotation
+	// Currently, this is only true for an IMPORT INTO CSV.
+	if seqChunkProvider != nil {
+		seqNameToMetadata, err := c.getSequenceAnnotation(evalCtx, c.cols)
+		if err != nil {
+			return nil, err
+		}
+		cellInfoAnnot.seqNameToMetadata = seqNameToMetadata
+		cellInfoAnnot.seqChunkProvider = seqChunkProvider
+	}
+	cellInfoAnnot.uniqueRowIDInstance = 0
+	annot.Set(cellInfoAddr, &cellInfoAnnot)
+	c.EvalCtx.Annotations = &annot
+
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
 	// If the DEFAULT expression is immutable, we can store it in the cache so that it
 	// doesn't have to be reevaluated for every row.
-	annot := make(tree.Annotations, 1)
-	var seqNameToMetadata map[string]*SequenceMetadata
-	seqNameToMetadata, err = c.getSequenceAnnotation(evalCtx, c.cols)
-	if err != nil {
-		return nil, err
-	}
-	annot.Set(cellInfoAddr, &CellInfoAnnotation{uniqueRowIDInstance: 0,
-		seqNameToMetadata: seqNameToMetadata, seqChunkProvider: seqChunkProvider})
-	c.EvalCtx.Annotations = &annot
 	for i := range cols {
 		col := &cols[i]
 		if col.DefaultExpr != nil {
@@ -408,7 +415,7 @@ func NewDatumRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
+	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.Families))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 

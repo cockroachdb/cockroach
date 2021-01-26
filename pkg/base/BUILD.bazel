@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "base",
@@ -11,9 +12,9 @@ go_library(
         "node_id.go",
         "store_spec.go",
         "test_server_args.go",
-        "testclusterreplicationmode_string.go",
         "testing_knobs.go",
         "zone.go",
+        ":gen-clusterreplication-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/base",
     visibility = ["//visibility:public"],
@@ -33,12 +34,12 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/cockroachdb/pebble",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 
@@ -60,7 +61,13 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-clusterreplication-stringer",
+    file = "test_server_args.go",
+    typ = "TestClusterReplicationMode",
 )

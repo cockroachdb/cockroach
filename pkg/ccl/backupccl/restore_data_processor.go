@@ -9,11 +9,8 @@
 package backupccl
 
 import (
-	"bytes"
 	"context"
-	"io/ioutil"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,10 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -177,6 +172,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
 	var iters []storage.SimpleMVCCIterator
+
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, newSpanKey)
 
@@ -189,45 +185,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 				log.Warningf(ctx, "close export storage failed %v", err)
 			}
 		}()
-
-		const maxAttempts = 3
-		var fileContents []byte
-		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			f, err := dir.ReadFile(ctx, file.Path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			fileContents, err = ioutil.ReadAll(f)
-			return err
-		}); err != nil {
-			return summary, errors.Wrapf(err, "fetching %q", file.Path)
-		}
-		dataSize := int64(len(fileContents))
-		log.Eventf(ctx, "fetched file (%s)", humanizeutil.IBytes(dataSize))
-
-		if rd.spec.Encryption != nil {
-			fileContents, err = storageccl.DecryptFile(fileContents, rd.spec.Encryption.Key)
-			if err != nil {
-				return summary, err
-			}
-		}
-
-		if len(file.Sha512) > 0 {
-			checksum, err := storageccl.SHA512ChecksumData(fileContents)
-			if err != nil {
-				return summary, err
-			}
-			if !bytes.Equal(checksum, file.Sha512) {
-				return summary, errors.Errorf("checksum mismatch for %s", file.Path)
-			}
-		}
-
-		iter, err := storage.NewMemSSTIterator(fileContents, false)
+		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
 		if err != nil {
 			return summary, err
 		}
-
 		defer iter.Close()
 		iters = append(iters, iter)
 	}

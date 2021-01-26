@@ -14,6 +14,7 @@ go_library(
         "join_funcs.go",
         "limit_funcs.go",
         "list_sorter.go",
+        "mutation_funcs.go",
         "ordering_funcs.go",
         "project_builder.go",
         "project_funcs.go",
@@ -49,8 +50,8 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/json",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -76,8 +77,8 @@ go_test(
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

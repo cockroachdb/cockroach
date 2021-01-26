@@ -14,6 +14,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 
@@ -181,13 +182,13 @@ func getLogicallyMergedTableSpans(
 	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
 ) ([]roachpb.Span, error) {
 	var nonDropIndexIDs []descpb.IndexID
-	if err := table.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
-		key := tableAndIndex{tableID: table.GetID(), indexID: idxDesc.ID}
+	if err := catalog.ForEachNonDropIndex(table, func(idx catalog.Index) error {
+		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
 		if added[key] {
 			return nil
 		}
 		added[key] = true
-		nonDropIndexIDs = append(nonDropIndexIDs, idxDesc.ID)
+		nonDropIndexIDs = append(nonDropIndexIDs, idx.GetID())
 		return nil
 	}); err != nil {
 		return nil, err
@@ -224,11 +225,11 @@ func getLogicallyMergedTableSpans(
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
 
-		lhsIndex, err := table.FindIndexByID(lhsIndexID)
+		lhsIndex, err := table.FindIndexWithID(lhsIndexID)
 		if err != nil {
 			return nil, err
 		}
-		rhsIndex, err := table.FindIndexByID(rhsIndexID)
+		rhsIndex, err := table.FindIndexWithID(rhsIndexID)
 		if err != nil {
 			return nil, err
 		}
@@ -382,7 +383,7 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	q.Del(localityURLParam)
 	parsedURI.RawQuery = q.Encode()
 	if appendPath != "" {
-		parsedURI.Path = parsedURI.Path + appendPath
+		parsedURI.Path = path.Join(parsedURI.Path, appendPath)
 	}
 	baseURI := parsedURI.String()
 	return localityKV, baseURI, nil
@@ -1244,7 +1245,7 @@ func backupPlanHook(
 
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
 			if err != nil {
 				return err
 			}
@@ -1264,8 +1265,13 @@ func backupPlanHook(
 		}
 
 		collectTelemetry()
-
-		return sj.Run(ctx)
+		if err := sj.Start(ctx); err != nil {
+			return err
+		}
+		if err := sj.AwaitCompletion(ctx); err != nil {
+			return err
+		}
+		return sj.ReportExecutionResults(ctx, resultsCh)
 	}
 
 	if backupStmt.Options.Detached {

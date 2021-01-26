@@ -77,6 +77,23 @@ message EncryptionInfo {
   map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
 }
 
+message StreamIngestionDetails {
+  // StreamAddress locates the stream. It enables the client to find the
+  // addresses of the stream's partitions.
+  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress"];
+  // Span is the keyspan into which this job will ingest KVs.
+  //
+  // The stream should emit all changes for a given span, and no changes outside
+  // a span. Note that KVs received from the stream may need to be re-keyed into
+  // this span.
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  // The job will ingest events from StartTime onwards.
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+}
+
+message StreamIngestionProgress {
+
+}
 
 message BackupDetails {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
@@ -316,6 +333,9 @@ message DroppedTableDetails {
 // 3. Database deletions: The deletion of a database and therefore all its tables.
 //      details.Tables -> the IDs of the tables to GC.
 //      details.ParentID -> the ID of the database to drop.
+//
+// 4. Tenant deletion: The deletion of a tenant key range.
+//      details.TenantID -> the ID of the tenant to delete.
 message SchemaChangeGCDetails {
   message DroppedIndex {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
@@ -348,6 +368,14 @@ message SchemaChangeGCDetails {
   // database, the database ID.
   int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+
+  message DroppedTenant {
+    uint64 id = 1 [(gogoproto.customname) = "ID"];
+    int64 drop_time = 2;
+  }
+
+  // Tenant to GC.
+  DroppedTenant tenant = 6;
 }
 
 message SchemaChangeDetails {
@@ -416,11 +444,18 @@ message SchemaChangeGCProgress {
     Status status = 2;
   }
 
+  message TenantProgress {
+    Status status = 1;
+  }
+
   // Indexes to GC.
   repeated IndexProgress indexes = 1 [(gogoproto.nullable) = false];
 
   // Entire tables to GC.
   repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
+
+  // The status of the tenant to be deleted.
+ TenantProgress tenant = 3;
 }
 
 message ChangefeedTarget {
@@ -562,6 +597,7 @@ message Payload {
     CreateStatsDetails createStats = 15;
     SchemaChangeGCDetails schemaChangeGC = 21;
     TypeSchemaChangeDetails typeSchemaChange = 22;
+    StreamIngestionDetails streamIngestion = 23;
   }
 }
 
@@ -582,6 +618,7 @@ message Progress {
     CreateStatsProgress createStats = 15;
     SchemaChangeGCProgress schemaChangeGC = 16;
     TypeSchemaChangeProgress typeSchemaChange = 17;
+    StreamIngestionProgress streamIngest = 18;
   }
 }
 
@@ -601,6 +638,7 @@ enum Type {
   // We can't name this TYPE_SCHEMA_CHANGE due to how proto generates actual
   // names for this enum, which cause a conflict with the SCHEMA_CHANGE entry.
   TYPEDESC_SCHEMA_CHANGE = 9 [(gogoproto.enumvalue_customname) = "TypeTypeSchemaChange"];
+  STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeStreamIngestion"];
 }
 
 message Job {

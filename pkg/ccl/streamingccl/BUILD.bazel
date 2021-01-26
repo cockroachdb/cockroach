@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "streamingccl",
+    srcs = [
+        "addresses.go",
+        "event.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+    ],
+)

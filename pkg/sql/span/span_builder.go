@@ -134,10 +134,12 @@ func (s *Builder) UnsetNeededFamilies() {
 	s.neededFamilies = nil
 }
 
-// SpanFromEncDatums encodes a span with prefixLen constraint columns from the index.
-// SpanFromEncDatums assumes that the EncDatums in values are in the order of the index columns.
-// It also returns whether or not the input values contain a null value or not, which can be
-// used as input for CanSplitSpanIntoSeparateFamilies.
+// SpanFromEncDatums encodes a span with prefixLen constraint columns from the
+// index prefixed with the index key prefix that includes the table and index
+// ID. SpanFromEncDatums assumes that the EncDatums in values are in the order
+// of the index columns. It also returns whether or not the input values contain
+// a null value or not, which can be used as input for
+// CanSplitSpanIntoSeparateFamilies.
 func (s *Builder) SpanFromEncDatums(
 	values rowenc.EncDatumRow, prefixLen int,
 ) (_ roachpb.Span, containsNull bool, _ error) {
@@ -193,8 +195,12 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	//   and it cannot be an inverted index.
 	// * We have all of the lookup columns of the index.
 	// * We don't need all of the families.
-	return s.index.Unique && len(s.table.Families) > 1 &&
-		(s.index.ID == s.table.PrimaryIndex.ID ||
+	// * The table is not a special system table. (System tables claim to have
+	//   column families, but actually do not, since they're written to with
+	//   raw KV puts in a "legacy" way.)
+	isSystemTable := s.table.ID > 0 && s.table.ID < keys.MaxReservedDescID
+	return !isSystemTable && s.index.Unique && len(s.table.Families) > 1 &&
+		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
 				!containsNull &&

@@ -5,7 +5,7 @@ go_library(
     srcs = ["ctxgroup.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxgroup",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/sync/errgroup"],
+    deps = ["@org_golang_x_sync//errgroup"],
 )
 
 go_test(
@@ -15,6 +15,6 @@ go_test(
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -203,11 +203,22 @@ func maybeBumpReadTimestampToWriteTimestamp(
 func tryBumpBatchTimestamp(
 	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
 ) bool {
-	if latchSpans.MaxProtectedTimestamp().Less(ts) {
+	if len(latchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) > 0 {
 		// If the batch acquired any read latches with bounded (MVCC) timestamps
-		// below this new timestamp then we can not trivially bump the batch's
-		// timestamp without dropping and re-acquiring those latches. Doing so
-		// could allow the request to read at an unprotected timestamp.
+		// then we can not trivially bump the batch's timestamp without dropping
+		// and re-acquiring those latches. Doing so could allow the request to
+		// read at an unprotected timestamp. We only look at global latch spans
+		// because local latch spans always use unbounded (NonMVCC) timestamps.
+		//
+		// NOTE: even if we hold read latches with high enough timestamps to
+		// fully cover ("protect") the batch at the new timestamp, we still
+		// don't want to allow the bump. This is because a batch with read spans
+		// and a higher timestamp may now conflict with locks that it previously
+		// did not. However, server-side retries don't re-scan the lock table.
+		// This can lead to requests missing unreplicated locks in the lock
+		// table that they should have seen or discovering replicated intents in
+		// MVCC that they should not have seen (from the perspective of the lock
+		// table's AddDiscoveredLock method).
 		//
 		// NOTE: we could consider adding a retry-loop above the latch
 		// acquisition to allow this to be retried, but given that we try not to

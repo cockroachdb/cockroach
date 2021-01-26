@@ -1,0 +1,11 @@
+diff -urN a/go/BUILD.bazel b/go/BUILD.bazel
+--- a/go/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/go/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -7,6 +7,6 @@
+     visibility = ["//visibility:public"],
+     deps = [
+         "@com_github_golang_protobuf//proto:go_default_library",
+-        "@io_bazel_rules_go//proto/wkt:timestamp_go_proto",
++        "@com_github_golang_protobuf//ptypes/timestamp:go_default_library",
+     ],
+ )

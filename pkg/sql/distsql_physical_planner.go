@@ -176,6 +176,11 @@ func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
 	}
 }
 
+// GatewayID returns the ID of the gateway.
+func (dsp *DistSQLPlanner) GatewayID() roachpb.NodeID {
+	return dsp.gatewayNodeID
+}
+
 // SetSpanResolver switches to a different SpanResolver. It is the caller's
 // responsibility to make sure the DistSQLPlanner is not in use.
 func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolver) {
@@ -960,14 +965,9 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 }
 
 func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint32, error) {
-	if index.ID == desc.PrimaryIndex.ID {
-		return 0, nil
-	}
-	for i := range desc.Indexes {
-		if index.ID == desc.Indexes[i].ID {
-			// IndexIdx is 1 based (0 means primary index).
-			return uint32(i + 1), nil
-		}
+	foundIndex, _ := desc.FindIndexWithID(index.ID)
+	if foundIndex != nil && foundIndex.Public() {
+		return uint32(foundIndex.Ordinal()), nil
 	}
 	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.Name)
 }
@@ -989,6 +989,7 @@ func initTableReaderSpec(
 		Spans:            s.Spans[:0],
 		HasSystemColumns: n.containsSystemColumns,
 		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
+		VirtualColumn:    getVirtualColumn(n.colCfg.virtualColumn, n.cols),
 	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
@@ -1010,6 +1011,27 @@ func initTableReaderSpec(
 		s.LimitHint = n.softLimit
 	}
 	return s, post, nil
+}
+
+// getVirtualColumn returns the column in cols with ID matching
+// virtualColumn.colID.
+func getVirtualColumn(
+	virtualColumn *struct {
+		colID tree.ColumnID
+		typ   *types.T
+	},
+	cols []*descpb.ColumnDescriptor,
+) *descpb.ColumnDescriptor {
+	if virtualColumn == nil {
+		return nil
+	}
+
+	for i := range cols {
+		if tree.ColumnID(cols[i].ID) == virtualColumn.colID {
+			return cols[i]
+		}
+	}
+	return nil
 }
 
 // tableOrdinal returns the index of a column with the given ID.
@@ -1281,25 +1303,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
-	numCols := len(info.desc.Columns)
-	if returnMutations {
-		numCols += len(info.desc.MutationColumns())
-	}
-	if info.containsSystemColumns {
-		numCols += len(colinfo.AllSystemColumnDescs)
-	}
-
-	typs := make([]*types.T, 0, numCols)
-	for i := range info.desc.Columns {
-		typs = append(typs, info.desc.Columns[i].Type)
-	}
-	if returnMutations {
-		mutationColumns := info.desc.MutationColumns()
-		for i := range mutationColumns {
-			typs = append(typs, mutationColumns[i].Type)
-		}
-	}
+	typs := info.desc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)
@@ -1566,9 +1570,6 @@ func (dsp *DistSQLPlanner) planAggregators(
 	var finalAggsSpec execinfrapb.AggregatorSpec
 	var finalAggsPost execinfrapb.PostProcessSpec
 
-	// planToStreamMapSet keeps track of whether or not
-	// p.PlanToStreamColMap has been set to its desired mapping or not.
-	planToStreamMapSet := false
 	if !multiStage {
 		finalAggsSpec = execinfrapb.AggregatorSpec{
 			Type:             aggType,
@@ -1862,16 +1863,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 			}
 			finalAggsPost.RenderExprs = renderExprs
 		} else if len(finalAggs) < len(info.aggregations) {
-			// We want to ensure we map the streams properly now
-			// that we've potential reduced the number of final
-			// aggregation output streams. We use finalIdxMap to
-			// create a 1-1 mapping from the final aggregators to
-			// their corresponding column index in the map.
-			p.PlanToStreamColMap = p.PlanToStreamColMap[:0]
-			for _, idx := range finalIdxMap {
-				p.PlanToStreamColMap = append(p.PlanToStreamColMap, int(idx))
-			}
-			planToStreamMapSet = true
+			// We have removed some duplicates, so we need to add a projection.
+			finalAggsPost.Projection = true
+			finalAggsPost.OutputColumns = finalIdxMap
 		}
 	}
 
@@ -1895,9 +1889,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 	// Update p.PlanToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator
 	// has been programmed to produce the same columns as the groupNode.
-	if !planToStreamMapSet {
-		p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(info.aggregations))
-	}
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(info.aggregations))
 
 	if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
 		// No GROUP BY, or we have a single stream. Use a single final aggregator.
@@ -2210,6 +2202,14 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 
 	numInputNodeCols, planToStreamColMap, post, types :=
 		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
+
+	invertedJoinerSpec.PrefixEqualityColumns = make([]uint32, len(n.prefixEqCols))
+	for i, col := range n.prefixEqCols {
+		if plan.PlanToStreamColMap[col] == -1 {
+			panic("lookup column not in planToStreamColMap")
+		}
+		invertedJoinerSpec.PrefixEqualityColumns[i] = uint32(plan.PlanToStreamColMap[col])
+	}
 
 	indexVarMap := makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
 	if invertedJoinerSpec.InvertedExpr, err = physicalplan.MakeExpression(

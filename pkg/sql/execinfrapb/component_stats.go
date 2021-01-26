@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
@@ -65,6 +66,8 @@ func (s *ComponentStats) StatsTags() map[string]string {
 			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID))
 		case ComponentID_STREAM:
 			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID))
+		case ComponentID_FLOW:
+			// Nothing extra to set.
 		}
 	}
 
@@ -105,6 +108,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.NetRx.BytesReceived.HasValue() {
 		fn("network bytes received", humanize.IBytes(s.NetRx.BytesReceived.Value()))
 	}
+	if s.NetRx.MessagesReceived.HasValue() {
+		fn("network messages received", humanizeutil.Count(s.NetRx.MessagesReceived.Value()))
+	}
 
 	// Network Tx stats.
 	if s.NetTx.TuplesSent.HasValue() {
@@ -112,6 +118,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	}
 	if s.NetTx.BytesSent.HasValue() {
 		fn("network bytes sent", humanize.IBytes(s.NetTx.BytesSent.Value()))
+	}
+	if s.NetTx.MessagesSent.HasValue() {
+		fn("network messages sent", humanizeutil.Count(s.NetTx.MessagesSent.Value()))
 	}
 
 	// Input stats.
@@ -194,6 +203,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.NetRx.BytesReceived.HasValue() {
 		result.NetRx.BytesReceived = other.NetRx.BytesReceived
+	}
+	if !result.NetRx.MessagesReceived.HasValue() {
+		result.NetRx.MessagesReceived = other.NetRx.MessagesReceived
 	}
 
 	// Network Tx stats.
@@ -281,6 +293,10 @@ func (s *ComponentStats) MakeDeterministic() {
 		// value for tests.
 		s.NetRx.BytesReceived.Set(8 * s.NetRx.TuplesReceived.Value())
 	}
+	if s.NetRx.MessagesReceived.HasValue() {
+		// Override to a useful value for tests.
+		s.NetRx.MessagesReceived.Set(s.NetRx.TuplesReceived.Value() / 2)
+	}
 
 	// NetTx.
 	if s.NetTx.BytesSent.HasValue() {
@@ -288,6 +304,10 @@ func (s *ComponentStats) MakeDeterministic() {
 		// varying sizes across different runs (e.g. metadata). Override to a useful
 		// value for tests.
 		s.NetTx.BytesSent.Set(8 * s.NetTx.TuplesSent.Value())
+	}
+	if s.NetTx.MessagesSent.HasValue() {
+		// Override to a useful value for tests.
+		s.NetTx.MessagesSent.Set(s.NetTx.TuplesSent.Value() / 2)
 	}
 
 	// KV.
@@ -319,14 +339,25 @@ func ExtractStatsFromSpans(
 ) map[ComponentID]*ComponentStats {
 	statsMap := make(map[ComponentID]*ComponentStats)
 	for i := range spans {
-		if spans[i].Stats == nil {
-			continue
-		}
-
+		span := &spans[i]
 		var stats ComponentStats
-		if err := types.UnmarshalAny(spans[i].Stats, &stats); err != nil {
-			continue
-		}
+
+		found := false
+		// TODO(radu): there's nothing stopping us from having multiple
+		// ComponentStats in a single Span once we are in the 21.2 cycle.
+		span.Structured(func(item *types.Any) {
+			if found {
+				return
+			}
+			if !types.Is(item, &stats) {
+				return
+			}
+			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+				return
+			}
+			found = true
+		})
+
 		if stats.Component == (ComponentID{}) {
 			continue
 		}

@@ -246,6 +246,14 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
+	{
+		// Create another empty database to ensure that cleanup still works in the
+		// presence of databases without temp objects. Regression test for #55086.
+		db := tc.ServerConn(0)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+	}
+
 	// Start and close two temporary schemas.
 	for _, dbID := range []int{0, 1} {
 		db := tc.ServerConn(dbID)

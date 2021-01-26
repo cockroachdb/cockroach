@@ -228,10 +228,10 @@ SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted
 
-query ITITTITT colnames
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction
+descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction  implicit
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name = ''
@@ -635,6 +635,32 @@ SELECT
 FROM
 	table41834;
 
+# Compact a range at this node, store.
+query II colnames
+SELECT node_id, store_id FROM crdb_internal.kv_store_status ORDER BY (node_id, store_id) LIMIT 1
+----
+node_id  store_id
+1        1
+
+# Do the compaction.
+query B colnames
+SELECT crdb_internal.compact_engine_span(1, 1, start_key, end_key)
+FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo' LIMIT 1
+----
+crdb_internal.compact_engine_span
+true
+
+# Failed compaction due to unknown node.
+query error could not dial node ID 153
+SELECT crdb_internal.compact_engine_span(153, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
+
+# Failed compaction due to unknown store.
+query error store 23 was not found
+SELECT crdb_internal.compact_engine_span(1, 23, decode('c08989', 'hex'), decode('c0898a', 'hex'))
+
+# Failed compaction due to invalid range.
+query error is not less than end
+SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
 subtest builtin_is_admin
 
@@ -723,6 +749,58 @@ other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
 other_db       testuser  SELECT
+
+statement ok
+SET DATABASE = test
+
+# crdb_internal can be used with the anonymous database.
+# It should show information across all databases.
+subtest anonymous_database
+
+query TTT colnames
+SELECT * FROM "".crdb_internal.cluster_database_privileges ORDER BY 1,2,3
+----
+database_name  grantee   privilege_type
+defaultdb      admin     ALL
+defaultdb      root      ALL
+other_db       admin     ALL
+other_db       root      ALL
+other_db       testuser  DROP
+other_db       testuser  SELECT
+postgres       admin     ALL
+postgres       root      ALL
+system         admin     GRANT
+system         admin     SELECT
+system         root      GRANT
+system         root      SELECT
+test           admin     ALL
+test           root      ALL
+testdb         admin     ALL
+testdb         root      ALL
+
+statement ok
+SET DATABASE = "";
+
+query TTT colnames
+SELECT * FROM crdb_internal.cluster_database_privileges ORDER BY 1,2,3
+----
+database_name  grantee   privilege_type
+defaultdb      admin     ALL
+defaultdb      root      ALL
+other_db       admin     ALL
+other_db       root      ALL
+other_db       testuser  DROP
+other_db       testuser  SELECT
+postgres       admin     ALL
+postgres       root      ALL
+system         admin     GRANT
+system         admin     SELECT
+system         root      GRANT
+system         root      SELECT
+test           admin     ALL
+test           root      ALL
+testdb         admin     ALL
+testdb         root      ALL
 
 statement ok
 SET DATABASE = test

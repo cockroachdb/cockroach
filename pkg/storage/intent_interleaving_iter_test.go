@@ -54,9 +54,13 @@ func makePrintableKey(k MVCCKey) MVCCKey {
 func scanSeekKey(t *testing.T, td *datadriven.TestData) MVCCKey {
 	key := MVCCKey{Key: scanRoachKey(t, td, "k")}
 	if td.HasArg("ts") {
-		var ts int
-		td.ScanArgs(t, "ts", &ts)
-		key.Timestamp.WallTime = int64(ts)
+		var tsS string
+		td.ScanArgs(t, "ts", &tsS)
+		ts, err := hlc.ParseTimestamp(tsS)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		key.Timestamp = ts
 	}
 	return key
 }
@@ -139,13 +143,13 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 			if uuid.Hi != 0 {
 				hiStr = fmt.Sprintf("%d,", uuid.Hi)
 			}
-			fmt.Fprintf(b, "output: meta k=%s ts=%d txn=%s%d\n",
-				string(k1.Key), meta.Timestamp.WallTime, hiStr, uuid.Lo)
+			fmt.Fprintf(b, "output: meta k=%s ts=%s txn=%s%d\n",
+				string(k1.Key), meta.Timestamp, hiStr, uuid.Lo)
 		}
 		return
 	}
-	fmt.Fprintf(b, "output: value k=%s ts=%d v=%s\n",
-		string(k1.Key), k1.Timestamp.WallTime, string(v1))
+	fmt.Fprintf(b, "output: value k=%s ts=%s v=%s\n",
+		string(k1.Key), k1.Timestamp, string(v1))
 }
 
 // TestIntentInterleavingIter is a datadriven test consisting of two commands:
@@ -223,9 +227,14 @@ func TestIntentInterleavingIter(t *testing.T) {
 						var meta enginepb.MVCCMetadata
 						var txnUUID uuid.UUID
 						if locksSection || d.HasArg("ts") {
-							var ts, txn int
-							d.ScanArgs(t, "ts", &ts)
-							meta.Timestamp.WallTime = int64(ts)
+							var tsS string
+							d.ScanArgs(t, "ts", &tsS)
+							ts, err := hlc.ParseTimestamp(tsS)
+							if err != nil {
+								t.Fatalf("%v", err)
+							}
+							meta.Timestamp = ts.ToLegacyTimestamp()
+							var txn int
 							d.ScanArgs(t, "txn", &txn)
 							txnUUID = uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
 							meta.Txn = &enginepb.TxnMeta{ID: txnUUID}
@@ -252,11 +261,15 @@ func TestIntentInterleavingIter(t *testing.T) {
 							t.Fatalf("%s: value in locks section", d.Pos)
 						}
 						key := scanRoachKey(t, d, "k")
-						var ts int
-						d.ScanArgs(t, "ts", &ts)
+						var tsS string
+						d.ScanArgs(t, "ts", &tsS)
+						ts, err := hlc.ParseTimestamp(tsS)
+						if err != nil {
+							t.Fatalf("%v", err)
+						}
 						var value string
 						d.ScanArgs(t, "v", &value)
-						mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts)}}
+						mvccKey := MVCCKey{Key: key, Timestamp: ts}
 						if err := batch.PutMVCC(mvccKey, []byte(value)); err != nil {
 							return err.Error()
 						}
@@ -442,7 +455,7 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
 			fwdDirection = false
 		}
 		if useTimestamp {
-			op = fmt.Sprintf("%s k=%s ts=%d", op, string(seekKey.Key), seekKey.Timestamp.WallTime)
+			op = fmt.Sprintf("%s k=%s ts=%s", op, string(seekKey.Key), seekKey.Timestamp)
 		} else {
 			op = fmt.Sprintf("%s k=%s", op, string(seekKey.Key))
 		}

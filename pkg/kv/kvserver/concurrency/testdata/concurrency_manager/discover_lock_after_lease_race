@@ -140,7 +140,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
 
 sequence req=req4
@@ -149,7 +149,7 @@ sequence req=req4
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: waiting in lock wait-queues
-[5] sequence req4: pushing timestamp of txn 00000003 above 0.000000010,0
+[5] sequence req4: pushing timestamp of txn 00000003 above 10.000000000,0
 [5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 handle-write-intent-error req=req2 lease-seq=1
@@ -161,7 +161,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
@@ -173,17 +173,19 @@ sequence req=req2
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
-[7] sequence req2: pushing timestamp of txn 00000003 above 0.000000010,0
+[7] sequence req2: pushing timestamp of txn 00000003 above 10.000000000,0
 [7] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [5] sequence req4: resolving intent "k" for txn 00000003 with COMMITTED status
+[5] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 1.23s
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: sequencing complete, returned guard
 [7] sequence req2: resolving intent "k" for txn 00000003 with COMMITTED status
+[7] sequence req2: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 1.23s
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: sequencing complete, returned guard

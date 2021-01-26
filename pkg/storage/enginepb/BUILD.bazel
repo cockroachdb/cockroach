@@ -1,27 +1,51 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "enginepb_proto",
+    srcs = [
+        "engine.proto",
+        "file_registry.proto",
+        "mvcc.proto",
+        "mvcc3.proto",
+        "rocksdb.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "enginepb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/enginepb",
+    proto = ":enginepb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
 
 go_library(
     name = "enginepb",
     srcs = [
         "decode.go",
         "engine.go",
-        "engine.pb.go",
-        "file_registry.pb.go",
         "mvcc.go",
-        "mvcc.pb.go",
         "mvcc3.go",
-        "mvcc3.pb.go",
-        "rocksdb.pb.go",
     ],
+    embed = [":enginepb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/enginepb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/hlc",
-        "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/sortkeys",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -37,6 +61,6 @@ go_test(
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

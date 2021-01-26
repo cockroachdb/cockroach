@@ -30,8 +30,8 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )
 

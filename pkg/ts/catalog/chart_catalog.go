@@ -305,6 +305,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.initput.sent",
 					"distsender.rpc.leaseinfo.sent",
 					"distsender.rpc.merge.sent",
+					"distsender.rpc.migrate.sent",
 					"distsender.rpc.pushtxn.sent",
 					"distsender.rpc.put.sent",
 					"distsender.rpc.queryintent.sent",
@@ -1851,6 +1852,14 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Open Transactions",
+				Metrics: []string{
+					"sql.txns.open",
+					"sql.txns.open.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
 				Title: "Byte I/O",
 				Metrics: []string{
 					"sql.bytesin",
@@ -2290,6 +2299,7 @@ var charts = []sectionDescription{
 					"jobs.schema_change.currently_running",
 					"jobs.schema_change_gc.currently_running",
 					"jobs.typedesc_schema_change.currently_running",
+					"jobs.stream_ingestion.currently_running",
 				},
 			},
 			{
@@ -2399,6 +2409,17 @@ var charts = []sectionDescription{
 					"jobs.typedesc_schema_change.resume_retry_error",
 				},
 				Rate: DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
+			},
+			{
+				Title: "Stream Ingestion",
+				Metrics: []string{
+					"jobs.stream_ingestion.fail_or_cancel_completed",
+					"jobs.stream_ingestion.fail_or_cancel_failed",
+					"jobs.stream_ingestion.fail_or_cancel_retry_error",
+					"jobs.stream_ingestion.resume_completed",
+					"jobs.stream_ingestion.resume_failed",
+					"jobs.stream_ingestion.resume_retry_error",
+				},
 			},
 		},
 	},

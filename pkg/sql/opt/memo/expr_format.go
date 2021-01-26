@@ -282,7 +282,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	default:
 		// Fall back to writing output columns in column id order.
-		colList = opt.ColSetToList(e.Relational().OutputCols)
+		colList = e.Relational().OutputCols.ToList()
 	}
 
 	f.formatColumns(e, tp, colList, required.Presentation)
@@ -294,7 +294,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
-			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
+			f.formatColList(e, tp, "grouping columns:", private.GroupingCols.ToList())
 		}
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
@@ -352,17 +352,18 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
-			if tab.PartialIndexPredicates != nil {
+			partialIndexPredicates := tab.PartialIndexPredicatesForFormattingOnly()
+			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
-				indexOrds := make([]cat.IndexOrdinal, 0, len(tab.PartialIndexPredicates))
-				for ord := range tab.PartialIndexPredicates {
+				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))
+				for ord := range partialIndexPredicates {
 					indexOrds = append(indexOrds, ord)
 				}
 				sort.Ints(indexOrds)
 				for _, ord := range indexOrds {
 					name := string(tab.Table.Index(ord).Name())
 					f.Buffer.Reset()
-					f.formatScalarWithLabel(name, tab.PartialIndexPredicates[ord], c)
+					f.formatScalarWithLabel(name, partialIndexPredicates[ord], c)
 				}
 			}
 		}
@@ -508,10 +509,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatArbiters(tp, t.Arbiters, t.Table)
+			f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+			f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -520,11 +522,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 			f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -534,18 +536,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				f.formatArbiters(tp, t.Arbiters, t.Table)
+				f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+				f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
-				f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 				f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			} else {
 				f.formatMutationCols(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
 			}
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -554,8 +557,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -1098,9 +1101,9 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	}
 }
 
-// formatArbiters constructs a new treeprinter child containing the
+// formatArbiterIndexes constructs a new treeprinter child containing the
 // specified list of arbiter indexes.
-func (f *ExprFmtCtx) formatArbiters(
+func (f *ExprFmtCtx) formatArbiterIndexes(
 	tp treeprinter.Node, arbiters cat.IndexOrdinals, tabID opt.TableID,
 ) {
 	md := f.Memo.Metadata()
@@ -1111,6 +1114,26 @@ func (f *ExprFmtCtx) formatArbiters(
 		f.Buffer.WriteString("arbiter indexes:")
 		for _, idx := range arbiters {
 			name := string(tab.Index(idx).Name())
+			f.space()
+			f.Buffer.WriteString(name)
+		}
+		tp.Child(f.Buffer.String())
+	}
+}
+
+// formatArbiterConstraints constructs a new treeprinter child containing the
+// specified list of arbiter constraints.
+func (f *ExprFmtCtx) formatArbiterConstraints(
+	tp treeprinter.Node, arbiters cat.UniqueOrdinals, tabID opt.TableID,
+) {
+	md := f.Memo.Metadata()
+	tab := md.Table(tabID)
+
+	if len(arbiters) > 0 {
+		f.Buffer.Reset()
+		f.Buffer.WriteString("arbiter constraints:")
+		for _, uc := range arbiters {
+			name := tab.Unique(uc).Name()
 			f.space()
 			f.Buffer.WriteString(name)
 		}
@@ -1164,6 +1187,23 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
+			f.space()
+			f.formatCol("" /* label */, col, notNullCols)
+		}
+		tp.Child(f.Buffer.String())
+	}
+}
+
+// formatOptionalColList constructs a new treeprinter child containing the
+// specified list of optional columns formatted using the formatCol method.
+func (f *ExprFmtCtx) formatOptionalColList(
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.OptionalColList,
+) {
+	if !colList.IsEmpty() {
+		notNullCols := nd.Relational().NotNullCols
+		f.Buffer.Reset()
+		f.Buffer.WriteString(heading)
+		for _, col := range colList {
 			if col != 0 {
 				f.space()
 				f.formatCol("" /* label */, col, notNullCols)
@@ -1180,9 +1220,9 @@ func (f *ExprFmtCtx) formatColList(
 //   a:1 => x:4
 //
 func (f *ExprFmtCtx) formatMutationCols(
-	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList, tabID opt.TableID,
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.OptionalColList, tabID opt.TableID,
 ) {
-	if len(colList) == 0 {
+	if colList.IsEmpty() {
 		return
 	}
 

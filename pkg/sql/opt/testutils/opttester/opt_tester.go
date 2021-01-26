@@ -211,6 +211,14 @@ type Flags struct {
 	// optsteps command with a split diff where the before and after expressions
 	// are printed in their entirety. The default value is false.
 	OptStepsSplitDiff bool
+
+	// RuleApplicationLimit is used by the check-size command to check whether
+	// more than RuleApplicationLimit rules are applied during optimization.
+	RuleApplicationLimit int64
+
+	// MemoGroupLimit is used by the check-size command to check whether
+	// more than MemoGroupLimit memo groups are constructed during optimization.
+	MemoGroupLimit int64
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -331,6 +339,13 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Injects table statistics from a json file.
 //
+//  - check-size [rule-limit=...] [group-limit=...]
+//
+//    Fully optimizes the given query and outputs the number of rules applied
+//    and memo groups created. If the rule-limit or group-limit flags are set,
+//    check-size will result in a test error if the rule application or memo
+//    group count exceeds the corresponding limit.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -410,6 +425,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - split-diff: replaces the unified diff output of the optsteps command with
 //    a split diff where the before and after expressions are printed in their
 //    entirety. This is only used by the optsteps command.
+//
+//  - rule-limit: used with check-size to set a max limit on the number of rules
+//    that can be applied before a testing error is returned.
+//
+//  - group-limit: used with check-size to set a max limit on the number of
+//    groups that can be added to the memo before a testing error is returned.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -597,6 +618,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "reorderjoins":
 		result, err := ot.ReorderJoins()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "check-size":
+		result, err := ot.CheckSize()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -875,6 +903,26 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "split-diff":
 		f.OptStepsSplitDiff = true
+
+	case "rule-limit":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("rule-limit requires one argument")
+		}
+		limit, err := strconv.ParseInt(arg.Vals[0], 10, 64)
+		if err != nil {
+			return err
+		}
+		f.RuleApplicationLimit = limit
+
+	case "group-limit":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("group-limit requires one argument")
+		}
+		limit, err := strconv.ParseInt(arg.Vals[0], 10, 64)
+		if err != nil {
+			return err
+		}
+		f.MemoGroupLimit = limit
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -1475,9 +1523,9 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			cat.Ordinary,
 			colMeta.Type,
 			!relProps.NotNullCols.Contains(col),
-			false, /* hidden */
-			nil,   /* defaultExpr */
-			nil,   /* computedExpr */
+			cat.Visible,
+			nil, /* defaultExpr */
+			nil, /* computedExpr */
 		)
 
 		// Make sure we have estimated stats for this column.
@@ -1539,6 +1587,35 @@ func (ot *OptTester) makeStat(
 		DistinctCount: distinctCount,
 		NullCount:     nullCount,
 	}
+}
+
+// CheckSize optimizes the given query and tracks the number of rule
+// applications that take place and the number of groups added to the memo.
+// If either of these values exceeds the given limits (if any), an error is
+// returned.
+func (ot *OptTester) CheckSize() (string, error) {
+	o := ot.makeOptimizer()
+	var ruleApplications int64
+	o.NotifyOnAppliedRule(
+		func(ruleName opt.RuleName, source, target opt.Expr) {
+			ruleApplications++
+		},
+	)
+	var groups int64
+	o.Memo().NotifyOnNewGroup(func(expr opt.Expr) {
+		groups++
+	})
+	if _, err := ot.optimizeExpr(o); err != nil {
+		return "", err
+	}
+	if ot.Flags.RuleApplicationLimit > 0 && ruleApplications > ot.Flags.RuleApplicationLimit {
+		return "", fmt.Errorf(
+			"rule applications exceeded limit: %d applications", ruleApplications)
+	}
+	if ot.Flags.MemoGroupLimit > 0 && groups > ot.Flags.MemoGroupLimit {
+		return "", fmt.Errorf("memo groups exceeded limit: %d groups", groups)
+	}
+	return fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups), nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

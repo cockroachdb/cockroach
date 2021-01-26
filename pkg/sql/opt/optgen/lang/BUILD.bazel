@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "lang",
@@ -7,16 +8,16 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
-        "operator_string.go",
         "parser.go",
         "scanner.go",
-        "token_string.go",
         ":gen-expr",  # keep
         ":gen-operator",  # keep
+        ":gen-operator-stringer",  # keep
+        ":gen-token-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 # Langgen is a bootstrapping compiler. We need to partition the dependencies
@@ -40,7 +41,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
@@ -53,8 +54,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":lang"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -77,4 +78,16 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(location lang.opt)
     """,
     tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+)
+
+stringer(
+    name = "gen-token-stringer",
+    file = "scanner.go",
+    typ = "Token",
+)
+
+stringer(
+    name = "gen-operator-stringer",
+    file = "operator.og.go",
+    typ = "Operator",
 )

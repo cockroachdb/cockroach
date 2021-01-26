@@ -27,11 +27,24 @@ const (
 	LocalityLevelRow
 )
 
+const (
+	// RegionEnum is the name of the per-database region enum required for
+	// multi-region.
+	RegionEnum string = "crdb_internal_region"
+	// RegionalByRowRegionDefaultCol is the default name of the REGIONAL BY ROW
+	// column name if the AS field is not populated.
+	RegionalByRowRegionDefaultCol string = "crdb_region"
+	// RegionalByRowRegionDefaultColName is the same, typed as Name.
+	RegionalByRowRegionDefaultColName Name = Name(RegionalByRowRegionDefaultCol)
+)
+
 // Locality defines the locality for a given table.
 type Locality struct {
 	LocalityLevel LocalityLevel
 	// TableRegion is set if is LocalityLevelTable and a non-primary region is set.
 	TableRegion Name
+	// RegionalByRowColumn is set if col_name on REGIONAL BY ROW ON <col_name> is set.
+	RegionalByRowColumn Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -49,6 +62,10 @@ func (node *Locality) Format(ctx *FmtCtx) {
 		}
 	case LocalityLevelRow:
 		ctx.WriteString("REGIONAL BY ROW")
+		if node.RegionalByRowColumn != "" {
+			ctx.WriteString(" AS ")
+			node.RegionalByRowColumn.Format(ctx)
+		}
 	default:
 		panic(fmt.Sprintf("unknown regional affinity: %#v", node.LocalityLevel))
 	}

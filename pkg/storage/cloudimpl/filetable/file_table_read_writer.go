@@ -11,12 +11,12 @@
 package filetable
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -164,16 +164,16 @@ type FileToTableSystem struct {
 }
 
 // FileTable which contains records for every uploaded file.
-const fileTableSchema = `CREATE TABLE %s (filename STRING PRIMARY KEY, 
+const fileTableSchema = `CREATE TABLE %s (filename STRING PRIMARY KEY,
 file_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
-file_size INT NOT NULL, 
-username STRING NOT NULL, 
+file_size INT NOT NULL,
+username STRING NOT NULL,
 upload_time TIMESTAMP DEFAULT now())`
 
 // PayloadTable contains the chunked payloads of each file.
-const payloadTableSchema = `CREATE TABLE %s (file_id UUID, 
-byte_offset INT, 
-payload BYTES, 
+const payloadTableSchema = `CREATE TABLE %s (file_id UUID,
+byte_offset INT,
+payload BYTES,
 PRIMARY KEY(file_id, byte_offset))`
 
 // GetFQFileTableName returns the qualified File table name.
@@ -624,31 +624,19 @@ func (w *chunkWriter) Close() error {
 	return err
 }
 
-// fileReader reads the file payload from the underlying Payload table.
-type fileReader struct {
-	io.Reader
+type reader struct {
+	pos int64
+	fn  func([]byte, int64) (int, error)
 }
 
-var _ io.ReadCloser = &fileReader{}
+func (r *reader) Read(p []byte) (int, error) {
+	n, err := r.fn(p, r.pos)
+	r.pos += int64(n)
+	return n, err
+}
 
-// Close implements the io.Closer interface.
-func (f *fileReader) Close() error {
+func (reader) Close() error {
 	return nil
-}
-
-func newFileReader(
-	ctx context.Context,
-	filename string,
-	username security.SQLUsername,
-	fileTableName, payloadTableName string,
-	ie *sql.InternalExecutor,
-) (io.ReadCloser, error) {
-	fileTableReader, err := newFileTableReader(ctx, filename, username, fileTableName,
-		payloadTableName, ie)
-	if err != nil {
-		return nil, err
-	}
-	return &fileReader{fileTableReader}, nil
 }
 
 func newFileTableReader(
@@ -657,7 +645,8 @@ func newFileTableReader(
 	username security.SQLUsername,
 	fileTableName, payloadTableName string,
 	ie *sql.InternalExecutor,
-) (io.Reader, error) {
+	offset int64,
+) (io.ReadCloser, int64, error) {
 	// Get file_id from metadata entry in File table.
 	fileIDQuery := fmt.Sprintf(`SELECT file_id FROM %s WHERE filename=$1`, fileTableName)
 	fileIDRow, err := ie.QueryRowEx(
@@ -665,45 +654,67 @@ func newFileTableReader(
 		nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, fileIDQuery, filename,
 	)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// If no metadata entry was found return a does not exist error.
 	if fileIDRow == nil {
-		return nil, os.ErrNotExist
+		return nil, 0, os.ErrNotExist
 	}
-
-	query := fmt.Sprintf(`SELECT payload FROM %s WHERE file_id=$1`, payloadTableName)
-	rows, err := ie.QueryEx(
-		ctx, "get-filename-payload",
-		nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileIDRow[0],
+	fileID := fileIDRow[0]
+	rows, err := ie.QueryEx(ctx, "get-file-size", nil /*txn*/, sessiondata.InternalExecutorOverride{User: username},
+		fmt.Sprintf(`SELECT sum_int(length(payload)) FROM %s WHERE file_id=$1`, payloadTableName), fileID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	// Verify that all the payloads are bytes and assemble bytes of filename.
-	var fileBytes []byte
-	for _, row := range rows {
-		fileBytes = append(fileBytes, []byte(tree.MustBeDBytes(row[0]))...)
+	if len(rows) == 0 || rows[0][0] == tree.DNull {
+		return ioutil.NopCloser(bytes.NewReader(nil)), 0, nil
 	}
 
-	return bufio.NewReader(bytes.NewBuffer(fileBytes)), nil
+	sz := int64(tree.MustBeDInt(rows[0][0]))
+
+	fn := func(p []byte, pos int64) (int, error) {
+		if pos >= sz {
+			return 0, io.EOF
+		}
+		query := fmt.Sprintf(
+			`SELECT byte_offset, payload FROM %s WHERE file_id=$1 AND byte_offset <= $2 ORDER BY byte_offset DESC LIMIT 1`, payloadTableName)
+		rows, err := ie.QueryEx(
+			ctx, "get-filename-payload",
+			nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileID, pos,
+		)
+		if err != nil {
+			return 0, err
+		}
+		if len(rows) == 0 || rows[0][1] == tree.DNull {
+			return 0, io.EOF
+		}
+		block := tree.MustBeDBytes(rows[0][1])
+		offsetInBlock := pos - int64(tree.MustBeDInt(rows[0][0]))
+		n := copy(p, block[offsetInBlock:])
+		return n, nil
+	}
+
+	return &reader{fn: fn, pos: offset}, sz, nil
 }
 
 // ReadFile returns the blob for filename using a FileTableReader.
 // TODO(adityamaru): Reading currently involves aggregating all chunks of a
 // file from the Payload table. In the future we might want to implement a pull
 // x rows system, or a scan based interface.
-func (f *FileToTableSystem) ReadFile(ctx context.Context, filename string) (io.ReadCloser, error) {
+func (f *FileToTableSystem) ReadFile(
+	ctx context.Context, filename string, offset int64,
+) (io.ReadCloser, int64, error) {
 	e, err := resolveInternalFileToTableExecutor(f.executor)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	var reader, readerErr = newFileReader(ctx, filename, f.username, f.GetFQFileTableName(),
-		f.GetFQPayloadTableName(), e.ie)
-	return reader, readerErr
+	return newFileTableReader(
+		ctx, filename, f.username, f.GetFQFileTableName(), f.GetFQPayloadTableName(), e.ie, offset,
+	)
 }
 
 func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(

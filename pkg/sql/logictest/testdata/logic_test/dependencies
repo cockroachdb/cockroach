@@ -1,4 +1,7 @@
 statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);
   CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(w);
@@ -11,6 +14,8 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;
+  CREATE TABLE test_uwi_parent(a INT UNIQUE WITHOUT INDEX);
+  CREATE TABLE test_uwi_child(a INT REFERENCES test_uwi_parent(a));
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, column_id
@@ -31,6 +36,10 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 58             test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
 59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
 60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+61             test_uwi_parent  1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+61             test_uwi_parent  2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
+62             test_uwi_child   1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+62             test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
 
 query ITITTBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
@@ -50,44 +59,49 @@ descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
 58             test_kvi2        2         test_kvi2_idx    secondary   true       false
 59             test_v1          0         ·                primary     false      false
 60             test_v2          0         ·                primary     false      false
+61             test_uwi_parent  1         primary          primary     true       false
+62             test_uwi_child   1         primary          primary     true       false
 
-query ITITTITT colnames
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
 ----
-descriptor_id  descriptor_name  index_id  index_name       column_type  column_id  column_name  column_direction
-53             test_kv          1         primary          key          1          k            ASC
-53             test_kv          2         test_v_idx       extra        1          NULL         NULL
-53             test_kv          2         test_v_idx       key          2          v            ASC
-53             test_kv          3         test_v_idx2      extra        1          NULL         NULL
-53             test_kv          3         test_v_idx2      key          2          v            DESC
-53             test_kv          3         test_v_idx2      storing      3          NULL         NULL
-53             test_kv          4         test_v_idx3      composite    3          NULL         NULL
-53             test_kv          4         test_v_idx3      extra        1          NULL         NULL
-53             test_kv          4         test_v_idx3      key          3          w            ASC
-53             test_kv          4         test_v_idx3      storing      2          NULL         NULL
-54             test_kvr1        1         primary          key          1          k            ASC
-55             test_kvr2        1         primary          key          3          rowid        ASC
-55             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL
-55             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC
-56             test_kvr3        1         primary          key          3          rowid        ASC
-56             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL
-56             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC
-57             test_kvi1        1         primary          key          1          k            ASC
-58             test_kvi2        1         primary          key          1          k            ASC
-58             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL
-58             test_kvi2        2         test_kvi2_idx    key          2          v            ASC
+descriptor_id  descriptor_name  index_id  index_name       column_type  column_id  column_name  column_direction  implicit
+53             test_kv          1         primary          key          1          k            ASC               false
+53             test_kv          2         test_v_idx       extra        1          NULL         NULL              false
+53             test_kv          2         test_v_idx       key          2          v            ASC               false
+53             test_kv          3         test_v_idx2      extra        1          NULL         NULL              false
+53             test_kv          3         test_v_idx2      key          2          v            DESC              false
+53             test_kv          3         test_v_idx2      storing      3          NULL         NULL              false
+53             test_kv          4         test_v_idx3      composite    3          NULL         NULL              false
+53             test_kv          4         test_v_idx3      extra        1          NULL         NULL              false
+53             test_kv          4         test_v_idx3      key          3          w            ASC               false
+53             test_kv          4         test_v_idx3      storing      2          NULL         NULL              false
+54             test_kvr1        1         primary          key          1          k            ASC               false
+55             test_kvr2        1         primary          key          3          rowid        ASC               false
+55             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL              false
+55             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC               false
+56             test_kvr3        1         primary          key          3          rowid        ASC               false
+56             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL              false
+56             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC               false
+57             test_kvi1        1         primary          key          1          k            ASC               false
+58             test_kvi2        1         primary          key          1          k            ASC               false
+58             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL              false
+58             test_kvi2        2         test_kvi2_idx    key          2          v            ASC               false
+61             test_uwi_parent  1         primary          key          2          rowid        ASC               false
+62             test_uwi_child   1         primary          key          2          rowid        ASC               false
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
-descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name    dependson_details
-54             test_kvr1        NULL      NULL       53            fk              1                   fk_k_ref_test_kv  NULL
-55             test_kvr2        NULL      NULL       53            fk              1                   fk_v_ref_test_kv  NULL
-56             test_kvr3        NULL      NULL       53            fk              2                   fk_v_ref_test_kv  NULL
-57             test_kvi1        1         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
-58             test_kvi2        2         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
-59             test_v1          NULL      NULL       53            view            NULL                NULL              NULL
-60             test_v2          NULL      NULL       59            view            NULL                NULL              NULL
+descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name            dependson_details
+54             test_kvr1        NULL      NULL       53            fk              1                   fk_k_ref_test_kv          NULL
+55             test_kvr2        NULL      NULL       53            fk              1                   fk_v_ref_test_kv          NULL
+56             test_kvr3        NULL      NULL       53            fk              2                   fk_v_ref_test_kv          NULL
+57             test_kvi1        1         NULL       53            interleave      1                   NULL                      SharedPrefixLen: 1
+58             test_kvi2        2         NULL       53            interleave      1                   NULL                      SharedPrefixLen: 1
+59             test_v1          NULL      NULL       53            view            NULL                NULL                      NULL
+60             test_v2          NULL      NULL       59            view            NULL                NULL                      NULL
+62             test_uwi_child   NULL      NULL       61            fk              0                   fk_a_ref_test_uwi_parent  NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
@@ -100,6 +114,7 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
 53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
 59             test_v1          NULL      60               view               0                      NULL               Columns: [1]
+61             test_uwi_parent  NULL      62               fk                 NULL                   NULL               NULL
 
 # Checks view dependencies (#17306)
 statement ok
@@ -110,13 +125,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-62             moretest_v       NULL      NULL       61            view            NULL                NULL            NULL
+64             moretest_v       NULL      NULL       63            view            NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-61             moretest_t       NULL      62               view               0                      NULL               Columns: [2]
+63             moretest_t       NULL      64               view               0                      NULL               Columns: [2]
 
 # Check sequence dependencies.
 
@@ -130,10 +145,10 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'blog_posts'
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-64             blog_posts       NULL      1          63            sequence        NULL                NULL            NULL
+66             blog_posts       NULL      1          65            sequence        NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [1]
+65             blog_posts_id_seq  NULL      66               sequence           0                      NULL               Columns: [1]

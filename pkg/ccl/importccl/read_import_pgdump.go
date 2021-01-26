@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -353,12 +352,12 @@ func readPostgresStmt(
 			break
 		}
 		var idx tree.TableDef = &tree.IndexTableDef{
-			Name:        stmt.Name,
-			Columns:     stmt.Columns,
-			Storing:     stmt.Storing,
-			Inverted:    stmt.Inverted,
-			Interleave:  stmt.Interleave,
-			PartitionBy: stmt.PartitionBy,
+			Name:             stmt.Name,
+			Columns:          stmt.Columns,
+			Storing:          stmt.Storing,
+			Inverted:         stmt.Inverted,
+			Interleave:       stmt.Interleave,
+			PartitionByIndex: stmt.PartitionByIndex,
 		}
 		if stmt.Unique {
 			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
@@ -425,12 +424,12 @@ func readPostgresStmt(
 				}
 			case *tree.AlterTableValidateConstraint:
 				// ignore
-			case *tree.AlterTableOwner:
-				// ignore
 			default:
 				return errors.Errorf("unsupported statement: %s", stmt)
 			}
 		}
+	case *tree.AlterTableOwner:
+		// ignore
 	case *tree.CreateSequence:
 		name, err := getTableName(&stmt.Name)
 		if err != nil {
@@ -821,7 +820,10 @@ func (m *pgDumpReader) readFile(
 						if s == nil {
 							conv.Datums[idx] = tree.DNull
 						} else {
-							conv.Datums[idx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
+							// We use ParseAndRequireString instead of ParseDatumStringAs
+							// because postgres dumps arrays in COPY statements using their
+							// internal string representation.
+							conv.Datums[idx], _, err = tree.ParseAndRequireString(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
 							if err != nil {
 								col := conv.VisibleCols[idx]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
@@ -913,7 +915,7 @@ func (m *pgDumpReader) readFile(
 			}
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// ignored.
-		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
+		case *tree.CreateTable, *tree.AlterTable, *tree.AlterTableOwner, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
 			// handled during schema extraction.
 		case *tree.Delete:
 			switch stmt := i.Table.(type) {

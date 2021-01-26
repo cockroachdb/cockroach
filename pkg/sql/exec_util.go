@@ -219,6 +219,12 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_implicit_column_partitioning.enabled",
+	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
+	false,
+)
+
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
@@ -241,6 +247,14 @@ var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
 	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
+	false,
+)
+
+// InterleavedTablesEnabled is the setting that controls whether it's possible
+// to create interleaved indexes or tables.
+var InterleavedTablesEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.interleaved_tables.enabled",
+	"allows creation of interleaved tables or indexes",
 	false,
 )
 
@@ -467,6 +481,12 @@ var (
 		Help:        "Latency of SQL transactions",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaSQLTxnsOpen = metric.Metadata{
+		Name:        "sql.txns.open",
+		Help:        "Number of currently open SQL transactions",
+		Measurement: "Open SQL Transactions",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Below are the metadata for the statement started counters.
@@ -896,6 +916,10 @@ type TenantTestingKnobs struct {
 	// in-memory cluster settings. SQL tenants are otherwise prohibited from
 	// setting cluster settings.
 	ClusterSettingsUpdater settings.Updater
+
+	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
+	// server's codec, but nothing else (e.g. its certs). Used for testing.
+	TenantIDCodecOverride roachpb.TenantID
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
@@ -1057,6 +1081,14 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 				switch {
 				case val.IsNil():
 					d = tree.DNull
+				case val.Type().Elem().Kind() == reflect.String:
+					a := tree.NewDArray(types.String)
+					for v := 0; v < val.Len(); v++ {
+						if err := a.Append(tree.NewDString(val.Index(v).String())); err != nil {
+							return nil, err
+						}
+					}
+					d = a
 				case val.Type().Elem().Kind() == reflect.Uint8:
 					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}
@@ -1431,7 +1463,7 @@ type SessionTracing struct {
 	enabled bool
 
 	// kvTracingEnabled is set at times when KV tracing is active. When
-	// KV tracning is enabled, the SQL/KV interface logs individual K/V
+	// KV tracing is enabled, the SQL/KV interface logs individual K/V
 	// operators to the current context.
 	kvTracingEnabled bool
 
@@ -2178,6 +2210,10 @@ func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 	m.data.TempTablesEnabled = val
+}
+
+func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
+	m.data.ImplicitColumnPartitioningEnabled = val
 }
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {

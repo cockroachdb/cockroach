@@ -215,6 +215,14 @@ func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE REGIONAL 
 func (*AlterTableLocality) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterTableOwner) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTableOwner) StatementTag() string { return "ALTER TABLE OWNER" }
+
+func (*AlterTableOwner) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterTableSetSchema) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -865,7 +873,7 @@ func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
 func (*ShowQueries) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowQueries) StatementTag() string { return "SHOW QUERIES" }
+func (*ShowQueries) StatementTag() string { return "SHOW STATEMENTS" }
 
 // StatementType implements the Statement interface.
 func (*ShowJobs) StatementType() StatementType { return Rows }
@@ -1071,6 +1079,7 @@ func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableLocality) String() string             { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
+func (n *AlterTableOwner) String() string                { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }
 func (n *AlterType) String() string                      { return AsString(n) }
 func (n *AlterRole) String() string                      { return AsString(n) }

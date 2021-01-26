@@ -71,7 +71,7 @@ func (x *Ordering_Column_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Ordering_Column_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{2, 0, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{2, 0, 0}
 }
 
 type StreamEndpointSpec_Type int32
@@ -116,7 +116,7 @@ func (x *StreamEndpointSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (StreamEndpointSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{3, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{3, 0}
 }
 
 type InputSyncSpec_Type int32
@@ -156,7 +156,7 @@ func (x *InputSyncSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (InputSyncSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{4, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{4, 0}
 }
 
 type OutputRouterSpec_Type int32
@@ -204,7 +204,7 @@ func (x *OutputRouterSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (OutputRouterSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{5, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{5, 0}
 }
 
 // Error is a generic representation including a string message.
@@ -217,7 +217,7 @@ type Error struct {
 func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -245,7 +245,7 @@ var xxx_messageInfo_Error proto.InternalMessageInfo
 func (m *Expression) Reset()      { *m = Expression{} }
 func (*Expression) ProtoMessage() {}
 func (*Expression) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{1}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{1}
 }
 func (m *Expression) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -280,7 +280,7 @@ func (m *Ordering) Reset()         { *m = Ordering{} }
 func (m *Ordering) String() string { return proto.CompactTextString(m) }
 func (*Ordering) ProtoMessage()    {}
 func (*Ordering) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{2}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{2}
 }
 func (m *Ordering) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -314,7 +314,7 @@ func (m *Ordering_Column) Reset()         { *m = Ordering_Column{} }
 func (m *Ordering_Column) String() string { return proto.CompactTextString(m) }
 func (*Ordering_Column) ProtoMessage()    {}
 func (*Ordering_Column) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{2, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{2, 0}
 }
 func (m *Ordering_Column) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -363,7 +363,7 @@ func (m *StreamEndpointSpec) Reset()         { *m = StreamEndpointSpec{} }
 func (m *StreamEndpointSpec) String() string { return proto.CompactTextString(m) }
 func (*StreamEndpointSpec) ProtoMessage()    {}
 func (*StreamEndpointSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{3}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{3}
 }
 func (m *StreamEndpointSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -402,7 +402,7 @@ func (m *InputSyncSpec) Reset()         { *m = InputSyncSpec{} }
 func (m *InputSyncSpec) String() string { return proto.CompactTextString(m) }
 func (*InputSyncSpec) ProtoMessage()    {}
 func (*InputSyncSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{4}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{4}
 }
 func (m *InputSyncSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -446,7 +446,7 @@ func (m *OutputRouterSpec) Reset()         { *m = OutputRouterSpec{} }
 func (m *OutputRouterSpec) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec) ProtoMessage()    {}
 func (*OutputRouterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{5}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{5}
 }
 func (m *OutputRouterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -489,7 +489,7 @@ func (m *OutputRouterSpec_RangeRouterSpec) Reset()         { *m = OutputRouterSp
 func (m *OutputRouterSpec_RangeRouterSpec) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{5, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{5, 0}
 }
 func (m *OutputRouterSpec_RangeRouterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -531,7 +531,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) String() string {
 }
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) ProtoMessage() {}
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{5, 0, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{5, 0, 0}
 }
 func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -568,7 +568,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_Span) Reset()         { *m = OutputRou
 func (m *OutputRouterSpec_RangeRouterSpec_Span) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec_Span) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec_Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{5, 0, 1}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{5, 0, 1}
 }
 func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -602,7 +602,7 @@ func (m *DatumInfo) Reset()         { *m = DatumInfo{} }
 func (m *DatumInfo) String() string { return proto.CompactTextString(m) }
 func (*DatumInfo) ProtoMessage()    {}
 func (*DatumInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{6}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{6}
 }
 func (m *DatumInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -637,7 +637,7 @@ func (m *ProducerHeader) Reset()         { *m = ProducerHeader{} }
 func (m *ProducerHeader) String() string { return proto.CompactTextString(m) }
 func (*ProducerHeader) ProtoMessage()    {}
 func (*ProducerHeader) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{7}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{7}
 }
 func (m *ProducerHeader) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -680,7 +680,7 @@ func (m *ProducerData) Reset()         { *m = ProducerData{} }
 func (m *ProducerData) String() string { return proto.CompactTextString(m) }
 func (*ProducerData) ProtoMessage()    {}
 func (*ProducerData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{8}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{8}
 }
 func (m *ProducerData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -722,7 +722,7 @@ func (m *ProducerMessage) Reset()         { *m = ProducerMessage{} }
 func (m *ProducerMessage) String() string { return proto.CompactTextString(m) }
 func (*ProducerMessage) ProtoMessage()    {}
 func (*ProducerMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{9}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{9}
 }
 func (m *ProducerMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -769,7 +769,7 @@ func (m *RemoteProducerMetadata) Reset()         { *m = RemoteProducerMetadata{}
 func (m *RemoteProducerMetadata) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata) ProtoMessage()    {}
 func (*RemoteProducerMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10}
 }
 func (m *RemoteProducerMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1123,7 +1123,7 @@ func (m *RemoteProducerMetadata_RangeInfos) Reset()         { *m = RemoteProduce
 func (m *RemoteProducerMetadata_RangeInfos) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RangeInfos) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RangeInfos) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 0}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 0}
 }
 func (m *RemoteProducerMetadata_RangeInfos) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1156,7 +1156,7 @@ func (m *RemoteProducerMetadata_TraceData) Reset()         { *m = RemoteProducer
 func (m *RemoteProducerMetadata_TraceData) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_TraceData) ProtoMessage()    {}
 func (*RemoteProducerMetadata_TraceData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 1}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 1}
 }
 func (m *RemoteProducerMetadata_TraceData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1197,7 +1197,7 @@ func (m *RemoteProducerMetadata_RowNum) Reset()         { *m = RemoteProducerMet
 func (m *RemoteProducerMetadata_RowNum) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RowNum) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RowNum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 2}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 2}
 }
 func (m *RemoteProducerMetadata_RowNum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1237,7 +1237,7 @@ func (m *RemoteProducerMetadata_SamplerProgress) Reset() {
 func (m *RemoteProducerMetadata_SamplerProgress) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_SamplerProgress) ProtoMessage()    {}
 func (*RemoteProducerMetadata_SamplerProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 3}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 3}
 }
 func (m *RemoteProducerMetadata_SamplerProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1278,7 +1278,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) String() string {
 }
 func (*RemoteProducerMetadata_BulkProcessorProgress) ProtoMessage() {}
 func (*RemoteProducerMetadata_BulkProcessorProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 4}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 4}
 }
 func (m *RemoteProducerMetadata_BulkProcessorProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1315,7 +1315,7 @@ func (m *RemoteProducerMetadata_Metrics) Reset()         { *m = RemoteProducerMe
 func (m *RemoteProducerMetadata_Metrics) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_Metrics) ProtoMessage()    {}
 func (*RemoteProducerMetadata_Metrics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 5}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 5}
 }
 func (m *RemoteProducerMetadata_Metrics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1352,7 +1352,7 @@ func (m *RemoteProducerMetadata_ContentionEvents) Reset() {
 func (m *RemoteProducerMetadata_ContentionEvents) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_ContentionEvents) ProtoMessage()    {}
 func (*RemoteProducerMetadata_ContentionEvents) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{10, 6}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{10, 6}
 }
 func (m *RemoteProducerMetadata_ContentionEvents) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1392,7 +1392,7 @@ func (m *DistSQLVersionGossipInfo) Reset()         { *m = DistSQLVersionGossipIn
 func (m *DistSQLVersionGossipInfo) String() string { return proto.CompactTextString(m) }
 func (*DistSQLVersionGossipInfo) ProtoMessage()    {}
 func (*DistSQLVersionGossipInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{11}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{11}
 }
 func (m *DistSQLVersionGossipInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1428,7 +1428,7 @@ func (m *DistSQLDrainingInfo) Reset()         { *m = DistSQLDrainingInfo{} }
 func (m *DistSQLDrainingInfo) String() string { return proto.CompactTextString(m) }
 func (*DistSQLDrainingInfo) ProtoMessage()    {}
 func (*DistSQLDrainingInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_5f75f2288136bd96, []int{12}
+	return fileDescriptor_data_6e2d4ee9b531ae93, []int{12}
 }
 func (m *DistSQLDrainingInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3072,7 +3072,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3180,7 +3180,7 @@ func (m *Expression) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3261,7 +3261,7 @@ func (m *Ordering) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3349,7 +3349,7 @@ func (m *Ordering_Column) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3475,7 +3475,7 @@ func (m *StreamEndpointSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3636,7 +3636,7 @@ func (m *InputSyncSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3859,7 +3859,7 @@ func (m *OutputRouterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -3991,7 +3991,7 @@ func (m *OutputRouterSpec_RangeRouterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4079,7 +4079,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Unmarshal(dAtA []byte)
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4210,7 +4210,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_Span) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4312,7 +4312,7 @@ func (m *DatumInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4411,7 +4411,7 @@ func (m *ProducerHeader) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4542,7 +4542,7 @@ func (m *ProducerData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -4686,7 +4686,7 @@ func (m *ProducerMessage) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5024,7 +5024,7 @@ func (m *RemoteProducerMetadata) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5105,7 +5105,7 @@ func (m *RemoteProducerMetadata_RangeInfos) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5186,7 +5186,7 @@ func (m *RemoteProducerMetadata_TraceData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5304,7 +5304,7 @@ func (m *RemoteProducerMetadata_RowNum) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5393,7 +5393,7 @@ func (m *RemoteProducerMetadata_SamplerProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5546,7 +5546,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) Unmarshal(dAtA []byte) er
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthData
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -5642,7 +5642,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) Unmarshal(dAtA []byte) er
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthData
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -5689,7 +5689,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) Unmarshal(dAtA []byte) er
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5777,7 +5777,7 @@ func (m *RemoteProducerMetadata_Metrics) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5858,7 +5858,7 @@ func (m *RemoteProducerMetadata_ContentionEvents) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -5946,7 +5946,7 @@ func (m *DistSQLVersionGossipInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -6016,7 +6016,7 @@ func (m *DistSQLDrainingInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthData
 			}
 			if (iNdEx + skippy) > l {
@@ -6136,9 +6136,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/execinfrapb/data.proto", fileDescriptor_data_5f75f2288136bd96) }
+func init() { proto.RegisterFile("sql/execinfrapb/data.proto", fileDescriptor_data_6e2d4ee9b531ae93) }
 
-var fileDescriptor_data_5f75f2288136bd96 = []byte{
+var fileDescriptor_data_6e2d4ee9b531ae93 = []byte{
 	// 2141 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x58, 0xcd, 0x73, 0x1c, 0x47,
 	0x15, 0xdf, 0x2f, 0xed, 0xc7, 0xd3, 0xd7, 0xa8, 0xb1, 0x9d, 0x65, 0x31, 0x92, 0xb3, 0xa6, 0x52,

@@ -14,6 +14,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/twpayne/go-geom"
@@ -1597,7 +1599,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					ctx,
 					tuple,
 					string(tree.MustBeDString(args[1])),
-					int(tree.MustBeDInt(args[2])),
+					fitMaxDecimalDigitsToBounds(int(tree.MustBeDInt(args[2]))),
 					false, /* pretty */
 				)
 			},
@@ -1623,7 +1625,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					ctx,
 					tuple,
 					string(tree.MustBeDString(args[1])),
-					int(tree.MustBeDInt(args[2])),
+					fitMaxDecimalDigitsToBounds(int(tree.MustBeDInt(args[2]))),
 					bool(tree.MustBeDBool(args[3])),
 				)
 			},
@@ -1951,6 +1953,48 @@ Flags shown square brackets after the geometry type have the following meaning:
 			},
 			tree.VolatilityImmutable,
 		),
+	),
+	"st_generatepoints": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				seed := timeutil.Now().Unix()
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.",
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				seed := int64(tree.MustBeDInt(args[2]))
+				if seed < 1 {
+					return nil, errors.New("seed must be greater than zero")
+				}
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_numpoints": makeBuiltin(
 		defProps(),
@@ -2715,6 +2759,25 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 					`MultiLineString with matching endpoints. If the input is not a MultiLineString or LineString, ` +
 					`an empty GeometryCollection is returned.`,
 				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_shiftlongitude": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ShiftLongitude(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a modified version of a geometry in which the longitude (X coordinate) of each point is ` +
+					`incremented by 360 if it is <0 and decremented by 360 if it is >180. The result is only meaningful ` +
+					`if the coordinates are in longitude/latitude.`,
 			},
 			tree.VolatilityImmutable,
 		),
@@ -5855,6 +5918,59 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_linesubstring": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"linestring", types.Geometry},
+				{"start_fraction", types.Float},
+				{"end_fraction", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Volatility: tree.VolatilityImmutable,
+			Info: infoBuilder{
+				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
+			}.String(),
+			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(datums[0])
+				startFraction := float64(tree.MustBeDFloat(datums[1]))
+				endFraction := float64(tree.MustBeDFloat(datums[2]))
+				geometry, err := geomfn.LineSubstring(g.Geometry, startFraction, endFraction)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
+			},
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"linestring", types.Geometry},
+				{"start_fraction", types.Decimal},
+				{"end_fraction", types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Volatility: tree.VolatilityImmutable,
+			Info: infoBuilder{
+				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
+			}.String(),
+			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(datums[0])
+				startFraction := tree.MustBeDDecimal(datums[1])
+				startFractionFloat, err := startFraction.Float64()
+				if err != nil {
+					return nil, err
+				}
+				endFraction := tree.MustBeDDecimal(datums[2])
+				endFractionFloat, err := endFraction.Float64()
+				if err != nil {
+					return nil, err
+				}
+				geometry, err := geomfn.LineSubstring(g.Geometry, startFractionFloat, endFractionFloat)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
+			},
+		}),
 
 	//
 	// Unimplemented.
@@ -5877,18 +5993,15 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_generatepoints":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
 	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
 	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
 	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
 	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_shiftlongitude":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
 	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
 	"st_snap":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),

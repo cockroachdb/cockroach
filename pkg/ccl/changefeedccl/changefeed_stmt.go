@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -202,7 +201,7 @@ func changefeedPlanHook(
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
 					StatementTimeName: table.GetName(),
 				}
-				if err := validateChangefeedTable(targets, table); err != nil {
+				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
 				}
 			}
@@ -300,13 +299,9 @@ func changefeedPlanHook(
 		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 		// which will be immediately closed, only to check for errors.
 		{
-			nodeID, err := p.ExtendedEvalContext().NodeID.OptionalNodeIDErr(48274)
-			if err != nil {
-				return err
-			}
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
-				ctx, details.SinkURI, nodeID, details.Opts, details.Targets,
+				ctx, details.SinkURI, p.ExecCfg().NodeID.SQLInstanceID(), details.Opts, details.Targets,
 				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
 			)
 			if err != nil {
@@ -316,11 +311,6 @@ func changefeedPlanHook(
 				return err
 			}
 		}
-
-		// Make a channel for runChangefeedFlow to signal once everything has
-		// been setup okay. This intentionally abuses what would normally be
-		// hooked up to resultsCh to avoid a bunch of extra plumbing.
-		startedCh := make(chan tree.Datums)
 
 		// The below block creates the job and if there's an initial scan, protects
 		// the data required for that scan. We protect the data here rather than in
@@ -353,7 +343,7 @@ func changefeedPlanHook(
 				Progress: *progress.GetChangefeed(),
 			}
 			createJobAndProtectedTS := func(ctx context.Context, txn *kv.Txn) (err error) {
-				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, startedCh)
+				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
 				if err != nil {
 					return err
 				}
@@ -387,23 +377,20 @@ func changefeedPlanHook(
 			}
 		}
 
-		// Start the job and wait for it to signal on startedCh.
-		errCh, err := sj.Start(ctx)
-		if err != nil {
+		// Start the job.
+		if err := sj.Start(ctx); err != nil {
 			return err
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case err := <-errCh:
-			return err
-		case <-startedCh:
-			// The feed set up without error, return control to the user.
-		}
-		resultsCh <- tree.Datums{
+		case resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*sj.ID())),
+		}:
+			return nil
 		}
-		return nil
+
 	}
 	return fn, header, nil, avoidBuffering, nil
 }
@@ -513,52 +500,6 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	return details, nil
 }
 
-func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor,
-) error {
-	t, ok := targets[tableDesc.GetID()]
-	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
-	}
-
-	// Technically, the only non-user table known not to work is system.jobs
-	// (which creates a cycle since the resolved timestamp high-water mark is
-	// saved in it), but there are subtle differences in the way many of them
-	// work and this will be under-tested, so disallow them all until demand
-	// dictates.
-	if tableDesc.GetID() < keys.MinUserDescID {
-		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
-	}
-	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
-	}
-	if families := tableDesc.GetFamilies(); len(families) != 1 {
-		return errors.Errorf(
-			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.GetName(), len(families))
-	}
-
-	if tableDesc.GetState() == descpb.DescriptorState_DROP {
-		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
-	}
-	if tableDesc.GetName() != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
-	}
-
-	// TODO(mrtracy): re-enable this when allow-backfill option is added.
-	// if tableDesc.HasColumnBackfillMutation() {
-	// 	return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
-	// }
-
-	return nil
-}
-
 type changefeedResumer struct {
 	job *jobs.Job
 }
@@ -592,10 +533,8 @@ func generateChangefeedSessionID() string {
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (b *changefeedResumer) Resume(
-	ctx context.Context, exec interface{}, startedCh chan<- tree.Datums,
-) error {
-	jobExec := exec.(sql.JobExecContext)
+func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
@@ -611,7 +550,14 @@ func (b *changefeedResumer) Resume(
 		MaxBackoff:     10 * time.Second,
 	}
 	var err error
+
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		// startedCh is normally used to signal back to the creator of the job that
+		// the job has started; however, in this case nothing will ever receive
+		// on the channel, causing the changefeed flow to block. Replace it with
+		// a dummy channel.
+		startedCh := make(chan tree.Datums, 1)
+
 		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
@@ -650,12 +596,6 @@ func (b *changefeedResumer) Resume(
 		} else {
 			progress = reloadedJob.Progress()
 		}
-
-		// startedCh is normally used to signal back to the creator of the job that
-		// the job has started; however, in this case nothing will ever receive
-		// on the channel, causing the changefeed flow to block. Replace it with
-		// a dummy channel.
-		startedCh = make(chan tree.Datums, 1)
 	}
 	// We only hit this if `r.Next()` returns false, which right now only happens
 	// on context cancellation.

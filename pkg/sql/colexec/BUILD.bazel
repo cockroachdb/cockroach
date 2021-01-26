@@ -13,10 +13,12 @@ go_library(
         "columnarizer.go",
         "constants.go",
         "count.go",
+        "crossjoiner.go",
         "deselector.go",
         "disk_spiller.go",
         "expr.go",
         "external_distinct.go",
+        "external_hash_aggregator.go",
         "external_hash_joiner.go",
         "external_sort.go",
         "fn_op.go",
@@ -80,6 +82,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
@@ -90,9 +93,9 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",  # keep
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/marusama/semaphore",
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -110,14 +113,17 @@ go_test(
         "columnarizer_test.go",
         "const_test.go",
         "count_test.go",
+        "crossjoiner_test.go",
         "default_agg_test.go",
         "default_cmp_op_test.go",
         "dep_test.go",
         "deselector_test.go",
         "distinct_test.go",
         "external_distinct_test.go",
+        "external_hash_aggregator_test.go",
         "external_hash_joiner_test.go",
         "external_sort_test.go",
+        "hash_aggregator_test.go",
         "hash_utils_test.go",
         "hashjoiner_test.go",
         "inject_setup_test.go",
@@ -192,13 +198,13 @@ go_test(
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
-        "//vendor/github.com/apache/arrow/go/arrow/array",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/marusama/semaphore",
-        "//vendor/github.com/pmezard/go-difflib/difflib",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_apache_arrow_go_arrow//array",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_pmezard_go_difflib//difflib",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

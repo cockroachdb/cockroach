@@ -39,6 +39,7 @@ func TestDockerC(t *testing.T) {
 }
 
 func TestDockerCSharp(t *testing.T) {
+	skip.WithIssue(t, 58218, "flaky test")
 	s := log.Scope(t)
 	defer s.Close(t)
 
@@ -48,6 +49,7 @@ func TestDockerCSharp(t *testing.T) {
 }
 
 func TestDockerJava(t *testing.T) {
+	skip.WithIssue(t, 58955, "flaky test")
 	s := log.Scope(t)
 	defer s.Close(t)
 
@@ -68,6 +70,7 @@ func TestDockerElixir(t *testing.T) {
 }
 
 func TestDockerNodeJS(t *testing.T) {
+	skip.WithIssue(t, 58955, "flaky test")
 	s := log.Scope(t)
 	defer s.Close(t)
 
@@ -96,6 +99,7 @@ func TestDockerPHP(t *testing.T) {
 }
 
 func TestDockerPSQL(t *testing.T) {
+	skip.WithIssue(t, 58955, "flaky test")
 	s := log.Scope(t)
 	defer s.Close(t)
 

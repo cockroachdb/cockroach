@@ -24,7 +24,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/fileutil",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

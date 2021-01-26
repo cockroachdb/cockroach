@@ -16,6 +16,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -523,7 +524,7 @@ func (s *Store) reserveSnapshot(
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return nil, "", errors.Errorf("stopped")
 		default:
 			return nil, snapshotApplySemBusyMsg, nil
@@ -533,7 +534,7 @@ func (s *Store) reserveSnapshot(
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return nil, "", errors.Errorf("stopped")
 		}
 	}
@@ -926,6 +927,11 @@ func SendEmptySnapshot(
 	); err != nil {
 		return err
 	}
+
+	var replicaVersion roachpb.Version
+	if st.Version.IsActive(ctx, clusterversion.ReplicaVersions) {
+		replicaVersion = st.Version.ActiveVersionOrEmpty(ctx).Version
+	}
 	ms, err := stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -934,6 +940,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		stateloader.TruncatedStateUnreplicated,
+		replicaVersion,
 	)
 	if err != nil {
 		return err

@@ -74,9 +74,8 @@ func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
-func (*AlterTablePartitionBy) alterTableCmd()        {}
+func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
-func (*AlterTableOwner) alterTableCmd()              {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -91,9 +90,8 @@ var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
-var _ AlterTableCmd = &AlterTablePartitionBy{}
+var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
-var _ AlterTableCmd = &AlterTableOwner{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -478,20 +476,20 @@ func (node *AlterTableDropStored) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP STORED")
 }
 
-// AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
-// command.
-type AlterTablePartitionBy struct {
-	*PartitionBy
+// AlterTablePartitionByTable represents an ALTER TABLE PARTITION [ALL]
+// BY command.
+type AlterTablePartitionByTable struct {
+	*PartitionByTable
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
-func (node *AlterTablePartitionBy) TelemetryCounter() telemetry.Counter {
+func (node *AlterTablePartitionByTable) TelemetryCounter() telemetry.Counter {
 	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "partition_by")
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTablePartitionBy) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.PartitionBy)
+func (node *AlterTablePartitionByTable) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.PartitionByTable)
 }
 
 // AuditMode represents a table audit mode
@@ -602,20 +600,71 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Schema)
 }
 
-// AlterTableOwner represents an ALTER TABLE OWNER TO command.
-type AlterTableOwner struct {
-	// TODO(solon): Adjust this, see
-	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner security.SQLUsername
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterTableSetSchema) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"set_schema")
 }
 
-// TelemetryCounter implements the AlterTableCmd interface.
+// AlterTableOwner represents an ALTER TABLE OWNER TO command.
+type AlterTableOwner struct {
+	Name *UnresolvedObjectName
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	Owner          security.SQLUsername
+	IfExists       bool
+	IsView         bool
+	IsMaterialized bool
+	IsSequence     bool
+}
+
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
 func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "owner to")
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"owner_to",
+	)
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER")
+	if node.IsView {
+		if node.IsMaterialized {
+			ctx.WriteString(" MATERIALIZED")
+		}
+		ctx.WriteString(" VIEW ")
+	} else if node.IsSequence {
+		ctx.WriteString(" SEQUENCE ")
+	} else {
+		ctx.WriteString(" TABLE ")
+	}
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	node.Name.Format(ctx)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatUsername(node.Owner)
+}
+
+// GetTableType returns a string representing the type of table the command
+// is operating on.
+// It is assumed if the table is not a sequence or a view, then it is a
+// regular table.
+func GetTableType(isSequence bool, isView bool, isMaterialized bool) string {
+	tableType := "table"
+	if isSequence {
+		tableType = "sequence"
+	} else if isView {
+		if isMaterialized {
+			tableType = "materialized_view"
+		} else {
+			tableType = "view"
+		}
+	}
+
+	return tableType
 }

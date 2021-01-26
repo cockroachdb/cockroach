@@ -19,15 +19,18 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
  * getEventDescription returns a short summary of an event.
  */
 export function getEventDescription(e: Event$Properties): string {
-  const info: EventInfo = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
+  const info: EventInfo = protobuf.util.isset(e, "info")
+    ? JSON.parse(e.info)
+    : {};
   let privs = "";
 
   switch (e.event_type) {
     case eventTypes.CREATE_DATABASE:
       return `Database Created: User ${info.User} created database ${info.DatabaseName}`;
-    case eventTypes.DROP_DATABASE:
+    case eventTypes.DROP_DATABASE: {
       const tableDropText = getDroppedObjectsText(info);
       return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
+    }
     case eventTypes.RENAME_DATABASE:
       return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
     case eventTypes.ALTER_DATABASE_OWNER:
@@ -134,7 +137,11 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.ALTER_ROLE:
       return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
     default:
-      return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
+      return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
+        info,
+        null,
+        2,
+      )}`;
   }
 }
 
@@ -179,7 +186,10 @@ export interface EventInfo {
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
   const droppedObjects =
-    eventInfo.DroppedSchemaObjects || eventInfo.DroppedTablesAndViews || eventInfo.DroppedTables || eventInfo.CascadeDroppedViews;
+    eventInfo.DroppedSchemaObjects ||
+    eventInfo.DroppedTablesAndViews ||
+    eventInfo.DroppedTables ||
+    eventInfo.CascadeDroppedViews;
   if (!droppedObjects) {
     return "";
   }
@@ -188,5 +198,7 @@ export function getDroppedObjectsText(eventInfo: EventInfo): string {
   } else if (droppedObjects.length === 1) {
     return `1 schema object was dropped: ${droppedObjects[0]}`;
   }
-  return `${droppedObjects.length} schema objects were dropped: ${droppedObjects.join(", ")}`;
+  return `${
+    droppedObjects.length
+  } schema objects were dropped: ${droppedObjects.join(", ")}`;
 }

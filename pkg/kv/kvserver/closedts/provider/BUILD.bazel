@@ -15,7 +15,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/logtags",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
@@ -34,9 +34,9 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
 )

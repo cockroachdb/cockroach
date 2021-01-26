@@ -52,31 +52,23 @@ func ReplicaTypeLearner() *ReplicaType {
 	return &t
 }
 
-// ReplicaDescriptors is a set of replicas, usually the nodes/stores on which
+// ReplicaSet is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
-type ReplicaDescriptors struct {
+type ReplicaSet struct {
 	wrapped []ReplicaDescriptor
 }
 
-// MakeReplicaDescriptors creates a ReplicaDescriptors wrapper from a raw slice
-// of individual descriptors.
-//
-// All construction of ReplicaDescriptors is required to go through this method
-// so we can guarantee sortedness, which is used to speed up accessor
-// operations.
-//
-// The function accepts a pointer to a slice instead of a slice directly to
-// avoid an allocation when boxing the argument as a sort.Interface. This may
-// cause the argument to escape to the heap for some callers, at which point
-// we're trading one allocation for another. However, if the caller already has
-// the slice header on the heap (which is the common case for *RangeDescriptors)
-// then this is a net win.
-func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
-	return ReplicaDescriptors{wrapped: replicas}
+// TODO(aayush): Add a `Size` or `NumReplicas` method to ReplicaSet and amend
+// usages that call `len(replicaSet.Descriptors())`
+
+// MakeReplicaSet creates a ReplicaSet wrapper from a raw slice of individual
+// descriptors.
+func MakeReplicaSet(replicas []ReplicaDescriptor) ReplicaSet {
+	return ReplicaSet{wrapped: replicas}
 }
 
 // SafeFormat implements redact.SafeFormatter.
-func (d ReplicaDescriptors) SafeFormat(w redact.SafePrinter, _ rune) {
+func (d ReplicaSet) SafeFormat(w redact.SafePrinter, _ rune) {
 	for i, desc := range d.wrapped {
 		if i > 0 {
 			w.SafeRune(',')
@@ -85,14 +77,24 @@ func (d ReplicaDescriptors) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
-func (d ReplicaDescriptors) String() string {
+func (d ReplicaSet) String() string {
 	return redact.StringWithoutMarkers(d)
 }
 
-// All returns every replica in the set, including both voter replicas and
-// learner replicas. Voter replicas are ordered first in the returned slice.
-func (d ReplicaDescriptors) All() []ReplicaDescriptor {
+// Descriptors returns every replica descriptor in the set, including both voter
+// replicas and learner replicas. Voter replicas are ordered first in the
+// returned slice.
+func (d ReplicaSet) Descriptors() []ReplicaDescriptor {
 	return d.wrapped
+}
+
+func predVoterFull(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_FULL:
+		return true
+	default:
+	}
+	return false
 }
 
 func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
@@ -112,12 +114,15 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == NON_VOTER
 }
 
-// Voters returns the current and future voter replicas in the set. This means
-// that during an atomic replication change, only the replicas that will be
-// voters once the change completes will be returned; "outgoing" voters will not
-// be returned even though they do in the current state retain their voting
-// rights. When no atomic membership change is ongoing, this is simply the set
-// of all non-learners.
+func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFull(rDesc) || predNonVoter(rDesc)
+}
+
+// Voters returns a ReplicaSet of current and future voter replicas in `d`. This
+// means that during an atomic replication change, only the replicas that will
+// be voters once the change completes will be returned; "outgoing" voters will
+// not be returned even though they do in the current state retain their voting
+// rights.
 //
 // This may allocate, but it also may return the underlying slice as a
 // performance optimization, so it's not safe to modify the returned value.
@@ -125,13 +130,20 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 // TODO(tbg): go through the callers and figure out the few which want a
 // different subset of voters. Consider renaming this method so that it's
 // more descriptive.
-func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
+func (d ReplicaSet) Voters() ReplicaSet {
 	return d.Filter(predVoterFullOrIncoming)
 }
 
-// Learners returns the learner replicas in the set. This may allocate, but it
-// also may return the underlying slice as a performance optimization, so it's
-// not safe to modify the returned value.
+// VoterDescriptors returns the descriptors of current and future voter replicas
+// in the set.
+func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterFullOrIncoming)
+}
+
+// LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
+// learner replicas in `d`. This may allocate, but it also may return the
+// underlying slice as a performance optimization, so it's not safe to modify
+// the returned value.
 //
 // A learner is a participant in a raft group that accepts messages but doesn't
 // vote. This means it doesn't affect raft quorum and thus doesn't affect the
@@ -211,17 +223,17 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // However, it means a slow learner can slow down regular traffic.
 //
 // For some related mega-comments, see Replica.sendSnapshot.
-func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
-	return d.Filter(predLearner)
+func (d ReplicaSet) LearnerDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predLearner)
 }
 
-// NonVoters returns the non-voting replicas in the set. Non-voting replicas are
-// treated differently from learner replicas. Learners are a temporary internal
-// state used to make atomic replication changes less disruptive to the system.
-// Even though learners and non-voting replicas are both etcd/raft LearnerNodes
-// under the hood, non-voting replicas are meant to be a user-visible state and
-// are explicitly chosen to be placed inside certain localities via zone
-// configs.
+// NonVoters returns a ReplicaSet containing only the non-voters in `d`.
+// Non-voting replicas are treated differently from learner replicas.
+// Learners are a temporary internal state used to make atomic
+// replication changes less disruptive to the system. Even though learners and
+// non-voting replicas are both etcd/raft LearnerNodes under the hood,
+// non-voting replicas are meant to be a user-visible state and are explicitly
+// chosen to be placed inside certain localities via zone configs.
 //
 // Key differences between how we treat (ephemeral) learners and (persistent)
 // non-voting replicas: - Non-voting replicas rely on the raft snapshot queue in
@@ -238,13 +250,35 @@ func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 // TODO(aayush): Expand this documentation once `AdminRelocateRange` knows how
 // to deal with such replicas & range merges no longer block due to the presence
 // of non-voting replicas.
-func (d ReplicaDescriptors) NonVoters() []ReplicaDescriptor {
+func (d ReplicaSet) NonVoters() ReplicaSet {
 	return d.Filter(predNonVoter)
 }
 
-// Filter returns only the replica descriptors for which the supplied method
-// returns true. The memory returned may be shared with the receiver.
-func (d ReplicaDescriptors) Filter(pred func(rDesc ReplicaDescriptor) bool) []ReplicaDescriptor {
+// NonVoterDescriptors returns the non-voting replica descriptors in the set.
+func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predNonVoter)
+}
+
+// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
+// replicas in the set. This set will not contain learners or, during an atomic
+// replication change, incoming or outgoing voters. Notably, this set must
+// encapsulate all replicas of a range for a range merge to proceed.
+func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterOrNonVoter)
+}
+
+// Filter returns a ReplicaSet corresponding to the replicas for which the
+// supplied predicate returns true.
+func (d ReplicaSet) Filter(pred func(rDesc ReplicaDescriptor) bool) ReplicaSet {
+	return MakeReplicaSet(d.FilterToDescriptors(pred))
+}
+
+// FilterToDescriptors returns only the replica descriptors for which the
+// supplied method returns true. The memory returned may be shared with the
+// receiver.
+func (d ReplicaSet) FilterToDescriptors(
+	pred func(rDesc ReplicaDescriptor) bool,
+) []ReplicaDescriptor {
 	// Fast path when all or none match to avoid allocations.
 	fastpath := true
 	out := d.wrapped
@@ -268,28 +302,38 @@ func (d ReplicaDescriptors) Filter(pred func(rDesc ReplicaDescriptor) bool) []Re
 // setting the InternalReplicas field of a RangeDescriptor. When possible the
 // SetReplicas method of RangeDescriptor should be used instead, this is only
 // here for the convenience of tests.
-func (d ReplicaDescriptors) AsProto() []ReplicaDescriptor {
+func (d ReplicaSet) AsProto() []ReplicaDescriptor {
 	return d.wrapped
 }
 
 // DeepCopy returns a copy of this set of replicas. Modifications to the
 // returned set will not affect this one and vice-versa.
-func (d ReplicaDescriptors) DeepCopy() ReplicaDescriptors {
-	return ReplicaDescriptors{
+func (d ReplicaSet) DeepCopy() ReplicaSet {
+	return ReplicaSet{
 		wrapped: append([]ReplicaDescriptor(nil), d.wrapped...),
 	}
 }
 
+// Contains returns true if the set contains rDesc.
+func (d ReplicaSet) Contains(rDesc ReplicaDescriptor) bool {
+	descs := d.Descriptors()
+	for i := range descs {
+		repl := &descs[i]
+		if repl.StoreID == rDesc.StoreID && repl.NodeID == rDesc.NodeID {
+			return true
+		}
+	}
+	return false
+}
+
 // AddReplica adds the given replica to this set.
-func (d *ReplicaDescriptors) AddReplica(r ReplicaDescriptor) {
+func (d *ReplicaSet) AddReplica(r ReplicaDescriptor) {
 	d.wrapped = append(d.wrapped, r)
 }
 
 // RemoveReplica removes the matching replica from this set. If it wasn't found
 // to remove, false is returned.
-func (d *ReplicaDescriptors) RemoveReplica(
-	nodeID NodeID, storeID StoreID,
-) (ReplicaDescriptor, bool) {
+func (d *ReplicaSet) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescriptor, bool) {
 	idx := -1
 	for i := range d.wrapped {
 		if d.wrapped[i].NodeID == nodeID && d.wrapped[i].StoreID == storeID {
@@ -309,7 +353,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 
 // InAtomicReplicationChange returns true if the descriptor is in the middle of
 // an atomic replication change.
-func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
+func (d ReplicaSet) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
 		switch rDesc.GetType() {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
@@ -323,7 +367,7 @@ func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 }
 
 // ConfState returns the Raft configuration described by the set of replicas.
-func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
+func (d ReplicaSet) ConfState() raftpb.ConfState {
 	var cs raftpb.ConfState
 	joint := d.InAtomicReplicationChange()
 	// The incoming config is taken verbatim from the full voters when the
@@ -359,7 +403,7 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 // CanMakeProgress reports whether the given descriptors can make progress at the
 // replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.
-func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
+func (d ReplicaSet) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
 	isVoterOldConfig := func(rDesc ReplicaDescriptor) bool {
 		switch rDesc.GetType() {
 		case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING:
@@ -385,8 +429,8 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 		}
 	}
 
-	votersOldGroup := d.Filter(isVoterOldConfig)
-	liveVotersOldGroup := d.Filter(isBoth(isVoterOldConfig, liveFunc))
+	votersOldGroup := d.FilterToDescriptors(isVoterOldConfig)
+	liveVotersOldGroup := d.FilterToDescriptors(isBoth(isVoterOldConfig, liveFunc))
 
 	n := len(votersOldGroup)
 	// Empty groups succeed by default, to match the Raft implementation.
@@ -394,11 +438,23 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 		return false
 	}
 
-	votersNewGroup := d.Filter(isVoterNewConfig)
-	liveVotersNewGroup := d.Filter(isBoth(isVoterNewConfig, liveFunc))
+	votersNewGroup := d.FilterToDescriptors(isVoterNewConfig)
+	liveVotersNewGroup := d.FilterToDescriptors(isBoth(isVoterNewConfig, liveFunc))
 
 	n = len(votersNewGroup)
 	return len(liveVotersNewGroup) >= n/2+1
+}
+
+// ReplicationTargets returns a slice of ReplicationTargets corresponding to
+// each of the replicas in the set.
+func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
+	descs := d.Descriptors()
+	out = make([]ReplicationTarget, len(descs))
+	for i := range descs {
+		repl := &descs[i]
+		out[i].NodeID, out[i].StoreID = repl.NodeID, repl.StoreID
+	}
+	return out
 }
 
 // IsAddition returns true if `c` refers to a replica addition operation.

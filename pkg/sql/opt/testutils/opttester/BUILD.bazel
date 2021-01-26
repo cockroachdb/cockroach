@@ -37,9 +37,9 @@ go_library(
         "//pkg/util",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/pmezard/go-difflib/difflib",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pmezard_go_difflib//difflib",
     ],
 )
 
@@ -51,6 +51,6 @@ go_test(
         ":opttester",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/testcat",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

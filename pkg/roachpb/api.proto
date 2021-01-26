@@ -99,9 +99,10 @@ message ResponseHeader {
   // The number of keys operated on.
   int64 num_keys = 5;
   // The number of bytes returned. Only populated for requests that support it
-  // (at the time of writing, Scan and ReverseScan). The number returned here
-  // corresponds to the (Header).TargetBytes field and loosely measures the
-  // bytes in the timestamps, keys, and values of the returned rows.
+  // (at the time of writing, Scan, ReverseScan and ExportRequest). The number
+  // returned here corresponds to the (Header).TargetBytes field and loosely
+  // measures the bytes in the timestamps, keys, and values of the returned
+  // rows.
   int64 num_bytes = 8;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.
@@ -343,6 +344,8 @@ message RevertRangeRequest {
   // than the GC Threshold for the replica - so that it is assured that the keys
   // for that time are still there — or the request will fail.
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+
+  bool enable_time_bound_iterator_optimization = 3;
 }
 
 // A RevertRangeResponse is the return value from the RevertRange() method.
@@ -821,7 +824,8 @@ message AdminChangeReplicasResponse {
 // The first store in the list of targets becomes the new leaseholder.
 message AdminRelocateRangeRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
+  repeated ReplicationTarget voter_targets = 2 [(gogoproto.nullable) = false];
+  repeated ReplicationTarget non_voter_targets = 3 [(gogoproto.nullable) = false];
   // TODO(a-robinson): Add "reason"/"details" string fields?
 }
 
@@ -836,6 +840,9 @@ message AdminRelocateRangeResponse {
 // gossip protocol.
 message HeartbeatTxnRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
@@ -1141,7 +1148,8 @@ message RequestLeaseRequest {
   // The MinLeaseProposedTS of the proposing replica to make sure that leases
   // issued after a node restart receive a new sequence number (instead of
   // counting as a lease extension). See #23204.
-  util.hlc.Timestamp min_proposed_ts = 4 [(gogoproto.customname) = "MinProposedTS"];
+  util.hlc.Timestamp min_proposed_ts = 4 [(gogoproto.customname) = "MinProposedTS",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -1645,7 +1653,8 @@ message SubsumeResponse {
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
   // mark for the keys previously owned by the subsumed range.
-  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
@@ -1671,6 +1680,26 @@ message RangeStatsResponse {
   // range_info contains descriptor and lease information. Added in 20.2.
   // TODO(andrei): Make non-nullable in 21.1.
   RangeInfo range_info = 4;
+}
+
+// MigrateRequest is used instruct all ranges overlapping with it to exercise
+// any relevant (below-raft) migrations in order for its range state to conform
+// to what's needed by the specified version. It's a core primitive used in our
+// migrations infrastructure to phase out legacy code below raft.
+//
+// KV waits for this command to durably apply on all replicas before returning,
+// guaranteeing to the caller that all pre-migration state has been completely
+// purged from the system.
+message MigrateRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Version is used to select the specific migration to exercise.
+  Version version = 2 [(gogoproto.nullable) = false];
+}
+
+// MigrateResponse is the response to a Migrate operation.
+message MigrateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RequestUnion contains exactly one of the requests.
@@ -1724,6 +1753,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    MigrateRequest migrate = 50;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1775,6 +1805,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    MigrateResponse migrate = 50;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }
@@ -2001,7 +2032,8 @@ message BatchResponse {
     Transaction txn = 3;
     // now is the highest current time from any node contacted during the request.
     // It can be used by the receiver to update its local HLC.
-    util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.tracingpb.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
@@ -2171,14 +2203,14 @@ service Internal {
 
 // ContentionEvent is a message that will be attached to BatchResponses
 // indicating any conflicts with another transaction during replica evaluation.
-// This message is currently not emitted and only exists for SQL Execution to
-// have a protobuf to work with to build the higher-level infrastructure around
-// contention observability while the work to emit these events is ongoing.
 message ContentionEvent {
+  option (gogoproto.goproto_stringer) = false;
+
   // Key is the key that this and the other transaction conflicted on.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
-  // Txn is the other transaction.
-  Transaction txn = 2 [(gogoproto.nullable) = false];
+  // TxnMeta is the transaction conflicted
+  // with, i.e. the transaction holding a lock.
+  cockroach.storage.enginepb.TxnMeta txn_meta = 2 [(gogoproto.nullable) = false];
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];

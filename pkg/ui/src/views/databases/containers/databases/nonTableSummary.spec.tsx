@@ -18,7 +18,7 @@ import "src/enzymeInit";
 import { NonTableSummary } from "./nonTableSummary";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { cockroach } from "src/js/protos";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import NonTableStatsResponse = cockroach.server.serverpb.NonTableStatsResponse;
 
 describe("NonTableSummary", () => {
@@ -42,11 +42,14 @@ describe("NonTableSummary", () => {
           stats: null,
         },
       });
-      const wrapper = shallow(<NonTableSummary
-        nonTableStats={tableStatsData}
-        nonTableStatsValid={true}
-        refreshNonTableStats={noop as typeof refreshNonTableStats}
-        lastError={undefined} />);
+      const wrapper = shallow(
+        <NonTableSummary
+          nonTableStats={tableStatsData}
+          nonTableStatsValid={true}
+          refreshNonTableStats={noop as typeof refreshNonTableStats}
+          lastError={undefined}
+        />,
+      );
       const loadingWrapper = wrapper.find(Loading).dive();
       assert.isTrue(loadingWrapper.find(".database-summary-table").exists());
     });
@@ -57,11 +60,14 @@ describe("NonTableSummary", () => {
         message: "Insufficient privileges to view this resource",
       };
 
-      const wrapper = mount(<NonTableSummary
-        nonTableStats={null}
-        nonTableStatsValid={true}
-        refreshNonTableStats={noop as typeof refreshNonTableStats}
-        lastError={error} />);
+      const wrapper = mount(
+        <NonTableSummary
+          nonTableStats={null}
+          nonTableStatsValid={true}
+          refreshNonTableStats={noop as typeof refreshNonTableStats}
+          lastError={error}
+        />,
+      );
 
       const loadingWrapper = wrapper.find(Loading);
       assert.isTrue(loadingWrapper.exists());

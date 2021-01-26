@@ -880,24 +880,10 @@ func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Times
 	}
 	var tsS string
 	e.scanArg(name, &tsS)
-	parts := strings.Split(tsS, ",")
-
-	// Find the wall time part.
-	tsW, err := strconv.ParseInt(parts[0], 10, 64)
+	ts, err := hlc.ParseTimestamp(tsS)
 	if err != nil {
 		e.Fatalf("%v", err)
 	}
-	ts.WallTime = tsW
-
-	// Find the logical part, if there is one.
-	var tsL int64
-	if len(parts) > 1 {
-		tsL, err = strconv.ParseInt(parts[1], 10, 32)
-		if err != nil {
-			e.Fatalf("%v", err)
-		}
-	}
-	ts.Logical = int32(tsL)
 	return ts
 }
 

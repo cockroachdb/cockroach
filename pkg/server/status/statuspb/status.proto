@@ -18,20 +18,47 @@ import "gogoproto/gogo.proto";
 
 // StoreStatus records the most recent values of metrics for a store.
 message StoreStatus {
+  // desc is the store descriptor.
   roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // metrics contains the last sampled values for the node metrics.
   map<string, double> metrics = 2;
 }
 
 // NodeStatus records the most recent values of metrics for a node.
+// API: PUBLIC ALPHA
 message NodeStatus {
+  // desc is the node descriptor.
   roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // build_info describes the `cockroach` executable file.
+  // API: PUBLIC ALPHA
   build.Info build_info = 2 [(gogoproto.nullable) = false];
+
+  // started_at is the unix timestamp at which the node process was
+  // last started.
+  // API: PUBLIC ALPHA
   int64 started_at = 3;
+
+  // updated_at is the unix timestamp at which the node status record
+  // was last updated.
+  // API: PUBLIC ALPHA
   int64 updated_at = 4;
+
+  // metrics contains the last sampled values for the node metrics.
   map<string, double> metrics = 5;
+
+  // store_statuses provides the store status payloads for all
+  // the stores on that node.
   repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
+
+  // args is the list of command-line arguments used to last start the node.
   repeated string args = 7;
+
+  // env is the list of environment variables that influenced
+  // the node's configuration.
   repeated string env = 8;
+
   // latencies is a map of nodeIDs to nanoseconds which is the latency
   // between this node and the other node.
   //
@@ -53,11 +80,18 @@ message NodeStatus {
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
+
   // total_system_memory is the total RAM available to the system
-  // (or, if possible, the memory available to the cgroup this process is in)
+  // (or, if detected, the memory available to the cgroup this process is in)
   // in bytes.
+  // API: PUBLIC ALPHA
   int64 total_system_memory = 11;
-  // num_cpus is the number of logical CPUs on this machine.
+
+  // num_cpus is the number of logical CPUs as reported by the operating system
+  // on the host where the `cockroach` process is running. Note that
+  // this does not report the number of CPUs actually used by `cockroach`;
+  // this parameter is controlled separately.
+  // API: PUBLIC ALPHA
   int32 num_cpus = 12;
 }
 

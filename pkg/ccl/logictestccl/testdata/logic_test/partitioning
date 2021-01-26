@@ -1146,3 +1146,26 @@ gc.ttlseconds = 90000,
 num_replicas = 5,
 constraints = '[]',
 lease_preferences = '[]'
+
+statement ok
+CREATE TABLE partition_by_nothing (
+  pk INT PRIMARY KEY,
+  a INT,
+  UNIQUE(b) PARTITION BY NOTHING,
+  b INT,
+  INDEX(b) PARTITION BY NOTHING,
+  FAMILY (pk, a, b)
+) PARTITION BY NOTHING
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE partition_by_nothing]
+----
+CREATE TABLE public.partition_by_nothing (
+   pk INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+   UNIQUE INDEX partition_by_nothing_b_key (b ASC),
+   INDEX partition_by_nothing_b_idx (b ASC),
+   FAMILY fam_0_pk_a_b (pk, a, b)
+)

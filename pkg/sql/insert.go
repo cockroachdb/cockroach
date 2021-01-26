@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var insertNodePool = sync.Pool{
@@ -130,8 +129,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// written to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := r.ti.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
+	if len(r.ti.tableDesc().PartialIndexes()) > 0 {
 		partialIndexPutVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
 
 		err := pm.Init(partialIndexPutVals, tree.Datums{}, r.ti.tableDesc())
@@ -205,8 +203,6 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	if n.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	n.run.ti.clearLastBatch(params.ctx)

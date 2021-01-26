@@ -162,6 +162,9 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 
 	case opt.ProjectOp:
 		relProps.Rule.RejectNullCols.UnionWith(deriveProjectRejectNullCols(in))
+
+	case opt.ScanOp:
+		relProps.Rule.RejectNullCols.UnionWith(deriveScanRejectNullCols(in))
 	}
 
 	return relProps.Rule.RejectNullCols
@@ -316,4 +319,46 @@ func deriveProjectRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 	}
 	return (rejectNullCols.Union(projectionsRejectCols)).Intersection(in.Relational().OutputCols)
+}
+
+// deriveScanRejectNullCols returns the set of Scan columns which are eligible
+// for null rejection. Scan columns can be null-rejected only when there are
+// partial indexes that have explicit "column IS NOT NULL" expressions. Creating
+// null-rejecting filters is useful in this case because the filters may imply a
+// partial index predicate expression, allowing a scan over the index.
+func deriveScanRejectNullCols(in memo.RelExpr) opt.ColSet {
+	md := in.Memo().Metadata()
+	scan := in.(*memo.ScanExpr)
+
+	var rejectNullCols opt.ColSet
+	for i, n := 0, md.Table(scan.Table).IndexCount(); i < n; i++ {
+		if pred, isPartialIndex := md.TableMeta(scan.Table).PartialIndexPredicate(i); isPartialIndex {
+			predFilters := *pred.(*memo.FiltersExpr)
+			rejectNullCols.UnionWith(isNotNullCols(predFilters))
+		}
+	}
+
+	return rejectNullCols
+}
+
+// isNotNullCols returns the set of columns with explicit, top-level IS NOT NULL
+// filter conditions in the given filters. Note that And and Or expressions are
+// not traversed.
+func isNotNullCols(filters memo.FiltersExpr) opt.ColSet {
+	var notNullCols opt.ColSet
+	for i := range filters {
+		c := filters[i].Condition
+		isNot, ok := c.(*memo.IsNotExpr)
+		if !ok {
+			continue
+		}
+		col, ok := isNot.Left.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		if isNot.Right == memo.NullSingleton {
+			notNullCols.Add(col.Col)
+		}
+	}
+	return notNullCols
 }

@@ -12,12 +12,8 @@ package serverpb
 
 import (
 	context "context"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SQLStatusServer is a smaller version of the serverpb.StatusInterface which
@@ -64,63 +60,4 @@ func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
 		return nil, err
 	}
 	return v.(NodesStatusServer), nil
-}
-
-// LatencyGetter stores the map of latencies obtained from the NodesStatusServer.
-// These latencies are displayed on the streams of EXPLAIN ANALYZE diagrams.
-// This struct is put here to avoid import cycles.
-type LatencyGetter struct {
-	NodesStatusServer *OptionalNodesStatusServer
-	mu                struct {
-		syncutil.Mutex
-		lastUpdatedTime time.Time
-		latencyMap      map[roachpb.NodeID]map[roachpb.NodeID]int64
-	}
-}
-
-const updateThreshold = 5 * time.Second
-
-// GetLatency is a helper function that updates the latencies between nodes
-// if the time since the last update exceeds the updateThreshold. This function
-// returns the latency between the origin node and the target node.
-func (lg *LatencyGetter) GetLatency(
-	ctx context.Context, originNodeID roachpb.NodeID, targetNodeID roachpb.NodeID,
-) int64 {
-	lg.mu.Lock()
-	defer lg.mu.Unlock()
-	if timeutil.Since(lg.mu.lastUpdatedTime) < updateThreshold {
-		return lg.mu.latencyMap[originNodeID][targetNodeID]
-	}
-	// Update latencies in latencyMap.
-	if lg.NodesStatusServer == nil {
-		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
-		return 0
-	}
-	ss, err := lg.NodesStatusServer.OptionalNodesStatusServer(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-	if err != nil {
-		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
-		return 0
-	}
-	if lg.mu.latencyMap == nil {
-		lg.mu.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
-	}
-	response, err := ss.Nodes(ctx, &NodesRequest{})
-	if err != nil {
-		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
-		return 0
-	}
-	for i := 0; i < len(response.Nodes); i++ {
-		sendingNodeID := response.Nodes[i].Desc.NodeID
-		if lg.mu.latencyMap[sendingNodeID] == nil {
-			lg.mu.latencyMap[sendingNodeID] = make(map[roachpb.NodeID]int64)
-		}
-		for j := 0; j < len(response.Nodes); j++ {
-			receivingNodeID := response.Nodes[i].Desc.NodeID
-			if sendingNodeID != receivingNodeID {
-				lg.mu.latencyMap[sendingNodeID][receivingNodeID] = response.Nodes[i].Activity[receivingNodeID].Latency
-			}
-		}
-	}
-	lg.mu.lastUpdatedTime = timeutil.Now()
-	return lg.mu.latencyMap[originNodeID][targetNodeID]
 }

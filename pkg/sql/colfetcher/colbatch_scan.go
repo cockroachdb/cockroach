@@ -71,8 +71,8 @@ func (s *ColBatchScan) Init() {
 	s.init = true
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
-		s.ctx, s.flowCtx.Txn, s.spans,
-		limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.ctx, s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -175,7 +175,7 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutations(returnMutations)
+	typs := table.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 
 	// Add all requested system columns to the output.
@@ -198,8 +198,8 @@ func NewColBatchScan(
 	}
 
 	var neededColumns util.FastIntSet
-	for i := range spec.NeededColumns {
-		neededColumns.Add(int(spec.NeededColumns[i]))
+	for _, neededColumn := range spec.NeededColumns {
+		neededColumns.Add(int(neededColumn))
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -215,8 +215,10 @@ func NewColBatchScan(
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
 	spans := s.spans[:0]
-	for i := range spec.Spans {
-		spans = append(spans, spec.Spans[i].Span)
+	specSpans := spec.Spans
+	for i := range specSpans {
+		//gcassert:bce
+		spans = append(spans, specSpans[i].Span)
 	}
 	*s = ColBatchScan{
 		ctx:       ctx,
@@ -248,21 +250,15 @@ func initCRowFetcher(
 		return nil, false, err
 	}
 
-	cols := desc.Columns
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
-	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+	tableArgs.InitCols(desc, spec.Visibility, systemColumnDescs, spec.VirtualColumn)
+
 	if err := fetcher.Init(
 		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
 	); err != nil {

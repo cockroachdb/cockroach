@@ -691,8 +691,9 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings *cluster.Settings
-	execCfg  *sql.ExecutorConfig
+	settings     *cluster.Settings
+	execCfg      *sql.ExecutorConfig
+	restoreStats RowCount
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -833,11 +834,11 @@ func spansForAllRestoreTableIndexes(
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
+		for _, index := range table.NonDropIndexes() {
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.GetID())), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
-			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
+			added[tableAndIndex{tableID: table.GetID(), indexID: index.GetID()}] = true
 		}
 	}
 	// If there are desc revisions, ensure that we also add any index spans
@@ -853,10 +854,10 @@ func spansForAllRestoreTableIndexes(
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
 			tbl := tabledesc.NewImmutable(*rawTbl)
-			for _, idx := range tbl.AllNonDropIndexes() {
-				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
+			for _, idx := range tbl.NonDropIndexes() {
+				key := tableAndIndex{tableID: tbl.ID, indexID: idx.GetID()}
 				if !added[key] {
-					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.GetID())), false); err != nil {
 						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 					}
 					added[key] = true
@@ -1135,9 +1136,7 @@ func createImportingDescriptors(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r *restoreResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 
@@ -1202,7 +1201,7 @@ func (r *restoreResumer) Resume(
 		}
 		// Start the schema change jobs we created.
 		for _, newJob := range newDescriptorChangeJobs {
-			if _, err := newJob.Start(ctx); err != nil {
+			if err := newJob.Start(ctx); err != nil {
 				return err
 			}
 		}
@@ -1264,7 +1263,7 @@ func (r *restoreResumer) Resume(
 
 	// Start the schema change jobs we created.
 	for _, newJob := range newDescriptorChangeJobs {
-		if _, err := newJob.Start(ctx); err != nil {
+		if err := newJob.Start(ctx); err != nil {
 			return err
 		}
 	}
@@ -1285,14 +1284,7 @@ func (r *restoreResumer) Resume(
 		}
 	}
 
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
+	r.restoreStats = res
 
 	// Collect telemetry.
 	{
@@ -1315,6 +1307,23 @@ func (r *restoreResumer) Resume(
 		}
 	}
 	return nil
+}
+
+// ReportResults implements JobResultsReporter interface.
+func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+		tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
+		tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+	}:
+		return nil
+	}
 }
 
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -1531,7 +1540,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {
 				tenant.State = descpb.TenantInfo_DROP
-				if err := sql.GCTenant(ctx, execCfg, &tenant); err != nil {
+				// This is already a job so no need to spin up a gc job for the tenant;
+				// instead just GC the data eagerly.
+				if err := sql.GCTenantSync(ctx, execCfg, &tenant); err != nil {
 					return err
 				}
 			}
@@ -1660,7 +1671,7 @@ func (r *restoreResumer) dropDescriptors(
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
 	}
-	allDescs, err := descsCol.GetAllDescriptors(ctx, txn, true /* validate */)
+	allDescs, err := descsCol.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return err
 	}

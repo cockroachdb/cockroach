@@ -72,7 +72,7 @@ func TestTableReader(t *testing.T) {
 
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, td, td.Indexes[0].ID))
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, td, td.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -437,9 +437,15 @@ func TestLimitScans(t *testing.T) {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
 			stats := execinfrapb.ComponentStats{}
-			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
-				t.Fatal(err)
-			}
+			span.Structured(func(item *types.Any) {
+				if !types.Is(item, &stats) {
+					return
+				}
+				if err := types.UnmarshalAny(item, &stats); err != nil {
+					t.Fatal(err)
+				}
+			})
+
 			if stats.KV.TuplesRead.Value() != limit {
 				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
 			}

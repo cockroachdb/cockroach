@@ -1,16 +1,34 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "tracingpb",
-    srcs = [
-        "recorded_span.go",
-        "recorded_span.pb.go",
-    ],
+    srcs = ["recorded_span.go"],
+    embed = [":tracingpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//types"],
+)
+
+proto_library(
+    name = "tracingpb_proto",
+    srcs = ["recorded_span.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/sortkeys",
-        "//vendor/github.com/gogo/protobuf/types",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
     ],
+)
+
+go_proto_library(
+    name = "tracingpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
+    proto = ":tracingpb_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )

@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.kv.kvserver;
 option go_package = "kvserver";
 
+import "roachpb/data.proto";
 import "roachpb/internal_raft.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
@@ -75,3 +76,12 @@ message WaitForReplicaInitRequest {
 message WaitForReplicaInitResponse {
 }
 
+// CompactEngineSpanRequest does a synchronous compaction of the provided
+// engine span in the given store.
+message CompactEngineSpanRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+}
+
+message CompactEngineSpanResponse {
+}

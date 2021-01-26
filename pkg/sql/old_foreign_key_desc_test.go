@@ -72,14 +72,14 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			refIdx, err := tabledesc.FindFKReferencedIndex(referencedTbl, fk.ReferencedColumnIDs)
+			refIdx, err := tabledesc.FindFKReferencedUniqueConstraint(referencedTbl, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
 			idx.ForeignKey = descpb.ForeignKeyReference{
 				Name:            fk.Name,
 				Table:           fk.ReferencedTableID,
-				Index:           refIdx.ID,
+				Index:           refIdx.(*descpb.IndexDescriptor).ID,
 				Validity:        fk.Validity,
 				SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
 				OnDelete:        fk.OnDelete,
@@ -91,7 +91,7 @@ CREATE INDEX ON t.t1 (x);
 		// Downgrade the inbound foreign keys.
 		for i := range tbl.InboundFKs {
 			fk := &tbl.InboundFKs[i]
-			idx, err := tabledesc.FindFKReferencedIndex(desc, fk.ReferencedColumnIDs)
+			refIdx, err := tabledesc.FindFKReferencedUniqueConstraint(desc, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,6 +111,7 @@ CREATE INDEX ON t.t1 (x);
 				Table: fk.OriginTableID,
 				Index: originIdx.ID,
 			}
+			idx := refIdx.(*descpb.IndexDescriptor)
 			idx.ReferencedBy = append(idx.ReferencedBy, fkRef)
 		}
 		tbl.InboundFKs = nil

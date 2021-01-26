@@ -21,9 +21,9 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
     ],
 )
 
@@ -50,8 +50,8 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

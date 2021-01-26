@@ -47,20 +47,22 @@ func (x HealthAlert_Category) String() string {
 	return proto.EnumName(HealthAlert_Category_name, int32(x))
 }
 func (HealthAlert_Category) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{2, 0}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{2, 0}
 }
 
 // StoreStatus records the most recent values of metrics for a store.
 type StoreStatus struct {
-	Desc    roachpb.StoreDescriptor `protobuf:"bytes,1,opt,name=desc,proto3" json:"desc"`
-	Metrics map[string]float64      `protobuf:"bytes,2,rep,name=metrics,proto3" json:"metrics,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"fixed64,2,opt,name=value,proto3"`
+	// desc is the store descriptor.
+	Desc roachpb.StoreDescriptor `protobuf:"bytes,1,opt,name=desc,proto3" json:"desc"`
+	// metrics contains the last sampled values for the node metrics.
+	Metrics map[string]float64 `protobuf:"bytes,2,rep,name=metrics,proto3" json:"metrics,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"fixed64,2,opt,name=value,proto3"`
 }
 
 func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
 func (m *StoreStatus) String() string { return proto.CompactTextString(m) }
 func (*StoreStatus) ProtoMessage()    {}
 func (*StoreStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{0}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{0}
 }
 func (m *StoreStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -86,15 +88,31 @@ func (m *StoreStatus) XXX_DiscardUnknown() {
 var xxx_messageInfo_StoreStatus proto.InternalMessageInfo
 
 // NodeStatus records the most recent values of metrics for a node.
+// API: PUBLIC ALPHA
 type NodeStatus struct {
-	Desc          roachpb.NodeDescriptor `protobuf:"bytes,1,opt,name=desc,proto3" json:"desc"`
-	BuildInfo     build.Info             `protobuf:"bytes,2,opt,name=build_info,json=buildInfo,proto3" json:"build_info"`
-	StartedAt     int64                  `protobuf:"varint,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	UpdatedAt     int64                  `protobuf:"varint,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Metrics       map[string]float64     `protobuf:"bytes,5,rep,name=metrics,proto3" json:"metrics,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"fixed64,2,opt,name=value,proto3"`
-	StoreStatuses []StoreStatus          `protobuf:"bytes,6,rep,name=store_statuses,json=storeStatuses,proto3" json:"store_statuses"`
-	Args          []string               `protobuf:"bytes,7,rep,name=args,proto3" json:"args,omitempty"`
-	Env           []string               `protobuf:"bytes,8,rep,name=env,proto3" json:"env,omitempty"`
+	// desc is the node descriptor.
+	Desc roachpb.NodeDescriptor `protobuf:"bytes,1,opt,name=desc,proto3" json:"desc"`
+	// build_info describes the `cockroach` executable file.
+	// API: PUBLIC ALPHA
+	BuildInfo build.Info `protobuf:"bytes,2,opt,name=build_info,json=buildInfo,proto3" json:"build_info"`
+	// started_at is the unix timestamp at which the node process was
+	// last started.
+	// API: PUBLIC ALPHA
+	StartedAt int64 `protobuf:"varint,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// updated_at is the unix timestamp at which the node status record
+	// was last updated.
+	// API: PUBLIC ALPHA
+	UpdatedAt int64 `protobuf:"varint,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// metrics contains the last sampled values for the node metrics.
+	Metrics map[string]float64 `protobuf:"bytes,5,rep,name=metrics,proto3" json:"metrics,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"fixed64,2,opt,name=value,proto3"`
+	// store_statuses provides the store status payloads for all
+	// the stores on that node.
+	StoreStatuses []StoreStatus `protobuf:"bytes,6,rep,name=store_statuses,json=storeStatuses,proto3" json:"store_statuses"`
+	// args is the list of command-line arguments used to last start the node.
+	Args []string `protobuf:"bytes,7,rep,name=args,proto3" json:"args,omitempty"`
+	// env is the list of environment variables that influenced
+	// the node's configuration.
+	Env []string `protobuf:"bytes,8,rep,name=env,proto3" json:"env,omitempty"`
 	// latencies is a map of nodeIDs to nanoseconds which is the latency
 	// between this node and the other node.
 	//
@@ -105,10 +123,15 @@ type NodeStatus struct {
 	// to other nodes.
 	Activity map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]NodeStatus_NetworkActivity `protobuf:"bytes,10,rep,name=activity,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"activity" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// total_system_memory is the total RAM available to the system
-	// (or, if possible, the memory available to the cgroup this process is in)
+	// (or, if detected, the memory available to the cgroup this process is in)
 	// in bytes.
+	// API: PUBLIC ALPHA
 	TotalSystemMemory int64 `protobuf:"varint,11,opt,name=total_system_memory,json=totalSystemMemory,proto3" json:"total_system_memory,omitempty"`
-	// num_cpus is the number of logical CPUs on this machine.
+	// num_cpus is the number of logical CPUs as reported by the operating system
+	// on the host where the `cockroach` process is running. Note that
+	// this does not report the number of CPUs actually used by `cockroach`;
+	// this parameter is controlled separately.
+	// API: PUBLIC ALPHA
 	NumCpus int32 `protobuf:"varint,12,opt,name=num_cpus,json=numCpus,proto3" json:"num_cpus,omitempty"`
 }
 
@@ -116,7 +139,7 @@ func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
 func (m *NodeStatus) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus) ProtoMessage()    {}
 func (*NodeStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{1}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{1}
 }
 func (m *NodeStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -151,7 +174,7 @@ func (m *NodeStatus_NetworkActivity) Reset()         { *m = NodeStatus_NetworkAc
 func (m *NodeStatus_NetworkActivity) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus_NetworkActivity) ProtoMessage()    {}
 func (*NodeStatus_NetworkActivity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{1, 2}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{1, 2}
 }
 func (m *NodeStatus_NetworkActivity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -190,7 +213,7 @@ func (m *HealthAlert) Reset()         { *m = HealthAlert{} }
 func (m *HealthAlert) String() string { return proto.CompactTextString(m) }
 func (*HealthAlert) ProtoMessage()    {}
 func (*HealthAlert) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{2}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{2}
 }
 func (m *HealthAlert) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -224,7 +247,7 @@ func (m *HealthCheckResult) Reset()         { *m = HealthCheckResult{} }
 func (m *HealthCheckResult) String() string { return proto.CompactTextString(m) }
 func (*HealthCheckResult) ProtoMessage()    {}
 func (*HealthCheckResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_f9872bd1035fefcc, []int{3}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{3}
 }
 func (m *HealthCheckResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -892,7 +915,7 @@ func (m *StoreStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -909,7 +932,7 @@ func (m *StoreStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1140,7 +1163,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1325,7 +1348,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1437,7 +1460,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1492,7 +1515,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1599,7 +1622,7 @@ func (m *NodeStatus_NetworkActivity) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1727,7 +1750,7 @@ func (m *HealthAlert) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1808,7 +1831,7 @@ func (m *HealthCheckResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1929,10 +1952,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/status/statuspb/status.proto", fileDescriptor_status_f9872bd1035fefcc)
+	proto.RegisterFile("server/status/statuspb/status.proto", fileDescriptor_status_c9ef8fcbce5ee691)
 }
 
-var fileDescriptor_status_f9872bd1035fefcc = []byte{
+var fileDescriptor_status_c9ef8fcbce5ee691 = []byte{
 	// 817 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0x5f, 0x6f, 0xe3, 0x44,
 	0x10, 0xcf, 0x36, 0x69, 0xe3, 0x8c, 0xef, 0x4a, 0x6f, 0x39, 0x90, 0x89, 0x44, 0x6a, 0x02, 0x0f,

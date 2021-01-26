@@ -837,6 +837,7 @@ type clusterSpec struct {
 	NodeCount int
 	// CPUs is the number of CPUs per node.
 	CPUs        int
+	SSDs        int
 	Zones       string
 	Geo         bool
 	Lifetime    time.Duration
@@ -908,6 +909,18 @@ func (s *clusterSpec) args() []string {
 		args = append(args, machineTypeArg)
 	}
 
+	if !local && s.SSDs != 0 {
+		var arg string
+		switch cloud {
+		case gce:
+			arg = fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs)
+		default:
+			fmt.Fprintf(os.Stderr, "specifying ssd count is not yet supported on %s", cloud)
+			os.Exit(1)
+		}
+		args = append(args, arg)
+	}
+
 	if !local {
 		zones := s.Zones
 		if zones == "" {
@@ -966,6 +979,17 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type nodeSSDOption int
+
+func (o nodeSSDOption) apply(spec *clusterSpec) {
+	spec.SSDs = int(o)
+}
+
+// ssd is a node option which requests nodes with the specified number of SSDs.
+func ssd(n int) nodeSSDOption {
+	return nodeSSDOption(n)
 }
 
 type nodeGeoOption struct{}
@@ -1085,6 +1109,11 @@ type cluster struct {
 	// at rest enabled. The default only applies if encryption is not explicitly
 	// enabled or disabled by options passed to Start.
 	encryptDefault bool
+	// encryptAtRandom is true if the cluster should enable encryption-at-rest
+	// on about half of all runs. Only valid if encryptDefault is false. Only
+	// applies if encryption is not explicitly enabled or disabled by options
+	// passed to Start. For use in roachtests.
+	encryptAtRandom bool
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
@@ -2132,8 +2161,18 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if !argExists(args, "--encrypt") && c.encryptDefault {
-		args = append(args, "--encrypt")
+	if !argExists(args, "--encrypt") {
+		if c.encryptDefault {
+			args = append(args, "--encrypt")
+		} else if c.encryptAtRandom {
+			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+			if rng.Intn(2) == 1 {
+				c.l.Printf("starting with encryption at rest enabled")
+				args = append(args, "--encrypt")
+				// Force encryption in future calls of Start with the same cluster.
+				c.encryptDefault = true
+			}
+		}
 	}
 	return execCmd(ctx, c.l, args...)
 }

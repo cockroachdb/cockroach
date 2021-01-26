@@ -1,17 +1,18 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "pgdate",
     srcs = [
         "field_extract.go",
-        "field_string.go",
         "fields.go",
         "math.go",
-        "parsemode_string.go",
         "parsing.go",
         "pgdate.go",
         "setters.go",
         "zone_cache.go",
+        ":gen-field-stringer",  # keep
+        ":gen-parsemode-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate",
     visibility = ["//visibility:public"],
@@ -22,7 +23,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -37,6 +38,18 @@ go_test(
     embed = [":pgdate"],
     deps = [
         "//pkg/util/timeutil",
-        "//vendor/github.com/lib/pq",
+        "@com_github_lib_pq//:pq",
     ],
+)
+
+stringer(
+    name = "gen-field-stringer",
+    file = "fields.go",
+    typ = "field",
+)
+
+stringer(
+    name = "gen-parsemode-stringer",
+    file = "parsing.go",
+    typ = "ParseMode",
 )

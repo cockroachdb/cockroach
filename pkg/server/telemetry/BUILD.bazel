@@ -13,7 +13,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -22,6 +22,6 @@ go_test(
     srcs = ["features_test.go"],
     deps = [
         ":telemetry",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

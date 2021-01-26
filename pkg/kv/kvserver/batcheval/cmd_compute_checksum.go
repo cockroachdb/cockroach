@@ -28,10 +28,7 @@ func init() {
 }
 
 func declareKeysComputeChecksum(
-	desc *roachpb.RangeDescriptor,
-	_ roachpb.Header,
-	_ roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// The correctness of range merges depends on the lease applied index of a
 	// range not being bumped while the RHS is subsumed. ComputeChecksum bumps a
@@ -42,8 +39,7 @@ func declareKeysComputeChecksum(
 	// at the end of Subsume() in cmd_subsume.go for details. Thus, it must
 	// declare access over at least one key. We choose to declare read-only access
 	// over the range descriptor key.
-	rdKey := keys.RangeDescriptorKey(desc.StartKey)
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // Version numbers for Replica checksum computation. Requests silently no-op

@@ -18,7 +18,7 @@ export const track = (fn: Function) => (collapsed: boolean) => {
   });
 };
 
-export default function trackCollapseNode (collapsed: boolean) {
+export default function trackCollapseNode(collapsed: boolean) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(collapsed);
 }

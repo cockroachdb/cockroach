@@ -14,6 +14,7 @@ package faketreeeval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -113,6 +114,20 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
 ) error {
 	return errors.WithStack(errEvalPlanner)
+}
+
+// CompactEngineSpan is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) CompactEngineSpan(
+	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// MemberOfWithAdminOption is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
+	ctx context.Context, member security.SQLUsername,
+) (map[security.SQLUsername]bool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
 }
 
 var _ tree.EvalPlanner = &DummyEvalPlanner{}

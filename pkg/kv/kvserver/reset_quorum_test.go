@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -48,8 +49,11 @@ import (
 // 5. A meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
+	skip.UnderStress(t, "too many nodes")
+	skip.UnderRace(t, "takes >1m under race")
+
+	ctx := context.Background()
 	livenessDuration := 3000 * time.Millisecond
 
 	// This function sets up a test cluster with 4 nodes with a scratch
@@ -83,7 +87,7 @@ func TestResetQuorum(t *testing.T) {
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(n2)))
 		desc, err = tc.RemoveVoters(k, tc.Target(n1))
 		require.NoError(t, err)
-		require.Len(t, desc.Replicas().All(), 3)
+		require.Len(t, desc.Replicas().Descriptors(), 3)
 
 		srv := tc.Server(n1)
 
@@ -131,7 +135,7 @@ func TestResetQuorum(t *testing.T) {
 
 		var updatedDesc roachpb.RangeDescriptor
 		require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
 				Key:    roachpb.KeyMin,
 				EndKey: roachpb.KeyMax,
 			})
@@ -149,11 +153,11 @@ func TestResetQuorum(t *testing.T) {
 			}
 			return errors.Errorf("range id %v not found after resetting quorum", rangeID)
 		}))
-		if len(updatedDesc.Replicas().All()) != 1 {
-			t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().All()))
+		if len(updatedDesc.Replicas().Descriptors()) != 1 {
+			t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().Descriptors()))
 		}
-		if updatedDesc.Replicas().All()[0].NodeID != srv.NodeID() {
-			t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().All()[0].NodeID, srv.NodeID())
+		if updatedDesc.Replicas().Descriptors()[0].NodeID != srv.NodeID() {
+			t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().Descriptors()[0].NodeID, srv.NodeID())
 		}
 	}
 
@@ -226,40 +230,6 @@ func TestResetQuorum(t *testing.T) {
 		verifyResult(t, srv, k, store, id)
 	})
 
-	t.Run("with-replicas-elsewhere", func(t *testing.T) {
-		tc, k, id := setup(t)
-		defer tc.Stopper().Stop(ctx)
-		n1, n2, n3 := 0, 1, 2
-		srv := tc.Server(n1)
-		tc.StopServer(n2)
-		tc.StopServer(n3)
-		// Wait for n2 and n3 liveness to expire.
-		time.Sleep(livenessDuration)
-
-		checkUnavailable(srv, k)
-
-		// Get the store on the designated survivor n1.
-		var store *kvserver.Store
-		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-			store = inner
-			return nil
-		}))
-		if store == nil {
-			t.Fatal("no store found on n1")
-		}
-
-		// Call ResetQuorum to reset quorum on the unhealthy range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(id),
-			},
-		)
-		require.NoError(t, err)
-
-		verifyResult(t, srv, k, store, id)
-	})
-
 	t.Run("without-quorum-loss", func(t *testing.T) {
 		tc, _, id := setup(t)
 		defer tc.Stopper().Stop(ctx)
@@ -289,5 +259,4 @@ func TestResetQuorum(t *testing.T) {
 		)
 		testutils.IsError(err, "targeted range to recover is a meta1 or meta2 range.")
 	})
-
 }

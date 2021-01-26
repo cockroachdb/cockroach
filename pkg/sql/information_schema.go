@@ -143,6 +143,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaRoutineTableID:                     informationSchemaRoutineTable,
 		catconstants.InformationSchemaSchemataTableID:                    informationSchemaSchemataTable,
 		catconstants.InformationSchemaSchemataTablePrivilegesID:          informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSessionVariables:                   informationSchemaSessionVariables,
 		catconstants.InformationSchemaSequencesID:                        informationSchemaSequences,
 		catconstants.InformationSchemaStatisticsTableID:                  informationSchemaStatisticsTable,
 		catconstants.InformationSchemaTableConstraintTableID:             informationSchemaTableConstraintTable,
@@ -402,6 +403,26 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		// Get the collations for all comments of current database.
+		comments, err := getComments(ctx, p)
+		if err != nil {
+			return err
+		}
+		// Push all comments of columns into map.
+		commentMap := make(map[tree.DInt]map[tree.DInt]string)
+		for _, comment := range comments {
+			objID := tree.MustBeDInt(comment[0])
+			objSubID := tree.MustBeDInt(comment[1])
+			description := comment[2].String()
+			commentType := tree.MustBeDInt(comment[3])
+			if commentType == 2 {
+				if commentMap[objID] == nil {
+					commentMap[objID] = make(map[tree.DInt]string)
+				}
+				commentMap[objID][objSubID] = description
+			}
+		}
+
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
@@ -432,11 +453,18 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+
+				// Match the comment belonging to current column from map,using table id and column id
+				tableID := tree.DInt(table.GetID())
+				columnID := tree.DInt(column.ID)
+				description := commentMap[tableID][columnID]
+
 				return addRow(
 					dbNameStr,                        // table_catalog
 					scNameStr,                        // table_schema
 					tree.NewDString(table.GetName()), // table_name
 					tree.NewDString(column.Name),     // column_name
+					tree.NewDString(description),     // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                    // column_default
 					yesOrNoDatum(column.Nullable), // is_nullable
@@ -899,22 +927,24 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				referencedIdx, err := tabledesc.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+					refTable, fk.ReferencedColumnIDs,
+				)
 				if err != nil {
 					return err
 				}
 				return addRow(
-					dbNameStr,                           // constraint_catalog
-					scNameStr,                           // constraint_schema
-					tree.NewDString(fk.Name),            // constraint_name
-					dbNameStr,                           // unique_constraint_catalog
-					scNameStr,                           // unique_constraint_schema
-					tree.NewDString(referencedIdx.Name), // unique_constraint_name
-					matchType,                           // match_option
-					dStringForFKAction(fk.OnUpdate),     // update_rule
-					dStringForFKAction(fk.OnDelete),     // delete_rule
-					tbNameStr,                           // table_name
-					tree.NewDString(refTable.GetName()), // referenced_table_name
+					dbNameStr,                                // constraint_catalog
+					scNameStr,                                // constraint_schema
+					tree.NewDString(fk.Name),                 // constraint_name
+					dbNameStr,                                // unique_constraint_catalog
+					scNameStr,                                // unique_constraint_schema
+					tree.NewDString(refConstraint.GetName()), // unique_constraint_name
+					matchType,                                // match_option
+					dStringForFKAction(fk.OnUpdate),          // update_rule
+					dStringForFKAction(fk.OnDelete),          // delete_rule
+					tbNameStr,                                // table_name
+					tree.NewDString(refTable.GetName()),      // referenced_table_name
 				)
 			})
 		})
@@ -1296,7 +1326,7 @@ CREATE TABLE information_schema.statistics (
 					)
 				}
 
-				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					// Columns in the primary key that aren't in index.ColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
@@ -1304,44 +1334,58 @@ CREATE TABLE information_schema.statistics (
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > 0
+						hasImplicitCols = index.NumExtraColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for _, col := range table.GetPrimaryIndex().ColumnNames {
+						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
+							col := table.GetPrimaryIndex().GetColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
 
 					sequence := 1
-					for i, col := range index.ColumnNames {
+					for i := 0; i < index.NumColumns(); i++ {
+						col := index.GetColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.ColumnDirections[i])
-						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
+						dir := dStringForIndexDirection(index.GetColumnDirection(i))
+						if err := appendRow(index.IndexDesc(), col, sequence, dir, false, false); err != nil {
 							return err
 						}
 						sequence++
 						delete(implicitCols, col)
 					}
-					for _, col := range index.StoreColumnNames {
+					for i := 0; i < index.NumStoredColumns(); i++ {
+						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
-						if err := appendRow(index, col, sequence,
+						if err := appendRow(index.IndexDesc(), col, sequence,
 							indexDirectionNA, true, false); err != nil {
 							return err
 						}
 						sequence++
 						delete(implicitCols, col)
 					}
-					for col := range implicitCols {
-						// We add a row for each implicit column of index.
-						if err := appendRow(index, col, sequence,
-							indexDirectionAsc, false, true); err != nil {
-							return err
+					if len(implicitCols) > 0 {
+						// In order to have the implicit columns reported in a
+						// deterministic order, we will add all of them in the
+						// same order as they are mentioned in the primary key.
+						//
+						// Note that simply iterating over implicitCols map
+						// produces non-deterministic output.
+						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
+							col := table.GetPrimaryIndex().GetColumnName(i)
+							if _, isImplicit := implicitCols[col]; isImplicit {
+								// We add a row for each implicit column of index.
+								if err := appendRow(index.IndexDesc(), col, sequence,
+									indexDirectionAsc, false, true); err != nil {
+									return err
+								}
+								sequence++
+							}
 						}
-						sequence++
 					}
 					return nil
 				})
@@ -1681,11 +1725,29 @@ https://www.postgresql.org/docs/current/infoschema-collation-character-set-appli
 	},
 }
 
+var informationSchemaSessionVariables = virtualSchemaTable{
+	comment: `exposes the session variables.`,
+	schema:  vtable.InformationSchemaSessionVariables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen.Get(&p.extendedEvalCtx)
+			if err := addRow(
+				tree.NewDString(vName),
+				tree.NewDString(value),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
 // forEachSchema iterates over the physical and virtual schemas.
 func forEachSchema(
 	ctx context.Context, p *planner, db *dbdesc.Immutable, fn func(sc catalog.ResolvedSchema) error,
 ) error {
-	schemaNames, err := getSchemaNames(ctx, p, db, false /* allowMissingDesc */)
+	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
 	}
@@ -1764,9 +1826,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []*dbdesc.Immutable
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(
-			ctx, p.txn, false, /* allowMissingDesc */
-		)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -1775,7 +1835,7 @@ func forEachDatabaseDesc(
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
 		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(
-			ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()}, false, /* allowMissingDesc */
+			ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()},
 		)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -1807,11 +1867,11 @@ func forEachTypeDesc(
 	dbContext *dbdesc.Immutable,
 	fn func(db *dbdesc.Immutable, sc string, typ *typedesc.Immutable) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
-	schemaNames, err := getSchemaNames(ctx, p, dbContext, false /* allowMissingDesc */)
+	schemaNames, err := getSchemaNames(ctx, p, dbContext)
 	if err != nil {
 		return err
 	}
@@ -1886,16 +1946,14 @@ func forEachTableDescAll(
 	virtualOpts virtualOpts,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
-	return forEachTableDescAllWithTableLookup(ctx,
-		p, dbContext, virtualOpts, true, /* validate */
-		func(
-			db *dbdesc.Immutable,
-			scName string,
-			table catalog.TableDescriptor,
-			_ tableLookupFn,
-		) error {
-			return fn(db, scName, table)
-		})
+	return forEachTableDescAllWithTableLookup(ctx, p, dbContext, virtualOpts, func(
+		db *dbdesc.Immutable,
+		scName string,
+		table catalog.TableDescriptor,
+		_ tableLookupFn,
+	) error {
+		return fn(db, scName, table)
+	})
 }
 
 // forEachTableDescAllWithTableLookup is like forEachTableDescAll, but it also
@@ -1907,11 +1965,11 @@ func forEachTableDescAllWithTableLookup(
 	p *planner,
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	validate bool,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx,
-		p, dbContext, virtualOpts, true /* allowAdding */, validate, fn)
+	return forEachTableDescWithTableLookupInternal(
+		ctx, p, dbContext, virtualOpts, true /* allowAdding */, fn,
+	)
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
@@ -1931,26 +1989,23 @@ func forEachTableDescWithTableLookup(
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(
-		ctx, p, dbContext, virtualOpts, false /* allowAdding */, true, fn,
+		ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn,
 	)
 }
 
 func getSchemaNames(
-	ctx context.Context, p *planner, dbContext *dbdesc.Immutable, allowMissingDesc bool,
+	ctx context.Context, p *planner, dbContext *dbdesc.Immutable,
 ) (map[descpb.ID]string, error) {
 	if dbContext != nil {
 		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
 	}
 	ret := make(map[descpb.ID]string)
-	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, allowMissingDesc)
+	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 	if err != nil {
 		return nil, err
 	}
 	for _, db := range dbs {
 		if db == nil {
-			if allowMissingDesc {
-				continue
-			}
 			return nil, catalog.ErrDescriptorNotFound
 		}
 		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db.GetID())
@@ -1977,13 +2032,25 @@ func forEachTableDescWithTableLookupInternal(
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	validate bool,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, validate)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
+	return forEachTableDescWithTableLookupInternalFromDescriptors(
+		ctx, p, dbContext, virtualOpts, allowAdding, descs, fn)
+}
+
+func forEachTableDescWithTableLookupInternalFromDescriptors(
+	ctx context.Context,
+	p *planner,
+	dbContext *dbdesc.Immutable,
+	virtualOpts virtualOpts,
+	allowAdding bool,
+	descs []catalog.Descriptor,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
+) error {
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
 		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
@@ -2020,12 +2087,6 @@ func forEachTableDescWithTableLookupInternal(
 		}
 	}
 
-	// Generate all schema names, and keep a mapping.
-	schemaNames, err := getSchemaNames(ctx, p, dbContext, !validate)
-	if err != nil {
-		return err
-	}
-
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -2036,9 +2097,30 @@ func forEachTableDescWithTableLookupInternal(
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
 		if parentExists {
 			var ok bool
-			scName, ok = schemaNames[table.GetParentSchemaID()]
-			if !ok && validate {
+			scName, ok = lCtx.schemaNames[table.GetParentSchemaID()]
+			// Look up the schemas for this database if we discover that there is a
+			// missing temporary schema name. The only schemas which do not have
+			// descriptors are the public schema and temporary schemas. The public
+			// schema does not have a descriptor but will appear in the map. Temporary
+			// schemas do, however, have namespace entries. The below code will go
+			// and lookup schema names from the namespace table if needed to qualify
+			// the name of a temporary table.
+			if !ok && !table.IsTemporary() {
 				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			}
+			if !ok { // && table.IsTemporary()
+				namesForSchema, err := getSchemaNames(ctx, p, dbDesc)
+				if err != nil {
+					return errors.Wrapf(err, "failed to look up schema id %d",
+						table.GetParentSchemaID())
+				}
+				for id, n := range namesForSchema {
+					if _, exists := lCtx.schemaNames[id]; exists {
+						continue
+					}
+					lCtx.schemaNames[id] = n
+					scName = lCtx.schemaNames[table.GetParentSchemaID()]
+				}
 			}
 		}
 		if err := fn(dbDesc, scName, table, lCtx); err != nil {

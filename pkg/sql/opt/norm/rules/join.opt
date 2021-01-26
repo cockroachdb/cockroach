@@ -19,9 +19,10 @@
     $on:[
             ...
             $item:(FiltersItem
-                    (And | True | False | Null | Or)
+                    (And | True | False | Null | Or | Is)
                 ) &
                 ^(IsUnsimplifiableOr $item) &
+                ^(IsUnsimplifiableIs $item) &
                 ^(IsContradiction $item)
             ...
         ] &

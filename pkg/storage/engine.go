@@ -202,6 +202,9 @@ type EngineIterator interface {
 	Value() []byte
 	// SetUpperBound installs a new upper bound for this iterator.
 	SetUpperBound(roachpb.Key)
+	// GetRawIter is a low-level method only for use in the storage package,
+	// that returns the underlying pebble Iterator.
+	GetRawIter() *pebble.Iterator
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
@@ -263,7 +266,17 @@ const (
 	MVCCKeyIterKind
 )
 
-// Reader is the read interface to an engine's data.
+// Reader is the read interface to an engine's data. Certain implementations
+// of Reader guarantee consistency of the underlying engine state across the
+// different iterators created by NewMVCCIterator, NewEngineIterator:
+// - pebbleSnapshot, because it uses an engine snapshot.
+// - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
+//   timestamp hint.
+// The ConsistentIterators method returns true when this consistency is
+// guaranteed by the Reader.
+// TODO(sumeer): this partial consistency can be a source of bugs if future
+// code starts relying on it, but rarely uses a Reader that does not guarantee
+// it. Can we enumerate the current cases where KV uses Engine as a Reader?
 type Reader interface {
 	// Close closes the reader, freeing up any outstanding resources. Note that
 	// various implementations have slightly different behaviors. In particular,
@@ -293,12 +306,16 @@ type Reader interface {
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
 	//
+	// If useTBI is true, the backing MVCCIncrementalIterator will initialize a
+	// time-bound iterator along with its regular iterator. The TBI will be used
+	// as an optimization to skip over swaths of uninteresting keys i.e. keys
+	// outside our time bounds, while locating the KVs to export.
+	//
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
 	ExportMVCCToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64,
-		io IterOptions,
+		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
@@ -330,6 +347,10 @@ type Reader interface {
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
+	// ConsistentIterators returns true if the Reader implementation guarantees
+	// that the different iterators constructed by this Reader will see the
+	// same underlying Engine state.
+	ConsistentIterators() bool
 }
 
 // PrecedingIntentState is information needed when writing or clearing an

@@ -34,10 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
@@ -90,10 +91,8 @@ type conn struct {
 
 	sv *settings.Values
 
-	// testingLogEnabled is used in unit tests in this package to
-	// force-enable auth logging without dancing around the
-	// asynchronicity of cluster settings.
-	testingLogEnabled bool
+	// alwaysLogAuthActivity is used force-enables logging of authn events.
+	alwaysLogAuthActivity bool
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -141,18 +140,23 @@ func (s *Server) serveConn(
 	reserved mon.BoundAccount,
 	authOpt authOptions,
 ) {
-	sArgs.RemoteAddr = netConn.RemoteAddr()
-
 	if log.V(2) {
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
 	c := newConn(netConn, sArgs, &s.metrics, &s.execCfg.Settings.SV)
-	c.testingLogEnabled = atomic.LoadInt32(&s.testingLogEnabled) > 0
+	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
 }
+
+// alwaysLogAuthActivity makes it possible to unconditionally enable
+// authentication logging when cluster settings do not work reliably,
+// e.g. in multi-tenant setups in v20.2. This override mechanism
+// can be removed after all of CC is moved to use v21.1 or a version
+// which supports cluster settings.
+var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN_EVENTS", false)
 
 func newConn(
 	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, sv *settings.Values,
@@ -188,7 +192,7 @@ func (c *conn) GetErr() error {
 }
 
 func (c *conn) authLogEnabled() bool {
-	return c.testingLogEnabled || logSessionAuth.Get(c.sv)
+	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
 
 // serveImpl continuously reads from the network connection and pushes execution
@@ -224,7 +228,13 @@ func (c *conn) serveImpl(
 		sessionStart := timeutil.Now()
 		defer func() {
 			if c.authLogEnabled() {
-				log.Sessions.Infof(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
+				endTime := timeutil.Now()
+				ev := &eventpb.ClientSessionEnd{
+					CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+					CommonConnectionDetails: authOpt.connDetails,
+					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
+				}
+				log.StructuredEvent(ctx, ev)
 			}
 		}()
 	}
@@ -260,7 +270,7 @@ func (c *conn) serveImpl(
 	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c, logAuthn)
+	authPipe := newAuthPipe(c, logAuthn, authOpt, c.sessionArgs.User)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
@@ -288,7 +298,7 @@ func (c *conn) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(fixedIntSizer{size: types.Int})
+		ac.AuthOK(ctx, fixedIntSizer{size: types.Int})
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
@@ -610,7 +620,7 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 		// Signal the connection was established to the authenticator.
-		ac.AuthOK(connHandler)
+		ac.AuthOK(ctx, connHandler)
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.
@@ -704,8 +714,6 @@ func (c *conn) handleSimpleQuery(
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-
-	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)

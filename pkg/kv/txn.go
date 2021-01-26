@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -98,12 +97,12 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 			errors.AssertionFailedf("attempting to create txn with nil db"), ctx))
 	}
 
-	now := db.clock.Now()
+	now := db.clock.NowAsClockTimestamp()
 	kvTxn := roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		now,
+		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
 	)
 
@@ -124,7 +123,7 @@ func NewTxnFromProto(
 	ctx context.Context,
 	db *DB,
 	gatewayNodeID roachpb.NodeID,
-	now hlc.Timestamp,
+	now hlc.ClockTimestamp,
 	typ TxnType,
 	proto *roachpb.Transaction,
 ) *Txn {
@@ -582,8 +581,6 @@ func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(ctx context.Context, b *Batch) error {
-	tracing.AnnotateTrace()
-	defer tracing.AnnotateTrace()
 	if err := b.prepare(); err != nil {
 		return err
 	}
@@ -1137,8 +1134,8 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	now := txn.db.clock.Now()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
+	now := txn.db.clock.NowAsClockTimestamp()
+	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg,
@@ -1147,7 +1144,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 			txn.debugNameLocked(),
 			nil, // baseKey
 			txn.mu.userPriority,
-			now,
+			now.ToTimestamp(),
 			txn.db.clock.MaxOffset().Nanoseconds(),
 		))
 }

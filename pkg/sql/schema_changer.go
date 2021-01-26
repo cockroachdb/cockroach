@@ -471,7 +471,7 @@ func startGCJob(
 	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
+		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn); err != nil {
 			return err
 		}
 		return nil
@@ -479,7 +479,7 @@ func startGCJob(
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", *sj.ID())
-	if _, err := sj.Start(ctx); err != nil {
+	if err := sj.Start(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -873,7 +873,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 				},
 			},
 		)
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
+		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
 			return err
 		}
@@ -888,7 +888,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		return err
 	}
 	if cleanupJob != nil {
-		if _, err := cleanupJob.Start(ctx); err != nil {
+		if err := cleanupJob.Start(ctx); err != nil {
 			log.Warningf(ctx, "starting job %d failed with error: %v", *cleanupJob.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *cleanupJob.ID())
@@ -989,7 +989,7 @@ func (sc *SchemaChanger) createIndexGCJob(
 	}
 
 	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
-	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -1043,7 +1043,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		}
 
 		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			desc, err := descsCol.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 			if err != nil {
 				return nil, err
 			}
@@ -1070,12 +1070,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// If any old indexes (including the old primary index) being rewritten are interleaved
 				// children, we will have to update their parents as well.
 				for _, idxID := range append([]descpb.IndexID{swap.OldPrimaryIndexId}, swap.OldIndexes...) {
-					oldIndex, err := scTable.FindIndexByID(idxID)
+					oldIndex, err := scTable.FindIndexWithID(idxID)
 					if err != nil {
 						return err
 					}
-					if len(oldIndex.Interleave.Ancestors) != 0 {
-						ancestor := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
+					if oldIndex.NumInterleaveAncestors() != 0 {
+						ancestor := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
 						if ancestor.TableID != scTable.ID {
 							interleaveParents[ancestor.TableID] = struct{}{}
 						}
@@ -1095,17 +1095,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
 				break
-			}
-			// Add scTable to the collection as an uncommitted descriptor so that
-			// future attempts to resolve a mutable copy find the same pointer.
-			//
-			// TODO(ajwerner): The need to do this implies that we should cache all
-			// mutable descriptors inside of the collection when they are resolved
-			// such that all attempts to resolve a mutable descriptor from a
-			// collection will always give you the same exact pointer.
-			scTable.MaybeIncrementVersion()
-			if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
-				return err
 			}
 			isRollback = mutation.Rollback
 			if indexDesc := mutation.GetIndex(); mutation.Direction == descpb.DescriptorMutation_DROP &&
@@ -1176,13 +1165,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// existing indexes on the table.
 				if mutation.Direction == descpb.DescriptorMutation_ADD {
 					desc := fmt.Sprintf("REFRESH MATERIALIZED VIEW %q cleanup", scTable.Name)
-					pkJob, err := sc.createIndexGCJob(ctx, &scTable.PrimaryIndex, txn, desc)
+					pkJob, err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex().IndexDesc(), txn, desc)
 					if err != nil {
 						return err
 					}
 					childJobs = append(childJobs, pkJob)
-					for i := range scTable.Indexes {
-						idxJob, err := sc.createIndexGCJob(ctx, &scTable.Indexes[i], txn, desc)
+					for _, idx := range scTable.PublicNonPrimaryIndexes() {
+						idxJob, err := sc.createIndexGCJob(ctx, idx.IndexDesc(), txn, desc)
 						if err != nil {
 							return err
 						}
@@ -1222,27 +1211,28 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// corresponding piece in runSchemaChangesInTxn.
 				for _, idxID := range append(
 					[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
-					oldIndex, err := scTable.FindIndexByID(idxID)
+					oldIndex, err := scTable.FindIndexWithID(idxID)
 					if err != nil {
 						return err
 					}
-					if len(oldIndex.Interleave.Ancestors) != 0 {
-						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
+					if oldIndex.NumInterleaveAncestors() != 0 {
+						ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
 						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
 						if err != nil {
 							return err
 						}
-						ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
+						ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
 						if err != nil {
 							return err
 						}
+						ancestorIdx := ancestorIdxI.IndexDesc()
 						foundAncestor := false
 						for k, ref := range ancestorIdx.InterleavedBy {
-							if ref.Table == scTable.ID && ref.Index == oldIndex.ID {
+							if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
 								if foundAncestor {
 									return errors.AssertionFailedf(
 										"ancestor entry in %s for %s@%s found more than once",
-										ancestor.Name, scTable.Name, oldIndex.Name)
+										ancestor.Name, scTable.Name, oldIndex.GetName())
 								}
 								ancestorIdx.InterleavedBy = append(
 									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
@@ -1368,7 +1358,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	for _, job := range childJobs {
-		if _, err := job.Start(ctx); err != nil {
+		if err := job.Start(ctx); err != nil {
 			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
@@ -1487,14 +1477,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
-			return err
-		}
-		// TODO(ajwerner): The need to do this implies that we should cache all
-		// mutable descriptors inside of the collection when they are resolved
-		// such that all attempts to resolve a mutable descriptor from a
-		// collection will always give you the same exact pointer.
-		scTable.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
 			return err
 		}
 
@@ -1853,6 +1835,7 @@ func CreateGCJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
+		RunningStatus: RunningStatusWaitingGC,
 		NonCancelable: true,
 	}
 }
@@ -1941,9 +1924,18 @@ type SchemaChangerTestingKnobs struct {
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
 
-	// TwoVersionLeaseViolation is called whenever a schema change
-	// transaction is unable to commit because it is violating the two
-	// version lease invariant.
+	// AlwaysUpdateIndexBackfillDetails indicates whether the index backfill
+	// schema change job details should be updated everytime the coordinator
+	// receives an update from the backfill processor.
+	AlwaysUpdateIndexBackfillDetails bool
+
+	// AlwaysUpdateIndexBackfillProgress indicates whether the index backfill
+	// schema change job fraction completed should be updated everytime the
+	// coordinator receives an update from the backfill processor.
+	AlwaysUpdateIndexBackfillProgress bool
+
+	// TwoVersionLeaseViolation is called whenever a schema change transaction is
+	// unable to commit because it is violating the two version lease invariant.
 	TwoVersionLeaseViolation func()
 }
 
@@ -2060,9 +2052,7 @@ type schemaChangeResumer struct {
 	job *jobs.Job
 }
 
-func (r schemaChangeResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 	if p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp != nil &&
@@ -2373,7 +2363,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
+		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
 			return nil, err
 		}

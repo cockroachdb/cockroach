@@ -1,0 +1,37 @@
+run
+----
+#
+json-fluent-compact: {"tag":"log_test.unknown","header":1,"t":"1136214245.654321000","g":11,"f":"util/log/format_json_test.go","l":123,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+        json-fluent: {"tag":"log_test.unknown","header":1,"timestamp":"1136214245.654321000","goroutine":11,"file":"util/log/format_json_test.go","line":123,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+       json-compact: {"header":1,"t":"1136214245.654321000","g":11,"f":"util/log/format_json_test.go","l":123,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+               json: {"header":1,"timestamp":"1136214245.654321000","goroutine":11,"file":"util/log/format_json_test.go","line":123,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+#
+json-fluent-compact: {"tag":"log_test.dev","c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+        json-fluent: {"tag":"log_test.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+       json-compact: {"c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+#
+json-fluent-compact: {"tag":"log_test.dev","c":0,"t":"1136214245.654321000","x":"abc","N":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+        json-fluent: {"tag":"log_test.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","cluster_id":"abc","node_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+       json-compact: {"c":0,"t":"1136214245.654321000","x":"abc","N":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","cluster_id":"abc","node_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+#
+json-fluent-compact: {"tag":"log_test.dev","c":0,"t":"1136214245.654321000","T":"abc","q":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+        json-fluent: {"tag":"log_test.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":"abc","instance_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+       json-compact: {"c":0,"t":"1136214245.654321000","T":"abc","q":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":"abc","instance_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+#
+json-fluent-compact: {"tag":"log_test.dev","c":0,"t":"1136214245.654321000","s":1,"sev":"I","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
+        json-fluent: {"tag":"log_test.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":1,"severity":"INFO","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
+       json-compact: {"c":0,"t":"1136214245.654321000","s":1,"sev":"I","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
+               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":1,"severity":"INFO","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
+#
+json-fluent-compact: {"tag":"log_test.ops","c":1,"t":"1136214245.654321000","s":2,"sev":"W","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
+        json-fluent: {"tag":"log_test.ops","channel_numeric":1,"channel":"OPS","timestamp":"1136214245.654321000","severity_numeric":2,"severity":"WARNING","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
+       json-compact: {"c":1,"t":"1136214245.654321000","s":2,"sev":"W","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
+               json: {"channel_numeric":1,"channel":"OPS","timestamp":"1136214245.654321000","severity_numeric":2,"severity":"WARNING","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
+#
+json-fluent-compact: {"tag":"log_test.health","c":2,"t":"1136214245.654321000","s":3,"sev":"E","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+        json-fluent: {"tag":"log_test.health","channel_numeric":2,"channel":"HEALTH","timestamp":"1136214245.654321000","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+       json-compact: {"c":2,"t":"1136214245.654321000","s":3,"sev":"E","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+               json: {"channel_numeric":2,"channel":"HEALTH","timestamp":"1136214245.654321000","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}

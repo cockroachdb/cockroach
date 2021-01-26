@@ -141,7 +141,9 @@ func ExamineDescriptors(
 		}
 
 		_, parentExists := descGetter[desc.GetParentID()]
-		_, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
+		parentSchema, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
+		var skipParentIDCheck bool
+		skipParentSchemaCheck := desc.Dropped()
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
 			if err := d.Validate(ctx, descGetter); err != nil {
@@ -149,8 +151,7 @@ func ExamineDescriptors(
 				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
 			}
 			// Table has been already validated.
-			parentExists = true
-			parentSchemaExists = true
+			skipParentIDCheck = true
 		case catalog.TypeDescriptor:
 			typ := typedesc.NewImmutable(*d.TypeDesc())
 			if err := typ.Validate(ctx, descGetter); err != nil {
@@ -159,17 +160,41 @@ func ExamineDescriptors(
 			}
 		case catalog.SchemaDescriptor:
 			// parent schema id is always 0.
-			parentSchemaExists = true
+			skipParentSchemaCheck = true
 		}
-		if desc.GetParentID() != descpb.InvalidID && !parentExists {
+
+		// TODO(postamar): The following descriptor checks on parent id, parent
+		// schema id and parent schema parent id should instead be performed by the
+		// descriptor validation logic.
+		// For doctor to still be useful this will require rewriting it such that it
+		// return multiple errors instead of only the first it encounters.
+		invalidParentID := !parentExists &&
+			desc.GetParentID() != descpb.InvalidID
+
+		if !skipParentIDCheck && invalidParentID {
 			problemsFound = true
 			fmt.Fprint(stdout, reportMsg(desc, "invalid parent id %d", desc.GetParentID()))
 		}
-		if desc.GetParentSchemaID() != descpb.InvalidID &&
+
+		invalidParentSchemaID := !parentSchemaExists &&
+			desc.GetParentSchemaID() != descpb.InvalidID &&
+			desc.GetParentSchemaID() != keys.PublicSchemaID
+
+		invalidParentSchemaParentID := !invalidParentID &&
+			desc.GetParentSchemaID() != descpb.InvalidID &&
 			desc.GetParentSchemaID() != keys.PublicSchemaID &&
-			!parentSchemaExists {
-			problemsFound = true
-			fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
+			parentSchemaExists &&
+			parentSchema.GetParentID() != desc.GetParentID()
+
+		if !skipParentSchemaCheck {
+			if invalidParentSchemaID {
+				problemsFound = true
+				fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
+			}
+			if invalidParentSchemaParentID {
+				problemsFound = true
+				fmt.Fprint(stdout, reportMsg(desc, "invalid parent id of parent schema, expected %d, found %d", desc.GetParentID(), parentSchema.GetParentID()))
+			}
 		}
 
 		// Process namespace entries pointing to this descriptor.

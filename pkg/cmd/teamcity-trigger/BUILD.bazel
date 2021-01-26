@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cmd/cmdutil",
-        "//vendor/github.com/abourget/teamcity",
-        "//vendor/github.com/kisielk/gotool",
+        "@com_github_abourget_teamcity//:teamcity",
+        "@com_github_kisielk_gotool//:gotool",
     ],
 )
 

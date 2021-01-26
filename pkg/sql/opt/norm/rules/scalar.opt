@@ -317,3 +317,10 @@ $input
 )
 =>
 (And (Is $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifyNotDisjoint converts !st_disjoint to st_intersects so that
+# the query can be index-accelerated if a suitable inverted index exists.
+[SimplifyNotDisjoint, Normalize]
+(Not (Function $args:* $private:(FunctionPrivate "st_disjoint")))
+=>
+(MakeIntersectionFunction $args)

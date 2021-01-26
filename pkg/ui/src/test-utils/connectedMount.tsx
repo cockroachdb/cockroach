@@ -18,18 +18,17 @@ import { createMemoryHistory } from "history";
 import "src/enzymeInit";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
-export function connectedMount(nodeFactory: (store: Store<AdminUIState>) => React.ReactNode) {
+export function connectedMount(
+  nodeFactory: (store: Store<AdminUIState>) => React.ReactNode,
+) {
   const history = createMemoryHistory({
     initialEntries: ["/"],
   });
   const store: Store<AdminUIState, Action> = createAdminUIStore(history);
   const wrapper: ReactWrapper = mount(
     <Provider store={store}>
-      <ConnectedRouter history={history}>
-        {
-          nodeFactory(store)
-        }
-      </ConnectedRouter>
-    </Provider>);
+      <ConnectedRouter history={history}>{nodeFactory(store)}</ConnectedRouter>
+    </Provider>,
+  );
   return wrapper;
 }

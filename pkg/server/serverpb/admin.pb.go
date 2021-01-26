@@ -74,7 +74,7 @@ func (x ZoneConfigurationLevel) String() string {
 	return proto.EnumName(ZoneConfigurationLevel_name, int32(x))
 }
 func (ZoneConfigurationLevel) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{0}
 }
 
 // DatabasesRequest requests a list of databases.
@@ -85,7 +85,7 @@ func (m *DatabasesRequest) Reset()         { *m = DatabasesRequest{} }
 func (m *DatabasesRequest) String() string { return proto.CompactTextString(m) }
 func (*DatabasesRequest) ProtoMessage()    {}
 func (*DatabasesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{0}
 }
 func (m *DatabasesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -119,7 +119,7 @@ func (m *DatabasesResponse) Reset()         { *m = DatabasesResponse{} }
 func (m *DatabasesResponse) String() string { return proto.CompactTextString(m) }
 func (*DatabasesResponse) ProtoMessage()    {}
 func (*DatabasesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{1}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{1}
 }
 func (m *DatabasesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -155,7 +155,7 @@ func (m *DatabaseDetailsRequest) Reset()         { *m = DatabaseDetailsRequest{}
 func (m *DatabaseDetailsRequest) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDetailsRequest) ProtoMessage()    {}
 func (*DatabaseDetailsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{2}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{2}
 }
 func (m *DatabaseDetailsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -204,7 +204,7 @@ func (m *DatabaseDetailsResponse) Reset()         { *m = DatabaseDetailsResponse
 func (m *DatabaseDetailsResponse) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDetailsResponse) ProtoMessage()    {}
 func (*DatabaseDetailsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{3}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{3}
 }
 func (m *DatabaseDetailsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -240,7 +240,7 @@ func (m *DatabaseDetailsResponse_Grant) Reset()         { *m = DatabaseDetailsRe
 func (m *DatabaseDetailsResponse_Grant) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDetailsResponse_Grant) ProtoMessage()    {}
 func (*DatabaseDetailsResponse_Grant) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{3, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{3, 0}
 }
 func (m *DatabaseDetailsResponse_Grant) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -280,7 +280,7 @@ func (m *TableDetailsRequest) Reset()         { *m = TableDetailsRequest{} }
 func (m *TableDetailsRequest) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsRequest) ProtoMessage()    {}
 func (*TableDetailsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{4}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{4}
 }
 func (m *TableDetailsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -337,7 +337,7 @@ func (m *TableDetailsResponse) Reset()         { *m = TableDetailsResponse{} }
 func (m *TableDetailsResponse) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse) ProtoMessage()    {}
 func (*TableDetailsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{5}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{5}
 }
 func (m *TableDetailsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -374,7 +374,7 @@ func (m *TableDetailsResponse_Grant) Reset()         { *m = TableDetailsResponse
 func (m *TableDetailsResponse_Grant) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Grant) ProtoMessage()    {}
 func (*TableDetailsResponse_Grant) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{5, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{5, 0}
 }
 func (m *TableDetailsResponse_Grant) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -418,7 +418,7 @@ func (m *TableDetailsResponse_Column) Reset()         { *m = TableDetailsRespons
 func (m *TableDetailsResponse_Column) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Column) ProtoMessage()    {}
 func (*TableDetailsResponse_Column) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{5, 1}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{5, 1}
 }
 func (m *TableDetailsResponse_Column) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -464,7 +464,7 @@ func (m *TableDetailsResponse_Index) Reset()         { *m = TableDetailsResponse
 func (m *TableDetailsResponse_Index) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Index) ProtoMessage()    {}
 func (*TableDetailsResponse_Index) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{5, 2}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{5, 2}
 }
 func (m *TableDetailsResponse_Index) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -505,7 +505,7 @@ func (m *TableStatsRequest) Reset()         { *m = TableStatsRequest{} }
 func (m *TableStatsRequest) String() string { return proto.CompactTextString(m) }
 func (*TableStatsRequest) ProtoMessage()    {}
 func (*TableStatsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{6}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{6}
 }
 func (m *TableStatsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -559,7 +559,7 @@ func (m *TableStatsResponse) Reset()         { *m = TableStatsResponse{} }
 func (m *TableStatsResponse) String() string { return proto.CompactTextString(m) }
 func (*TableStatsResponse) ProtoMessage()    {}
 func (*TableStatsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{7}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{7}
 }
 func (m *TableStatsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -597,7 +597,7 @@ func (m *TableStatsResponse_MissingNode) Reset()         { *m = TableStatsRespon
 func (m *TableStatsResponse_MissingNode) String() string { return proto.CompactTextString(m) }
 func (*TableStatsResponse_MissingNode) ProtoMessage()    {}
 func (*TableStatsResponse_MissingNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{7, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{7, 0}
 }
 func (m *TableStatsResponse_MissingNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -631,7 +631,7 @@ func (m *NonTableStatsRequest) Reset()         { *m = NonTableStatsRequest{} }
 func (m *NonTableStatsRequest) String() string { return proto.CompactTextString(m) }
 func (*NonTableStatsRequest) ProtoMessage()    {}
 func (*NonTableStatsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{8}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{8}
 }
 func (m *NonTableStatsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -670,7 +670,7 @@ func (m *NonTableStatsResponse) Reset()         { *m = NonTableStatsResponse{} }
 func (m *NonTableStatsResponse) String() string { return proto.CompactTextString(m) }
 func (*NonTableStatsResponse) ProtoMessage()    {}
 func (*NonTableStatsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{9}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{9}
 }
 func (m *NonTableStatsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -703,7 +703,7 @@ func (m *UsersRequest) Reset()         { *m = UsersRequest{} }
 func (m *UsersRequest) String() string { return proto.CompactTextString(m) }
 func (*UsersRequest) ProtoMessage()    {}
 func (*UsersRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{10}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{10}
 }
 func (m *UsersRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -738,7 +738,7 @@ func (m *UsersResponse) Reset()         { *m = UsersResponse{} }
 func (m *UsersResponse) String() string { return proto.CompactTextString(m) }
 func (*UsersResponse) ProtoMessage()    {}
 func (*UsersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{11}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{11}
 }
 func (m *UsersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -772,7 +772,7 @@ func (m *UsersResponse_User) Reset()         { *m = UsersResponse_User{} }
 func (m *UsersResponse_User) String() string { return proto.CompactTextString(m) }
 func (*UsersResponse_User) ProtoMessage()    {}
 func (*UsersResponse_User) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{11, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{11, 0}
 }
 func (m *UsersResponse_User) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -819,7 +819,7 @@ func (m *EventsRequest) Reset()         { *m = EventsRequest{} }
 func (m *EventsRequest) String() string { return proto.CompactTextString(m) }
 func (*EventsRequest) ProtoMessage()    {}
 func (*EventsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{12}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{12}
 }
 func (m *EventsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -854,7 +854,7 @@ func (m *EventsResponse) Reset()         { *m = EventsResponse{} }
 func (m *EventsResponse) String() string { return proto.CompactTextString(m) }
 func (*EventsResponse) ProtoMessage()    {}
 func (*EventsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{13}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{13}
 }
 func (m *EventsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -899,7 +899,7 @@ func (m *EventsResponse_Event) Reset()         { *m = EventsResponse_Event{} }
 func (m *EventsResponse_Event) String() string { return proto.CompactTextString(m) }
 func (*EventsResponse_Event) ProtoMessage()    {}
 func (*EventsResponse_Event) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{13, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{13, 0}
 }
 func (m *EventsResponse_Event) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -935,7 +935,7 @@ func (m *SetUIDataRequest) Reset()         { *m = SetUIDataRequest{} }
 func (m *SetUIDataRequest) String() string { return proto.CompactTextString(m) }
 func (*SetUIDataRequest) ProtoMessage()    {}
 func (*SetUIDataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{14}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{14}
 }
 func (m *SetUIDataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -968,7 +968,7 @@ func (m *SetUIDataResponse) Reset()         { *m = SetUIDataResponse{} }
 func (m *SetUIDataResponse) String() string { return proto.CompactTextString(m) }
 func (*SetUIDataResponse) ProtoMessage()    {}
 func (*SetUIDataResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{15}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{15}
 }
 func (m *SetUIDataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1003,7 +1003,7 @@ func (m *GetUIDataRequest) Reset()         { *m = GetUIDataRequest{} }
 func (m *GetUIDataRequest) String() string { return proto.CompactTextString(m) }
 func (*GetUIDataRequest) ProtoMessage()    {}
 func (*GetUIDataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{16}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{16}
 }
 func (m *GetUIDataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1040,7 +1040,7 @@ func (m *GetUIDataResponse) Reset()         { *m = GetUIDataResponse{} }
 func (m *GetUIDataResponse) String() string { return proto.CompactTextString(m) }
 func (*GetUIDataResponse) ProtoMessage()    {}
 func (*GetUIDataResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{17}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{17}
 }
 func (m *GetUIDataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1076,7 +1076,7 @@ func (m *GetUIDataResponse_Value) Reset()         { *m = GetUIDataResponse_Value
 func (m *GetUIDataResponse_Value) String() string { return proto.CompactTextString(m) }
 func (*GetUIDataResponse_Value) ProtoMessage()    {}
 func (*GetUIDataResponse_Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{17, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{17, 0}
 }
 func (m *GetUIDataResponse_Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1109,7 +1109,7 @@ func (m *ClusterRequest) Reset()         { *m = ClusterRequest{} }
 func (m *ClusterRequest) String() string { return proto.CompactTextString(m) }
 func (*ClusterRequest) ProtoMessage()    {}
 func (*ClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{18}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{18}
 }
 func (m *ClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1148,7 +1148,7 @@ func (m *ClusterResponse) Reset()         { *m = ClusterResponse{} }
 func (m *ClusterResponse) String() string { return proto.CompactTextString(m) }
 func (*ClusterResponse) ProtoMessage()    {}
 func (*ClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{19}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{19}
 }
 func (m *ClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1196,7 +1196,7 @@ func (m *DrainRequest) Reset()         { *m = DrainRequest{} }
 func (m *DrainRequest) String() string { return proto.CompactTextString(m) }
 func (*DrainRequest) ProtoMessage()    {}
 func (*DrainRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{20}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{20}
 }
 func (m *DrainRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1281,7 +1281,7 @@ func (m *DrainResponse) Reset()         { *m = DrainResponse{} }
 func (m *DrainResponse) String() string { return proto.CompactTextString(m) }
 func (*DrainResponse) ProtoMessage()    {}
 func (*DrainResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{21}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{21}
 }
 func (m *DrainResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1316,7 +1316,7 @@ func (m *DecommissionStatusRequest) Reset()         { *m = DecommissionStatusReq
 func (m *DecommissionStatusRequest) String() string { return proto.CompactTextString(m) }
 func (*DecommissionStatusRequest) ProtoMessage()    {}
 func (*DecommissionStatusRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{22}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{22}
 }
 func (m *DecommissionStatusRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1354,7 +1354,7 @@ func (m *DecommissionRequest) Reset()         { *m = DecommissionRequest{} }
 func (m *DecommissionRequest) String() string { return proto.CompactTextString(m) }
 func (*DecommissionRequest) ProtoMessage()    {}
 func (*DecommissionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{23}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{23}
 }
 func (m *DecommissionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1389,7 +1389,7 @@ func (m *DecommissionStatusResponse) Reset()         { *m = DecommissionStatusRe
 func (m *DecommissionStatusResponse) String() string { return proto.CompactTextString(m) }
 func (*DecommissionStatusResponse) ProtoMessage()    {}
 func (*DecommissionStatusResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{24}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{24}
 }
 func (m *DecommissionStatusResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1428,7 +1428,7 @@ func (m *DecommissionStatusResponse_Status) Reset()         { *m = DecommissionS
 func (m *DecommissionStatusResponse_Status) String() string { return proto.CompactTextString(m) }
 func (*DecommissionStatusResponse_Status) ProtoMessage()    {}
 func (*DecommissionStatusResponse_Status) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{24, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{24, 0}
 }
 func (m *DecommissionStatusResponse_Status) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1470,7 +1470,7 @@ func (m *SettingsRequest) Reset()         { *m = SettingsRequest{} }
 func (m *SettingsRequest) String() string { return proto.CompactTextString(m) }
 func (*SettingsRequest) ProtoMessage()    {}
 func (*SettingsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{25}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{25}
 }
 func (m *SettingsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1504,7 +1504,7 @@ func (m *SettingsResponse) Reset()         { *m = SettingsResponse{} }
 func (m *SettingsResponse) String() string { return proto.CompactTextString(m) }
 func (*SettingsResponse) ProtoMessage()    {}
 func (*SettingsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{26}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{26}
 }
 func (m *SettingsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1540,7 +1540,7 @@ func (m *SettingsResponse_Value) Reset()         { *m = SettingsResponse_Value{}
 func (m *SettingsResponse_Value) String() string { return proto.CompactTextString(m) }
 func (*SettingsResponse_Value) ProtoMessage()    {}
 func (*SettingsResponse_Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{26, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{26, 0}
 }
 func (m *SettingsResponse_Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1582,10 +1582,12 @@ var xxx_messageInfo_SettingsResponse_Value proto.InternalMessageInfo
 //   a liveness beacon. Absent either of these conditions, an error
 //   code will result.
 //
+// API: PUBLIC
 type HealthRequest struct {
 	// ready specifies whether the client wants to know whether the
 	// target node is ready to receive traffic. If a node is unready, an
 	// error will be returned.
+	// API: PUBLIC
 	Ready bool `protobuf:"varint,1,opt,name=ready,proto3" json:"ready,omitempty"`
 }
 
@@ -1593,7 +1595,7 @@ func (m *HealthRequest) Reset()         { *m = HealthRequest{} }
 func (m *HealthRequest) String() string { return proto.CompactTextString(m) }
 func (*HealthRequest) ProtoMessage()    {}
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{27}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{27}
 }
 func (m *HealthRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1620,6 +1622,7 @@ var xxx_messageInfo_HealthRequest proto.InternalMessageInfo
 
 // HealthResponse is the response to HealthRequest. It currently does not
 // contain any information.
+// API: PUBLIC
 type HealthResponse struct {
 }
 
@@ -1627,7 +1630,7 @@ func (m *HealthResponse) Reset()         { *m = HealthResponse{} }
 func (m *HealthResponse) String() string { return proto.CompactTextString(m) }
 func (*HealthResponse) ProtoMessage()    {}
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{28}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{28}
 }
 func (m *HealthResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1660,7 +1663,7 @@ func (m *LivenessRequest) Reset()         { *m = LivenessRequest{} }
 func (m *LivenessRequest) String() string { return proto.CompactTextString(m) }
 func (*LivenessRequest) ProtoMessage()    {}
 func (*LivenessRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{29}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{29}
 }
 func (m *LivenessRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1695,7 +1698,7 @@ func (m *LivenessResponse) Reset()         { *m = LivenessResponse{} }
 func (m *LivenessResponse) String() string { return proto.CompactTextString(m) }
 func (*LivenessResponse) ProtoMessage()    {}
 func (*LivenessResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{30}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{30}
 }
 func (m *LivenessResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1731,7 +1734,7 @@ func (m *JobsRequest) Reset()         { *m = JobsRequest{} }
 func (m *JobsRequest) String() string { return proto.CompactTextString(m) }
 func (*JobsRequest) ProtoMessage()    {}
 func (*JobsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{31}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{31}
 }
 func (m *JobsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1765,7 +1768,7 @@ func (m *JobsResponse) Reset()         { *m = JobsResponse{} }
 func (m *JobsResponse) String() string { return proto.CompactTextString(m) }
 func (*JobsResponse) ProtoMessage()    {}
 func (*JobsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{32}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{32}
 }
 func (m *JobsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1818,7 +1821,7 @@ func (m *JobsResponse_Job) Reset()         { *m = JobsResponse_Job{} }
 func (m *JobsResponse_Job) String() string { return proto.CompactTextString(m) }
 func (*JobsResponse_Job) ProtoMessage()    {}
 func (*JobsResponse_Job) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{32, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{32, 0}
 }
 func (m *JobsResponse_Job) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1851,7 +1854,7 @@ func (m *LocationsRequest) Reset()         { *m = LocationsRequest{} }
 func (m *LocationsRequest) String() string { return proto.CompactTextString(m) }
 func (*LocationsRequest) ProtoMessage()    {}
 func (*LocationsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{33}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{33}
 }
 func (m *LocationsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1885,7 +1888,7 @@ func (m *LocationsResponse) Reset()         { *m = LocationsResponse{} }
 func (m *LocationsResponse) String() string { return proto.CompactTextString(m) }
 func (*LocationsResponse) ProtoMessage()    {}
 func (*LocationsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{34}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{34}
 }
 func (m *LocationsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1921,7 +1924,7 @@ func (m *LocationsResponse_Location) Reset()         { *m = LocationsResponse_Lo
 func (m *LocationsResponse_Location) String() string { return proto.CompactTextString(m) }
 func (*LocationsResponse_Location) ProtoMessage()    {}
 func (*LocationsResponse_Location) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{34, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{34, 0}
 }
 func (m *LocationsResponse_Location) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1963,7 +1966,7 @@ func (m *RangeLogRequest) Reset()         { *m = RangeLogRequest{} }
 func (m *RangeLogRequest) String() string { return proto.CompactTextString(m) }
 func (*RangeLogRequest) ProtoMessage()    {}
 func (*RangeLogRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{35}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{35}
 }
 func (m *RangeLogRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1997,7 +2000,7 @@ func (m *RangeLogResponse) Reset()         { *m = RangeLogResponse{} }
 func (m *RangeLogResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeLogResponse) ProtoMessage()    {}
 func (*RangeLogResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{36}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{36}
 }
 func (m *RangeLogResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2037,7 +2040,7 @@ func (m *RangeLogResponse_PrettyInfo) Reset()         { *m = RangeLogResponse_Pr
 func (m *RangeLogResponse_PrettyInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeLogResponse_PrettyInfo) ProtoMessage()    {}
 func (*RangeLogResponse_PrettyInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{36, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{36, 0}
 }
 func (m *RangeLogResponse_PrettyInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2071,7 +2074,7 @@ func (m *RangeLogResponse_Event) Reset()         { *m = RangeLogResponse_Event{}
 func (m *RangeLogResponse_Event) String() string { return proto.CompactTextString(m) }
 func (*RangeLogResponse_Event) ProtoMessage()    {}
 func (*RangeLogResponse_Event) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{36, 1}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{36, 1}
 }
 func (m *RangeLogResponse_Event) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2106,7 +2109,7 @@ func (m *QueryPlanRequest) Reset()         { *m = QueryPlanRequest{} }
 func (m *QueryPlanRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryPlanRequest) ProtoMessage()    {}
 func (*QueryPlanRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{37}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{37}
 }
 func (m *QueryPlanRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2141,7 +2144,7 @@ func (m *QueryPlanResponse) Reset()         { *m = QueryPlanResponse{} }
 func (m *QueryPlanResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryPlanResponse) ProtoMessage()    {}
 func (*QueryPlanResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{38}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{38}
 }
 func (m *QueryPlanResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2173,7 +2176,7 @@ func (m *DataDistributionRequest) Reset()         { *m = DataDistributionRequest
 func (m *DataDistributionRequest) String() string { return proto.CompactTextString(m) }
 func (*DataDistributionRequest) ProtoMessage()    {}
 func (*DataDistributionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{39}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{39}
 }
 func (m *DataDistributionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2209,7 +2212,7 @@ func (m *DataDistributionResponse) Reset()         { *m = DataDistributionRespon
 func (m *DataDistributionResponse) String() string { return proto.CompactTextString(m) }
 func (*DataDistributionResponse) ProtoMessage()    {}
 func (*DataDistributionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{40}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{40}
 }
 func (m *DataDistributionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2247,7 +2250,7 @@ func (m *DataDistributionResponse_ZoneConfig) Reset()         { *m = DataDistrib
 func (m *DataDistributionResponse_ZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*DataDistributionResponse_ZoneConfig) ProtoMessage()    {}
 func (*DataDistributionResponse_ZoneConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{40, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{40, 0}
 }
 func (m *DataDistributionResponse_ZoneConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2282,7 +2285,7 @@ func (m *DataDistributionResponse_TableInfo) Reset()         { *m = DataDistribu
 func (m *DataDistributionResponse_TableInfo) String() string { return proto.CompactTextString(m) }
 func (*DataDistributionResponse_TableInfo) ProtoMessage()    {}
 func (*DataDistributionResponse_TableInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{40, 1}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{40, 1}
 }
 func (m *DataDistributionResponse_TableInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2316,7 +2319,7 @@ func (m *DataDistributionResponse_DatabaseInfo) Reset()         { *m = DataDistr
 func (m *DataDistributionResponse_DatabaseInfo) String() string { return proto.CompactTextString(m) }
 func (*DataDistributionResponse_DatabaseInfo) ProtoMessage()    {}
 func (*DataDistributionResponse_DatabaseInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{40, 2}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{40, 2}
 }
 func (m *DataDistributionResponse_DatabaseInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2349,7 +2352,7 @@ func (m *MetricMetadataRequest) Reset()         { *m = MetricMetadataRequest{} }
 func (m *MetricMetadataRequest) String() string { return proto.CompactTextString(m) }
 func (*MetricMetadataRequest) ProtoMessage()    {}
 func (*MetricMetadataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{41}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{41}
 }
 func (m *MetricMetadataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2383,7 +2386,7 @@ func (m *MetricMetadataResponse) Reset()         { *m = MetricMetadataResponse{}
 func (m *MetricMetadataResponse) String() string { return proto.CompactTextString(m) }
 func (*MetricMetadataResponse) ProtoMessage()    {}
 func (*MetricMetadataResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{42}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{42}
 }
 func (m *MetricMetadataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2426,7 +2429,7 @@ func (m *EnqueueRangeRequest) Reset()         { *m = EnqueueRangeRequest{} }
 func (m *EnqueueRangeRequest) String() string { return proto.CompactTextString(m) }
 func (*EnqueueRangeRequest) ProtoMessage()    {}
 func (*EnqueueRangeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{43}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{43}
 }
 func (m *EnqueueRangeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2459,7 +2462,7 @@ func (m *EnqueueRangeResponse) Reset()         { *m = EnqueueRangeResponse{} }
 func (m *EnqueueRangeResponse) String() string { return proto.CompactTextString(m) }
 func (*EnqueueRangeResponse) ProtoMessage()    {}
 func (*EnqueueRangeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{44}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{44}
 }
 func (m *EnqueueRangeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2496,7 +2499,7 @@ func (m *EnqueueRangeResponse_Details) Reset()         { *m = EnqueueRangeRespon
 func (m *EnqueueRangeResponse_Details) String() string { return proto.CompactTextString(m) }
 func (*EnqueueRangeResponse_Details) ProtoMessage()    {}
 func (*EnqueueRangeResponse_Details) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{44, 0}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{44, 0}
 }
 func (m *EnqueueRangeResponse_Details) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2529,7 +2532,7 @@ func (m *ChartCatalogRequest) Reset()         { *m = ChartCatalogRequest{} }
 func (m *ChartCatalogRequest) String() string { return proto.CompactTextString(m) }
 func (*ChartCatalogRequest) ProtoMessage()    {}
 func (*ChartCatalogRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{45}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{45}
 }
 func (m *ChartCatalogRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2563,7 +2566,7 @@ func (m *ChartCatalogResponse) Reset()         { *m = ChartCatalogResponse{} }
 func (m *ChartCatalogResponse) String() string { return proto.CompactTextString(m) }
 func (*ChartCatalogResponse) ProtoMessage()    {}
 func (*ChartCatalogResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_a864e42949dbbfc6, []int{46}
+	return fileDescriptor_admin_beba7622cc4ca35f, []int{46}
 }
 func (m *ChartCatalogResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2729,6 +2732,7 @@ type AdminClient interface {
 	// Settings returns the cluster-wide settings for the cluster.
 	Settings(ctx context.Context, in *SettingsRequest, opts ...grpc.CallOption) (*SettingsResponse, error)
 	// Health returns liveness for the node target of the request.
+	// API: PUBLIC
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
 	// Liveness returns the liveness state of all nodes on the cluster.
 	Liveness(ctx context.Context, in *LivenessRequest, opts ...grpc.CallOption) (*LivenessResponse, error)
@@ -3074,6 +3078,7 @@ type AdminServer interface {
 	// Settings returns the cluster-wide settings for the cluster.
 	Settings(context.Context, *SettingsRequest) (*SettingsResponse, error)
 	// Health returns liveness for the node target of the request.
+	// API: PUBLIC
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
 	// Liveness returns the liveness state of all nodes on the cluster.
 	Liveness(context.Context, *LivenessRequest) (*LivenessResponse, error)
@@ -7484,7 +7489,7 @@ func (m *DatabasesRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7563,7 +7568,7 @@ func (m *DatabasesResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7642,7 +7647,7 @@ func (m *DatabaseDetailsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7820,7 +7825,7 @@ func (m *DatabaseDetailsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7928,7 +7933,7 @@ func (m *DatabaseDetailsResponse_Grant) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8036,7 +8041,7 @@ func (m *TableDetailsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8295,7 +8300,7 @@ func (m *TableDetailsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8403,7 +8408,7 @@ func (m *TableDetailsResponse_Grant) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8609,7 +8614,7 @@ func (m *TableDetailsResponse_Column) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8825,7 +8830,7 @@ func (m *TableDetailsResponse_Index) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8933,7 +8938,7 @@ func (m *TableStatsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9120,7 +9125,7 @@ func (m *TableStatsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9228,7 +9233,7 @@ func (m *TableStatsResponse_MissingNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9278,7 +9283,7 @@ func (m *NonTableStatsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9394,7 +9399,7 @@ func (m *NonTableStatsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9444,7 +9449,7 @@ func (m *UsersRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9525,7 +9530,7 @@ func (m *UsersResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9604,7 +9609,7 @@ func (m *UsersResponse_User) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9741,7 +9746,7 @@ func (m *EventsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9822,7 +9827,7 @@ func (m *EventsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10029,7 +10034,7 @@ func (m *EventsResponse_Event) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10181,7 +10186,7 @@ func (m *SetUIDataRequest) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -10198,7 +10203,7 @@ func (m *SetUIDataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10248,7 +10253,7 @@ func (m *SetUIDataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10327,7 +10332,7 @@ func (m *GetUIDataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10483,7 +10488,7 @@ func (m *GetUIDataResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -10500,7 +10505,7 @@ func (m *GetUIDataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10611,7 +10616,7 @@ func (m *GetUIDataResponse_Value) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10661,7 +10666,7 @@ func (m *ClusterRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10780,7 +10785,7 @@ func (m *ClusterResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10943,7 +10948,7 @@ func (m *DrainRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11061,7 +11066,7 @@ func (m *DrainResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11184,7 +11189,7 @@ func (m *DecommissionStatusRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11326,7 +11331,7 @@ func (m *DecommissionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11407,7 +11412,7 @@ func (m *DecommissionStatusResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11554,7 +11559,7 @@ func (m *DecommissionStatusResponse_Status) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11653,7 +11658,7 @@ func (m *SettingsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11809,7 +11814,7 @@ func (m *SettingsResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -11826,7 +11831,7 @@ func (m *SettingsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11983,7 +11988,7 @@ func (m *SettingsResponse_Value) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12053,7 +12058,7 @@ func (m *HealthRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12103,7 +12108,7 @@ func (m *HealthResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12153,7 +12158,7 @@ func (m *LivenessRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12313,7 +12318,7 @@ func (m *LivenessResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -12330,7 +12335,7 @@ func (m *LivenessResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12447,7 +12452,7 @@ func (m *JobsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12528,7 +12533,7 @@ func (m *JobsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13078,7 +13083,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13128,7 +13133,7 @@ func (m *LocationsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13209,7 +13214,7 @@ func (m *LocationsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13339,7 +13344,7 @@ func (m *LocationsResponse_Location) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13427,7 +13432,7 @@ func (m *RangeLogRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13508,7 +13513,7 @@ func (m *RangeLogResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13732,7 +13737,7 @@ func (m *RangeLogResponse_PrettyInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13842,7 +13847,7 @@ func (m *RangeLogResponse_Event) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13921,7 +13926,7 @@ func (m *QueryPlanRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14000,7 +14005,7 @@ func (m *QueryPlanResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14050,7 +14055,7 @@ func (m *DataDistributionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14206,7 +14211,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14329,7 +14334,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14346,7 +14351,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14484,7 +14489,7 @@ func (m *DataDistributionResponse_ZoneConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14613,7 +14618,7 @@ func (m *DataDistributionResponse_TableInfo) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14682,7 +14687,7 @@ func (m *DataDistributionResponse_TableInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14838,7 +14843,7 @@ func (m *DataDistributionResponse_DatabaseInfo) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14855,7 +14860,7 @@ func (m *DataDistributionResponse_DatabaseInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14905,7 +14910,7 @@ func (m *MetricMetadataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15061,7 +15066,7 @@ func (m *MetricMetadataResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -15078,7 +15083,7 @@ func (m *MetricMetadataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15215,7 +15220,7 @@ func (m *EnqueueRangeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15296,7 +15301,7 @@ func (m *EnqueueRangeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15425,7 +15430,7 @@ func (m *EnqueueRangeResponse_Details) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15475,7 +15480,7 @@ func (m *ChartCatalogRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15556,7 +15561,7 @@ func (m *ChartCatalogResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15676,9 +15681,9 @@ var (
 	ErrIntOverflowAdmin   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/admin.proto", fileDescriptor_admin_a864e42949dbbfc6) }
+func init() { proto.RegisterFile("server/serverpb/admin.proto", fileDescriptor_admin_beba7622cc4ca35f) }
 
-var fileDescriptor_admin_a864e42949dbbfc6 = []byte{
+var fileDescriptor_admin_beba7622cc4ca35f = []byte{
 	// 4167 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x3a, 0x5d, 0x73, 0x1b, 0xd7,
 	0x75, 0x5a, 0x80, 0xf8, 0x3a, 0x04, 0x48, 0xf0, 0x8a, 0xa2, 0x40, 0x48, 0x21, 0xe8, 0x55, 0x1c,

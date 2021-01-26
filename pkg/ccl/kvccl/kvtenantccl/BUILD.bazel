@@ -20,10 +20,11 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/google.golang.org/grpc",
-        "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/status",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -48,7 +49,8 @@ go_test(
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/tracing",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

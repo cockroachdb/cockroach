@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -219,18 +220,35 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				if d.PartitionBy != nil {
+				if d.PartitionByIndex.ContainsPartitions() {
+					var numImplicitColumns int
+					var err error
+					idx, numImplicitColumns, err = detectImplicitPartitionColumns(
+						params.EvalContext(),
+						n.tableDesc,
+						idx,
+						d.PartitionByIndex.PartitionBy,
+					)
+					if err != nil {
+						return err
+					}
 					partitioning, err := CreatePartitioning(
-						params.ctx, params.p.ExecCfg().Settings,
-						params.EvalContext(), n.tableDesc, &idx, d.PartitionBy)
+						params.ctx,
+						params.p.ExecCfg().Settings,
+						params.EvalContext(),
+						n.tableDesc,
+						&idx,
+						numImplicitColumns,
+						d.PartitionByIndex.PartitionBy,
+					)
 					if err != nil {
 						return err
 					}
 					idx.Partitioning = partitioning
 				}
-				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
+				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
 				if err == nil {
-					if dropped {
+					if foundIndex.Dropped() {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"index %q being dropped, try again later", d.Name)
 					}
@@ -419,10 +437,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
 					viewDesc.Name, colToDrop.ColName())
-				droppedViews, err = params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc, jobDesc)
+				cascadedViews, err := params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc, jobDesc)
 				if err != nil {
 					return err
 				}
+				qualifiedView, err := params.p.getQualifiedTableName(params.ctx, viewDesc)
+				if err != nil {
+					return err
+				}
+
+				droppedViews = append(droppedViews, cascadedViews...)
+				droppedViews = append(droppedViews, qualifiedView.String())
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
@@ -436,12 +461,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.PrimaryIndex.ContainsColumnID(colToDrop.ID) {
+			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.ID) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
 			var idxNamesToDelete []string
-			for _, idx := range n.tableDesc.AllNonDropIndexes() {
+			for _, idx := range n.tableDesc.NonDropIndexes() {
 				// We automatically drop indexes that reference the column
 				// being dropped.
 
@@ -450,15 +475,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				containsThisColumn := false
 
 				// Analyze the index.
-				for _, id := range idx.ColumnIDs {
-					if id == colToDrop.ID {
+				for j := 0; j < idx.NumColumns(); j++ {
+					if idx.GetColumnID(j) == colToDrop.ID {
 						containsThisColumn = true
 						break
 					}
 				}
 				if !containsThisColumn {
-					for _, id := range idx.ExtraColumnIDs {
-						if n.tableDesc.PrimaryIndex.ContainsColumnID(id) {
+					for j := 0; j < idx.NumExtraColumns(); j++ {
+						id := idx.GetExtraColumnID(j)
+						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -476,8 +502,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for _, id := range idx.StoreColumnIDs {
-						if id == colToDrop.ID {
+					for j := 0; j < idx.NumStoredColumns(); j++ {
+						if idx.GetStoredColumnID(j) == colToDrop.ID {
 							containsThisColumn = true
 							break
 						}
@@ -487,7 +513,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// If the column being dropped is referenced in the partial
 				// index predicate, then the index should be dropped.
 				if !containsThisColumn && idx.IsPartial() {
-					expr, err := parser.ParseExpr(idx.Predicate)
+					expr, err := parser.ParseExpr(idx.GetPredicate())
 					if err != nil {
 						return err
 					}
@@ -504,7 +530,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					idxNamesToDelete = append(idxNamesToDelete, idx.Name)
+					idxNamesToDelete = append(idxNamesToDelete, idx.GetName())
 				}
 			}
 
@@ -528,6 +554,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				sliceIdx++
 				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
 					sliceIdx--
+
+					// If this unique constraint is used on the referencing side of any FK
+					// constraints, try to remove the references. Don't bother trying to find
+					// an alternate index or constraint, since all possible matches will
+					// be dropped when the column is dropped.
+					if err := params.p.tryRemoveFKBackReferences(
+						params.ctx, n.tableDesc, constraint, t.DropBehavior, nil,
+					); err != nil {
+						return err
+					}
 				}
 			}
 			n.tableDesc.UniqueWithoutIndexConstraints = n.tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
@@ -738,24 +774,42 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 
-		case *tree.AlterTablePartitionBy:
-			partitioning, err := CreatePartitioning(
+		case *tree.AlterTablePartitionByTable:
+			if t.All {
+				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
+			}
+			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
+			if oldPartitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER TABLE PARTITION BY",
+					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
+				)
+			}
+			newPartitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
-				n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
-			if err != nil {
-				return err
-			}
-			descriptorChanged = descriptorChanged || !n.tableDesc.PrimaryIndex.Partitioning.Equal(&partitioning)
-			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx, params.p.txn,
-				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning,
-				&partitioning, params.extendedEvalCtx.ExecCfg,
+				n.tableDesc,
+				n.tableDesc.GetPrimaryIndex().IndexDesc(),
+				0, /* numImplicitColumns */
+				t.PartitionBy,
 			)
 			if err != nil {
 				return err
 			}
-			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+			descriptorChanged = descriptorChanged || !oldPartitioning.Equal(&newPartitioning)
+			err = deleteRemovedPartitionZoneConfigs(
+				params.ctx, params.p.txn,
+				n.tableDesc, n.tableDesc.GetPrimaryIndex().IndexDesc(), &oldPartitioning,
+				&newPartitioning, params.extendedEvalCtx.ExecCfg,
+			)
+			if err != nil {
+				return err
+			}
+			{
+				newPrimaryIndex := *n.tableDesc.GetPrimaryIndex().IndexDesc()
+				newPrimaryIndex.Partitioning = newPartitioning
+				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
+			}
 
 		case *tree.AlterTableSetAudit:
 			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
@@ -809,16 +863,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// new name exists. This is what postgres does.
 			switch details.Kind {
 			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
-				if err := n.tableDesc.ForeachNonDropIndex(func(
-					descriptor *descpb.IndexDescriptor,
-				) error {
-					if descriptor.Name == string(t.NewName) {
-						return pgerror.Newf(pgcode.DuplicateRelation,
-							"relation %v already exists", t.NewName)
-					}
-					return nil
-				}); err != nil {
-					return err
+				if catalog.FindNonDropIndex(n.tableDesc, func(idx catalog.Index) bool {
+					return idx.GetName() == string(t.NewName)
+				}) != nil {
+					return pgerror.Newf(pgcode.DuplicateRelation,
+						"relation %v already exists", t.NewName)
 				}
 			}
 
@@ -840,12 +889,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-		case *tree.AlterTableOwner:
-			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
-			if err != nil {
-				return err
-			}
-			descriptorChanged = descriptorChanged || changed
 		default:
 			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
@@ -888,10 +931,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterTable{
-			TableName:  params.p.ResolvedName(n.n.Table).FQString(),
-			MutationID: uint32(mutationID),
-			// TODO(knz): This is missing some qualification, see
-			// https://github.com/cockroachdb/cockroach/issues/57735
+			TableName:           params.p.ResolvedName(n.n.Table).FQString(),
+			MutationID:          uint32(mutationID),
 			CascadeDroppedViews: droppedViews,
 		})
 }
@@ -1033,7 +1074,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.ID) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.Name)
 		}
@@ -1249,49 +1290,51 @@ func (p *planner) updateFKBackReferenceName(
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
 }
 
-// alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
-// was updated.
-func (p *planner) alterTableOwner(
-	ctx context.Context, n *alterTableNode, newOwner security.SQLUsername,
-) (bool, error) {
-	privs := n.tableDesc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner() {
-		return false, nil
-	}
-
-	if err := p.checkCanAlterTableAndSetNewOwner(ctx, n.tableDesc, newOwner); err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-// checkCanAlterTableAndSetNewOwner handles privilege checking and setting new owner.
-// Called in ALTER TABLE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterTableAndSetNewOwner(
-	ctx context.Context, desc *tabledesc.Mutable, newOwner security.SQLUsername,
+// tryRemoveFKBackReferences determines whether the provided unique constraint
+// is used on the referencing side of a FK constraint. If so, it tries to remove
+// the references or find an alternate unique constraint that will suffice.
+func (p *planner) tryRemoveFKBackReferences(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	constraint descpb.UniqueConstraint,
+	behavior tree.DropBehavior,
+	candidateConstraints []descpb.UniqueConstraint,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
-		return err
+	// uniqueConstraintHasReplacementCandidate runs
+	// IsValidReferencedUniqueConstraint on the candidateConstraints. Returns true
+	// if at least one constraint satisfies IsValidReferencedUniqueConstraint.
+	uniqueConstraintHasReplacementCandidate := func(
+		referencedColumnIDs []descpb.ColumnID,
+	) bool {
+		for _, uc := range candidateConstraints {
+			if uc.IsValidReferencedUniqueConstraint(referencedColumnIDs) {
+				return true
+			}
+		}
+		return false
 	}
 
-	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(
-		ctx, desc.GetParentSchemaID(), desc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
+	// Index for updating the FK slices in place when removing FKs.
+	sliceIdx := 0
+	for i := range tableDesc.InboundFKs {
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		fk := &tableDesc.InboundFKs[i]
+		// The constraint being deleted could potentially be the referenced unique
+		// constraint for this fk.
+		if constraint.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) &&
+			!uniqueConstraintHasReplacementCandidate(fk.ReferencedColumnIDs) {
+			// If we found haven't found a replacement, then we check that the drop
+			// behavior is cascade.
+			if err := p.canRemoveFKBackreference(ctx, constraint.GetName(), fk, behavior); err != nil {
+				return err
+			}
+			sliceIdx--
+			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+				return err
+			}
+		}
 	}
-
-	privs := desc.GetPrivileges()
-	privs.SetOwner(newOwner)
-
-	return p.logEvent(ctx,
-		desc.ID,
-		&eventpb.AlterTableOwner{
-			// TODO(knz): Properly qualify this.
-			// See: https://github.com/cockroachdb/cockroach/issues/57960
-			TableName: desc.Name,
-			Owner:     newOwner.Normalized(),
-		})
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
+	return nil
 }

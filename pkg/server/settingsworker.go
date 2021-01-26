@@ -50,7 +50,7 @@ func processSystemConfigKVs(
 		{
 			types := []*types.T{tbl.Columns[0].Type}
 			nameRow := make([]rowenc.EncDatum, 1)
-			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
+			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}
@@ -130,7 +130,7 @@ func (s *Server) refreshSettings(initialSettingsKVs []roachpb.KeyValue) error {
 		}
 	}
 	// Setup updater that listens for changes in settings.
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	return s.stopper.RunAsyncTask(ctx, "refresh-settings", func(ctx context.Context) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
 		for {
@@ -141,10 +141,9 @@ func (s *Server) refreshSettings(initialSettingsKVs []roachpb.KeyValue) error {
 				if err := processSystemConfigKVs(ctx, cfg.Values, u, s.engines[0]); err != nil {
 					log.Warningf(ctx, "error processing config KVs: %+v", err)
 				}
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}
 	})
-	return nil
 }

@@ -95,6 +95,7 @@ const (
 	InformationSchemaRoutineTableID
 	InformationSchemaSchemataTableID
 	InformationSchemaSchemataTablePrivilegesID
+	InformationSchemaSessionVariables
 	InformationSchemaSequencesID
 	InformationSchemaStatisticsTableID
 	InformationSchemaTableConstraintTableID

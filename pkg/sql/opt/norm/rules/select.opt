@@ -8,6 +8,7 @@
 #   - Replaces the Filters operator with False if any operand is False or Null
 #   - Flattens nested And operands by merging their conditions into parent
 #   - Simplifies Or operands where one side is a Null to the other side
+#   - Simplifies Is operands where the right side is True or False
 #
 # Note that the Null handling behavior is different than the SimplifyAnd rules,
 # because Filters only appears as a Select or Join filter condition, both of
@@ -18,9 +19,10 @@
     $filters:[
             ...
             $item:(FiltersItem
-                    (And | True | False | Null | Or)
+                    (And | True | False | Null | Or | Is)
                 ) &
-                ^(IsUnsimplifiableOr $item)
+                ^(IsUnsimplifiableOr $item) &
+                ^(IsUnsimplifiableIs $item)
             ...
         ] &
         ^(IsFilterFalse $filters)

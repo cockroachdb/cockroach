@@ -35,7 +35,7 @@ func (m *Config) Reset()         { *m = Config{} }
 func (m *Config) String() string { return proto.CompactTextString(m) }
 func (*Config) ProtoMessage()    {}
 func (*Config) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_4fdfa32e25381f1e, []int{0}
+	return fileDescriptor_config_91e5b6ac35c7431c, []int{0}
 }
 func (m *Config) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -85,7 +85,7 @@ func (m *S2Config) Reset()         { *m = S2Config{} }
 func (m *S2Config) String() string { return proto.CompactTextString(m) }
 func (*S2Config) ProtoMessage()    {}
 func (*S2Config) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_4fdfa32e25381f1e, []int{1}
+	return fileDescriptor_config_91e5b6ac35c7431c, []int{1}
 }
 func (m *S2Config) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +118,7 @@ func (m *S2GeographyConfig) Reset()         { *m = S2GeographyConfig{} }
 func (m *S2GeographyConfig) String() string { return proto.CompactTextString(m) }
 func (*S2GeographyConfig) ProtoMessage()    {}
 func (*S2GeographyConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_4fdfa32e25381f1e, []int{2}
+	return fileDescriptor_config_91e5b6ac35c7431c, []int{2}
 }
 func (m *S2GeographyConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -157,7 +157,7 @@ func (m *S2GeometryConfig) Reset()         { *m = S2GeometryConfig{} }
 func (m *S2GeometryConfig) String() string { return proto.CompactTextString(m) }
 func (*S2GeometryConfig) ProtoMessage()    {}
 func (*S2GeometryConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_4fdfa32e25381f1e, []int{3}
+	return fileDescriptor_config_91e5b6ac35c7431c, []int{3}
 }
 func (m *S2GeometryConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -684,7 +684,7 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -810,7 +810,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -893,7 +893,7 @@ func (m *S2GeographyConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -1020,7 +1020,7 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -1140,9 +1140,9 @@ var (
 	ErrIntOverflowConfig   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("geo/geoindex/config.proto", fileDescriptor_config_4fdfa32e25381f1e) }
+func init() { proto.RegisterFile("geo/geoindex/config.proto", fileDescriptor_config_91e5b6ac35c7431c) }
 
-var fileDescriptor_config_4fdfa32e25381f1e = []byte{
+var fileDescriptor_config_91e5b6ac35c7431c = []byte{
 	// 376 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0xbf, 0x6e, 0xea, 0x30,
 	0x18, 0xc5, 0x63, 0x2e, 0xa0, 0x60, 0xee, 0x70, 0x6f, 0xee, 0x55, 0x95, 0xb6, 0x92, 0x41, 0x4c,

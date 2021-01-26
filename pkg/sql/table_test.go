@@ -302,11 +302,16 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
-		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
-			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIndex)
+		activeIndexDescs := make([]descpb.IndexDescriptor, len(schema.ActiveIndexes()))
+		for i, index := range schema.ActiveIndexes() {
+			activeIndexDescs[i] = *index.IndexDesc()
 		}
-		if !reflect.DeepEqual(d.indexes, append([]descpb.IndexDescriptor{}, schema.Indexes...)) {
-			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.Indexes)
+
+		if !reflect.DeepEqual(d.primary, activeIndexDescs[0]) {
+			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, activeIndexDescs[0])
+		}
+		if !reflect.DeepEqual(d.indexes, activeIndexDescs[1:]) {
+			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, activeIndexDescs[1:])
 		}
 
 	}
@@ -386,7 +391,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc.PrimaryIndex = descpb.IndexDescriptor{}
+	desc.SetPrimaryIndex(descpb.IndexDescriptor{})
 
 	err = desc.ValidateTable(ctx)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {

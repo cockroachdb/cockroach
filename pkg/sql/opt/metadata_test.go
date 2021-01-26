@@ -192,9 +192,9 @@ func TestMetadataTables(t *testing.T) {
 			cat.Ordinary,
 			types.Int,
 			false, /* nullable */
-			false, /* hidden */
-			nil,   /* defaultExpr */
-			nil,   /* computedExpr */
+			cat.Visible,
+			nil, /* defaultExpr */
+			nil, /* computedExpr */
 		)
 		return c
 	}
@@ -281,7 +281,7 @@ func TestIndexColumns(t *testing.T) {
 // TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
 func TestDuplicateTable(t *testing.T) {
 	cat := testcat.New()
-	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL)")
+	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL, INDEX (b2) WHERE b)")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,11 +332,12 @@ func TestDuplicateTable(t *testing.T) {
 		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
 	}
 
-	if dupTabMeta.PartialIndexPredicates == nil || dupTabMeta.PartialIndexPredicates[1] == nil {
+	pred, isPartialIndex := dupTabMeta.PartialIndexPredicate(1)
+	if !isPartialIndex {
 		t.Fatalf("expected partial index predicates to be duplicated")
 	}
 
-	col = dupTabMeta.PartialIndexPredicates[1].(*memo.VariableExpr).Col
+	col = pred.(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)
 	}

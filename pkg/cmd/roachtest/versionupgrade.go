@@ -94,7 +94,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
 		// empty string which uses the local cockroach binary.
-		newV := "20.2.3"
+		newV := "20.2.4"
 		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
 		if err != nil {
 			t.Fatal(err)
@@ -104,6 +104,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], 10 /* maxOps */, 2 /* concurrency */)
+	// TODO(irfansharif): All schema change instances were commented out while
+	// of #58489 is being addressed.
+	_ = schemaChangeStep
 	backupStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// This check was introduced for the system.tenants table and the associated
 		// changes to full-cluster backup to include tenants. It mostly wants to
@@ -151,7 +154,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		testFeaturesStep,
 		// Run a quick schemachange workload in between each upgrade.
 		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
-		schemaChangeStep,
+		// schemaChangeStep,
 		backupStep,
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
@@ -159,18 +162,18 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		// as they ought to.
 		binaryUpgradeStep(c.All(), predecessorVersion),
 		testFeaturesStep,
-		schemaChangeStep,
+		// schemaChangeStep,
 		backupStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
 		binaryUpgradeStep(c.All(), ""),
 		allowAutoUpgradeStep(1),
 		testFeaturesStep,
-		schemaChangeStep,
+		// schemaChangeStep,
 		backupStep,
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
-		schemaChangeStep,
+		// schemaChangeStep,
 		backupStep,
 	)
 
@@ -219,7 +222,11 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 			u.conns = append(u.conns, u.c.Conn(ctx, i))
 		}
 	}
-	return u.conns[i-1]
+	db := u.conns[i-1]
+	// Run a trivial query to shake out errors that can occur when the server has
+	// restarted in the meantime.
+	_ = db.PingContext(ctx)
+	return db
 }
 
 func (u *versionUpgradeTest) uploadVersion(
@@ -401,6 +408,19 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 	}
 }
 
+func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgradeTest) {
+	db := u.conn(ctx, t, 1)
+	u.c.l.Printf("bumping cluster version")
+	// TODO(tbg): once this is using a job, poll and periodically print the job status
+	// instead of blocking.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING version = crdb_internal.node_executable_version()`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	u.c.l.Printf("cluster version bumped")
+}
+
 type versionFeatureTest struct {
 	name string
 	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
@@ -520,4 +540,32 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
+}
+
+// importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
+// crashes during the import). If oldV is nil, this runs the import using the specified
+// version (for example "19.2.1", as provided by PredecessorVersion()) using the location
+// used by c.Stage(). An empty oldV uses the main cockroach binary.
+func importTPCCStep(oldV string, headroomWarehouses int, crdbNodes nodeListOption) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		// We need to use the predecessor binary to load into the
+		// predecessor cluster to avoid random breakage. For example, you
+		// can't use 21.1 to import into 20.2 due to some flag changes.
+		//
+		// TODO(tbg): also import a large dataset (for example 2TB bank)
+		// that will provide cold data that may need to be migrated.
+		var cmd string
+		if oldV == "" {
+			cmd = tpccImportCmd(headroomWarehouses)
+		} else {
+			cmd = tpccImportCmdWithCockroachBinary(filepath.Join("v"+oldV, "cockroach"), headroomWarehouses, "--checks=false")
+		}
+		// Use a monitor so that we fail cleanly if the cluster crashes
+		// during import.
+		m := newMonitor(ctx, u.c, crdbNodes)
+		m.Go(func(ctx context.Context) error {
+			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
+		})
+		m.Wait()
+	}
 }

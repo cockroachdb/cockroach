@@ -56,14 +56,15 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.CreateReassignOwnedByCounter())
 
-	allDescs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn, true /* validate */)
+	allDescs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
 	if err != nil {
 		return err
 	}
 
 	// Filter for all objects in current database.
 	currentDatabase := params.p.CurrentDatabase()
-	currentDbDesc, err := params.p.ResolveMutableDatabaseDescriptor(params.ctx, currentDatabase, true)
+	_, currentDbDesc, err := params.p.Descriptors().GetMutableDatabaseByName(
+		params.ctx, params.p.txn, currentDatabase, tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}

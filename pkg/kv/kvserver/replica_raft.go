@@ -1672,6 +1672,7 @@ func handleTruncatedStateBelowRaft(
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
 	readWriter storage.ReadWriter,
+	assertNoLegacy bool,
 ) (_apply bool, _ error) {
 	// If this is a log truncation, load the resulting unreplicated or legacy
 	// replicated truncated state (in that order). If the migration is happening
@@ -1684,6 +1685,10 @@ func handleTruncatedStateBelowRaft(
 	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter)
 	if err != nil {
 		return false, errors.Wrap(err, "loading truncated state")
+	}
+
+	if assertNoLegacy && truncStateIsLegacy {
+		log.Fatalf(ctx, "found legacy truncated state which should no longer exist")
 	}
 
 	// Truncate the Raft log from the entry after the previous
@@ -1800,7 +1805,7 @@ func maybeCampaignAfterConfChange(
 	// If the leader is no longer in the descriptor but we are the first voter,
 	// campaign.
 	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
-	if !leaderStillThere && storeID == desc.Replicas().Voters()[0].StoreID {
+	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
 		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
 		_ = raftGroup.Campaign()
 	}

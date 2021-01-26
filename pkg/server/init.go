@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -214,16 +215,15 @@ func (s *initServer) ServeAndWait(
 		joinCtx, cancelJoin = context.WithCancel(ctx)
 		defer cancelJoin()
 
-		err := stopper.RunTask(joinCtx, "init server: join loop",
-			func(joinCtx context.Context) {
-				stopper.RunWorker(joinCtx, func(joinCtx context.Context) {
-					defer wg.Done()
+		err := stopper.RunAsyncTask(joinCtx, "init server: join loop",
+			func(ctx context.Context) {
+				defer wg.Done()
 
-					state, err := s.startJoinLoop(joinCtx, stopper)
-					joinCh <- joinResult{state: state, err: err}
-				})
+				state, err := s.startJoinLoop(ctx, stopper)
+				joinCh <- joinResult{state: state, err: err}
 			})
 		if err != nil {
+			wg.Done()
 			return nil, false, err
 		}
 	}
@@ -559,6 +559,9 @@ type initServerCfg struct {
 	// n2 is `cockroach init`-ialized, n3 will learn about it. The reverse will
 	// not be true.
 	resolvers []resolver.Resolver
+
+	// testingKnobs is used for internal test controls only.
+	testingKnobs base.TestingKnobs
 }
 
 func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
@@ -578,5 +581,6 @@ func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
 		defaultZoneConfig:         cfg.DefaultZoneConfig,
 		dialOpts:                  dialOpts,
 		resolvers:                 resolvers,
+		testingKnobs:              cfg.TestingKnobs,
 	}
 }

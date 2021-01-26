@@ -22,17 +22,28 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // Info describes build information for this CockroachDB binary.
 type Info struct {
-	GoVersion       string `protobuf:"bytes,1,opt,name=go_version,json=goVersion" json:"go_version"`
-	Tag             string `protobuf:"bytes,2,opt,name=tag" json:"tag"`
-	Time            string `protobuf:"bytes,3,opt,name=time" json:"time"`
-	Revision        string `protobuf:"bytes,4,opt,name=revision" json:"revision"`
-	CgoCompiler     string `protobuf:"bytes,5,opt,name=cgo_compiler,json=cgoCompiler" json:"cgo_compiler"`
+	// go_version is the version of the Go toolchain used to compile this executable.
+	GoVersion string `protobuf:"bytes,1,opt,name=go_version,json=goVersion" json:"go_version"`
+	// tag is the git tag for the revision of the source code for this executable.
+	Tag string `protobuf:"bytes,2,opt,name=tag" json:"tag"`
+	// time is the time at which the build started.
+	Time string `protobuf:"bytes,3,opt,name=time" json:"time"`
+	// revision is the git commit identifier for the source code of this executable.
+	Revision string `protobuf:"bytes,4,opt,name=revision" json:"revision"`
+	// cgo_compiler is the C/C++ compiler used to build non-go dependencies.
+	CgoCompiler string `protobuf:"bytes,5,opt,name=cgo_compiler,json=cgoCompiler" json:"cgo_compiler"`
+	// cgo_target_triple is the platform identifier that identifies the cross-compilation target for C/C++ components.
 	CgoTargetTriple string `protobuf:"bytes,10,opt,name=cgo_target_triple,json=cgoTargetTriple" json:"cgo_target_triple"`
-	Platform        string `protobuf:"bytes,6,opt,name=platform" json:"platform"`
-	Distribution    string `protobuf:"bytes,7,opt,name=distribution" json:"distribution"`
-	Type            string `protobuf:"bytes,8,opt,name=type" json:"type"`
-	Channel         string `protobuf:"bytes,9,opt,name=channel" json:"channel"`
-	EnvChannel      string `protobuf:"bytes,11,opt,name=env_channel,json=envChannel" json:"env_channel"`
+	// platform is the platform identifiers that identifies the cross-compilation target for Go code.
+	Platform string `protobuf:"bytes,6,opt,name=platform" json:"platform"`
+	// distribution indicates which licensing conditions apply (OSS: full open source; CCL: includes CCL code).
+	Distribution string `protobuf:"bytes,7,opt,name=distribution" json:"distribution"`
+	// type indicates whether this is a development or release build.
+	Type string `protobuf:"bytes,8,opt,name=type" json:"type"`
+	// channel identifies through which product channel the executable was released.
+	Channel string `protobuf:"bytes,9,opt,name=channel" json:"channel"`
+	// env_channel identifies the product channel as overridden by the COCKROACH_CHANNEL environment variable.
+	EnvChannel string `protobuf:"bytes,11,opt,name=env_channel,json=envChannel" json:"env_channel"`
 	// dependencies exists to allow tests that run against old clusters
 	// to unmarshal JSON containing this field. The tag is unimportant,
 	// but the field name must remain unchanged.
@@ -47,7 +58,7 @@ func (m *Info) Reset()         { *m = Info{} }
 func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
 func (*Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_info_144091887156c658, []int{0}
+	return fileDescriptor_info_4e97a9e72e768597, []int{0}
 }
 func (m *Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -588,7 +599,7 @@ func (m *Info) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthInfo
 			}
 			if (iNdEx + skippy) > l {
@@ -708,9 +719,9 @@ var (
 	ErrIntOverflowInfo   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("build/info.proto", fileDescriptor_info_144091887156c658) }
+func init() { proto.RegisterFile("build/info.proto", fileDescriptor_info_4e97a9e72e768597) }
 
-var fileDescriptor_info_144091887156c658 = []byte{
+var fileDescriptor_info_4e97a9e72e768597 = []byte{
 	// 339 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x91, 0x41, 0x8e, 0xda, 0x30,
 	0x14, 0x86, 0x93, 0x12, 0x0a, 0x18, 0x24, 0x5a, 0xab, 0xaa, 0xac, 0x2e, 0x5c, 0x54, 0x54, 0xc1,

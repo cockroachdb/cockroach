@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -8,8 +10,8 @@ go_library(
         "docker.go",
         "dockercluster.go",
         "http.go",
-        "testconfig.pb.go",
     ],
+    embed = [":cluster_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/cluster",
     visibility = ["//visibility:public"],
     deps = [
@@ -24,19 +26,35 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/docker/distribution/reference",
-        "//vendor/github.com/docker/docker/api/types",
-        "//vendor/github.com/docker/docker/api/types/container",
-        "//vendor/github.com/docker/docker/api/types/events",
-        "//vendor/github.com/docker/docker/api/types/filters",
-        "//vendor/github.com/docker/docker/api/types/network",
-        "//vendor/github.com/docker/docker/client",
-        "//vendor/github.com/docker/docker/pkg/jsonmessage",
-        "//vendor/github.com/docker/docker/pkg/stdcopy",
-        "//vendor/github.com/docker/go-connections/nat",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/mattn/go-isatty",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_docker_distribution//reference",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+        "@com_github_docker_docker//api/types/events",
+        "@com_github_docker_docker//api/types/filters",
+        "@com_github_docker_docker//api/types/network",
+        "@com_github_docker_docker//client",
+        "@com_github_docker_docker//pkg/jsonmessage",
+        "@com_github_docker_docker//pkg/stdcopy",
+        "@com_github_docker_go_connections//nat",
+        "@com_github_mattn_go_isatty//:go-isatty",
     ],
+)
+
+proto_library(
+    name = "cluster_proto",
+    srcs = ["testconfig.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "cluster_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/cluster",
+    proto = ":cluster_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )

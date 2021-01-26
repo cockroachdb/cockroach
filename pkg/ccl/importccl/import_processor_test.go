@@ -549,12 +549,10 @@ type cancellableImportResumer struct {
 	wrapped          *importResumer
 }
 
-func (r *cancellableImportResumer) Resume(
-	_ context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	r.jobID = *r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
-	if err := r.wrapped.Resume(r.ctx, execCtx, resultsCh); err != nil {
+	if err := r.wrapped.Resume(r.ctx, execCtx); err != nil {
 		return err
 	}
 	if r.onSuccessBarrier != nil {

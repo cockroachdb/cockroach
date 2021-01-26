@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -111,7 +112,7 @@ func TestConn(t *testing.T) {
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
 			mon.BoundAccount{}, /* reserved */
-			authOptions{testingSkipAuth: true},
+			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 		)
 		return nil
 	})
@@ -538,7 +539,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	// Consume the connection options.
-	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf); err != nil {
+	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf, conn.RemoteAddr(), false /* trustRemoteAddr */); err != nil {
 		return nil, err
 	}
 
@@ -1056,7 +1057,7 @@ func TestMaliciousInputs(t *testing.T) {
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
-				authOptions{testingSkipAuth: true},
+				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)

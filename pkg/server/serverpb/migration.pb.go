@@ -7,6 +7,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import clusterversion "github.com/cockroachdb/cockroach/pkg/clusterversion"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import (
 	context "context"
@@ -36,7 +37,7 @@ func (m *ValidateTargetClusterVersionRequest) Reset()         { *m = ValidateTar
 func (m *ValidateTargetClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionRequest) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{0}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{0}
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +71,7 @@ func (m *ValidateTargetClusterVersionResponse) Reset()         { *m = ValidateTa
 func (m *ValidateTargetClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionResponse) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{1}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{1}
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -95,8 +96,8 @@ func (m *ValidateTargetClusterVersionResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ValidateTargetClusterVersionResponse proto.InternalMessageInfo
 
-// BumpClusterVersionRequest is used to inform a given node of a cluster version
-// bump.
+// BumpClusterVersionRequest is used to inform the target node of a cluster
+// version bump.
 type BumpClusterVersionRequest struct {
 	ClusterVersion *clusterversion.ClusterVersion `protobuf:"bytes,1,opt,name=cluster_version,json=clusterVersion,proto3" json:"cluster_version,omitempty"`
 }
@@ -105,7 +106,7 @@ func (m *BumpClusterVersionRequest) Reset()         { *m = BumpClusterVersionReq
 func (m *BumpClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionRequest) ProtoMessage()    {}
 func (*BumpClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{2}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{2}
 }
 func (m *BumpClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -138,7 +139,7 @@ func (m *BumpClusterVersionResponse) Reset()         { *m = BumpClusterVersionRe
 func (m *BumpClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionResponse) ProtoMessage()    {}
 func (*BumpClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{3}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{3}
 }
 func (m *BumpClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -163,11 +164,151 @@ func (m *BumpClusterVersionResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_BumpClusterVersionResponse proto.InternalMessageInfo
 
+// PurgeOutdatedReplicasRequest is used to instruct the target node to
+// purge all replicas with a version less than the one provided.
+type PurgeOutdatedReplicasRequest struct {
+	Version *roachpb.Version `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+}
+
+func (m *PurgeOutdatedReplicasRequest) Reset()         { *m = PurgeOutdatedReplicasRequest{} }
+func (m *PurgeOutdatedReplicasRequest) String() string { return proto.CompactTextString(m) }
+func (*PurgeOutdatedReplicasRequest) ProtoMessage()    {}
+func (*PurgeOutdatedReplicasRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_migration_e2a428f370588fbd, []int{4}
+}
+func (m *PurgeOutdatedReplicasRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PurgeOutdatedReplicasRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PurgeOutdatedReplicasRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PurgeOutdatedReplicasRequest.Merge(dst, src)
+}
+func (m *PurgeOutdatedReplicasRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PurgeOutdatedReplicasRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PurgeOutdatedReplicasRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PurgeOutdatedReplicasRequest proto.InternalMessageInfo
+
+// PurgeOutdatedReplicasResponse is the response to a
+// PurgeOutdatedReplicasRequest.
+type PurgeOutdatedReplicasResponse struct {
+}
+
+func (m *PurgeOutdatedReplicasResponse) Reset()         { *m = PurgeOutdatedReplicasResponse{} }
+func (m *PurgeOutdatedReplicasResponse) String() string { return proto.CompactTextString(m) }
+func (*PurgeOutdatedReplicasResponse) ProtoMessage()    {}
+func (*PurgeOutdatedReplicasResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_migration_e2a428f370588fbd, []int{5}
+}
+func (m *PurgeOutdatedReplicasResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PurgeOutdatedReplicasResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PurgeOutdatedReplicasResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PurgeOutdatedReplicasResponse.Merge(dst, src)
+}
+func (m *PurgeOutdatedReplicasResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *PurgeOutdatedReplicasResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PurgeOutdatedReplicasResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PurgeOutdatedReplicasResponse proto.InternalMessageInfo
+
+// SyncAllEnginesRequest is used to instruct the target node to sync all its
+// engines.
+type SyncAllEnginesRequest struct {
+}
+
+func (m *SyncAllEnginesRequest) Reset()         { *m = SyncAllEnginesRequest{} }
+func (m *SyncAllEnginesRequest) String() string { return proto.CompactTextString(m) }
+func (*SyncAllEnginesRequest) ProtoMessage()    {}
+func (*SyncAllEnginesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_migration_e2a428f370588fbd, []int{6}
+}
+func (m *SyncAllEnginesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncAllEnginesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SyncAllEnginesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncAllEnginesRequest.Merge(dst, src)
+}
+func (m *SyncAllEnginesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *SyncAllEnginesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncAllEnginesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncAllEnginesRequest proto.InternalMessageInfo
+
+// SyncAllEnginesResponse is the response to a SyncAllEnginesRequest.
+type SyncAllEnginesResponse struct {
+}
+
+func (m *SyncAllEnginesResponse) Reset()         { *m = SyncAllEnginesResponse{} }
+func (m *SyncAllEnginesResponse) String() string { return proto.CompactTextString(m) }
+func (*SyncAllEnginesResponse) ProtoMessage()    {}
+func (*SyncAllEnginesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_migration_e2a428f370588fbd, []int{7}
+}
+func (m *SyncAllEnginesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncAllEnginesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SyncAllEnginesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncAllEnginesResponse.Merge(dst, src)
+}
+func (m *SyncAllEnginesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *SyncAllEnginesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncAllEnginesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncAllEnginesResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*ValidateTargetClusterVersionRequest)(nil), "cockroach.server.serverpb.ValidateTargetClusterVersionRequest")
 	proto.RegisterType((*ValidateTargetClusterVersionResponse)(nil), "cockroach.server.serverpb.ValidateTargetClusterVersionResponse")
 	proto.RegisterType((*BumpClusterVersionRequest)(nil), "cockroach.server.serverpb.BumpClusterVersionRequest")
 	proto.RegisterType((*BumpClusterVersionResponse)(nil), "cockroach.server.serverpb.BumpClusterVersionResponse")
+	proto.RegisterType((*PurgeOutdatedReplicasRequest)(nil), "cockroach.server.serverpb.PurgeOutdatedReplicasRequest")
+	proto.RegisterType((*PurgeOutdatedReplicasResponse)(nil), "cockroach.server.serverpb.PurgeOutdatedReplicasResponse")
+	proto.RegisterType((*SyncAllEnginesRequest)(nil), "cockroach.server.serverpb.SyncAllEnginesRequest")
+	proto.RegisterType((*SyncAllEnginesResponse)(nil), "cockroach.server.serverpb.SyncAllEnginesResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -196,6 +337,12 @@ type MigrationClient interface {
 	// which checks to see that all nodes in the cluster are running binaries
 	// that would be able to support the intended version bump.
 	BumpClusterVersion(ctx context.Context, in *BumpClusterVersionRequest, opts ...grpc.CallOption) (*BumpClusterVersionResponse, error)
+	// SyncAllEngines is used to instruct the target node to sync all its
+	// engines.
+	SyncAllEngines(ctx context.Context, in *SyncAllEnginesRequest, opts ...grpc.CallOption) (*SyncAllEnginesResponse, error)
+	// PurgeOutdatedReplicas is used to instruct the target node to purge all
+	// replicas with a version less than the one provided.
+	PurgeOutdatedReplicas(ctx context.Context, in *PurgeOutdatedReplicasRequest, opts ...grpc.CallOption) (*PurgeOutdatedReplicasResponse, error)
 }
 
 type migrationClient struct {
@@ -224,6 +371,24 @@ func (c *migrationClient) BumpClusterVersion(ctx context.Context, in *BumpCluste
 	return out, nil
 }
 
+func (c *migrationClient) SyncAllEngines(ctx context.Context, in *SyncAllEnginesRequest, opts ...grpc.CallOption) (*SyncAllEnginesResponse, error) {
+	out := new(SyncAllEnginesResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/SyncAllEngines", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *migrationClient) PurgeOutdatedReplicas(ctx context.Context, in *PurgeOutdatedReplicasRequest, opts ...grpc.CallOption) (*PurgeOutdatedReplicasResponse, error) {
+	out := new(PurgeOutdatedReplicasResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/PurgeOutdatedReplicas", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MigrationServer is the server API for Migration service.
 type MigrationServer interface {
 	// ValidateTargetClusterVersion is used to verify that the target node is
@@ -240,6 +405,12 @@ type MigrationServer interface {
 	// which checks to see that all nodes in the cluster are running binaries
 	// that would be able to support the intended version bump.
 	BumpClusterVersion(context.Context, *BumpClusterVersionRequest) (*BumpClusterVersionResponse, error)
+	// SyncAllEngines is used to instruct the target node to sync all its
+	// engines.
+	SyncAllEngines(context.Context, *SyncAllEnginesRequest) (*SyncAllEnginesResponse, error)
+	// PurgeOutdatedReplicas is used to instruct the target node to purge all
+	// replicas with a version less than the one provided.
+	PurgeOutdatedReplicas(context.Context, *PurgeOutdatedReplicasRequest) (*PurgeOutdatedReplicasResponse, error)
 }
 
 func RegisterMigrationServer(s *grpc.Server, srv MigrationServer) {
@@ -282,6 +453,42 @@ func _Migration_BumpClusterVersion_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Migration_SyncAllEngines_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncAllEnginesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MigrationServer).SyncAllEngines(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.serverpb.Migration/SyncAllEngines",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MigrationServer).SyncAllEngines(ctx, req.(*SyncAllEnginesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Migration_PurgeOutdatedReplicas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeOutdatedReplicasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MigrationServer).PurgeOutdatedReplicas(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.serverpb.Migration/PurgeOutdatedReplicas",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MigrationServer).PurgeOutdatedReplicas(ctx, req.(*PurgeOutdatedReplicasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Migration_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cockroach.server.serverpb.Migration",
 	HandlerType: (*MigrationServer)(nil),
@@ -293,6 +500,14 @@ var _Migration_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BumpClusterVersion",
 			Handler:    _Migration_BumpClusterVersion_Handler,
+		},
+		{
+			MethodName: "SyncAllEngines",
+			Handler:    _Migration_SyncAllEngines_Handler,
+		},
+		{
+			MethodName: "PurgeOutdatedReplicas",
+			Handler:    _Migration_PurgeOutdatedReplicas_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -391,6 +606,88 @@ func (m *BumpClusterVersionResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *PurgeOutdatedReplicasRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PurgeOutdatedReplicasRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Version != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMigration(dAtA, i, uint64(m.Version.Size()))
+		n3, err := m.Version.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+
+func (m *PurgeOutdatedReplicasResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PurgeOutdatedReplicasResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *SyncAllEnginesRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncAllEnginesRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *SyncAllEnginesResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncAllEnginesResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
 func encodeVarintMigration(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -436,6 +733,46 @@ func (m *BumpClusterVersionRequest) Size() (n int) {
 }
 
 func (m *BumpClusterVersionResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *PurgeOutdatedReplicasRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Version != nil {
+		l = m.Version.Size()
+		n += 1 + l + sovMigration(uint64(l))
+	}
+	return n
+}
+
+func (m *PurgeOutdatedReplicasResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *SyncAllEnginesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *SyncAllEnginesResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -525,7 +862,7 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -575,7 +912,7 @@ func (m *ValidateTargetClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -658,7 +995,7 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -708,7 +1045,240 @@ func (m *BumpClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMigration
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PurgeOutdatedReplicasRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMigration
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PurgeOutdatedReplicasRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PurgeOutdatedReplicasRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMigration
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMigration
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Version == nil {
+				m.Version = &roachpb.Version{}
+			}
+			if err := m.Version.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMigration(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMigration
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PurgeOutdatedReplicasResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMigration
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PurgeOutdatedReplicasResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PurgeOutdatedReplicasResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMigration(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMigration
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncAllEnginesRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMigration
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncAllEnginesRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncAllEnginesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMigration(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMigration
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncAllEnginesResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMigration
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncAllEnginesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncAllEnginesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMigration(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -829,27 +1399,35 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_8dfeb6fcf9144e4c)
+	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_e2a428f370588fbd)
 }
 
-var fileDescriptor_migration_8dfeb6fcf9144e4c = []byte{
-	// 278 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_migration_e2a428f370588fbd = []byte{
+	// 409 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,
 	0x79, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0x92, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89,
 	0xc9, 0x19, 0x7a, 0x10, 0x35, 0x7a, 0x30, 0xa5, 0x52, 0x2a, 0xc9, 0x39, 0xa5, 0xc5, 0x25, 0x60,
-	0x5e, 0x71, 0x66, 0x7e, 0x9e, 0x3e, 0x94, 0x1b, 0x0f, 0xe5, 0x43, 0x0c, 0x50, 0xaa, 0xe0, 0x52,
-	0x0e, 0x4b, 0xcc, 0xc9, 0x4c, 0x49, 0x2c, 0x49, 0x0d, 0x49, 0x2c, 0x4a, 0x4f, 0x2d, 0x71, 0x86,
-	0x28, 0x0b, 0x83, 0xa8, 0x0a, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x0a, 0xe4, 0xe2, 0x47,
-	0xd3, 0x2f, 0xc1, 0xa8, 0xc0, 0xa8, 0xc1, 0x6d, 0xa4, 0xa1, 0x87, 0x70, 0x01, 0xaa, 0x85, 0x7a,
-	0x68, 0x26, 0xf1, 0x25, 0xa3, 0xf0, 0x95, 0xd4, 0xb8, 0x54, 0xf0, 0xdb, 0x5c, 0x5c, 0x90, 0x9f,
-	0x57, 0x9c, 0xaa, 0x94, 0xc7, 0x25, 0xe9, 0x54, 0x9a, 0x5b, 0x40, 0x37, 0x77, 0xc9, 0x70, 0x49,
-	0x61, 0xb3, 0x0f, 0xe2, 0x1a, 0xa3, 0xad, 0x4c, 0x5c, 0x9c, 0xbe, 0xb0, 0x48, 0x10, 0x5a, 0xc8,
-	0xc8, 0x25, 0x83, 0xcf, 0x13, 0x42, 0x76, 0x7a, 0x38, 0x23, 0x48, 0x8f, 0x88, 0x70, 0x97, 0xb2,
-	0x27, 0x5b, 0x3f, 0x34, 0xf4, 0x18, 0x84, 0x9a, 0x19, 0xb9, 0x84, 0x30, 0x3d, 0x24, 0x64, 0x82,
-	0xc7, 0x64, 0x9c, 0xe1, 0x2d, 0x65, 0x4a, 0xa2, 0x2e, 0x98, 0x2b, 0x9c, 0xb4, 0x4e, 0x3c, 0x94,
-	0x63, 0x38, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6, 0x1b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c,
-	0x92, 0x63, 0x9c, 0xf0, 0x58, 0x8e, 0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2,
-	0x38, 0x60, 0x06, 0x25, 0xb1, 0x81, 0x93, 0xa6, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x08, 0xa5,
-	0xf0, 0xc3, 0xfe, 0x02, 0x00, 0x00,
+	0x5e, 0x71, 0x66, 0x7e, 0x9e, 0x3e, 0x94, 0x1b, 0x0f, 0xe5, 0x43, 0x0c, 0x90, 0x12, 0x03, 0x6b,
+	0x06, 0x99, 0x9c, 0x5a, 0x92, 0x98, 0x92, 0x58, 0x92, 0x08, 0x11, 0x57, 0xaa, 0xe0, 0x52, 0x0e,
+	0x4b, 0xcc, 0xc9, 0x4c, 0x49, 0x2c, 0x49, 0x0d, 0x49, 0x2c, 0x4a, 0x4f, 0x2d, 0x71, 0x86, 0x68,
+	0x0f, 0x83, 0xe8, 0x0e, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x0a, 0xe4, 0xe2, 0x47, 0x33,
+	0x57, 0x82, 0x51, 0x81, 0x51, 0x83, 0xdb, 0x48, 0x43, 0x0f, 0xe1, 0x32, 0x54, 0x87, 0xe8, 0xa1,
+	0x99, 0xc4, 0x97, 0x8c, 0xc2, 0x57, 0x52, 0xe3, 0x52, 0xc1, 0x6f, 0x73, 0x71, 0x41, 0x7e, 0x5e,
+	0x71, 0xaa, 0x52, 0x1e, 0x97, 0xa4, 0x53, 0x69, 0x6e, 0x01, 0xdd, 0xdc, 0x25, 0xc3, 0x25, 0x85,
+	0xcd, 0x3e, 0xa8, 0x6b, 0x42, 0xb8, 0x64, 0x02, 0x4a, 0x8b, 0xd2, 0x53, 0xfd, 0x4b, 0x4b, 0x40,
+	0x2e, 0x4f, 0x09, 0x4a, 0x2d, 0xc8, 0xc9, 0x4c, 0x4e, 0x2c, 0x86, 0x39, 0xc8, 0x84, 0x8b, 0x1d,
+	0xd5, 0x21, 0x52, 0x48, 0x0e, 0x81, 0xc6, 0x81, 0x1e, 0xcc, 0x50, 0x98, 0x52, 0x25, 0x79, 0x2e,
+	0x59, 0x1c, 0xa6, 0x42, 0xad, 0x15, 0xe7, 0x12, 0x0d, 0xae, 0xcc, 0x4b, 0x76, 0xcc, 0xc9, 0x71,
+	0xcd, 0x4b, 0xcf, 0xcc, 0x4b, 0x85, 0xd9, 0xa7, 0x24, 0xc1, 0x25, 0x86, 0x2e, 0x01, 0xd1, 0x62,
+	0xb4, 0x97, 0x85, 0x8b, 0xd3, 0x17, 0x96, 0x8c, 0x84, 0x16, 0x32, 0x72, 0xc9, 0xe0, 0x0b, 0x6e,
+	0x21, 0x3b, 0x3d, 0x9c, 0x49, 0x4c, 0x8f, 0x88, 0x14, 0x22, 0x65, 0x4f, 0xb6, 0x7e, 0xa8, 0x17,
+	0x19, 0x84, 0x9a, 0x19, 0xb9, 0x84, 0x30, 0x83, 0x5e, 0xc8, 0x04, 0x8f, 0xc9, 0x38, 0x53, 0x86,
+	0x94, 0x29, 0x89, 0xba, 0xe0, 0xae, 0x28, 0xe7, 0xe2, 0x43, 0x0d, 0x51, 0x21, 0x03, 0x3c, 0x46,
+	0x61, 0x8d, 0x15, 0x29, 0x43, 0x12, 0x74, 0xc0, 0x2d, 0xee, 0x61, 0xe4, 0x12, 0xc5, 0x9a, 0x0a,
+	0x84, 0xcc, 0xf1, 0x18, 0x87, 0x2f, 0x35, 0x4a, 0x59, 0x90, 0xae, 0x11, 0xe6, 0x1c, 0x27, 0xad,
+	0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc6, 0x23, 0x39,
+	0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63,
+	0x39, 0x86, 0x28, 0x0e, 0x98, 0x59, 0x49, 0x6c, 0xe0, 0xc2, 0xc4, 0x18, 0x10, 0x00, 0x00, 0xff,
+	0xff, 0x92, 0x08, 0x96, 0x7d, 0xc8, 0x04, 0x00, 0x00,
 }

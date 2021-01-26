@@ -88,12 +88,16 @@ func (it *scanIndexIter) Init(
 	filters memo.FiltersExpr,
 	rejectFlags indexRejectFlags,
 ) {
-	it.mem = mem
-	it.im = im
-	it.tabMeta = mem.Metadata().TableMeta(scanPrivate.Table)
-	it.scanPrivate = scanPrivate
-	it.filters = filters
-	it.rejectFlags = rejectFlags
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*it = scanIndexIter{
+		mem:         mem,
+		im:          im,
+		tabMeta:     mem.Metadata().TableMeta(scanPrivate.Table),
+		scanPrivate: scanPrivate,
+		filters:     filters,
+		rejectFlags: rejectFlags,
+	}
 	it.filtersMutateChecker.Init(it.filters)
 }
 
@@ -209,7 +213,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		pred, isPartialIndex := it.tabMeta.PartialIndexPredicates[ord]
+		pred, isPartialIndex := it.tabMeta.PartialIndexPredicate(ord)
 
 		// Skip over partial indexes if rejectPartialIndexes is set.
 		if it.hasRejectFlags(rejectPartialIndexes) && isPartialIndex {

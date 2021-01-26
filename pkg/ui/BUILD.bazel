@@ -9,7 +9,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/elazarl/go-bindata-assetfs",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_elazarl_go_bindata_assetfs//:go-bindata-assetfs",
     ],
 )

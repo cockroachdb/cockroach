@@ -27,7 +27,7 @@ go_library(
         "//pkg/util/encoding",  # keep
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",  # keep
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",  # keep
+        "@com_github_lib_pq//oid",
     ],
 )

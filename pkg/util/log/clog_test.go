@@ -145,6 +145,7 @@ func TestStandardLog(t *testing.T) {
 }
 
 func TestEntryDecoder(t *testing.T) {
+	entryIdx := 1
 	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
 		entry := logpb.Entry{
 			Severity:  s,
@@ -155,10 +156,11 @@ func TestEntryDecoder(t *testing.T) {
 			Line:      int64(line),
 			Tags:      tags,
 			Message:   msg,
+			Counter:   uint64(entryIdx),
 		}
-		var f formatCrdbV1
-		buf := f.formatEntry(entry, nil /* stacks */)
-		defer putBuffer(buf)
+		entryIdx++
+		var buf bytes.Buffer
+		_ = FormatLegacyEntry(entry, &buf)
 		return buf.String()
 	}
 
@@ -171,6 +173,8 @@ func TestEntryDecoder(t *testing.T) {
 	t7 := t6.Add(time.Microsecond)
 	t8 := t7.Add(time.Microsecond)
 	t9 := t8.Add(time.Microsecond)
+	t10 := t9.Add(time.Microsecond)
+	t11 := t10.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
@@ -193,6 +197,10 @@ func TestEntryDecoder(t *testing.T) {
 	contents += formatEntry(severity.INFO, channel.DEV, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
 	// Different channel.
 	contents += formatEntry(severity.INFO, channel.SESSIONS, t9, 10, "clog_test.go", 146, ``, "info")
+	// Ensure that IPv6 addresses in tags get parsed properly.
+	contents += formatEntry(severity.INFO, channel.DEV, t10, 11, "clog_test.go", 147, `client=[1::]:2`, "foo")
+	// Ensure that empty messages don't wreak havoc.
+	contents += formatEntry(severity.INFO, channel.DEV, t11, 12, "clog_test.go", 148, "", "")
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -220,6 +228,7 @@ func TestEntryDecoder(t *testing.T) {
 			File:      `clog_test.go`,
 			Line:      136,
 			Message:   `info`,
+			Counter:   2,
 		},
 		{
 			Severity:  severity.INFO,
@@ -230,6 +239,7 @@ func TestEntryDecoder(t *testing.T) {
 			Line:      137,
 			Message: `multi-
 line`,
+			Counter: 3,
 		},
 		{
 			Severity:  severity.INFO,
@@ -239,6 +249,7 @@ line`,
 			File:      `clog_test.go`,
 			Line:      138,
 			Message:   reallyLongEntry,
+			Counter:   4,
 		},
 		{
 			Severity:  severity.INFO,
@@ -248,6 +259,7 @@ line`,
 			File:      `clog_test.go`,
 			Line:      139,
 			Message:   tooLongEntry[:maxMessageLength],
+			Counter:   5,
 		},
 		{
 			Severity:  severity.WARNING,
@@ -257,6 +269,7 @@ line`,
 			File:      `clog_test.go`,
 			Line:      140,
 			Message:   `warning`,
+			Counter:   6,
 		},
 		{
 			Severity:  severity.ERROR,
@@ -266,6 +279,7 @@ line`,
 			File:      `clog_test.go`,
 			Line:      141,
 			Message:   `error`,
+			Counter:   7,
 		},
 		{
 			Severity:  severity.FATAL,
@@ -277,6 +291,7 @@ line`,
 			Message: `fatal
 stack
 trace`,
+			Counter: 8,
 		},
 		{
 			Severity:  severity.INFO,
@@ -286,6 +301,7 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      143,
 			Message:   tooLongEntry[:maxMessageLength],
+			Counter:   9,
 		},
 		{
 			Severity:  severity.INFO,
@@ -296,6 +312,7 @@ trace`,
 			Line:      144,
 			Tags:      `sometags`,
 			Message:   `foo`,
+			Counter:   10,
 		},
 		{
 			Severity:  severity.INFO,
@@ -305,6 +322,7 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      145,
 			Message:   `bar`,
+			Counter:   11,
 		},
 		{
 			Severity:  severity.INFO,
@@ -314,6 +332,29 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      146,
 			Message:   `info`,
+			Counter:   12,
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.DEV,
+			Time:      t10.UnixNano(),
+			Goroutine: 11,
+			File:      `clog_test.go`,
+			Line:      147,
+			Tags:      `client=[1::]:2`,
+			Message:   `foo`,
+			Counter:   13,
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.DEV,
+			Time:      t11.UnixNano(),
+			Goroutine: 12,
+			File:      `clog_test.go`,
+			Line:      148,
+			Tags:      ``,
+			Message:   ``,
+			Counter:   14,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -635,36 +676,39 @@ func TestRollover(t *testing.T) {
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ScopeWithoutShowLogs(t).Close(t)
-
-	SetExitFunc(false /* hideStack */, func(exit.Code) {})
-
-	defer capture()()
 
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
-		traceback = level
-		Fatalf(context.Background(), "cinap")
-		cont := contents()
-		if !strings.Contains(cont, " cinap") {
-			t.Fatalf("panic output does not contain cinap:\n%s", cont)
-		}
-		if !strings.Contains(cont, "clog_test") {
-			t.Fatalf("stack trace does not contain file name: %s", cont)
-		}
-		switch traceback {
-		case tracebackNone:
-			if strings.Count(cont, "goroutine ") > 0 {
-				t.Fatalf("unexpected stack trace:\n%s", cont)
+		t.Run(fmt.Sprintf("%d", level), func(t *testing.T) {
+			defer ScopeWithoutShowLogs(t).Close(t)
+
+			SetExitFunc(false /* hideStack */, func(exit.Code) {})
+
+			defer capture()()
+
+			traceback = level
+			Fatalf(context.Background(), "cinap")
+			cont := contents()
+			if !strings.Contains(cont, " cinap") {
+				t.Fatalf("panic output does not contain cinap:\n%s", cont)
 			}
-		case tracebackSingle:
-			if strings.Count(cont, "goroutine ") != 1 {
-				t.Fatalf("stack trace contains too many goroutines: %s", cont)
+			if !strings.Contains(cont, "clog_test") {
+				t.Fatalf("stack trace does not contain file name: %s", cont)
 			}
-		case tracebackAll:
-			if strings.Count(cont, "goroutine ") < 2 {
-				t.Fatalf("stack trace contains less than two goroutines: %s", cont)
+			switch traceback {
+			case tracebackNone:
+				if strings.Count(cont, "goroutine ") > 0 {
+					t.Fatalf("unexpected stack trace:\n%s", cont)
+				}
+			case tracebackSingle:
+				if strings.Count(cont, "goroutine ") != 1 {
+					t.Fatalf("stack trace contains too many goroutines: %s", cont)
+				}
+			case tracebackAll:
+				if strings.Count(cont, "goroutine ") < 2 {
+					t.Fatalf("stack trace contains less than two goroutines: %s", cont)
+				}
 			}
-		}
+		})
 	}
 }
 
@@ -773,10 +817,9 @@ func BenchmarkHeader(b *testing.B) {
 		File:      "file.go",
 		Line:      100,
 	}
-	var f formatCrdbV1
 	for i := 0; i < b.N; i++ {
-		buf := f.formatEntry(entry, nil /* stacks */)
-		putBuffer(buf)
+		var w bytes.Buffer
+		_ = FormatLegacyEntry(entry, &w)
 	}
 }
 

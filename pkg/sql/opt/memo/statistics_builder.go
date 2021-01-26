@@ -15,10 +15,8 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -167,8 +165,12 @@ type statisticsBuilder struct {
 }
 
 func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, md *opt.Metadata) {
-	sb.evalCtx = evalCtx
-	sb.md = md
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*sb = statisticsBuilder{
+		evalCtx: evalCtx,
+		md:      md,
+	}
 }
 
 func (sb *statisticsBuilder) clear() {
@@ -653,7 +655,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// selectivity, the inverted constraint selectivity, and the partial index
 	// predicate (if they exist) to the underlying table stats.
 	if scan.Constraint == nil || scan.Constraint.Spans.Count() < 2 {
-		sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
+		sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -677,17 +679,17 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	// Get the stats for each span and union them together.
 	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
-	sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStatsUnion)
+	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
 	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
 		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
-		sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStats)
+		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
 	// partial index predicate (if it exists) to get the correct column stats.
-	sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
+	sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
 
 	// Copy in the row count and selectivity that were calculated above, if
 	// less than the values calculated from the combined spans.
@@ -716,7 +718,6 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 func (sb *statisticsBuilder) constrainScan(
 	scan *ScanExpr,
 	constraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
 	pred FiltersExpr,
 	relProps *props.Relational,
 	s *props.Statistics,
@@ -727,18 +728,18 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Calculate distinct counts and histograms for inverted constrained columns
 	// -------------------------------------------------------------------------
-	if invertedConstraint != nil {
+	if scan.InvertedConstraint != nil {
 		// The constrained column is the virtual inverted column in the inverted
 		// index. Using scan.Cols here would also include the PK, which we don't
 		// want.
 		invertedConstrainedCol := scan.Table.ColumnID(idx.VirtualInvertedColumn().Ordinal())
 		constrainedCols.Add(invertedConstrainedCol)
-		colSet := opt.MakeColSet(invertedConstrainedCol)
-		if sb.shouldUseHistogram(relProps, colSet) {
+		if sb.shouldUseHistogram(relProps) {
 			// TODO(mjibson): set distinctCount to something correct. Max is
 			// fine for now because ensureColStat takes the minimum of the
 			// passed value and colSet's distinct count.
 			const distinctCount = math.MaxFloat64
+			colSet := opt.MakeColSet(invertedConstrainedCol)
 			sb.ensureColStat(colSet, distinctCount, scan, s)
 
 			inputStat, _ := sb.colStatFromInput(colSet, scan)
@@ -779,7 +780,7 @@ func (sb *statisticsBuilder) constrainScan(
 		// TODO(mgartner): Remove this special case for JSON and ARRAY inverted
 		// indexes that are constrained by scan.Constraint once they are instead
 		// constrained by scan.InvertedConstraint.
-		if idx.IsInverted() && invertedConstraint == nil {
+		if idx.IsInverted() && scan.InvertedConstraint == nil {
 			for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 				numUnappliedConjuncts += sb.numConjunctsInConstraint(constraint, i)
 			}
@@ -833,7 +834,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
 
-	if sb.shouldUseHistogram(relProps, colSet) {
+	if sb.shouldUseHistogram(relProps) {
 		colStat.Histogram = inputColStat.Histogram
 	}
 
@@ -2578,27 +2579,11 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	}
 }
 
-func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational, cols opt.ColSet) bool {
+func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational) bool {
 	// If we know that the cardinality is below a certain threshold (e.g., due to
 	// a constraint on a key column), don't bother adding the overhead of
 	// creating a histogram.
-	if relProps.Cardinality.Max < minCardinalityForHistogram {
-		return false
-	}
-	allowHist := true
-	cols.ForEach(func(col opt.ColumnID) {
-		colTyp := sb.md.ColumnMeta(col).Type
-		switch colTyp {
-		case types.Geometry, types.Geography:
-			// Special case these since ColumnTypeIsInvertedIndexable returns true for
-			// them, but they are supported in histograms now.
-		default:
-			if colinfo.ColumnTypeIsInvertedIndexable(colTyp) {
-				allowHist = false
-			}
-		}
-	})
-	return allowHist
+	return relProps.Cardinality.Max >= minCardinalityForHistogram
 }
 
 // rowsProcessed calculates and returns the number of rows processed by the
@@ -3048,7 +3033,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lowerBound)
 	}
 
-	if !sb.shouldUseHistogram(relProps, constrainedCols) {
+	if !sb.shouldUseHistogram(relProps) {
 		return constrainedCols, histCols
 	}
 
@@ -3103,12 +3088,12 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			continue
 		}
 
-		cols := opt.MakeColSet(col)
-		if !sb.shouldUseHistogram(relProps, cols) {
+		if !sb.shouldUseHistogram(relProps) {
 			continue
 		}
 
 		// Calculate histogram.
+		cols := opt.MakeColSet(col)
 		if sb.updateHistogram(c, cols, e, s) {
 			histCols.UnionWith(cols)
 		}

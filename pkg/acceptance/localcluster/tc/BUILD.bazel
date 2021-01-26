@@ -5,5 +5,5 @@ go_library(
     srcs = ["tc.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )

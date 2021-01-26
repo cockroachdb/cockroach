@@ -77,6 +77,17 @@ SELECT id FROM system.descriptor
 51
 52
 
+# Verify we can read ID on its own (see #58614).
+query I
+SELECT id FROM system.descriptor WHERE id=1
+----
+1
+
+query I
+SELECT id FROM (VALUES(1)) AS v(a) INNER LOOKUP JOIN system.descriptor on id=a
+----
+1
+
 # Verify we can read "protobuf" columns.
 query I
 SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
@@ -566,6 +577,7 @@ ORDER BY name
 cluster.secret
 diagnostics.reporting.enabled
 kv.range_merge.queue_enabled
+sql.defaults.interleaved_tables.enabled
 sql.stats.automatic_collection.min_stale_rows
 version
 
@@ -584,6 +596,7 @@ ORDER BY name
 diagnostics.reporting.enabled                  true
 kv.range_merge.queue_enabled                   false
 somesetting                                    somevalue
+sql.defaults.interleaved_tables.enabled        true
 sql.stats.automatic_collection.min_stale_rows  5
 
 user testuser
@@ -600,3 +613,18 @@ query TTB
 SELECT * from system.role_members
 ----
 admin  root  true
+
+statement ok
+SET DATABASE = "";
+
+query T
+SELECT username FROM system.users WHERE username = 'root'
+----
+root
+
+statement ok
+SET DATABASE = test
+
+# system is a database, not a schema.
+query error relation ".system.users" does not exist
+SELECT username FROM "".system.users WHERE username = 'root'

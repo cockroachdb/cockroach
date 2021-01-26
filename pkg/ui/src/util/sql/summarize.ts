@@ -40,7 +40,7 @@ export function summarize(statement: string): StatementSummary {
       }
 
       let table = tableMatch[1];
-      if (table[0] === "\"" && table[table.length - 1] === "\"") {
+      if (table[0] === '"' && table[table.length - 1] === '"') {
         table = table.slice(1, table.length - 1);
       }
 

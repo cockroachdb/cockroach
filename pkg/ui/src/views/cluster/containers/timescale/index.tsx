@@ -77,8 +77,12 @@ export const getTimeRangeTitle = (
   currentScale: timewindow.TimeScale,
 ) => {
   if (currentScale.key === "Custom" && currentWindow) {
-    const isSameStartDay = moment.utc(currentWindow.start).isSame(moment.utc(), "day");
-    const isSameEndDay = moment.utc(currentWindow.end).isSame(moment.utc(), "day");
+    const isSameStartDay = moment
+      .utc(currentWindow.start)
+      .isSame(moment.utc(), "day");
+    const isSameEndDay = moment
+      .utc(currentWindow.end)
+      .isSame(moment.utc(), "day");
     return {
       dateStart: isSameStartDay
         ? ""
@@ -136,12 +140,12 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       dispatchRefreshNodes();
     }
   });
-  useEffect(
-    () => {
-      getQueryParams();
-    },
-    [],
-  );
+  useEffect(() => {
+    getQueryParams();
+    // We want this to just run once like a componentDidMount function but we
+    // still need an empty deps array, can't remove it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [isOpened, setIsOpened] = useState(false);
 
@@ -183,7 +187,10 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     }
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    if (!windowEnd || windowEnd > moment.utc().subtract(currentScale.windowValid)) {
+    if (
+      !windowEnd ||
+      windowEnd > moment.utc().subtract(currentScale.windowValid)
+    ) {
       const size = { windowSize: { _data: windowSize._data } };
       if (_.find(timewindow.availableTimeScales, size as any)) {
         const data = {
@@ -341,22 +348,22 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
 const scaleSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  tw => tw?.scale,
+  (tw) => tw?.scale,
 );
 
 const currentWindowSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  tw => tw?.currentWindow,
+  (tw) => tw?.currentWindow,
 );
 
 const timeRangeSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  tw => tw?.useTimeRange,
+  (tw) => tw?.useTimeRange,
 );
 
 const isValidNodeStatus = createSelector(
   (state: AdminUIState) => state?.cachedData?.nodes,
-  nodes => nodes?.valid,
+  (nodes) => nodes?.valid,
 );
 
 export default connect(

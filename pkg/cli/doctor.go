@@ -223,7 +223,12 @@ FROM system.namespace`
 			return err
 		}
 		md.Progress = &jobspb.Progress{}
-		if err := protoutil.Unmarshal(vals[3].([]byte), md.Progress); err != nil {
+		// Progress is a nullable column, so have to check for nil here.
+		progressBytes, ok := vals[3].([]byte)
+		if !ok {
+			return errors.Errorf("unexpected NULL progress on job row: %v", md)
+		}
+		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
 			return err
 		}
 		if md.Status == jobs.StatusRunning {

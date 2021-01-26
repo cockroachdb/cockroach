@@ -28,10 +28,7 @@ func init() {
 }
 
 func declareKeysSubsume(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
@@ -170,9 +167,9 @@ func Subsume(
 
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
-	reply.FreezeStart = cArgs.EvalCtx.Clock().Now()
+	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
 
 	return result.Result{
-		Local: result.LocalResult{FreezeStart: reply.FreezeStart},
+		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
 	}, nil
 }

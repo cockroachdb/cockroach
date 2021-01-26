@@ -20,67 +20,53 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// TimestampFlag is used to provide extra classification for Timestamps.
-type TimestampFlag int32
-
-const (
-	TimestampFlag_UNKNOWN TimestampFlag = 0
-	// A synthetic timestamp is defined as a timestamp that makes no claim
-	// about the value of clocks in the system. While standard timestamps
-	// are pulled from HLC clocks and indicate that some node in the system
-	// has a clock with a reading equal to or above its value, a synthetic
-	// timestamp makes no such indication.
-	//
-	// Synthetic timestamps are central to non-blocking transactions, which
-	// write at "future timestamps". They are also used to disconnect some
-	// committed versions from observed timestamps, where they indicate that
-	// versions were moved from the timestamp at which they were originally
-	// written. Only synthetic timestamps require observing the full
-	// uncertainty interval, whereas readings off the leaseholders's clock
-	// can tighten it for non-synthetic versions.
-	TimestampFlag_SYNTHETIC TimestampFlag = 1
-)
-
-var TimestampFlag_name = map[int32]string{
-	0: "UNKNOWN",
-	1: "SYNTHETIC",
-}
-var TimestampFlag_value = map[string]int32{
-	"UNKNOWN":   0,
-	"SYNTHETIC": 1,
-}
-
-func (x TimestampFlag) String() string {
-	return proto.EnumName(TimestampFlag_name, int32(x))
-}
-func (TimestampFlag) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_7c076e9f3a1546ea, []int{0}
-}
-
 // Timestamp represents a state of the hybrid logical clock.
 type Timestamp struct {
 	// Holds a wall time, typically a unix epoch time expressed in
 	// nanoseconds.
+	//
+	// It is not safe to mutate this field directly. Instead, use one of the
+	// methods on Timestamp, which ensure that the synthetic flag is updated
+	// appropriately.
 	WallTime int64 `protobuf:"varint,1,opt,name=wall_time,json=wallTime,proto3" json:"wall_time,omitempty"`
 	// The logical component captures causality for events whose wall times
 	// are equal. It is effectively bounded by (maximum clock skew)/(minimal
 	// ns between events) and nearly impossible to overflow.
-	Logical int32 `protobuf:"varint,2,opt,name=logical,proto3" json:"logical,omitempty"`
-	// A collection of bit flags that provide details about the timestamp
-	// and its meaning. The data type is a uint32, but the number of flags
-	// is limited to 8 so that the flags can be encoded into a single byte.
 	//
-	// Flags do not affect the sort order of Timestamps. However, they are
-	// considered when performing structural equality checks (e.g. using the
-	// == operator). Consider use of the EqOrdering method when testing for
-	// equality.
-	Flags uint32 `protobuf:"varint,3,opt,name=flags,proto3" json:"flags,omitempty"`
+	// It is not safe to mutate this field directly. Instead, use one of the
+	// methods on Timestamp, which ensure that the synthetic flag is updated
+	// appropriately.
+	Logical int32 `protobuf:"varint,2,opt,name=logical,proto3" json:"logical,omitempty"`
+	// Indicates that the Timestamp did not come from an HLC clock somewhere
+	// in the system and, therefore, does not have the ability to update a
+	// peer's HLC clock. If set to true, the "synthetic timestamp" may be
+	// arbitrarily disconnected from real time.
+	//
+	// The flag serves as the dynamically typed version of a ClockTimestamp
+	// (but inverted). Only Timestamps with this flag set to false can be
+	// downcast to a ClockTimestamp successfully (see TryToClockTimestamp).
+	//
+	// Synthetic timestamps with this flag set to true are central to
+	// non-blocking transactions, which write "into the future". Setting the
+	// flag to true is also used to disconnect some committed MVCC versions
+	// from observed timestamps by indicating that those versions were moved
+	// from the timestamp at which they were originally written. Committed
+	// MVCC versions with synthetic timestamps require observing the full
+	// uncertainty interval, whereas readings off the leaseholders's clock
+	// can tighten the uncertainty interval that is applied to MVCC versions
+	// with clock timestamp.
+	//
+	// This flag does not affect the sort order of Timestamps. However, it
+	// is considered when performing structural equality checks (e.g. using
+	// the == operator). Consider use of the EqOrdering method when testing
+	// for equality.
+	Synthetic bool `protobuf:"varint,3,opt,name=synthetic,proto3" json:"synthetic,omitempty"`
 }
 
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 func (*Timestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_7c076e9f3a1546ea, []int{0}
+	return fileDescriptor_timestamp_e3db50d085ffaa11, []int{0}
 }
 func (m *Timestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -107,7 +93,6 @@ var xxx_messageInfo_Timestamp proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Timestamp)(nil), "cockroach.util.hlc.Timestamp")
-	proto.RegisterEnum("cockroach.util.hlc.TimestampFlag", TimestampFlag_name, TimestampFlag_value)
 }
 func (this *Timestamp) Equal(that interface{}) bool {
 	if that == nil {
@@ -134,7 +119,7 @@ func (this *Timestamp) Equal(that interface{}) bool {
 	if this.Logical != that1.Logical {
 		return false
 	}
-	if this.Flags != that1.Flags {
+	if this.Synthetic != that1.Synthetic {
 		return false
 	}
 	return true
@@ -164,10 +149,15 @@ func (m *Timestamp) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintTimestamp(dAtA, i, uint64(m.Logical))
 	}
-	if m.Flags != 0 {
+	if m.Synthetic {
 		dAtA[i] = 0x18
 		i++
-		i = encodeVarintTimestamp(dAtA, i, uint64(m.Flags))
+		if m.Synthetic {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
 	}
 	return i, nil
 }
@@ -191,7 +181,7 @@ func NewPopulatedTimestamp(r randyTimestamp, easy bool) *Timestamp {
 	if r.Intn(2) == 0 {
 		this.Logical *= -1
 	}
-	this.Flags = uint32(r.Uint32())
+	this.Synthetic = bool(bool(r.Intn(2) == 0))
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -281,8 +271,8 @@ func (m *Timestamp) Size() (n int) {
 	if m.Logical != 0 {
 		n += 1 + sovTimestamp(uint64(m.Logical))
 	}
-	if m.Flags != 0 {
-		n += 1 + sovTimestamp(uint64(m.Flags))
+	if m.Synthetic {
+		n += 2
 	}
 	return n
 }
@@ -369,9 +359,9 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Flags", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Synthetic", wireType)
 			}
-			m.Flags = 0
+			var v int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTimestamp
@@ -381,18 +371,19 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Flags |= (uint32(b) & 0x7F) << shift
+				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Synthetic = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTimestamp(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimestamp
 			}
 			if (iNdEx + skippy) > l {
@@ -513,25 +504,23 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_7c076e9f3a1546ea)
+	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_e3db50d085ffaa11)
 }
 
-var fileDescriptor_timestamp_7c076e9f3a1546ea = []byte{
-	// 247 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_timestamp_e3db50d085ffaa11 = []byte{
+	// 213 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,
 	0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4a, 0xce, 0x4f, 0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0,
 	0x03, 0xa9, 0xd1, 0xcb, 0xc8, 0x49, 0x96, 0x12, 0x49, 0xcf, 0x4f, 0xcf, 0x07, 0x4b, 0xeb, 0x83,
-	0x58, 0x10, 0x95, 0x4a, 0x69, 0x5c, 0x9c, 0x21, 0x30, 0xcd, 0x42, 0xd2, 0x5c, 0x9c, 0xe5, 0x89,
+	0x58, 0x10, 0x95, 0x4a, 0x79, 0x5c, 0x9c, 0x21, 0x30, 0xcd, 0x42, 0xd2, 0x5c, 0x9c, 0xe5, 0x89,
 	0x39, 0x39, 0xf1, 0x20, 0xe3, 0x24, 0x18, 0x15, 0x18, 0x35, 0x98, 0x83, 0x38, 0x40, 0x02, 0x20,
 	0x15, 0x42, 0x12, 0x5c, 0xec, 0x39, 0xf9, 0xe9, 0x99, 0xc9, 0x89, 0x39, 0x12, 0x4c, 0x0a, 0x8c,
-	0x1a, 0xac, 0x41, 0x30, 0xae, 0x90, 0x08, 0x17, 0x6b, 0x5a, 0x4e, 0x62, 0x7a, 0xb1, 0x04, 0xb3,
-	0x02, 0xa3, 0x06, 0x6f, 0x10, 0x84, 0x63, 0xc5, 0x33, 0x63, 0x81, 0x3c, 0xc3, 0x8e, 0x05, 0xf2,
-	0x8c, 0x2f, 0x16, 0xc8, 0x33, 0x6a, 0x69, 0x73, 0xf1, 0xc2, 0xed, 0x71, 0xcb, 0x49, 0x4c, 0x17,
-	0xe2, 0xe6, 0x62, 0x0f, 0xf5, 0xf3, 0xf6, 0xf3, 0x0f, 0xf7, 0x13, 0x60, 0x10, 0xe2, 0xe5, 0xe2,
-	0x0c, 0x8e, 0xf4, 0x0b, 0xf1, 0x70, 0x0d, 0xf1, 0x74, 0x16, 0x60, 0x74, 0x52, 0x3d, 0xf1, 0x50,
-	0x8e, 0xe1, 0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x6f, 0x3c, 0x92, 0x63, 0x7c, 0xf0,
-	0x48, 0x8e, 0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88,
-	0x62, 0xce, 0xc8, 0x49, 0x4e, 0x62, 0x03, 0x7b, 0xc1, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0xf4,
-	0x8d, 0x21, 0xb8, 0x08, 0x01, 0x00, 0x00,
+	0x1a, 0xac, 0x41, 0x30, 0xae, 0x90, 0x0c, 0x17, 0x67, 0x71, 0x65, 0x5e, 0x49, 0x46, 0x6a, 0x49,
+	0x66, 0xb2, 0x04, 0xb3, 0x02, 0xa3, 0x06, 0x47, 0x10, 0x42, 0xc0, 0x8a, 0x67, 0xc6, 0x02, 0x79,
+	0x86, 0x1d, 0x0b, 0xe4, 0x19, 0x5f, 0x2c, 0x90, 0x67, 0x74, 0x52, 0x3d, 0xf1, 0x50, 0x8e, 0xe1,
+	0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x6f, 0x3c, 0x92, 0x63, 0x7c, 0xf0, 0x48, 0x8e,
+	0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88, 0x62, 0xce,
+	0xc8, 0x49, 0x4e, 0x62, 0x03, 0xbb, 0xce, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0xa2, 0x14, 0x0e,
+	0x21, 0xe3, 0x00, 0x00, 0x00,
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -39,33 +38,14 @@ import (
 var _ resolver.SchemaResolver = &planner{}
 
 // ResolveUncachedDatabaseByName looks up a database name from the store.
+// TODO (lucy): See if we can rework the PlanHookState interface to just use
+// the desc.Collection methods directly.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
 ) (res *dbdesc.Immutable, err error) {
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		var desc catalog.DatabaseDescriptor
-		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
-			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
-		)
-		if desc != nil {
-			res = desc.(*dbdesc.Immutable)
-		}
-	})
+	_, res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
 	return res, err
-}
-
-func (p *planner) ResolveMutableDatabaseDescriptor(
-	ctx context.Context, name string, required bool,
-) (*dbdesc.Mutable, error) {
-	desc, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
-		ctx, p.txn, p.ExecCfg().Codec, name, tree.DatabaseLookupFlags{
-			Required:       required,
-			RequireMutable: true,
-		})
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	return desc.(*dbdesc.Mutable), nil
 }
 
 // ResolveUncachedSchemaDescriptor looks up a schema from the store.
@@ -187,11 +167,12 @@ func (p *planner) ResolveTargetObject(
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
-	sc := p.LogicalSchemaAccessor()
-	dbDesc, err := sc.GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(false /* required */))
-	if err != nil || dbDesc == nil {
+	found, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
+	if err != nil || !found {
 		return false, nil, err
 	}
+	sc := p.LogicalSchemaAccessor()
 	var resolvedSchema catalog.ResolvedSchema
 	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName,
 		p.CommonLookupFlags(false /* required */))
@@ -228,15 +209,17 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 func (p *planner) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	desc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
+	desc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
+	// Note that the value of required doesn't matter for lookups by ID.
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, desc.ParentSchemaID)
+	sc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -306,7 +289,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.ResolveMutableDatabaseDescriptor(ctx, string(database), true /*required*/)
+			_, descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
+				string(database), tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
 			}
@@ -355,7 +339,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
+			_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
 			}
@@ -419,21 +404,48 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID())
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
+		tree.DatabaseLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID(), schemaID)
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
+		tree.SchemaLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
-		tree.Name(schemaName),
+		tree.Name(resolvedSchema.Name),
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
+}
+
+// getQualifiedSchemaName returns the database-qualified name of the
+// schema represented by the provided descriptor.
+func (p *planner) getQualifiedSchemaName(
+	ctx context.Context, desc catalog.SchemaDescriptor,
+) (*tree.ObjectNamePrefix, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(dbDesc.GetName()),
+		SchemaName:      tree.Name(desc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}, nil
 }
 
 // findTableContainingIndex returns the descriptor of a table
@@ -476,8 +488,8 @@ func findTableContainingIndex(
 			continue
 		}
 
-		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
-		if err != nil || dropped {
+		idx, err := tableDesc.FindIndexWithName(string(idxName))
+		if err != nil || idx.Dropped() {
 			// err is nil if the index does not exist on the table.
 			continue
 		}
@@ -657,6 +669,7 @@ type internalLookupCtx struct {
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.Immutable
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
+	schemaNames map[descpb.ID]string
 	schemaIDs   []descpb.ID
 	tbDescs     map[descpb.ID]*tabledesc.Immutable
 	tbIDs       []descpb.ID
@@ -743,6 +756,9 @@ func newInternalLookupCtx(
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	schemaNames := map[descpb.ID]string{
+		keys.PublicSchemaID: tree.PublicSchema,
+	}
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
@@ -773,6 +789,7 @@ func newInternalLookupCtx(
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the schema visible for iteration if the prefix was included.
 				schemaIDs = append(schemaIDs, desc.GetID())
+				schemaNames[desc.GetID()] = desc.GetName()
 			}
 		}
 	}
@@ -781,6 +798,7 @@ func newInternalLookupCtx(
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,
 		schemaDescs: schemaDescs,
+		schemaNames: schemaNames,
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,

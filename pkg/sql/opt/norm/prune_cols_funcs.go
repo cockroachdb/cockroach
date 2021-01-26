@@ -45,10 +45,19 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 func (c *CustomFuncs) NeededMutationCols(
 	private *memo.MutationPrivate, uniqueChecks memo.UniqueChecksExpr, fkChecks memo.FKChecksExpr,
 ) opt.ColSet {
+	return c.neededMutationCols(private, uniqueChecks, fkChecks, true /* includePartialIndexCols */)
+}
+
+func (c *CustomFuncs) neededMutationCols(
+	private *memo.MutationPrivate,
+	uniqueChecks memo.UniqueChecksExpr,
+	fkChecks memo.FKChecksExpr,
+	includePartialIndexCols bool,
+) opt.ColSet {
 	var cols opt.ColSet
 
 	// Add all input columns referenced by the mutation private.
-	addCols := func(list opt.ColList) {
+	addCols := func(list opt.OptionalColList) {
 		for _, id := range list {
 			if id != 0 {
 				cols.Add(id)
@@ -60,10 +69,12 @@ func (c *CustomFuncs) NeededMutationCols(
 	addCols(private.FetchCols)
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
-	addCols(private.PartialIndexPutCols)
-	addCols(private.PartialIndexDelCols)
+	if includePartialIndexCols {
+		addCols(private.PartialIndexPutCols)
+		addCols(private.PartialIndexDelCols)
+	}
 	addCols(private.ReturnCols)
-	addCols(private.PassthroughCols)
+	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
@@ -89,17 +100,7 @@ func (c *CustomFuncs) NeededMutationCols(
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
-	return neededMutationFetchCols(c.mem, op, private)
-}
-
-// neededMutationFetchCols returns the set of columns needed by the given
-// mutation operator.
-func neededMutationFetchCols(
-	mem *memo.Memo, op opt.Operator, private *memo.MutationPrivate,
-) opt.ColSet {
-
-	var cols opt.ColSet
-	tabMeta := mem.Metadata().TableMeta(private.Table)
+	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
 	familyCols := func(fam cat.Family) opt.ColSet {
@@ -110,6 +111,10 @@ func neededMutationFetchCols(
 		}
 		return colSet
 	}
+
+	// cols accumulates the result. The column IDs are relative to tabMeta.
+	// TODO(radu): this should be a set of ordinals instead.
+	var cols opt.ColSet
 
 	// addFamilyCols adds all columns in each family containing at least one
 	// column that is being updated.
@@ -151,28 +156,34 @@ func neededMutationFetchCols(
 			}
 		}
 
+		// TODO(radu): The execution code requires that each update column has a
+		// corresponding fetch column (even if the old value is not necessary).
+		// Note that when this limitation is fixed, the rest of the code below
+		// needs to be revisited as well.
+		cols.UnionWith(updateCols)
+
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			// If the columns being updated are not part of the index and the
-			// index is not a partial index, then the update does not require
-			// changes to the index. Partial indexes may be updated (even when a
-			// column in the index is not changing) when rows that were not
-			// previously in the index must be added to the index because they
-			// now satisfy the partial index predicate.
+			// If the columns being updated are not part of the index, then the
+			// update does not require changes to the index. Partial indexes may
+			// be updated (even when a column in the index is not changing) when
+			// the predicate references columns that are being updated. For
+			// example, rows that were not previously in the index must be added
+			// to the index because they now satisfy the partial index
+			// predicate, requiring the index columns to be fetched.
 			//
 			// Note that we use the set of index columns where the virtual
 			// columns have been mapped to their source columns. Virtual columns
 			// are never part of the updated columns. Updates to source columns
 			// trigger index changes.
-			//
-			// TODO(mgartner): Index columns are not necessary when neither the
-			// index columns nor the columns referenced in the partial index
-			// predicate are being updated. We should prune mutation fetch
-			// columns when this is the case, rather than always marking index
-			// columns of partial indexes as "needed".
 			indexCols := tabMeta.IndexColumnsMapVirtual(i)
-			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
-			if !indexCols.Intersects(updateCols) && !isPartialIndex {
+			pred, isPartialIndex := tabMeta.PartialIndexPredicate(i)
+			indexAndPredCols := indexCols.Copy()
+			if isPartialIndex {
+				predFilters := *pred.(*memo.FiltersExpr)
+				indexAndPredCols.UnionWith(predFilters.OuterCols())
+			}
+			if !indexAndPredCols.Intersects(updateCols) {
 				continue
 			}
 
@@ -185,9 +196,6 @@ func neededMutationFetchCols(
 			// It is possible to update a subset of families only for the primary
 			// index, and only when key columns are not being updated. Otherwise,
 			// all columns in the index must be fetched.
-			// TODO(andyk): It should be possible to not include columns that are
-			// being updated, since the existing value is not used. However, this
-			// would require execution support.
 			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
 				addFamilyCols(updateCols)
 			} else {
@@ -202,6 +210,19 @@ func neededMutationFetchCols(
 			}
 		}
 
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			var fkCols opt.ColSet
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				fkCols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
+			if fkCols.Intersects(updateCols) {
+				cols.UnionWith(fkCols)
+			}
+		}
+
 	case opt.DeleteOp:
 		// Add in all strict key columns from all indexes, since these are needed
 		// to compose the keys of rows to delete. Include mutation indexes, since
@@ -209,6 +230,15 @@ func neededMutationFetchCols(
 		// or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			cols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+		}
+
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				cols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
 		}
 	}
 
@@ -318,13 +348,11 @@ func (c *CustomFuncs) PruneMutationFetchCols(
 // that are not in the neededCols set to zero. This indicates that those input
 // columns are not needed by this mutation list.
 func (c *CustomFuncs) filterMutationList(
-	tabID opt.TableID, inList opt.ColList, neededCols opt.ColSet,
-) opt.ColList {
-	newList := make(opt.ColList, len(inList))
+	tabID opt.TableID, inList opt.OptionalColList, neededCols opt.ColSet,
+) opt.OptionalColList {
+	newList := make(opt.OptionalColList, len(inList))
 	for i, c := range inList {
-		if !neededCols.Contains(tabID.ColumnID(i)) {
-			newList[i] = 0
-		} else {
+		if c != 0 && neededCols.Contains(tabID.ColumnID(i)) {
 			newList[i] = c
 		}
 	}
@@ -581,17 +609,6 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps().OuterCols)
 		}
 
-	case opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
-		// Find the columns that would need to be fetched, if no returning
-		// clause were present.
-		withoutReturningPrivate := *e.Private().(*memo.MutationPrivate)
-		withoutReturningPrivate.ReturnCols = opt.ColList{}
-		neededCols := neededMutationFetchCols(e.Memo(), e.Op(), &withoutReturningPrivate)
-
-		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
-		// required by the mutation only because they're being returned).
-		relProps.Rule.PruneCols = relProps.OutputCols.Difference(neededCols)
-
 	case opt.WithOp:
 		// WithOp passes through its input unchanged, so it has the same pruning
 		// characteristics as its input.
@@ -639,17 +656,12 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 	private *memo.MutationPrivate, needed opt.ColSet,
 ) *memo.MutationPrivate {
 	newPrivate := *private
-	newReturnCols := make(opt.ColList, len(private.ReturnCols))
-	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
 	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
 
 	// Prune away the ReturnCols that are unused.
-	for i := range private.ReturnCols {
-		if needed.Contains(tabID.ColumnID(i)) {
-			newReturnCols[i] = private.ReturnCols[i]
-		}
-	}
+	newPrivate.ReturnCols = c.filterMutationList(tabID, private.ReturnCols, needed)
 
+	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
 	// Prune away the PassthroughCols that are unused.
 	for _, passthroughCol := range private.PassthroughCols {
 		if passthroughCol != 0 && needed.Contains(passthroughCol) {
@@ -657,7 +669,6 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 		}
 	}
 
-	newPrivate.ReturnCols = newReturnCols
 	newPrivate.PassthroughCols = newPassthroughCols
 	return &newPrivate
 }

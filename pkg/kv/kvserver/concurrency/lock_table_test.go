@@ -82,6 +82,11 @@ update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seq
 
  Updates locks for the named transaction.
 
+txn-finalized txn=<name> status=committed|aborted
+----
+
+ Informs the lock table that the named transaction is finalized.
+
 add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>]
 ----
 <error string>
@@ -179,6 +184,29 @@ func TestLockTableBasic(t *testing.T) {
 					Sequence:       enginepb.TxnSeq(seq),
 					WriteTimestamp: ts,
 				}
+				return ""
+
+			case "txn-finalized":
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					return fmt.Sprintf("txn %s not found", txnName)
+				}
+				txn := &roachpb.Transaction{
+					TxnMeta: *txnMeta,
+				}
+				var statusStr string
+				d.ScanArgs(t, "status", &statusStr)
+				switch statusStr {
+				case "committed":
+					txn.Status = roachpb.COMMITTED
+				case "aborted":
+					txn.Status = roachpb.ABORTED
+				default:
+					return fmt.Sprintf("unknown txn status %s", statusStr)
+				}
+				lt.TransactionIsFinalized(txn)
 				return ""
 
 			case "new-request":
@@ -374,9 +402,11 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
 				var str string
+				stateTransition := false
 				select {
 				case <-g.NewStateChan():
 					str = "new: "
+					stateTransition = true
 				default:
 					str = "old: "
 				}
@@ -392,7 +422,19 @@ func TestLockTableBasic(t *testing.T) {
 				case waitSelf:
 					return str + "state=waitSelf"
 				case doneWaiting:
-					return str + "state=doneWaiting"
+					var toResolveStr string
+					if stateTransition {
+						if toResolve := g.ResolveBeforeScanning(); len(toResolve) > 0 {
+							var buf strings.Builder
+							fmt.Fprintf(&buf, "\nIntents to resolve:")
+							for i := range toResolve {
+								fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
+									toResolve[i].Txn.ID.Short(), toResolve[i].Status)
+							}
+							toResolveStr = buf.String()
+						}
+					}
+					return str + "state=doneWaiting" + toResolveStr
 				}
 				id := state.txn.ID
 				var txnS string
@@ -436,27 +478,12 @@ func nextUUID(counter *uint128.Uint128) uuid.UUID {
 }
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
-	var ts hlc.Timestamp
 	var tsS string
 	d.ScanArgs(t, "ts", &tsS)
-	parts := strings.Split(tsS, ",")
-
-	// Find the wall time part.
-	tsW, err := strconv.ParseInt(parts[0], 10, 64)
+	ts, err := hlc.ParseTimestamp(tsS)
 	if err != nil {
 		d.Fatalf(t, "%v", err)
 	}
-	ts.WallTime = tsW
-
-	// Find the logical part, if there is one.
-	var tsL int64
-	if len(parts) > 1 {
-		tsL, err = strconv.ParseInt(parts[1], 10, 32)
-		if err != nil {
-			d.Fatalf(t, "%v", err)
-		}
-	}
-	ts.Logical = int32(tsL)
 	return ts
 }
 

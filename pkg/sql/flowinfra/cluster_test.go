@@ -71,7 +71,7 @@ func TestClusterFlow(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.Indexes[0].ID))
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -90,12 +90,12 @@ func TestClusterFlow(t *testing.T) {
 	ctx := tracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 
-	now := tc.Server(0).Clock().Now()
+	now := tc.Server(0).Clock().NowAsClockTimestamp()
 	txnProto := roachpb.MakeTransaction(
 		"cluster-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		now,
+		now.ToTimestamp(),
 		0, // maxOffset
 	)
 	txn := kv.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, kv.RootTxn, &txnProto)
@@ -271,6 +271,7 @@ func TestClusterFlow(t *testing.T) {
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
+	metas = ignoreTraceData(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -321,6 +322,18 @@ func ignoreMetricsMeta(metas []execinfrapb.ProducerMetadata) []execinfrapb.Produ
 	res := make([]execinfrapb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if m.Metrics == nil {
+			res = append(res, m)
+		}
+	}
+	return res
+}
+
+// ignoreTraceData takes a slice of metadata and returns the entries
+// excluding the ones with trace data.
+func ignoreTraceData(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+	res := make([]execinfrapb.ProducerMetadata, 0)
+	for _, m := range metas {
+		if m.TraceData == nil {
 			res = append(res, m)
 		}
 	}
@@ -416,12 +429,12 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		Type: descpb.InnerJoin,
 	}
 
-	now := tc.Server(0).Clock().Now()
+	now := tc.Server(0).Clock().NowAsClockTimestamp()
 	txnProto := roachpb.MakeTransaction(
 		"deadlock-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		now,
+		now.ToTimestamp(),
 		0, // maxOffset
 	)
 	txn := kv.NewTxnFromProto(
@@ -545,6 +558,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
+	metas = ignoreTraceData(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -736,12 +750,12 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						return execinfrapb.StreamEndpointSpec_REMOTE
 					}
-					now := tc.Server(0).Clock().Now()
+					now := tc.Server(0).Clock().NowAsClockTimestamp()
 					txnProto := roachpb.MakeTransaction(
 						"cluster-test",
 						nil, // baseKey
 						roachpb.NormalUserPriority,
-						now,
+						now.ToTimestamp(),
 						0, // maxOffset
 					)
 					txn := kv.NewTxnFromProto(
@@ -852,6 +866,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						metas = ignoreMisplannedRanges(metas)
 						metas = ignoreLeafTxnState(metas)
 						metas = ignoreMetricsMeta(metas)
+						metas = ignoreTraceData(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

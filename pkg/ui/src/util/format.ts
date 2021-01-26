@@ -9,7 +9,17 @@
 // licenses/APL.txt.
 
 export const kibi = 1024;
-export const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+export const byteUnits: string[] = [
+  "B",
+  "KiB",
+  "MiB",
+  "GiB",
+  "TiB",
+  "PiB",
+  "EiB",
+  "ZiB",
+  "YiB",
+];
 export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
 
 interface UnitValue {
@@ -22,13 +32,19 @@ interface UnitValue {
 // value may be expressed in bytes, but we may want to display it on the graph
 // as a larger prefix unit (such as "kilobytes" or "gigabytes") in order to make
 // the numbers more readable.
-export function ComputePrefixExponent(value: number, prefixMultiple: number, prefixList: string[]) {
+export function ComputePrefixExponent(
+  value: number,
+  prefixMultiple: number,
+  prefixList: string[],
+) {
   // Compute the metric prefix that will be used to label the axis.
   let maxUnits = Math.abs(value);
   let prefixScale: number;
-  for (prefixScale = 0;
-       maxUnits >= prefixMultiple && prefixScale < (prefixList.length - 1);
-       prefixScale++) {
+  for (
+    prefixScale = 0;
+    maxUnits >= prefixMultiple && prefixScale < prefixList.length - 1;
+    prefixScale++
+  ) {
     maxUnits /= prefixMultiple;
   }
   return prefixScale;
@@ -83,8 +99,7 @@ export function BytesWithPrecision(bytes: number, precision: number): string {
 /**
  * Cast bytes to provided scale units
  */
-// tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => ( bytes: number) => {
+export const BytesFitScale = (scale: string) => (bytes: number) => {
   if (!bytes) {
     return `0.00 ${scale}`;
   }
@@ -99,7 +114,7 @@ export function Percentage(numerator: number, denominator: number): string {
   if (denominator === 0) {
     return "--%";
   }
-  return Math.floor(numerator / denominator * 100).toString() + "%";
+  return Math.floor((numerator / denominator) * 100).toString() + "%";
 }
 
 /**
@@ -111,7 +126,7 @@ export function ComputeDurationScale(nanoseconds: number): UnitValue {
   return {
     value: Math.pow(1000, scale),
     units: durationUnits[scale],
- };
+  };
 }
 
 /**
@@ -128,12 +143,11 @@ export function Duration(nanoseconds: number): string {
 /**
  * Cast nanonseconds to provided scale units
  */
-// tslint:disable-next-line: variable-name
 export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   if (!nanoseconds) {
     return `0.00 ${scale}`;
   }
-  const n = durationUnits.indexOf(scale) ;
+  const n = durationUnits.indexOf(scale);
   return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
 };
 

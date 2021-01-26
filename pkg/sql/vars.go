@@ -219,8 +219,8 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, err := evalCtx.schemaAccessors.logical.GetDatabaseDesc(
-					ctx, evalCtx.Txn, evalCtx.Codec, dbName, tree.DatabaseLookupFlags{Required: true},
+				if _, _, err := evalCtx.Descs.GetImmutableDatabaseByName(
+					ctx, evalCtx.Txn, dbName, tree.DatabaseLookupFlags{Required: true},
 				); err != nil {
 					return "", err
 				}
@@ -843,8 +843,10 @@ var varGen = map[string]sessionVar{
 					// TODO(knz): if/when we want to support this, we'll need to change
 					// the interface between GetStringVal() and Set() to take string
 					// arrays instead of a single string.
-					return "", unimplemented.Newf("schema names containing commas in search_path",
-						"schema name %q not supported in search_path", s)
+					return "",
+						errors.WithHintf(unimplemented.NewWithIssuef(53971,
+							`schema name %q has commas so is not supported in search_path.`, s),
+							`Did you mean to omit quotes? SET search_path = %s`, s)
 				}
 				buf.WriteString(comma)
 				buf.WriteString(s)
@@ -1084,6 +1086,25 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(temporaryTablesEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	`experimental_enable_implicit_column_partitioning`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_implicit_column_partitioning`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("experimental_enable_implicit_column_partitioning", s)
+			if err != nil {
+				return err
+			}
+			m.SetImplicitColumnPartitioningEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ImplicitColumnPartitioningEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(implicitColumnPartitioningEnabledClusterMode.Get(sv))
 		},
 	},
 

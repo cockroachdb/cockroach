@@ -24,6 +24,6 @@ go_test(
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

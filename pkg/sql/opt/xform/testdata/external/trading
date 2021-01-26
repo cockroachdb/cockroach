@@ -612,25 +612,25 @@ project
  │    │    │    ├── limit hint: 1.00
  │    │    │    └── union
  │    │    │         ├── columns: dealerid:8!null version:16!null
- │    │    │         ├── left columns: dealerid:8!null version:16!null
- │    │    │         ├── right columns: dealerid:65 version:73
+ │    │    │         ├── left columns: dealerid:75 version:83
+ │    │    │         ├── right columns: dealerid:85 version:93
  │    │    │         ├── cardinality: [0 - 4]
  │    │    │         ├── stats: [rows=4, distinct(8,16)=4, null(8,16)=0]
  │    │    │         ├── key: (8,16)
  │    │    │         ├── union
- │    │    │         │    ├── columns: dealerid:8!null version:16!null
- │    │    │         │    ├── left columns: dealerid:8!null version:16!null
- │    │    │         │    ├── right columns: dealerid:55 version:63
+ │    │    │         │    ├── columns: dealerid:75!null version:83!null
+ │    │    │         │    ├── left columns: dealerid:55 version:63
+ │    │    │         │    ├── right columns: dealerid:65 version:73
  │    │    │         │    ├── cardinality: [0 - 3]
- │    │    │         │    ├── stats: [rows=3, distinct(8,16)=3, null(8,16)=0]
- │    │    │         │    ├── key: (8,16)
+ │    │    │         │    ├── stats: [rows=3, distinct(75,83)=3, null(75,83)=0]
+ │    │    │         │    ├── key: (75,83)
  │    │    │         │    ├── union
- │    │    │         │    │    ├── columns: dealerid:8!null version:16!null
+ │    │    │         │    │    ├── columns: dealerid:55!null version:63!null
  │    │    │         │    │    ├── left columns: dealerid:35 version:43
  │    │    │         │    │    ├── right columns: dealerid:45 version:53
  │    │    │         │    │    ├── cardinality: [0 - 2]
- │    │    │         │    │    ├── stats: [rows=2, distinct(8,16)=2, null(8,16)=0]
- │    │    │         │    │    ├── key: (8,16)
+ │    │    │         │    │    ├── stats: [rows=2, distinct(55,63)=2, null(55,63)=0]
+ │    │    │         │    │    ├── key: (55,63)
  │    │    │         │    │    ├── scan cardsinfo@cardsinfoversionindex,rev
  │    │    │         │    │    │    ├── columns: dealerid:35!null version:43!null
  │    │    │         │    │    │    ├── constraint: /35/43: [/1 - /1]
@@ -646,19 +646,19 @@ project
  │    │    │         │    │         ├── key: ()
  │    │    │         │    │         └── fd: ()-->(45,53)
  │    │    │         │    └── scan cardsinfo@cardsinfoversionindex,rev
- │    │    │         │         ├── columns: dealerid:55!null version:63!null
- │    │    │         │         ├── constraint: /55/63: [/3 - /3]
+ │    │    │         │         ├── columns: dealerid:65!null version:73!null
+ │    │    │         │         ├── constraint: /65/73: [/3 - /3]
  │    │    │         │         ├── limit: 1(rev)
- │    │    │         │         ├── stats: [rows=1, distinct(55)=1, null(55)=0, distinct(55,63)=1, null(55,63)=0]
+ │    │    │         │         ├── stats: [rows=1, distinct(65)=1, null(65)=0, distinct(65,73)=1, null(65,73)=0]
  │    │    │         │         ├── key: ()
- │    │    │         │         └── fd: ()-->(55,63)
+ │    │    │         │         └── fd: ()-->(65,73)
  │    │    │         └── scan cardsinfo@cardsinfoversionindex,rev
- │    │    │              ├── columns: dealerid:65!null version:73!null
- │    │    │              ├── constraint: /65/73: [/4 - /4]
+ │    │    │              ├── columns: dealerid:85!null version:93!null
+ │    │    │              ├── constraint: /85/93: [/4 - /4]
  │    │    │              ├── limit: 1(rev)
- │    │    │              ├── stats: [rows=1, distinct(65)=1, null(65)=0, distinct(65,73)=1, null(65,73)=0]
+ │    │    │              ├── stats: [rows=1, distinct(85)=1, null(85)=0, distinct(85,93)=1, null(85,93)=0]
  │    │    │              ├── key: ()
- │    │    │              └── fd: ()-->(65,73)
+ │    │    │              └── fd: ()-->(85,93)
  │    │    └── 1
  │    └── aggregations
  │         └── const-agg [as=max:33, outer=(16)]
@@ -836,18 +836,18 @@ project
  │    │         │    ├── fd: ()-->(8), (1)-->(2-6), (2,4,5)~~>(1,3,6), (9)-->(10-16), (16)-->(9-15), (1)==(9), (9)==(1), (9,20-22)-->(18,19)
  │    │         │    ├── left-join (lookup transactiondetails@detailscardidindex)
  │    │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null transactiondetails.dealerid:18 isbuy:19 transactiondate:20 transactiondetails.cardid:21 quantity:22
- │    │         │    │    ├── key columns: [39 40 1] = [18 19 21]
+ │    │         │    │    ├── key columns: [43 44 1] = [18 19 21]
  │    │         │    │    ├── immutable
  │    │         │    │    ├── stats: [rows=3543333.33, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(21)=19000, null(21)=0]
  │    │         │    │    ├── key: (1,20-22)
  │    │         │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (1,20-22)-->(18,19)
  │    │         │    │    ├── ordering: +1
  │    │         │    │    ├── project
- │    │         │    │    │    ├── columns: "lookup_join_const_col_@19":40!null "lookup_join_const_col_@18":39!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    ├── columns: "lookup_join_const_col_@19":44!null "lookup_join_const_col_@18":43!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │    │         │    │    │    ├── immutable
- │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+ │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(43)=1, null(43)=0, distinct(44)=1, null(44)=0]
  │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    ├── fd: ()-->(39,40), (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    ├── fd: ()-->(43,44), (1)-->(2-6), (2,4,5)~~>(1,3,6)
  │    │         │    │    │    ├── ordering: +1
  │    │         │    │    │    ├── select
  │    │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
@@ -865,8 +865,8 @@ project
  │    │         │    │    │    │    └── filters
  │    │         │    │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
  │    │         │    │    │    └── projections
- │    │         │    │    │         ├── false [as="lookup_join_const_col_@19":40]
- │    │         │    │    │         └── 1 [as="lookup_join_const_col_@18":39]
+ │    │         │    │    │         ├── false [as="lookup_join_const_col_@19":44]
+ │    │         │    │    │         └── 1 [as="lookup_join_const_col_@18":43]
  │    │         │    │    └── filters
  │    │         │    │         └── (transactiondate:20 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:20 <= '2020-03-01 00:00:00+00:00') [outer=(20), constraints=(/20: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │    │         │    ├── scan cardsinfo

@@ -16,7 +16,10 @@ import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshDatabases } from "src/redux/apiReducers";
@@ -34,11 +37,7 @@ const databasePages = [
 ];
 
 // The system databases should sort after user databases.
-const systemDatabases = [
-  "defaultdb",
-  "postgres",
-  "system",
-];
+const systemDatabases = ["defaultdb", "postgres", "system"];
 
 interface DatabaseListNavProps {
   selected: string;
@@ -57,7 +56,8 @@ class DatabaseListNav extends React.Component<DatabaseListNavProps> {
             selected={selected}
             onChange={({ value }: DropdownOption) => {
               onChange(value);
-            }} />
+            }}
+          />
         </PageConfigItem>
       </PageConfig>
     );
@@ -80,7 +80,9 @@ interface DatabaseListActions {
   refreshDatabases: typeof refreshDatabases;
 }
 
-type DatabaseListProps = DatabaseListData & DatabaseListActions & RouteComponentProps;
+type DatabaseListProps = DatabaseListData &
+  DatabaseListActions &
+  RouteComponentProps;
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
 class DatabaseTablesList extends React.Component<DatabaseListProps> {
@@ -90,25 +92,32 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
 
   handleOnNavigationListChange = (value: string) => {
     this.props.history.push(`/databases/${value}`);
-  }
+  };
 
   render() {
     const { user, system } = this.props.databasesByType;
 
-    return <div>
-      <Helmet title="Tables | Databases" />
-      <section className="section"><h1 className="base-heading">Databases</h1></section>
-      <DatabaseListNav selected="tables" onChange={this.handleOnNavigationListChange}/>
-      <div className="section databases">
-        {
-          user.map(n => <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />)
-        }
-        {
-          system.map(n => <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />)
-        }
-        <NonTableSummary />
+    return (
+      <div>
+        <Helmet title="Tables | Databases" />
+        <section className="section">
+          <h1 className="base-heading">Databases</h1>
+        </section>
+        <DatabaseListNav
+          selected="tables"
+          onChange={this.handleOnNavigationListChange}
+        />
+        <div className="section databases">
+          {user.map((n) => (
+            <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />
+          ))}
+          {system.map((n) => (
+            <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />
+          ))}
+          <NonTableSummary />
+        </div>
       </div>
-    </div>;
+    );
   }
 }
 
@@ -120,24 +129,31 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps> {
 
   handleOnNavigationListChange = (value: string) => {
     this.props.history.push(`/databases/${value}`);
-  }
+  };
 
   render() {
     const { user, system } = this.props.databasesByType;
 
-    return <div>
-      <Helmet title="Grants | Databases" />
-      <section className="section"><h1 className="base-heading">Databases</h1></section>
-      <DatabaseListNav selected="grants" onChange={this.handleOnNavigationListChange}/>
-      <div className="section databases">
-        {
-          user.map(n => <DatabaseSummaryGrants name={n} key={n} />)
-        }
-        {
-          system.map(n => <DatabaseSummaryGrants name={n} key={n} />)
-        }
+    return (
+      <div>
+        <Helmet title="Grants | Databases" />
+        <section className="section">
+          <h1 className="base-heading">Databases</h1>
+        </section>
+        <DatabaseListNav
+          selected="grants"
+          onChange={this.handleOnNavigationListChange}
+        />
+        <div className="section databases">
+          {user.map((n) => (
+            <DatabaseSummaryGrants name={n} key={n} />
+          ))}
+          {system.map((n) => (
+            <DatabaseSummaryGrants name={n} key={n} />
+          ))}
+        </div>
       </div>
-    </div>;
+    );
   }
 }
 
@@ -145,7 +161,10 @@ type DatabasesState = Pick<AdminUIState, "cachedData", "databases">;
 
 // Base selectors to extract data from redux state.
 function databaseNames(state: DatabasesState): string[] {
-  if (state.cachedData.databases.data && state.cachedData.databases.data.databases) {
+  if (
+    state.cachedData.databases.data &&
+    state.cachedData.databases.data.databases
+  ) {
     return state.cachedData.databases.data.databases;
   }
   return [];
@@ -154,12 +173,16 @@ function databaseNames(state: DatabasesState): string[] {
 export const selectDatabasesByType = createSelector(
   databaseNames,
   (dbs: string[]) => {
-    const [user, system] = _.partition(dbs, (db) => systemDatabases.indexOf(db) === -1);
+    const [user, system] = _.partition(
+      dbs,
+      (db) => systemDatabases.indexOf(db) === -1,
+    );
     return { user, system };
   },
 );
 
-const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+const mapStateToProps = (state: AdminUIState) => ({
+  // RootState contains declaration for whole state
   databasesByType: selectDatabasesByType(state),
 });
 
@@ -168,16 +191,14 @@ const mapDispatchToProps = {
 };
 
 // Connect the DatabaseTablesList class with our redux store.
-const databaseTablesListConnected = withRouter(connect(
-  mapStateToProps,
-  mapDispatchToProps,
-)(DatabaseTablesList));
+const databaseTablesListConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(DatabaseTablesList),
+);
 
 // Connect the DatabaseGrantsList class with our redux store.
-const databaseGrantsListConnected = withRouter(connect(
-  mapStateToProps,
-  mapDispatchToProps,
-)(DatabaseGrantsList));
+const databaseGrantsListConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(DatabaseGrantsList),
+);
 
 export {
   databaseTablesListConnected as DatabaseTablesList,

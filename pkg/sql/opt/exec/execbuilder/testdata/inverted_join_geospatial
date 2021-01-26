@@ -317,8 +317,8 @@ vectorized: true
 ├── • render
 │   │ columns: (count, count)
 │   │ estimated row count: 333 (missing stats)
-│   │ render 0: @S2
-│   │ render 1: count_rows
+│   │ render count: @S2
+│   │ render count_rows: count_rows
 │   │
 │   └── • group
 │       │ columns: (lk, count_rows)

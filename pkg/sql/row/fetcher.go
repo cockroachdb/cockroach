@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -156,6 +158,36 @@ type FetcherTableArgs struct {
 	Cols             []descpb.ColumnDescriptor
 	// The indexes (0 to # of columns - 1) of the columns to return.
 	ValNeededForCol util.FastIntSet
+}
+
+// InitCols initializes the columns in FetcherTableArgs.
+func (fta *FetcherTableArgs) InitCols(
+	desc *tabledesc.Immutable,
+	scanVisibility execinfrapb.ScanVisibility,
+	systemColumns []descpb.ColumnDescriptor,
+	virtualColumn *descpb.ColumnDescriptor,
+) {
+	cols := desc.Columns
+	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		cols = desc.ReadableColumns()
+	}
+	if virtualColumn != nil {
+		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
+		copy(tempCols, cols)
+		for i := range tempCols {
+			if tempCols[i].ID == virtualColumn.ID {
+				tempCols[i] = *virtualColumn
+			}
+		}
+		cols = tempCols
+		// Add on any requested system columns.
+		cols = append(cols, systemColumns...)
+	} else {
+		// Add on any requested system columns. We slice cols to avoid modifying
+		// the underlying table descriptor.
+		cols = append(cols[:len(cols):len(cols)], systemColumns...)
+	}
+	fta.Cols = cols
 }
 
 // Fetcher handles fetching kvs and forming table rows for an
@@ -537,6 +569,7 @@ func (rf *Fetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -552,6 +585,7 @@ func (rf *Fetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
@@ -577,6 +611,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -633,6 +668,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
@@ -1386,7 +1422,12 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		return nil
 	})
 
-	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.GetPublicNonPrimaryIndexes()}
+	indexes := make([]descpb.IndexDescriptor, len(table.desc.PublicNonPrimaryIndexes()))
+	for i, idx := range table.desc.PublicNonPrimaryIndexes() {
+		indexes[i] = *idx.IndexDesc()
+	}
+
+	rh := rowHelper{TableDesc: table.desc, Indexes: indexes}
 
 	return table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var lastColID descpb.ColumnID

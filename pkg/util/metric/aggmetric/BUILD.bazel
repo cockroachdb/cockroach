@@ -12,10 +12,10 @@ go_library(
     deps = [
         "//pkg/util/metric",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/google/btree",
-        "//vendor/github.com/prometheus/client_model/go",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_google_btree//:btree",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
@@ -27,6 +27,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

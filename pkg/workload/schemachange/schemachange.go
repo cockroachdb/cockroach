@@ -58,6 +58,8 @@ const (
 	defaultEnumPct            = 10
 	defaultMaxSourceTables    = 3
 	defaultSequenceOwnedByPct = 25
+	defaultFkParentInvalidPct = 5
+	defaultFkChildInvalidPct  = 5
 )
 
 type schemaChange struct {
@@ -75,6 +77,8 @@ type schemaChange struct {
 	logFile            *os.File
 	dumpLogsOnce       *sync.Once
 	workers            []*schemaChangeWorker
+	fkParentInvalidPct int
+	fkChildInvalidPct  int
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -102,6 +106,10 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times that a sequence is owned by column upon creation.`)
 		s.flags.StringVar(&s.logFilePath, `txn-log`, "",
 			`If provided, transactions will be written to this file in JSON form`)
+		s.flags.IntVar(&s.fkParentInvalidPct, `fk-parent-invalid-pct`, defaultFkParentInvalidPct,
+			`Percentage of times to choose an invalid parent column in a fk constraint.`)
+		s.flags.IntVar(&s.fkChildInvalidPct, `fk-child-invalid-pct`, defaultFkChildInvalidPct,
+			`Percentage of times to choose an invalid child column in a fk constraint.`)
 		return s
 	},
 }
@@ -180,6 +188,8 @@ func (s *schemaChange) Ops(
 			ops:                ops,
 			maxSourceTables:    s.maxSourceTables,
 			sequenceOwnedByPct: s.sequenceOwnedByPct,
+			fkParentInvalidPct: s.fkParentInvalidPct,
+			fkChildInvalidPct:  s.fkChildInvalidPct,
 		}
 
 		w := &schemaChangeWorker{
@@ -381,7 +391,7 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 				// Rollback because the error was anticipated.
 				w.recordInHist(timeutil.Since(start), txnRollback)
 				return errors.Mark(
-					errors.Wrap(err, "***ROLLBACK; Successfully got expected execution error"),
+					errors.Wrap(err, "ROLLBACK; Successfully got expected execution error"),
 					errRunInTxnRbkSentinel,
 				)
 			}

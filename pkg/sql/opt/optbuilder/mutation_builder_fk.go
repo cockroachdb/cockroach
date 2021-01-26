@@ -522,6 +522,8 @@ type fkCheckHelper struct {
 // Returns false if the FK relation should be ignored (e.g. because the new
 // values for the FK columns are known to be always NULL).
 func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) bool {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
 	*h = fkCheckHelper{
 		mb:         mb,
 		fk:         mb.tab.OutboundForeignKey(fkOrdinal),
@@ -572,6 +574,8 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 // Returns false if the FK relation should be ignored (because the other table
 // is in the process of being created).
 func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (ok bool) {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
 	*h = fkCheckHelper{
 		mb:         mb,
 		fk:         mb.tab.InboundForeignKey(fkOrdinal),

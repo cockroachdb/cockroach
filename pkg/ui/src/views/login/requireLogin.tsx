@@ -19,7 +19,9 @@ interface RequireLoginProps {
   loginState: LoginState;
 }
 
-class RequireLogin extends React.Component<RouteComponentProps & RequireLoginProps> {
+class RequireLogin extends React.Component<
+  RouteComponentProps & RequireLoginProps
+> {
   componentDidMount() {
     this.checkLogin();
   }
@@ -49,13 +51,12 @@ class RequireLogin extends React.Component<RouteComponentProps & RequireLoginPro
   }
 }
 
-// tslint:disable-next-line:variable-name
-const RequireLoginConnected = withRouter(connect(
-  (state: AdminUIState) => {
+const RequireLoginConnected = withRouter(
+  connect((state: AdminUIState) => {
     return {
       loginState: selectLoginState(state),
     };
-  },
-)(RequireLogin));
+  })(RequireLogin),
+);
 
 export default RequireLoginConnected;

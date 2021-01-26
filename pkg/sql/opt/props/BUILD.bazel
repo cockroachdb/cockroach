@@ -19,11 +19,13 @@ go_library(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/encoding",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/olekukonko/tablewriter",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )
 
@@ -47,7 +49,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

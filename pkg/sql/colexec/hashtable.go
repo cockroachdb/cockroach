@@ -477,6 +477,7 @@ func (ht *hashTable) removeDuplicates(
 // appendAllDistinct appends all tuples from batch to the hash table. It
 // assumes that all tuples are distinct and that ht.probeScratch.hashBuffer
 // contains the hash codes for all of them.
+// NOTE: batch must be of non-zero length.
 func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch) {
 	numBuffered := uint64(ht.vals.Length())
 	ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
@@ -486,6 +487,22 @@ func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch)
 	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, uint64(batch.Length()))
 	if ht.shouldResize(ht.vals.Length()) {
 		ht.buildFromBufferedTuples(ctx)
+	}
+}
+
+// maybeRepairAfterDistinctBuild checks whether the hash table built via
+// distinctBuild is in an inconsistent state and repairs it if so.
+func (ht *hashTable) maybeRepairAfterDistinctBuild(ctx context.Context) {
+	// buildScratch.next has an extra 0th element not used by the tuples
+	// reserved for the end of the chain.
+	if len(ht.buildScratch.next) < ht.vals.Length()+1 {
+		// The hash table in such a state that some distinct tuples were
+		// appended to ht.vals, but 'next' and 'first' slices were not updated
+		// accordingly.
+		numConsistentTuples := len(ht.buildScratch.next) - 1
+		lastBatchNumDistinctTuples := ht.vals.Length() - numConsistentTuples
+		ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:lastBatchNumDistinctTuples]...)
+		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, uint64(numConsistentTuples)+1, uint64(lastBatchNumDistinctTuples))
 	}
 }
 

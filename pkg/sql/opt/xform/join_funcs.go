@@ -129,7 +129,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //  1. The index has all the columns we need; this is the simple case, where we
 //     generate a LookupJoin expression in the current group:
 //
-//         Join                       LookupJoin(t@idx))
+//         Join                       LookupJoin(t@idx)
 //         /   \                           |
 //        /     \            ->            |
 //      Input  Scan(t)                   Input
@@ -470,26 +470,64 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
 
+	eqColsAndOptionalFiltersCalculated := false
+	var leftEqCols opt.ColList
+	var rightEqCols opt.ColList
+	var rightSideCols opt.ColList
+	var optionalFilters memo.FiltersExpr
+
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
-	iter.ForEach(func(index cat.Index, on memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
+		numPrefixCols := index.NonInvertedPrefixColumnCount()
+
+		var allFilters memo.FiltersExpr
+		if numPrefixCols > 0 {
+			// Only calculate the left and right equality columns and optional
+			// filters if there is a multi-column inverted index.
+			if !eqColsAndOptionalFiltersCalculated {
+				inputProps := input.Relational()
+				leftEqCols, rightEqCols = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
+
+				// Generate implicit filters from CHECK constraints and computed
+				// columns as optional filters. We build the computed column
+				// optional filters from the original on filters, not the
+				// filters within the context of the iter.ForEach callback. The
+				// latter may be reduced during partial index implication and
+				// using them here would result in a reduced set of optional
+				// filters.
+				optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
+				computedColFilters := c.computedColFilters(scanPrivate.Table, on, optionalFilters)
+				optionalFilters = append(optionalFilters, computedColFilters...)
+
+				eqColsAndOptionalFiltersCalculated = true
+			}
+
+			// Combine the ON filters and optional filters together. This set of
+			// filters will be used to attempt to constrain non-inverted prefix
+			// columns of the multi-column inverted index.
+			allFilters = append(onFilters, optionalFilters...)
+		}
 
 		// The non-inverted prefix columns of a multi-column inverted index must
 		// be constrained in order to perform an inverted join. We attempt to
 		// constrain each prefix column to non-ranging constant values. These
 		// values are joined with the input to create key columns for the
 		// InvertedJoin, similar to GenerateLookupJoins.
-		// TODO(mgartner): Try to constrain prefix columns with CHECK
-		// constraints and computed column expressions.
-		// TODO(mgartner): Try to constrain prefix columns via ON condition
-		// equalities to columns in the input expression.
 		var constFilters memo.FiltersExpr
-		for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+		for i := 0; i < numPrefixCols; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
 
+			// Check if prefixCol is constrained by an equality constraint.
+			if eqIdx, ok := rightEqCols.Find(prefixCol); ok {
+				invertedJoin.PrefixKeyCols = append(invertedJoin.PrefixKeyCols, leftEqCols[eqIdx])
+				rightSideCols = append(rightSideCols, prefixCol)
+				continue
+			}
+
 			// Try to constrain prefixCol to constant, non-ranging values.
-			foundVals, onIdx, ok := c.findJoinFilterConstants(on, prefixCol)
+			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, prefixCol)
 			if !ok {
 				// Cannot constrain prefix column and therefore cannot generate
 				// an inverted join.
@@ -499,7 +537,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// We will join these constant values with the input to make
 			// equality columns for the inverted join.
 			if constFilters == nil {
-				constFilters = make(memo.FiltersExpr, 0, n)
+				constFilters = make(memo.FiltersExpr, 0, numPrefixCols)
 			}
 
 			prefixColType := c.e.f.Metadata().ColumnMeta(prefixCol).Type
@@ -513,23 +551,20 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 			invertedJoin.Input = join
 			invertedJoin.PrefixKeyCols = append(invertedJoin.PrefixKeyCols, constColID)
-			constFilters = append(constFilters, on[onIdx])
+			constFilters = append(constFilters, allFilters[allIdx])
 		}
 
-		// Remove the constant filters that constrain the prefix columns from
-		// the on condition. Copy the filters to a new slice to avoid mutating
-		// the filters within iter.
-		if len(constFilters) > 0 {
-			onCopy := make(memo.FiltersExpr, len(on))
-			copy(onCopy, on)
-			on = onCopy
-			on.RemoveCommonFilters(constFilters)
+		// Remove the redundant filters and update the ON condition if there are
+		// non-inverted prefix columns that have been constrained.
+		if len(rightSideCols) > 0 || len(constFilters) > 0 {
+			onFilters = memo.ExtractRemainingJoinFilters(onFilters, invertedJoin.PrefixKeyCols, rightSideCols)
+			onFilters.RemoveCommonFilters(constFilters)
+			invertedJoin.ConstFilters = constFilters
 		}
-		invertedJoin.ConstFilters = constFilters
 
 		// Check whether the filter can constrain the inverted column.
 		invertedExpr := invertedidx.TryJoinInvertedIndex(
-			c.e.evalCtx.Context, c.e.f, on, scanPrivate.Table, index, inputCols,
+			c.e.evalCtx.Context, c.e.f, onFilters, scanPrivate.Table, index, inputCols,
 		)
 		if invertedExpr == nil {
 			return
@@ -579,7 +614,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.Table = scanPrivate.Table
 		invertedJoin.Index = index.Ordinal()
 		invertedJoin.InvertedExpr = invertedExpr
-		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(index, 0)
 		invertedJoin.Cols = indexCols.Union(inputCols)
 		if continuationCol != 0 {
 			invertedJoin.Cols.Add(continuationCol)
@@ -592,8 +626,8 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// ON may have some conditions that are bound by the columns in the index
 		// and some conditions that refer to other columns. We can put the former
 		// in the InvertedJoin and the latter in the index join.
-		invertedJoin.On = c.ExtractBoundConditions(on, invertedJoin.Cols)
-		indexJoin.On = c.ExtractUnboundConditions(on, invertedJoin.Cols)
+		invertedJoin.On = c.ExtractBoundConditions(onFilters, invertedJoin.Cols)
+		indexJoin.On = c.ExtractUnboundConditions(onFilters, invertedJoin.Cols)
 
 		indexJoin.Input = c.e.f.ConstructInvertedJoin(
 			invertedJoin.Input,
@@ -726,7 +760,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 
 	// Ensure that this join expression was not added to the memo by a previous
 	// reordering, as well as that the join does not have hints.
-	return !private.WasReordered && c.NoJoinHints(private)
+	return !private.SkipReorderJoins && c.NoJoinHints(private)
 }
 
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The

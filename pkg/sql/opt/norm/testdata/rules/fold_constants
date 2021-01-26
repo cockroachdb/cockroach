@@ -1020,6 +1020,28 @@ values
  ├── fd: ()-->(1)
  └── ('foo',)
 
+# Fold when input is Null. This is possible when FoldIndirection has already
+# folded an Indirection with an out-of-bounds index to Null.
+norm expect=FoldColumnAccess format=show-types
+SELECT (ARRAY[(('foo', i) AS foo, bar)][0]).foo FROM a
+----
+project
+ ├── columns: foo:8(string)
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS STRING) [as=foo:8, type=string]
+
+norm expect=FoldColumnAccess format=show-types
+SELECT (ARRAY[(('foo', i) AS foo, bar)][0]).bar FROM a
+----
+project
+ ├── columns: bar:8(int)
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS INT8) [as=bar:8, type=int]
+
 # --------------------------------------------------
 # FoldEqualsAnyNull
 # --------------------------------------------------

@@ -22,7 +22,7 @@ go_library(
     deps = [
         "//pkg/util/humanizeutil",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -33,7 +33,7 @@ go_test(
         ":settings",
         "//pkg/testutils",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

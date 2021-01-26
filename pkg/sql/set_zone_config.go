@@ -201,7 +201,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		if zs.Database == "system" {
 			return p.RequireAdminRole(ctx, "alter the system database")
 		}
-		dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(zs.Database), true)
+		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+			string(zs.Database), tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return err
 		}
@@ -331,12 +332,19 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 		// index has the specified partition.
 		partitionName := string(n.zoneSpecifier.Partition)
-		indexes := table.FindIndexesWithPartition(partitionName)
+
+		var indexes []catalog.Index
+		for _, idx := range table.NonDropIndexes() {
+			if tabledesc.FindIndexPartitionByName(idx.IndexDesc(), partitionName) != nil {
+				indexes = append(indexes, idx)
+			}
+		}
+
 		switch len(indexes) {
 		case 0:
 			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.GetName())
 		case 1:
-			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].Name)
+			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
 		default:
 			err := fmt.Errorf(
 				"partition %q exists on multiple indexes of table %q", partitionName, table.GetName())
@@ -352,10 +360,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	var specifiers []tree.ZoneSpecifier
 	if n.zoneSpecifier.TargetsPartition() && n.allIndexes {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.AlterAllPartitions)
-		for _, idx := range table.AllNonDropIndexes() {
-			if p := tabledesc.FindIndexPartitionByName(idx, string(n.zoneSpecifier.Partition)); p != nil {
+		for _, idx := range table.NonDropIndexes() {
+			if p := tabledesc.FindIndexPartitionByName(idx.IndexDesc(), string(n.zoneSpecifier.Partition)); p != nil {
 				zs := n.zoneSpecifier
-				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.Name)
+				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.GetName())
 				specifiers = append(specifiers, zs)
 			}
 		}

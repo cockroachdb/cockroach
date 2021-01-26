@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // UserPriority is a custom type for transaction's user priority.
@@ -712,6 +713,9 @@ func (*AdminScatterRequest) Method() Method { return AdminScatter }
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
 // Method implements the Request interface.
+func (*MigrateRequest) Method() Method { return Migrate }
+
+// Method implements the Request interface.
 func (*RecomputeStatsRequest) Method() Method { return RecomputeStats }
 
 // Method implements the Request interface.
@@ -953,6 +957,12 @@ func (r *AdminScatterRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AddSSTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *MigrateRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1317,6 +1327,7 @@ func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRa
 func (*AddSSTableRequest) flags() int {
 	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
 }
+func (*MigrateRequest) flags() int { return isWrite | isRange | isAlone }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.
@@ -1508,4 +1519,14 @@ func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
 		StoreID:   storeID,
 	}
 	return sIdent, nil
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("conflicted with %s on %s for %.2fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())
+}
+
+// String implements fmt.Stringer.
+func (c *ContentionEvent) String() string {
+	return redact.StringWithoutMarkers(c)
 }

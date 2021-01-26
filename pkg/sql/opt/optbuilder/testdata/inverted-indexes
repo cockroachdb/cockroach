@@ -25,11 +25,11 @@ TABLE kj
  ├── k int not null
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
+ ├── j_inverted_key jsonb not null [virtual-inverted]
  ├── INDEX primary
  │    └── k int not null
  ├── INVERTED INDEX secondary
- │    ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
+ │    ├── j_inverted_key jsonb not null [virtual-inverted]
  │    └── k int not null
  └── UNIQUE (k)
 
@@ -95,21 +95,15 @@ insert kj
  └── upsert-distinct-on
       ├── columns: column1:5!null column2:6!null
       ├── grouping columns: column1:5!null
-      ├── project
+      ├── anti-join (hash)
       │    ├── columns: column1:5!null column2:6!null
-      │    └── select
-      │         ├── columns: column1:5!null column2:6!null k:7 j:8
-      │         ├── left-join (hash)
-      │         │    ├── columns: column1:5!null column2:6!null k:7 j:8
-      │         │    ├── values
-      │         │    │    ├── columns: column1:5!null column2:6!null
-      │         │    │    └── (1, '{"a": 2}')
-      │         │    ├── scan kj
-      │         │    │    └── columns: k:7!null j:8
-      │         │    └── filters
-      │         │         └── column1:5 = k:7
-      │         └── filters
-      │              └── k:7 IS NULL
+      │    ├── values
+      │    │    ├── columns: column1:5!null column2:6!null
+      │    │    └── (1, '{"a": 2}')
+      │    ├── scan kj
+      │    │    └── columns: k:7!null j:8
+      │    └── filters
+      │         └── column1:5 = k:7
       └── aggregations
            └── first-agg [as=column2:6]
                 └── column2:6

@@ -8,7 +8,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding/csv",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
@@ -21,6 +21,6 @@ go_test(
     embed = [":csv"],
     deps = [
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

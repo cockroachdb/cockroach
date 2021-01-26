@@ -119,7 +119,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(refScope.cols))
 		for i := range refScope.cols {
 			col := &refScope.cols[i]
-			if col.table == *src && !col.hidden {
+			if col.table == *src && col.visibility == cat.Visible {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name))
 			}
@@ -134,7 +134,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
 			col := &inScope.cols[i]
-			if !col.hidden {
+			if col.visibility == cat.Visible {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name))
 			}
@@ -244,24 +244,11 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 	return len(texpr.ResolvedType().TupleLabels()) == 0
 }
 
-// addColumn adds a column to scope with the given alias, type, and
-// expression. It returns a pointer to the new column. The column ID and group
-// are left empty so they can be filled in later.
-func (b *Builder) addColumn(scope *scope, alias string, expr tree.TypedExpr) *scopeColumn {
-	name := tree.Name(alias)
-	scope.cols = append(scope.cols, scopeColumn{
-		name: name,
-		typ:  expr.ResolvedType(),
-		expr: expr,
-	})
-	return &scope.cols[len(scope.cols)-1]
-}
-
 func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColumns) {
 	for i := range cols {
 		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
-			c.hidden = true
+			c.visibility = cat.Hidden
 		}
 	}
 }
@@ -652,7 +639,7 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 		cnt := tab.ColumnCount()
 		for ord < cnt {
 			col := tab.Column(ord)
-			if col.IsSelectable() && col.ColID() == cat.StableID(c) {
+			if col.ColID() == cat.StableID(c) && col.Visibility() != cat.Inaccessible {
 				break
 			}
 			ord++
@@ -671,7 +658,7 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
 	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
 		col := tab.Column(ord)
-		if col.ColName() == name && !col.IsMutation() {
+		if col.ColName() == name && col.Visibility() != cat.Inaccessible {
 			return ord
 		}
 	}

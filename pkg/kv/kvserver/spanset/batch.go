@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 )
 
 // MVCCIterator wraps an storage.MVCCIterator and ensures that it can
@@ -322,6 +323,11 @@ func (i *EngineIterator) SetUpperBound(key roachpb.Key) {
 	i.i.SetUpperBound(key)
 }
 
+// GetRawIter is part of the storage.EngineIterator interface.
+func (i *EngineIterator) GetRawIter() *pebble.Iterator {
+	return i.i.GetRawIter()
+}
+
 type spanSetReader struct {
 	r     storage.Reader
 	spans *SpanSet
@@ -346,9 +352,10 @@ func (s spanSetReader) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io storage.IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
@@ -413,6 +420,10 @@ func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.Engin
 		i:     s.r.NewEngineIterator(opts),
 		spans: s.spans,
 	}
+}
+
+func (s spanSetReader) ConsistentIterators() bool {
+	return s.r.ConsistentIterators()
 }
 
 // GetDBEngine recursively searches for the underlying rocksDB engine.

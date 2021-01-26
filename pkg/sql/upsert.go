@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var upsertNodePool = sync.Pool{
@@ -76,8 +75,6 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	if n.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	n.run.tw.clearLastBatch(params.ctx)
@@ -146,8 +143,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Create a set of partial index IDs to not add or remove entries from.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := n.run.tw.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
+	if len(n.run.tw.tableDesc().PartialIndexes()) > 0 {
 		partialIndexValOffset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
 		if n.run.tw.canaryOrdinal != -1 {
 			partialIndexValOffset++

@@ -57,10 +57,9 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.RequireMutable = true
-		tbl, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+		_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
-		require.NotNil(t, tbl)
-		mut := tbl.(*tabledesc.Mutable)
+		require.NotNil(t, mut)
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
 		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
@@ -79,13 +78,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(1), newTable.Version)
 
 		// Ensure that the descriptor has been added to the collection.
-		tbl2, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+		_, mut2, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
-		mut2 := tbl2.(*tabledesc.Mutable)
 		require.Equal(t, mut, mut2)
 
 		t2n := tree.MakeTableNameWithSchema("db", "schema", "table2")
-		newTableResolved, err := descriptors.GetTableByName(ctx, txn, &t2n, flags)
+		_, newTableResolved, err := descriptors.GetMutableTableByName(ctx, txn, &t2n, flags)
 		require.NoError(t, err)
 		require.Equal(t, newTable, newTableResolved)
 		return txn.Run(ctx, b)
@@ -143,9 +141,8 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.RequireMutable = true
-			desc, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
-			mut := desc.(*tabledesc.Mutable)
 			// Verify that the descriptor version is always 1 prior to the write and 2
 			// after the write even after a retry.
 			require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
@@ -155,4 +152,168 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+}
+
+// TestAddUncommittedDescriptorAndMutableResolution tests the collection to
+// ensure that subsequent resolution of mutable descriptors yields the same
+// object. It also ensures that immutable resolution only yields a modified
+// immutable descriptor after a modified version has been explicitly added
+// with AddUncommittedDescriptor.
+func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s0 := tc.Server(0)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, "CREATE DATABASE db")
+	tdb.Exec(t, "USE db")
+	tdb.Exec(t, "CREATE SCHEMA db.sc")
+	tdb.Exec(t, "CREATE TABLE db.sc.tab (i INT PRIMARY KEY)")
+	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('foo')")
+	lm := s0.LeaseManager().(*lease.Manager)
+	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
+	var dbID descpb.ID
+	t.Run("database descriptors", func(t *testing.T) {
+		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			flags := tree.DatabaseLookupFlags{}
+			flags.RequireMutable = true
+			flags.Required = true
+
+			_, db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			require.NoError(t, err)
+			dbID = db.GetID()
+
+			_, resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			require.NoError(t, err)
+
+			require.Same(t, db, resolved)
+
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, db.GetID(), txn)
+			require.NoError(t, err)
+			require.Same(t, db, byID)
+
+			mut := db
+			mut.MaybeIncrementVersion()
+			mut.Schemas["foo"] = descpb.DatabaseDescriptor_SchemaInfo{ID: 2}
+
+			flags.RequireMutable = false
+
+			_, immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			require.NoError(t, err)
+			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
+
+			immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
+			require.NoError(t, err)
+			require.Same(t, immByName, immByID)
+
+			mut.Name = "new_name"
+			mut.SetDrainingNames([]descpb.NameInfo{{
+				Name: "db",
+			}})
+
+			// Try to get the database descriptor by the old name and fail.
+			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			require.Regexp(t, `database "db" does not exist`, err)
+			require.Nil(t, failedToResolve)
+
+			// Try to get the database descriptor by the new name and succeed but get
+			// the old version with the old name (this is bizarre but is the
+			// contract now).
+			_, immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			require.NoError(t, err)
+			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
+
+			require.NoError(t, descriptors.AddUncommittedDescriptor(mut))
+
+			_, immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			require.NoError(t, err)
+			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
+			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
+
+			immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
+			require.NoError(t, err)
+			require.Same(t, immByNameAfter, immByIDAfter)
+
+			return nil
+		}))
+	})
+	t.Run("schema descriptors", func(t *testing.T) {
+		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			flags := tree.SchemaLookupFlags{}
+			flags.RequireMutable = true
+			flags.Required = true
+
+			ok, schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			require.NoError(t, err)
+			require.True(t, ok)
+
+			ok, resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			require.NoError(t, err)
+			require.True(t, ok)
+
+			require.Same(t, schema.Desc, resolved.Desc)
+
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.ID, txn)
+			require.NoError(t, err)
+
+			require.Same(t, schema.Desc, byID)
+			return nil
+		}))
+	})
+	t.Run("table descriptors", func(t *testing.T) {
+		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			flags := tree.ObjectLookupFlags{}
+			flags.RequireMutable = true
+			flags.Required = true
+			tn := tree.MakeTableNameWithSchema("db", "sc", "tab")
+
+			_, tab, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			require.NoError(t, err)
+
+			_, resolved, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			require.NoError(t, err)
+
+			require.Same(t, tab, resolved)
+
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, tab.GetID(), txn)
+			require.NoError(t, err)
+
+			require.Same(t, tab, byID)
+			return nil
+		}))
+	})
+	t.Run("type descriptors", func(t *testing.T) {
+		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			flags := tree.ObjectLookupFlags{}
+			flags.RequireMutable = true
+			flags.Required = true
+			tn := tree.MakeNewQualifiedTypeName("db", "sc", "typ")
+			_, typ, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
+			require.NoError(t, err)
+
+			_, resolved, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
+			require.NoError(t, err)
+
+			require.Same(t, typ, resolved)
+
+			byID, err := descriptors.GetMutableTypeVersionByID(ctx, txn, typ.GetID())
+			require.NoError(t, err)
+
+			require.Same(t, typ, byID)
+
+			return nil
+		}))
+	})
 }

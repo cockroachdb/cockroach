@@ -29,7 +29,7 @@ type UnresolvedAddr struct {
 func (m *UnresolvedAddr) Reset()      { *m = UnresolvedAddr{} }
 func (*UnresolvedAddr) ProtoMessage() {}
 func (*UnresolvedAddr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_unresolved_addr_d5da3e94d4806572, []int{0}
+	return fileDescriptor_unresolved_addr_5a54c22f2a6fdd9e, []int{0}
 }
 func (m *UnresolvedAddr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -238,7 +238,7 @@ func (m *UnresolvedAddr) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthUnresolvedAddr
 			}
 			if (iNdEx + skippy) > l {
@@ -359,10 +359,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/unresolved_addr.proto", fileDescriptor_unresolved_addr_d5da3e94d4806572)
+	proto.RegisterFile("util/unresolved_addr.proto", fileDescriptor_unresolved_addr_5a54c22f2a6fdd9e)
 }
 
-var fileDescriptor_unresolved_addr_d5da3e94d4806572 = []byte{
+var fileDescriptor_unresolved_addr_5a54c22f2a6fdd9e = []byte{
 	// 193 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x2d, 0xc9, 0xcc,
 	0xd1, 0x2f, 0xcd, 0x2b, 0x4a, 0x2d, 0xce, 0xcf, 0x29, 0x4b, 0x4d, 0x89, 0x4f, 0x4c, 0x49, 0x29,

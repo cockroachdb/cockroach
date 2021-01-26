@@ -564,7 +564,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
-	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
+	txn.UpdateObservedTimestamp(1, hlc.MaxClockTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
 	if _, pErr := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
@@ -586,7 +586,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().Voters()[1]
+	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[1]
 	unrecognizedLeaseHolder := roachpb.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
@@ -642,7 +642,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 			g := makeGossip(t, stopper, rpcContext)
-			for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 				require.NoError(t, g.AddInfoProto(
 					gossip.MakeNodeIDKey(n.NodeID),
 					newNodeDesc(n.NodeID),
@@ -823,7 +823,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 		require.NoError(t, g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
 			newNodeDesc(n.NodeID),
@@ -2180,20 +2180,20 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(sender kv.Sender, fakeTime hlc.Timestamp) {
+	doCheck := func(sender kv.Sender, fakeTime hlc.ClockTimestamp) {
 		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
 		_, err := kv.SendWrapped(context.Background(), ds, put)
 		if err != nil && err != expectedErr {
 			t.Fatal(err)
 		}
-		newTime := ds.clock.Now()
+		newTime := ds.clock.NowAsClockTimestamp()
 		if newTime.Less(fakeTime) {
 			t.Fatalf("clock was not advanced: expected >= %s; got %s", fakeTime, newTime)
 		}
 	}
 
 	// Test timestamp propagation on valid BatchResults.
-	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0).UnsafeToClockTimestamp()
 	replyNormal := kv.SenderFunc(
 		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			rb := args.CreateReply()
@@ -2203,7 +2203,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 	doCheck(replyNormal, fakeTime)
 
 	// Test timestamp propagation on errors.
-	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0).UnsafeToClockTimestamp()
 	replyError := kv.SenderFunc(
 		func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			pErr := expectedErr
@@ -4329,17 +4329,17 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 		br := &roachpb.BatchResponse{}
 		switch call {
 		case 0:
-			expRepl := desc1.Replicas().All()[0]
+			expRepl := desc1.Replicas().Descriptors()[0]
 			require.Equal(t, expRepl, ba.Replica)
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc1.Replicas().All()[1]},
+				Lease: &roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
 			})
 		case 1:
-			expRep := desc1.Replicas().All()[1]
+			expRep := desc1.Replicas().Descriptors()[1]
 			require.Equal(t, ba.Replica, expRep)
 			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
 		case 2:
-			expRep := desc2.Replicas().All()[0]
+			expRep := desc2.Replicas().Descriptors()[0]
 			require.Equal(t, ba.Replica, expRep)
 			br = ba.CreateReply()
 		default:
@@ -4420,7 +4420,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 		br := &roachpb.BatchResponse{}
 		if call == 0 {
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc.Replicas().All()[1]},
+				Lease: &roachpb.Lease{Replica: desc.Replicas().Descriptors()[1]},
 			})
 		} else {
 			br.Error = roachpb.NewError(&roachpb.ConditionFailedError{})
@@ -4449,7 +4449,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc: desc,
 		Lease: roachpb.Lease{
-			Replica: desc.Replicas().All()[0],
+			Replica: desc.Replicas().Descriptors()[0],
 		},
 	})
 	var ba roachpb.BatchRequest

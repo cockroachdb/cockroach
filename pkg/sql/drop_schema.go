@@ -63,7 +63,8 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		}
 		scName := schema.Schema()
 
-		db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
+		_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+			tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return nil, err
 		}
@@ -168,11 +169,16 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	// in the same transaction as table descriptor update.
 	for _, schemaToDelete := range n.d.schemasToDelete {
 		sc := schemaToDelete.schema
+		qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, sc.Desc)
+		if err != nil {
+			return err
+		}
+
 		if err := params.p.logEvent(params.ctx,
 			sc.ID,
-			// TODO(knz): This is missing some details about the database.
-			// See: https://github.com/cockroachdb/cockroach/issues/57738
-			&eventpb.DropSchema{SchemaName: sc.Name}); err != nil {
+			&eventpb.DropSchema{
+				SchemaName: qualifiedSchemaName.String(),
+			}); err != nil {
 			return err
 		}
 	}

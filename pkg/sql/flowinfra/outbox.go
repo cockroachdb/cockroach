@@ -161,14 +161,15 @@ func (m *Outbox) flush(ctx context.Context) error {
 		return nil
 	}
 	msg := m.encoder.FormMessage(ctx)
-	if m.statsCollectionEnabled {
-		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
-	}
 
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
 	}
 	sendErr := m.stream.Send(msg)
+	if m.statsCollectionEnabled {
+		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
+		m.stats.NetTx.MessagesSent.Add(1)
+	}
 	for _, rpm := range msg.Data.Metadata {
 		if metricsMeta, ok := rpm.Value.(*execinfrapb.RemoteProducerMetadata_Metrics_); ok {
 			metricsMeta.Metrics.Release()
@@ -216,9 +217,9 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
 	}
-	// spanFinished specifies whether we called tracing.FinishSpan on the span.
-	// Some code paths (e.g. stats collection) need to prematurely call
-	// FinishSpan to get trace data.
+	// spanFinished specifies whether we've Finish()-ed the span. Some code
+	// paths (e.g. stats collection) need to prematurely call it to get trace
+	// data.
 	spanFinished := false
 	defer func() {
 		if !spanFinished {

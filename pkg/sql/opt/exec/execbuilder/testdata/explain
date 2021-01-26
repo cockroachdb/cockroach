@@ -576,7 +576,7 @@ vectorized: true
 • render
 │ columns: ("?column?")
 │ estimated row count: 1
-│ render 0: last_value
+│ render ?column?: last_value
 │
 └── • sequence select
       columns: (last_value, log_cnt, is_called)
@@ -873,8 +873,8 @@ vectorized: true
 • render
 │ columns: (z int, v int)
 │ estimated row count: 0
-│ render 0: ((count)[int] * (2)[int])[int]
-│ render 1: (v)[int]
+│ render z: ((count)[int] * (2)[int])[int]
+│ render v: (v)[int]
 │
 └── • norows
       columns: (v int, count int)
@@ -921,9 +921,9 @@ vectorized: true
 └── • render
     │ columns: (k int, v int, v_new int)
     │ estimated row count: 333 (missing stats)
-    │ render 0: ((k)[int] + (1)[int])[int]
-    │ render 1: (k)[int]
-    │ render 2: (v)[int]
+    │ render v_new: ((k)[int] + (1)[int])[int]
+    │ render k: (k)[int]
+    │ render v: (v)[int]
     │
     └── • filter
         │ columns: (k int, v int)
@@ -1411,23 +1411,43 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: primary, u_v_key
 │
-└── • filter
-    │ filter: k IS NULL
+└── • lookup join (anti)
+    │ table: u@u_v_key
+    │ equality: (column2) = (v)
+    │ equality cols are key
     │
-    └── • lookup join (left outer)
-        │ table: u@u_v_key
-        │ equality: (column2) = (v)
-        │ equality cols are key
+    └── • cross join (anti)
         │
-        └── • filter
-            │ filter: k IS NULL
-            │
-            └── • cross join (left outer)
-                │
-                ├── • values
-                │     size: 2 columns, 1 row
-                │
-                └── • scan
-                      missing stats
-                      table: u@primary
-                      spans: [/1 - /1]
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: u@primary
+              spans: [/1 - /1]
+
+# Make sure EXPLAIN (VERBOSE) works when there is a constrained scan of a
+# virtual table (#58193).
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+query T
+EXPLAIN (VERBOSE) SELECT attnum FROM pg_attribute WHERE attrelid = 'ab'::regclass AND attname = 'b';
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (attnum)
+│ estimated row count: 1 (missing stats)
+│
+└── • filter
+    │ columns: (attrelid, attname, attnum)
+    │ estimated row count: 1 (missing stats)
+    │ filter: attname = 'b'
+    │
+    └── • virtual table
+          columns: (attrelid, attname, attnum)
+          estimated row count: 10 (missing stats)
+          table: pg_attribute@pg_attribute_attrelid_idx
+          spans: [/ab - /ab]

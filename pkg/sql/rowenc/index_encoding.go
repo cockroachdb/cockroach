@@ -41,8 +41,8 @@ import (
 func MakeIndexKeyPrefix(
 	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
 ) []byte {
-	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
-		ancestor := &i.Interleave.Ancestors[0]
+	if i, err := desc.FindIndexWithID(indexID); err == nil && i.NumInterleaveAncestors() > 0 {
+		ancestor := i.GetInterleaveAncestor(0)
 		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
 	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
@@ -216,7 +216,7 @@ func MakeSpanFromEncDatums(
 	alloc *DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
+	startKey, complete, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -358,7 +358,7 @@ func NeededColumnFamilyIDs(
 		return nil
 	})
 	if family0 == nil {
-		panic("column family 0 not found")
+		panic(errors.AssertionFailedf("column family 0 not found"))
 	}
 
 	// If all the needed families are nullable, we also need family 0 as a
@@ -400,7 +400,7 @@ func SplitSpanIntoSeparateFamilies(
 	return appendTo
 }
 
-// makeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
+// MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
 // encodings of the given EncDatum values. The values, types, and dirs
 // parameters should be specified in the same order as the index key columns and
 // may be a prefix. The complete return value is true if the resultant key
@@ -410,7 +410,7 @@ func SplitSpanIntoSeparateFamilies(
 // in place of the family id (a varint) to signal the next component of the
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
-func makeKeyFromEncDatums(
+func MakeKeyFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
@@ -546,7 +546,7 @@ func DecodeIndexKeyPrefix(
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
-	interleaves := append([]descpb.IndexDescriptor{*desc.GetPrimaryIndex()}, desc.GetPublicNonPrimaryIndexes()...)
+	interleaves := append(make([]catalog.Index, 0, len(desc.ActiveIndexes())), desc.ActiveIndexes()...)
 
 	for component := 0; ; component++ {
 		var tableID descpb.ID
@@ -561,9 +561,9 @@ func DecodeIndexKeyPrefix(
 		}
 
 		for i := len(interleaves) - 1; i >= 0; i-- {
-			if len(interleaves[i].Interleave.Ancestors) <= component ||
-				interleaves[i].Interleave.Ancestors[component].TableID != tableID ||
-				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
+			if interleaves[i].NumInterleaveAncestors() <= component ||
+				interleaves[i].GetInterleaveAncestor(component).TableID != tableID ||
+				interleaves[i].GetInterleaveAncestor(component).IndexID != indexID {
 
 				// This component, and thus this interleave, doesn't match what was
 				// decoded, remove it.
@@ -578,7 +578,7 @@ func DecodeIndexKeyPrefix(
 
 		// Anything left has the same SharedPrefixLen at index `component`, so just
 		// use the first one.
-		for i := uint32(0); i < interleaves[0].Interleave.Ancestors[component].SharedPrefixLen; i++ {
+		for i := uint32(0); i < interleaves[0].GetInterleaveAncestor(component).SharedPrefixLen; i++ {
 			l, err := encoding.PeekLength(key)
 			if err != nil {
 				return 0, nil, err
@@ -1364,21 +1364,22 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
-	indexBoundAccount mon.BoundAccount,
-) ([]IndexEntry, error) {
+	indexBoundAccount *mon.BoundAccount,
+) ([]IndexEntry, int64, error) {
+	var memUsedEncodingSecondaryIdxs int64
 	if len(secondaryIndexEntries) > 0 {
-		panic("Length of secondaryIndexEntries was non-zero")
+		panic(errors.AssertionFailedf("length of secondaryIndexEntries was non-zero"))
 	}
 
-	if indexBoundAccount.Monitor() == nil {
-		panic("Memory monitor passed to EncodeSecondaryIndexes was nil")
+	if indexBoundAccount == nil || indexBoundAccount.Monitor() == nil {
+		panic(errors.AssertionFailedf("memory monitor passed to EncodeSecondaryIndexes was nil"))
 	}
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
-			return secondaryIndexEntries, err
+			return secondaryIndexEntries, 0, err
 		}
 		// Normally, each index will have exactly one entry. However, inverted
 		// indexes can have 0 or >1 entries, as well as secondary indexes which
@@ -1390,22 +1391,32 @@ func EncodeSecondaryIndexes(
 		// in capacity. Therefore, we must account for another
 		// cap(secondaryIndexEntries) in the index memory account.
 		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
-			if err := indexBoundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(secondaryIndexEntries))); err != nil {
-				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
+			resliceSize := sizeOfIndexEntry * int64(cap(secondaryIndexEntries))
+			if err := indexBoundAccount.Grow(ctx, resliceSize); err != nil {
+				return nil, 0, errors.Wrap(err,
+					"failed to re-slice index entries buffer")
 			}
+			memUsedEncodingSecondaryIdxs += resliceSize
 		}
 
 		// The index keys can be large and so we must account for them in the index
 		// memory account.
+		// In some cases eg: STORING indexes, the size of the value can also be
+		// non-trivial.
 		for _, index := range entries {
 			if err := indexBoundAccount.Grow(ctx, int64(len(index.Key))); err != nil {
-				return nil, errors.Wrap(err, "failed to allocate space for index keys")
+				return nil, 0, errors.Wrap(err, "failed to allocate space for index keys")
 			}
+			memUsedEncodingSecondaryIdxs += int64(len(index.Key))
+			if err := indexBoundAccount.Grow(ctx, int64(len(index.Value.RawBytes))); err != nil {
+				return nil, 0, errors.Wrap(err, "failed to allocate space for index values")
+			}
+			memUsedEncodingSecondaryIdxs += int64(len(index.Value.RawBytes))
 		}
 
 		secondaryIndexEntries = append(secondaryIndexEntries, entries...)
 	}
-	return secondaryIndexEntries, nil
+	return secondaryIndexEntries, memUsedEncodingSecondaryIdxs, nil
 }
 
 // IndexKeyEquivSignature parses an index key if and only if the index key

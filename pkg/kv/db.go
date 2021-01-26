@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -650,10 +649,10 @@ func (db *DB) AdminChangeReplicas(
 // AdminRelocateRange relocates the replicas for a range onto the specified
 // list of stores.
 func (db *DB) AdminRelocateRange(
-	ctx context.Context, key interface{}, targets []roachpb.ReplicationTarget,
+	ctx context.Context, key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) error {
 	b := &Batch{}
-	b.adminRelocateRange(key, targets)
+	b.adminRelocateRange(key, voterTargets, nonVoterTargets)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -678,6 +677,16 @@ func (db *DB) AddSSTable(
 ) error {
 	b := &Batch{}
 	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// Migrate is used instruct all ranges overlapping with the provided keyspace to
+// exercise any relevant (below-raft) migrations in order for its range state to
+// conform to what's needed by the specified version. It's a core primitive used
+// in our migrations infrastructure to phase out legacy code below raft.
+func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roachpb.Version) error {
+	b := &Batch{}
+	b.migrate(begin, end, version)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -782,7 +791,6 @@ func (db *DB) sendUsingSender(
 		ba.UserPriority = db.ctx.UserPriority
 	}
 
-	tracing.AnnotateTrace()
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {

@@ -13,10 +13,10 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/cmux",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/net/http2",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_cmux//:cmux",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_x_net//http2",
     ],
 )
 

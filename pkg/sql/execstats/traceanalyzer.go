@@ -11,7 +11,6 @@
 package execstats
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
 )
 
 // processorStats contains stats for a specific processor extracted from a trace.
@@ -92,6 +90,7 @@ type NodeLevelStats struct {
 	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
 	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
 	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
+	NetworkMessagesGroupedByNode  map[roachpb.NodeID]int64
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
@@ -101,6 +100,7 @@ type QueryLevelStats struct {
 	KVBytesRead      int64
 	KVRowsRead       int64
 	KVTime           time.Duration
+	NetworkMessages  int64
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -130,55 +130,34 @@ func MakeTraceAnalyzer(flowMetadata *FlowMetadata) *TraceAnalyzer {
 // If makeDeterministic is set, statistics that can vary from run to run are set
 // to fixed values; see ComponentStats.MakeDeterministic.
 func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
+	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
 	// Annotate the maps with stats extracted from the trace.
-	for _, span := range trace {
-		if span.Stats == nil {
-			// No stats to unmarshal (e.g. noop processors at time of writing).
-			continue
-		}
-
-		var stats execinfrapb.ComponentStats
-		if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
-			return errors.Wrap(err, "unable to unmarshal in TraceAnalyzer")
-		}
-		if makeDeterministic {
-			stats.MakeDeterministic()
-		}
-
-		// Get the processor or stream id for this span. If neither exists, this
-		// span doesn't belong to a processor or stream.
-		if pid, ok := span.Tags[execinfrapb.ProcessorIDTagKey]; ok {
-			stringID := pid
-			id, err := strconv.Atoi(stringID)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span processor ID tag in TraceAnalyzer")
-			}
+	for component, componentStats := range m {
+		switch component.Type {
+		case execinfrapb.ComponentID_PROCESSOR:
+			id := component.ID
 			processorStats := a.processorStats[execinfrapb.ProcessorID(id)]
 			if processorStats == nil {
 				return errors.Errorf("trace has span for processor %d but the processor does not exist in the physical plan", id)
 			}
-			processorStats.stats = &stats
-		} else if sid, ok := span.Tags[execinfrapb.StreamIDTagKey]; ok {
-			stringID := sid
-			id, err := strconv.Atoi(stringID)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span processor ID tag in TraceAnalyzer")
-			}
+			processorStats.stats = componentStats
+
+		case execinfrapb.ComponentID_STREAM:
+			id := component.ID
 			streamStats := a.streamStats[execinfrapb.StreamID(id)]
 			if streamStats == nil {
 				return errors.Errorf("trace has span for stream %d but the stream does not exist in the physical plan", id)
 			}
-			streamStats.stats = &stats
-		} else if fid, ok := span.Tags[execinfrapb.FlowIDTagKey]; ok {
-			uuid, err := uuid.FromString(fid)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span flow ID tag in TraceAnalyzer")
+			streamStats.stats = componentStats
+
+		case execinfrapb.ComponentID_FLOW:
+			if id := component.FlowID.UUID; id != (uuid.UUID{}) {
+				flowStats := a.flowStats[execinfrapb.FlowID{UUID: id}]
+				if flowStats == nil {
+					return errors.Errorf("trace has span for flow %s but the flow does not exist in the physical plan", id)
+				}
+				flowStats.stats = append(flowStats.stats, componentStats)
 			}
-			flowStats := a.flowStats[execinfrapb.FlowID{UUID: uuid}]
-			if flowStats == nil {
-				return errors.Errorf("trace has span for flow %s but the flow does not exist in the physical plan", fid)
-			}
-			flowStats.stats = append(flowStats.stats, &stats)
 		}
 	}
 
@@ -196,6 +175,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
 		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
 		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
+		NetworkMessagesGroupedByNode:  make(map[roachpb.NodeID]int64),
 	}
 	var errs error
 
@@ -235,6 +215,13 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] = memUsage
 			}
 		}
+
+		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
+		if err != nil {
+			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
+		} else {
+			a.nodeLevelStats.NetworkMessagesGroupedByNode[stats.originNodeID] += numMessages
+		}
 	}
 
 	// Process flowStats.
@@ -262,6 +249,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVBytesRead:      int64(0),
 		KVRowsRead:       int64(0),
 		KVTime:           time.Duration(0),
+		NetworkMessages:  int64(0),
 	}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
@@ -285,6 +273,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
 		a.queryLevelStats.KVTime += kvTime
 	}
+
+	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {
+		a.queryLevelStats.NetworkMessages += networkMessages
+	}
 	return errs
 }
 
@@ -304,6 +296,24 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, er
 		return int64(v.NetTx.BytesSent.Value()), nil
 	}
 	return 0, errors.Errorf("could not get network bytes; neither BytesReceived and BytesSent is set")
+}
+
+func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (int64, error) {
+	// We expect exactly one of MessagesReceived and MessagesSent to be set.
+	// It may seem like we are double-counting everything (from both the send and
+	// the receive side) but in practice only one side of each stream presents
+	// statistics (specifically the sending side in the row engine, and the
+	// receiving side in the vectorized engine).
+	if v.NetRx.MessagesReceived.HasValue() {
+		if v.NetTx.MessagesSent.HasValue() {
+			return 0, errors.Errorf("could not get network messages; both MessagesReceived and MessagesSent are set")
+		}
+		return int64(v.NetRx.MessagesReceived.Value()), nil
+	}
+	if v.NetTx.MessagesSent.HasValue() {
+		return int64(v.NetTx.MessagesSent.Value()), nil
+	}
+	return 0, errors.Errorf("could not get network messages; neither MessagesReceived and MessagesSent is set")
 }
 
 // GetNodeLevelStats returns the node level stats calculated and stored in the TraceAnalyzer.

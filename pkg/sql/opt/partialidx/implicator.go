@@ -140,11 +140,15 @@ type constraintCacheItem struct {
 }
 
 // Init initializes an Implicator with the given factory, metadata, and eval
-// context.
+// context. It also resets the constraint cache.
 func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.EvalContext) {
-	im.f = f
-	im.md = md
-	im.evalCtx = evalCtx
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*im = Implicator{
+		f:       f,
+		md:      md,
+		evalCtx: evalCtx,
+	}
 }
 
 // ClearCache empties the Implicator's constraint cache.

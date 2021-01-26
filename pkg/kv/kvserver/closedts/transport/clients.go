@@ -115,7 +115,7 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 	// If our client made it into the map, start it. The point in inserting
 	// before starting is to be able to collect RangeIDs immediately while never
 	// blocking callers.
-	pr.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := pr.cfg.Stopper.RunAsyncTask(ctx, "ct-client", func(ctx context.Context) {
 		defer pr.clients.Delete(int64(nodeID))
 
 		c, err := pr.cfg.Dialer.Dial(ctx, nodeID)
@@ -165,7 +165,9 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 				Requested: slice,
 			}
 		}
-	})
+	}); err != nil {
+		pr.clients.Delete(int64(nodeID))
+	}
 
 	return cl
 }

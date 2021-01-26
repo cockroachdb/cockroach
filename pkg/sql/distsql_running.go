@@ -96,9 +96,9 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
 	for i := 0; i < numRunners; i++ {
-		dsp.stopper.RunWorker(ctx, func(context.Context) {
+		_ = dsp.stopper.RunAsyncTask(ctx, "distslq-runner", func(context.Context) {
 			runnerChan := dsp.runnerChan
-			stopChan := dsp.stopper.ShouldStop()
+			stopChan := dsp.stopper.ShouldQuiesce()
 			for {
 				select {
 				case req := <-runnerChan:
@@ -224,12 +224,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
 	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
-	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return ctx, flow, nil
+	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 }
 
 // Run executes a physical plan. The plan should have been finalized using
@@ -530,7 +525,7 @@ var receiverSyncPool = sync.Pool{
 // timestamp. Usually wraps an hlc.Clock.
 type clockUpdater interface {
 	// Update updates this ClockUpdater with the observed hlc.Timestamp.
-	Update(observedTS hlc.Timestamp)
+	Update(observedTS hlc.ClockTimestamp)
 }
 
 // MakeDistSQLReceiver creates a DistSQLReceiver.
@@ -644,8 +639,7 @@ func (r *DistSQLReceiver) Push(
 		if len(meta.TraceData) > 0 {
 			span := tracing.SpanFromContext(r.ctx)
 			if span == nil {
-				r.resultWriter.SetError(
-					errors.New("trying to ingest remote spans but there is no recording span set up"))
+				// Nothing to do.
 			} else if err := span.ImportRemoteSpans(meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}

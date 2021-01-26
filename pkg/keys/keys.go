@@ -286,6 +286,11 @@ func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLastGCKey()
 }
 
+// RangeVersionKey returns a system-local for the range version.
+func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeVersionKey()
+}
+
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
@@ -597,7 +602,7 @@ func SpanAddr(span roachpb.Span) (roachpb.RSpan, error) {
 // NOTE(andrei): This function has special handling for RKeyMin, but it does not
 // handle RKeyMin.Next() properly: RKeyMin.Next() maps for a Meta2 key, rather
 // than mapping to RKeyMin. This issue is not trivial to fix, because there's
-// code that has come to rely on it: sql.ScanMetaKVs(RKeyMin,RKeyMax) ends up
+// code that has come to rely on it: kvclient.ScanMetaKVs(RKeyMin,RKeyMax) ends up
 // scanning from RangeMetaKey(RkeyMin.Next()), and what it wants is to scan only
 // the Meta2 ranges. Even if it were fine with also scanning Meta1, there's
 // other problems: a scan from RKeyMin is rejected by the store because it mixes
@@ -962,6 +967,11 @@ func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
 // RangeLastGCKey returns a system-local key for the last GC.
 func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
+}
+
+// RangeVersionKey returns a system-local key for the range version.
+func (b RangeIDPrefixBuf) RangeVersionKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeVersionSuffix...)
 }
 
 // RangeTombstoneKey returns a system-local key for a range tombstone.

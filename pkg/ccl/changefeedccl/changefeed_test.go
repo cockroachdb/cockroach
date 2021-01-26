@@ -1468,8 +1468,8 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
-			t.Errorf(`expected ""drop" was dropped or truncated" error got: %+v`, err)
+		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped`) {
+			t.Errorf(`expected ""drop" was dropped" error got: %+v`, err)
 		}
 		assertFailuresCounter(t, metrics, 4)
 	}
@@ -3029,4 +3029,45 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 		`foo: [9]->{"after": {"k": 9, "v": 1}}`,
 		`foo: [10]->{"after": {"k": 10, "v": 0}}`,
 	})
+}
+
+// Primary key changes are not currently supported by changefeeds. There used
+// to be no detection but rather they would fail with an inscrutible error or
+// not all, just swallowing writes.
+func TestChangefeedPrimaryKeyChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		// ALTER PRIMARY KEY is totally busted as of writing this.
+		// The change will occur and all future drops will be hidden
+		// until the data gets GC'd. Assert that we don't see these updates.
+		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+		_, err := foo.Next()
+		require.Regexp(t, "\"foo\" primary key changed", err)
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 }

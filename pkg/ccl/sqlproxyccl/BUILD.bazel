@@ -1,16 +1,18 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sqlproxyccl",
     srcs = [
+        "authentication.go",
         "backend_dialer.go",
         "error.go",
-        "errorcode_string.go",
         "frontend_admitter.go",
         "idle_disconnect_connection.go",
         "metrics.go",
         "proxy.go",
         "server.go",
+        ":gen-errorcode-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
     visibility = ["//visibility:public"],
@@ -21,14 +23,15 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/jackc/pgproto3/v2:pgproto3",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgproto3_v2//:pgproto3",
     ],
 )
 
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "authentication_test.go",
         "frontend_admitter_test.go",
         "idle_disconnect_connection_test.go",
         "main_test.go",
@@ -42,15 +45,23 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/jackc/pgconn",
-        "//vendor/github.com/jackc/pgproto3/v2:pgproto3",
-        "//vendor/github.com/jackc/pgx/v4:pgx",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgproto3_v2//:pgproto3",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-errorcode-stringer",
+    file = "error.go",
+    typ = "ErrorCode",
 )

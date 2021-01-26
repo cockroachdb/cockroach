@@ -25,18 +25,15 @@ func init() {
 }
 
 func declareKeysRequestLease(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As
 	// such, the request does not actually acquire latches over these spans
 	// (see concurrency.shouldAcquireLatches). However, we continue to
 	// declare the keys in order to appease SpanSet assertions under race.
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // RequestLease sets the range lease for this range. The command fails
@@ -59,18 +56,9 @@ func RequestLease(
 		Requested: args.Lease,
 	}
 
-	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-	// no reason this wouldn't work in principle, but it seems inadvisable. In
-	// particular, learners can't become raft leaders, so we wouldn't be able to
-	// co-locate the leaseholder + raft leader, which is going to affect tail
-	// latencies. Additionally, as of the time of writing, learner replicas are
-	// only used for a short time in replica addition, so it's not worth working
-	// out the edge cases. If we decide to start using long-lived learners at some
-	// point, that math may change.
-	//
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := checkCanReceiveLease(&args.Lease, cArgs.EvalCtx); err != nil {
+	if err := CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		rErr.Message = err.Error()
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
@@ -118,7 +106,7 @@ func RequestLease(
 		// The bug prevented with this is unlikely to occur in practice
 		// since earlier commands usually apply before this lease will.
 		if ts := args.MinProposedTS; isExtension && ts != nil {
-			effectiveStart.Forward(*ts)
+			effectiveStart.Forward(ts.ToTimestamp())
 		}
 
 	} else if prevLease.Type() == roachpb.LeaseExpiration {

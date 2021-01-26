@@ -100,14 +100,6 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 // counting each "txn coordinator send" operation.
 func countKvBatchRequestsInRecording(r tracing.Recording) int {
 	root := r[0]
-
-	// Find the topmost "flow" span to start traversing from.
-	for _, sp := range r {
-		if sp.ParentSpanID == root.SpanID && sp.Operation == "flow" {
-			return countKvBatchRequestsInSpan(r, sp)
-		}
-	}
-
 	return countKvBatchRequestsInSpan(r, root)
 }
 

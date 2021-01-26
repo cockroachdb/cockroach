@@ -256,7 +256,7 @@ func createTestStoreWithoutStart(
 	if err := WriteInitialClusterData(
 		context.Background(), eng, kvs, /* initialValues */
 		clusterversion.TestingBinaryVersion,
-		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		if err := WriteInitialClusterData(
 			ctx, eng, kvs /* initialValues */, clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
+			1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 		); err != nil {
 			t.Errorf("failure to create first range: %+v", err)
 		}
@@ -1340,7 +1340,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0)
+	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0).WithSynthetic(false)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -1386,7 +1386,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
+	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0).WithSynthetic(false)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Errorf("unexpected error: %v", pErr)
@@ -1424,7 +1424,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	err = stateloader.WriteInitialRangeState(ctx, store.engine, *rhsDesc)
+	err = stateloader.WriteInitialRangeState(ctx, store.engine, *rhsDesc, roachpb.Version{})
 	require.NoError(t, err)
 	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
 	require.NoError(t, err)
@@ -1854,11 +1854,12 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			}
 
 			// Determine the timestamp to read at.
-			readTs := store.cfg.Clock.Now()
+			clockTs := store.cfg.Clock.NowAsClockTimestamp()
+			readTs := clockTs.ToTimestamp()
 			// Give the pusher a previous observed timestamp equal to this read
 			// timestamp. This ensures that the pusher doesn't need to push the
 			// intent any higher just to push it out of its uncertainty window.
-			pusher.UpdateObservedTimestamp(store.Ident.NodeID, readTs)
+			pusher.UpdateObservedTimestamp(store.Ident.NodeID, clockTs)
 
 			// If the pushee is already pushed, update the transaction record.
 			if tc.pusheeAlreadyPushed {
@@ -2929,7 +2930,9 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	if err := stateloader.WriteInitialRangeState(ctx, s.Engine(), uninitDesc); err != nil {
+	if err := stateloader.WriteInitialRangeState(
+		ctx, s.Engine(), uninitDesc, roachpb.Version{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)

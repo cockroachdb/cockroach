@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "tree",
@@ -27,7 +28,6 @@ go_library(
         "constants.go",
         "copy.go",
         "create.go",
-        "createtypevariety_string.go",
         "datum.go",
         "decimal.go",
         "delete.go",
@@ -74,7 +74,6 @@ go_library(
         "set.go",
         "show.go",
         "split.go",
-        "statementtype_string.go",
         "stmt.go",
         "survival_goal.go",
         "table_name.go",
@@ -96,6 +95,8 @@ go_library(
         "window_funcs_util.go",
         "with.go",
         "zone.go",
+        ":gen-createtypevariety-stringer",  # keep
+        ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
@@ -111,7 +112,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/lex",
-        "//pkg/sql/lexbase:lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
@@ -144,12 +145,12 @@ go_library(
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/google/go-cmp/cmp",
-        "//vendor/github.com/lib/pq/oid",
-        "//vendor/golang.org/x/text/collate",
-        "//vendor/golang.org/x/text/language",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
+        "@com_github_lib_pq//oid",
+        "@org_golang_x_text//collate",
+        "@org_golang_x_text//language",
     ],
 )
 
@@ -198,6 +199,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/optbuilder",
@@ -218,11 +220,23 @@ go_test(
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/lib/pq/oid",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_lib_pq//oid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-createtypevariety-stringer",
+    file = "create.go",
+    typ = "CreateTypeVariety",
+)
+
+stringer(
+    name = "gen-statementtype-stringer",
+    file = "stmt.go",
+    typ = "StatementType",
 )

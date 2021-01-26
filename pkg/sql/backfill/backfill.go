@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,7 +125,7 @@ func (cb *ColumnBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
@@ -253,9 +254,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added)+len(cb.dropped))
 	requestedCols = append(requestedCols, tableDesc.Columns...)
 	requestedCols = append(requestedCols, cb.added...)
+	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
 		ctx,
 		txn,
@@ -286,7 +288,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
+		traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -373,6 +376,15 @@ func ConvertBackfillError(ctx context.Context, tableDesc *tabledesc.Immutable, b
 	return row.ConvertBatchError(ctx, tabledesc.NewImmutable(*desc.TableDesc()), b)
 }
 
+type muBoundAccount struct {
+	// mu protects the boundAccount which may be updated asynchronously during
+	// ingestion and index creation.
+	syncutil.Mutex
+	// boundAccount is associated with mon and is used to track allocations during
+	// an	index backfill.
+	boundAccount mon.BoundAccount
+}
+
 // IndexBackfiller is capable of backfilling all the added index.
 type IndexBackfiller struct {
 	backfiller
@@ -395,10 +407,8 @@ type IndexBackfiller struct {
 	indexesToEncode []*descpb.IndexDescriptor
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
-	mon *mon.BytesMonitor
-	// boundAccount is associated with mon and is used to track allocations during
-	// an	index backfill.
-	boundAccount mon.BoundAccount
+	mon            *mon.BytesMonitor
+	muBoundAccount muBoundAccount
 }
 
 // ContainsInvertedIndex returns true if backfilling an inverted index.
@@ -509,15 +519,28 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 func (ib *IndexBackfiller) Close(ctx context.Context) {
 	ib.fetcher.Close(ctx)
 	if ib.mon != nil {
-		ib.boundAccount.Close(ctx)
+		ib.muBoundAccount.Lock()
+		ib.muBoundAccount.boundAccount.Close(ctx)
+		ib.muBoundAccount.Unlock()
 		ib.mon.Stop(ctx)
 	}
 }
 
-// Clear releases the allocations on the IndexBackfiller's bound account,
-// prepping it for reuse.
-func (ib *IndexBackfiller) Clear(ctx context.Context) {
-	ib.boundAccount.Clear(ctx)
+// GrowBoundAccount grows the mutex protected bound account backing the
+// index backfiller.
+func (ib *IndexBackfiller) GrowBoundAccount(ctx context.Context, growBy int64) error {
+	defer ib.muBoundAccount.Unlock()
+	ib.muBoundAccount.Lock()
+	err := ib.muBoundAccount.boundAccount.Grow(ctx, growBy)
+	return err
+}
+
+// ShrinkBoundAccount shrinks the mutex protected bound account backing the
+// index backfiller.
+func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int64) {
+	defer ib.muBoundAccount.Unlock()
+	ib.muBoundAccount.Lock()
+	ib.muBoundAccount.boundAccount.Shrink(ctx, shrinkBy)
 }
 
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
@@ -564,7 +587,7 @@ func (ib *IndexBackfiller) initIndexes(desc *tabledesc.Immutable) util.FastIntSe
 			for i := range ib.cols {
 				id := ib.cols[i].ID
 				if idx.ContainsColumnID(id) ||
-					idx.GetEncodingType(desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding {
+					idx.GetEncodingType(desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}
@@ -601,7 +624,7 @@ func (ib *IndexBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       ib.colIdxMap,
 		Cols:            ib.cols,
 		ValNeededForCol: valNeededForCol,
@@ -609,10 +632,10 @@ func (ib *IndexBackfiller) init(
 
 	// Create a bound account associated with the index backfiller monitor.
 	if mon == nil {
-		return errors.AssertionFailedf("no memory monitor linked to IndexBacfiller during init")
+		return errors.AssertionFailedf("no memory monitor linked to IndexBackfiller during init")
 	}
 	ib.mon = mon
-	ib.boundAccount = mon.MakeBoundAccount()
+	ib.muBoundAccount.boundAccount = mon.MakeBoundAccount()
 
 	return ib.fetcher.Init(
 		evalCtx.Context,
@@ -630,8 +653,10 @@ func (ib *IndexBackfiller) init(
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
 // provided, and builds all the added indexes.
 // The method accounts for the memory used by the index entries for this chunk
-// using the memory monitor associated with ib. It is the callers responsibility
-// to clear the associated bound account when appropriate.
+// using the memory monitor associated with ib and returns the amount of memory
+// that needs to be freed once the returned IndexEntry slice is freed.
+// It is the callers responsibility to clear the associated bound account when
+// appropriate.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -639,19 +664,20 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
-) ([]rowenc.IndexEntry, roachpb.Key, error) {
+) ([]rowenc.IndexEntry, roachpb.Key, int64, error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(rowenc.IndexEntry{}))
+	var memUsedPerChunk int64
 
 	indexEntriesInChunkInitialBufferSize :=
 		sizeOfIndexEntry * initBufferSize * int64(len(ib.added))
-	if err := ib.boundAccount.Grow(ctx,
-		indexEntriesInChunkInitialBufferSize); err != nil {
-		return nil, nil, errors.Wrap(err,
+	if err := ib.GrowBoundAccount(ctx, indexEntriesInChunkInitialBufferSize); err != nil {
+		return nil, nil, 0, errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of all rows in the chunk")
 	}
+	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
 	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	// Get the next set of rows.
@@ -663,10 +689,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := ib.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, initBufferSize, traceKV,
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, initBufferSize,
+		traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	iv := &schemaexpr.RowIndexedVarContainer{
@@ -676,15 +703,16 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ib.evalCtx.IVarContainer = iv
 
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
-	if err := ib.boundAccount.Grow(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
-		return nil, nil, errors.Wrap(err,
+	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
+		return nil, nil, 0, errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of a single row")
 	}
+	memUsedPerChunk += indexEntriesPerRowInitialBufferSize
 	buffer := make([]rowenc.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		if encRow == nil {
 			break
@@ -693,7 +721,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.rowVals = make(tree.Datums, len(encRow))
 		}
 		if err := rowenc.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 
 		iv.CurSourceRow = ib.rowVals
@@ -716,7 +744,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				val, err := texpr.Eval(ib.evalCtx)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, 0, err
 				}
 
 				if val == tree.DBoolTrue {
@@ -731,7 +759,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// subsequent rows and we would then have duplicates in entries on output. Additionally, we do
 		// not want to include empty k/v pairs while backfilling.
 		buffer = buffer[:0]
-		if buffer, err = rowenc.EncodeSecondaryIndexes(
+		// We lock the bound account for the duration of this method as it could
+		// attempt to Grow() it while encoding secondary indexes.
+		var memUsedDuringEncoding int64
+		ib.muBoundAccount.Lock()
+		if buffer, memUsedDuringEncoding, err = rowenc.EncodeSecondaryIndexes(
 			ctx,
 			ib.evalCtx.Codec,
 			tableDesc,
@@ -740,24 +772,36 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.rowVals,
 			buffer,
 			false, /* includeEmpty */
-			ib.boundAccount,
+			&ib.muBoundAccount.boundAccount,
 		); err != nil {
-			return nil, nil, err
+			ib.muBoundAccount.Unlock()
+			return nil, nil, 0, err
 		}
+		ib.muBoundAccount.Unlock()
+		memUsedPerChunk += memUsedDuringEncoding
 
 		// The memory monitor has already accounted for cap(entries). If the number
 		// of index entries are going to cause the entries buffer to re-slice, then
 		// it will very likely double in capacity. Therefore, we must account for
 		// another cap(entries) in the index memory account.
 		if cap(entries)-len(entries) < len(buffer) {
-			if err := ib.boundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(entries))); err != nil {
-				return nil, nil, err
+			resliceSize := sizeOfIndexEntry * int64(cap(entries))
+			if err := ib.GrowBoundAccount(ctx, resliceSize); err != nil {
+				return nil, nil, 0, err
 			}
+			memUsedPerChunk += resliceSize
 		}
 
 		entries = append(entries, buffer...)
 	}
-	return entries, ib.fetcher.Key(), nil
+
+	// We can release the memory which was allocated for `buffer` since all its
+	// contents have been copied to `entries`.
+	shrinkSize := sizeOfIndexEntry * int64(cap(buffer))
+	ib.ShrinkBoundAccount(ctx, shrinkSize)
+	memUsedPerChunk -= shrinkSize
+
+	return entries, ib.fetcher.Key(), memUsedPerChunk, nil
 }
 
 // RunIndexBackfillChunk runs an index backfill over a chunk of the table
@@ -772,7 +816,7 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp,
+	entries, key, memUsedBuildingChunk, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp,
 		chunkSize, traceKV)
 	if err != nil {
 		return nil, err
@@ -796,7 +840,7 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	// After the chunk entries have been written, we must clear the bound account
 	// tracking the memory usage for the chunk.
 	entries = nil
-	ib.Clear(ctx)
+	ib.ShrinkBoundAccount(ctx, memUsedBuildingChunk)
 
 	return key, nil
 }

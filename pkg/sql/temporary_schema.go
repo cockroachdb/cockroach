@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -245,11 +244,10 @@ func cleanupSchemaObjects(
 	for _, tbName := range tbNames {
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.AvoidCached = true
-		d, err := descsCol.GetTableByName(ctx, txn, &tbName, flags)
+		_, desc, err := descsCol.GetImmutableTableByName(ctx, txn, &tbName, flags)
 		if err != nil {
 			return err
 		}
-		desc := d.(*tabledesc.Immutable)
 
 		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName
@@ -587,7 +585,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 
 // Start initializes the background thread which periodically cleans up leftover temporary objects.
 func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stopper) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "object-cleaner", func(ctx context.Context) {
 		nextTick := timeutil.Now()
 		for {
 			nextTickCh := time.After(nextTick.Sub(timeutil.Now()))

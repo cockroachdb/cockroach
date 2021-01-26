@@ -47,7 +47,13 @@ type DetailedIdentity = Identity & {
 };
 
 // createHeaderCell creates and decorates a header cell.
-function createHeaderCell(staleIDs: Set<number>, id: DetailedIdentity, key: string, isMultiple?: boolean, collapsed?: boolean) {
+function createHeaderCell(
+  staleIDs: Set<number>,
+  id: DetailedIdentity,
+  key: string,
+  isMultiple?: boolean,
+  collapsed?: boolean,
+) {
   const node = `n${id.nodeID.toString()}`;
   const className = classNames(
     "latency-table__cell",
@@ -62,46 +68,73 @@ function createHeaderCell(staleIDs: Set<number>, id: DetailedIdentity, key: stri
   );
 }
 
-const generateCollapsedData = (data: [DetailedIdentity[]], rowLength: number) => {
+const generateCollapsedData = (
+  data: [DetailedIdentity[]],
+  rowLength: number,
+) => {
   const collapsedData: Array<DetailedIdentity[]> = [];
   const rows: number[] = [];
   for (let x = 0; x < rowLength; x++) {
     data.forEach((dataItems: DetailedIdentity[], dataIndex: number) => {
       if (!collapsedData[dataIndex]) {
-        collapsedData[dataIndex] = [{...dataItems[0], row: []}];
+        collapsedData[dataIndex] = [{ ...dataItems[0], row: [] }];
         rows.push(data[dataIndex].length);
       }
       const maxValues: DetailedRow[] = [];
-      dataItems.forEach(item => maxValues.push(item.row[x]));
-      collapsedData[dataIndex][0].row.push(maxValues.reduce((prev, current) => (prev.latency === 0 || prev.latency > current.latency) ? prev : current));
+      dataItems.forEach((item) => maxValues.push(item.row[x]));
+      collapsedData[dataIndex][0].row.push(
+        maxValues.reduce((prev, current) =>
+          prev.latency === 0 || prev.latency > current.latency ? prev : current,
+        ),
+      );
     });
   }
-  return collapsedData.map(array => array.map(itemValue => {
-    let rowsCount = 0;
-    const newRow: DetailedRow[] = [];
-    rows.forEach(row => {
-      const rowEach: DetailedRow[] = [];
-      for (let x = 0; x < row; x++) {
-        rowEach.push(itemValue.row[rowsCount + x]);
-      }
-      rowsCount = rowsCount + row;
-      newRow.push(rowEach.reduce((prev, current) => (prev.latency === 0 || prev.latency > current.latency) ? prev : current));
-    });
-    return {...itemValue, row: newRow };
-  }));
+  return collapsedData.map((array) =>
+    array.map((itemValue) => {
+      let rowsCount = 0;
+      const newRow: DetailedRow[] = [];
+      rows.forEach((row) => {
+        const rowEach: DetailedRow[] = [];
+        for (let x = 0; x < row; x++) {
+          rowEach.push(itemValue.row[rowsCount + x]);
+        }
+        rowsCount = rowsCount + row;
+        newRow.push(
+          rowEach.reduce((prev, current) =>
+            prev.latency === 0 || prev.latency > current.latency
+              ? prev
+              : current,
+          ),
+        );
+      });
+      return { ...itemValue, row: newRow };
+    }),
+  );
 };
 
-const renderMultipleHeaders = (displayIdentities: Identity[], collapsed: boolean, nodesSummary: any, staleIDs: Set<number>, nodeId: string, multipleHeader: boolean) => {
+const renderMultipleHeaders = (
+  displayIdentities: Identity[],
+  collapsed: boolean,
+  nodesSummary: any,
+  staleIDs: Set<number>,
+  nodeId: string,
+  multipleHeader: boolean,
+) => {
   const data: any = [];
   let rowLength = 0;
-  const filteredData = displayIdentities.map(identityA => {
+  const filteredData = displayIdentities.map((identityA) => {
     const row: any[] = [];
-    displayIdentities.forEach(identityB => {
+    displayIdentities.forEach((identityB) => {
       const a = nodesSummary.nodeStatusByID[identityA.nodeID].activity;
       const nano = FixLong(a[identityB.nodeID].latency);
       if (identityA.nodeID === identityB.nodeID) {
         row.push({ latency: 0, identityB });
-      } else if (staleIDs.has(identityA.nodeID) || staleIDs.has(identityB.nodeID) || _.isNil(a) || _.isNil(a[identityB.nodeID])) {
+      } else if (
+        staleIDs.has(identityA.nodeID) ||
+        staleIDs.has(identityB.nodeID) ||
+        _.isNil(a) ||
+        _.isNil(a[identityB.nodeID])
+      ) {
         row.push({ latency: -2, identityB });
       } else if (nano.eq(0)) {
         row.push({ latency: -1, identityB });
@@ -111,12 +144,14 @@ const renderMultipleHeaders = (displayIdentities: Identity[], collapsed: boolean
       }
     });
     rowLength = row.length;
-    return {row, ...identityA};
+    return { row, ...identityA };
   });
   filteredData.forEach((value) => {
     const newValue = {
       ...value,
-      title: multipleHeader ? getValueFromString(nodeId, value.locality) : value.locality,
+      title: multipleHeader
+        ? getValueFromString(nodeId, value.locality)
+        : value.locality,
     };
     if (data.length === 0) {
       data[0] = new Array(newValue);
@@ -136,38 +171,51 @@ const renderMultipleHeaders = (displayIdentities: Identity[], collapsed: boolean
 };
 
 const getVerticalLines = (data: [DetailedIdentity[]], index: number) => {
-  // tslint:disable-next-line: no-shadowed-variable
   const values: any = [];
   let currentNumber = 0;
-  data.forEach(array => {
+  data.forEach((array) => {
     currentNumber = currentNumber + array.length;
     values.push(currentNumber);
   });
   return values.includes(index);
 };
 
-const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; identityB: Identity; identityA: DetailedIdentity }, verticalLine: boolean, isMultiple?: boolean, std?: StdDev, collapsed?: boolean) => {
-  const generateClassName = (names: string[]) => classNames(
-    { "latency-table__cell--end": isMultiple },
-    { "latency-table__cell--start": verticalLine },
-    ...names,
-  );
+const getLatencyCell = (
+  {
+    latency,
+    identityB,
+    identityA,
+  }: { latency: number; identityB: Identity; identityA: DetailedIdentity },
+  verticalLine: boolean,
+  isMultiple?: boolean,
+  std?: StdDev,
+  collapsed?: boolean,
+) => {
+  const generateClassName = (names: string[]) =>
+    classNames(
+      { "latency-table__cell--end": isMultiple },
+      { "latency-table__cell--start": verticalLine },
+      ...names,
+    );
   if (latency === 0) {
     return (
       <td
-        className={generateClassName(["latency-table__cell", "latency-table__cell--self"])}
+        className={generateClassName([
+          "latency-table__cell",
+          "latency-table__cell--self",
+        ])}
       />
     );
   }
   if (latency === -1) {
     return (
       <td
-        className={generateClassName(["latency-table__cell", "latency-table__cell--stddev-even"])}
+        className={generateClassName([
+          "latency-table__cell",
+          "latency-table__cell--stddev-even",
+        ])}
       >
-        <Chip
-          title="loading..."
-          type="yellow"
-        />
+        <Chip title="loading..." type="yellow" />
       </td>
     );
   }
@@ -178,27 +226,37 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
     "latency-table__cell--stddev-minus-2":
       std.stddev > 0 && latency < std.stddevMinus2,
     "latency-table__cell--stddev-minus-1":
-      std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
+      std.stddev > 0 &&
+      latency < std.stddevMinus1 &&
+      latency >= std.stddevMinus2,
     "latency-table__cell--stddev-even":
-      std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
+      std.stddev > 0 &&
+      latency >= std.stddevMinus1 &&
+      latency <= std.stddevPlus1,
     "latency-table__cell--stddev-plus-1":
       std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
     "latency-table__cell--stddev-plus-2":
       std.stddev > 0 && latency > std.stddevPlus2,
   });
   const type: any = classNames({
-    "yellow":
-      latency === -2,
-    "green":
-      latency > 0 && std.stddev > 0 && latency < std.stddevMinus2,
-    "lightgreen":
-      latency > 0 && std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
-    "grey":
-      latency > 0 && std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
-    "lightblue":
-      latency > 0 && std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
-    "blue":
-      latency > 0 && std.stddev > 0 && latency > std.stddevPlus2,
+    yellow: latency === -2,
+    green: latency > 0 && std.stddev > 0 && latency < std.stddevMinus2,
+    lightgreen:
+      latency > 0 &&
+      std.stddev > 0 &&
+      latency < std.stddevMinus1 &&
+      latency >= std.stddevMinus2,
+    grey:
+      latency > 0 &&
+      std.stddev > 0 &&
+      latency >= std.stddevMinus1 &&
+      latency <= std.stddevPlus1,
+    lightblue:
+      latency > 0 &&
+      std.stddev > 0 &&
+      latency > std.stddevPlus1 &&
+      latency <= std.stddevPlus2,
+    blue: latency > 0 && std.stddev > 0 && latency > std.stddevPlus2,
   });
   const renderDescription = (data: string) => {
     if (!data) {
@@ -213,27 +271,32 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
   return (
     <td className={className}>
       {collapsed ? (
-        <Chip
-          title={`${latency.toFixed(2)}ms`}
-          type={type}
-        />
+        <Chip title={`${latency.toFixed(2)}ms`} type={type} />
       ) : (
-        <Tooltip overlayClassName="Chip--tooltip" placement="bottom" title={(
-          <div>
-            <div className="Chip--tooltip__nodes">
-              <div className="Chip--tooltip__nodes--item">
-                <p className="Chip--tooltip__nodes--item-title">{`Node ${identityB.nodeID}`}</p>
-                {renderDescription(identityB.locality)}
+        <Tooltip
+          overlayClassName="Chip--tooltip"
+          placement="bottom"
+          title={
+            <div>
+              <div className="Chip--tooltip__nodes">
+                <div className="Chip--tooltip__nodes--item">
+                  <p className="Chip--tooltip__nodes--item-title">{`Node ${identityB.nodeID}`}</p>
+                  {renderDescription(identityB.locality)}
+                </div>
+                <Divider type="vertical" />
+                <div className="Chip--tooltip__nodes--item">
+                  <p className="Chip--tooltip__nodes--item-title">{`Node ${identityA.nodeID}`}</p>
+                  {renderDescription(identityA.locality)}
+                </div>
               </div>
-              <Divider type="vertical" />
-              <div className="Chip--tooltip__nodes--item">
-                <p className="Chip--tooltip__nodes--item-title">{`Node ${identityA.nodeID}`}</p>
-                {renderDescription(identityA.locality)}
-              </div>
+              {latency > 0 && (
+                <p
+                  className={`color--${type} Chip--tooltip__latency`}
+                >{`${latency.toFixed(2)}ms roundtrip`}</p>
+              )}
             </div>
-            {latency > 0 && <p className={`color--${type} Chip--tooltip__latency`}>{`${latency.toFixed(2)}ms roundtrip`}</p>}
-          </div>
-        )}>
+          }
+        >
           <div>
             <Chip
               title={latency > 0 ? latency.toFixed(2) + "ms" : "--"}
@@ -246,8 +309,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
   );
 };
 
-// tslint:disable-next-line: variable-name
-export const Latency: React.SFC <ILatencyProps> = ({
+export const Latency: React.SFC<ILatencyProps> = ({
   displayIdentities,
   staleIDs,
   multipleHeader,
@@ -255,49 +317,100 @@ export const Latency: React.SFC <ILatencyProps> = ({
   nodesSummary,
   std,
   node_id,
-  }) => {
-    const data = renderMultipleHeaders(displayIdentities, collapsed, nodesSummary, staleIDs, node_id, multipleHeader);
-    const className = classNames(
-      "latency-table",
-      { "latency-table__multiple": multipleHeader },
-      { "latency-table__empty": data.length === 0 },
-    );
-    // tslint:disable-next-line: no-bitwise
-    const width = data && (data.reduce((a: any, b: any) => (a.length || a) + b.length, 0) * 108) + 150;
-    if (data.length === 0) {
-      return <div className={className}><Empty /></div>;
-    }
+}) => {
+  const data = renderMultipleHeaders(
+    displayIdentities,
+    collapsed,
+    nodesSummary,
+    staleIDs,
+    node_id,
+    multipleHeader,
+  );
+  const className = classNames(
+    "latency-table",
+    { "latency-table__multiple": multipleHeader },
+    { "latency-table__empty": data.length === 0 },
+  );
+  const width =
+    data &&
+    data.reduce((a: any, b: any) => (a.length || a) + b.length, 0) * 108 + 150;
+  if (data.length === 0) {
     return (
-      <table className={className} style={{ width }}>
-        <thead>
-          {multipleHeader && (
-            <tr>
-              <th style={{ width: 115 }} />
-              <th style={{ width: 45 }}  />
-              {_.map(data, (value, index) => <th className="region-name" colSpan={data[index].length}>{value[0].title}</th>)}
-            </tr>
-          )}
-          {!collapsed && (
-            <tr className="latency-table__row">
-              {multipleHeader && <td />}
-              <td className="latency-table__cell latency-table__cell--spacer" />
-              {_.map(data, value => _.map(value, (identity, index: number) => createHeaderCell(staleIDs, identity, `0-${value.nodeID}`, index === 0, collapsed)))}
-            </tr>
-          )}
-        </thead>
-        <tbody>
-          {_.map(data, (value, index) => _.map(data[index], (identityA, indA: number) => {
+      <div className={className}>
+        <Empty />
+      </div>
+    );
+  }
+  return (
+    <table className={className} style={{ width }}>
+      <thead>
+        {multipleHeader && (
+          <tr>
+            <th style={{ width: 115 }} />
+            <th style={{ width: 45 }} />
+            {_.map(data, (value, index) => (
+              <th className="region-name" colSpan={data[index].length}>
+                {value[0].title}
+              </th>
+            ))}
+          </tr>
+        )}
+        {!collapsed && (
+          <tr className="latency-table__row">
+            {multipleHeader && <td />}
+            <td className="latency-table__cell latency-table__cell--spacer" />
+            {_.map(data, (value) =>
+              _.map(value, (identity, index: number) =>
+                createHeaderCell(
+                  staleIDs,
+                  identity,
+                  `0-${value.nodeID}`,
+                  index === 0,
+                  collapsed,
+                ),
+              ),
+            )}
+          </tr>
+        )}
+      </thead>
+      <tbody>
+        {_.map(data, (value, index) =>
+          _.map(data[index], (identityA, indA: number) => {
             return (
-              <tr key={index} className={`latency-table__row ${data[index].length === indA + 1 ? "latency-table__row--end" : ""}`} >
+              <tr
+                key={index}
+                className={`latency-table__row ${
+                  data[index].length === indA + 1
+                    ? "latency-table__row--end"
+                    : ""
+                }`}
+              >
                 {multipleHeader && Number(indA) === 0 && (
-                  <th rowSpan={collapsed ? 1 : data[index][0].rowCount}>{value[0].title}</th>
+                  <th rowSpan={collapsed ? 1 : data[index][0].rowCount}>
+                    {value[0].title}
+                  </th>
                 )}
-                {createHeaderCell(staleIDs, identityA, `${identityA.nodeID}-0`, false, collapsed)}
-                {_.map(identityA.row, ((identity: any, indexB: number) => getLatencyCell({ ...identity, identityA }, getVerticalLines(data, indexB), false, std, collapsed)))}
+                {createHeaderCell(
+                  staleIDs,
+                  identityA,
+                  `${identityA.nodeID}-0`,
+                  false,
+                  collapsed,
+                )}
+                {_.map(identityA.row, (identity: any, indexB: number) =>
+                  getLatencyCell(
+                    { ...identity, identityA },
+                    getVerticalLines(data, indexB),
+                    false,
+                    std,
+                    collapsed,
+                  ),
+                )}
               </tr>
             );
-          }))}
-        </tbody>
-      </table>
-    );
-  };
+          }),
+        )}
+      </tbody>
+    </table>
+  );
+};

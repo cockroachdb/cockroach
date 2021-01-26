@@ -254,7 +254,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// Wait for initial heartbeat.
 	select {
 	case <-c.initialHeartbeatDone:
-	case <-c.stopper.ShouldStop():
+	case <-c.stopper.ShouldQuiesce():
 		return nil, errors.Errorf("stopped")
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -398,7 +398,7 @@ func NewContext(opts ContextOptions) *Context {
 		ctx.ClusterID.Set(masterCtx, *id)
 	}
 
-	ctx.Stopper.RunWorker(ctx.masterCtx, func(context.Context) {
+	waitQuiesce := func(context.Context) {
 		<-ctx.Stopper.ShouldQuiesce()
 
 		cancel()
@@ -415,7 +415,10 @@ func NewContext(opts ContextOptions) *Context {
 			ctx.removeConn(conn, k.(connKey))
 			return true
 		})
-	})
+	}
+	if err := ctx.Stopper.RunAsyncTask(ctx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(ctx.masterCtx)
+	}
 	return ctx
 }
 
@@ -746,6 +749,22 @@ func (ctx *Context) grpcDialOptions(
 			streamInterceptors = append(streamInterceptors, testingStreamInterceptor)
 		}
 	}
+	if ctx.Knobs.ArtificialLatencyMap != nil {
+		dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
+			dialer := net.Dialer{
+				LocalAddr: sourceAddr,
+			}
+			return dialer.DialContext(ctx, "tcp", target)
+		}
+		latency := ctx.Knobs.ArtificialLatencyMap[target]
+		log.VEventf(ctx.masterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
+		dialer := artificialLatencyDialer{
+			dialerFunc: dialerFunc,
+			latencyMS:  latency,
+		}
+		dialerFunc = dialer.dial
+		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
+	}
 
 	if len(unaryInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
@@ -1030,15 +1049,13 @@ func (ctx *Context) grpcDialNodeInternal(
 		var redialChan <-chan struct{}
 		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, remoteNodeID, class)
 		if conn.dialErr == nil {
-			if err := ctx.Stopper.RunTask(
+			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
-					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
-						err := ctx.runHeartbeat(conn, target, redialChan)
-						if err != nil && !grpcutil.IsClosedConnection(err) {
-							log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
-						}
-						ctx.removeConn(conn, thisConnKeys...)
-					})
+					err := ctx.runHeartbeat(conn, target, redialChan)
+					if err != nil && !grpcutil.IsClosedConnection(err) {
+						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
+					}
+					ctx.removeConn(conn, thisConnKeys...)
 				}); err != nil {
 				conn.dialErr = err
 			}

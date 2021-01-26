@@ -317,9 +317,9 @@ vectorized: true
 └── • render
     │ columns: (x, v, column11)
     │ estimated row count: 10 (missing stats)
-    │ render 0: unique_rowid()
-    │ render 1: x
-    │ render 2: v
+    │ render column11: unique_rowid()
+    │ render x: x
+    │ render v: v
     │
     └── • limit
         │ columns: (x, v)
@@ -354,9 +354,9 @@ vectorized: true
 └── • render
     │ columns: (x, v, column11)
     │ estimated row count: 1 (missing stats)
-    │ render 0: unique_rowid()
-    │ render 1: x
-    │ render 2: v
+    │ render column11: unique_rowid()
+    │ render x: x
+    │ render v: v
     │
     └── • scan
           columns: (x, v)
@@ -458,7 +458,7 @@ vectorized: true
 • render
 │ columns: ("?column?")
 │ estimated row count: 10 (missing stats)
-│ render 0: x + v
+│ render ?column?: x + v
 │
 └── • insert
     │ columns: (x, v, rowid)
@@ -468,9 +468,9 @@ vectorized: true
     └── • render
         │ columns: (length, "?column?", column13)
         │ estimated row count: 10 (missing stats)
-        │ render 0: unique_rowid()
-        │ render 1: length
-        │ render 2: "?column?"
+        │ render column13: unique_rowid()
+        │ render length: length
+        │ render ?column?: "?column?"
         │
         └── • limit
             │ columns: (length, "?column?", column12)
@@ -486,9 +486,9 @@ vectorized: true
                 └── • render
                     │ columns: (length, "?column?", column12)
                     │ estimated row count: 1,000 (missing stats)
-                    │ render 0: length(k)
-                    │ render 1: 2
-                    │ render 2: k::STRING || v::STRING
+                    │ render length: length(k)
+                    │ render ?column?: 2
+                    │ render column12: k::STRING || v::STRING
                     │
                     └── • scan
                           columns: (k, v)
@@ -601,10 +601,10 @@ vectorized: true
                 └── • render
                     │ columns: (a, b, c, column13)
                     │ estimated row count: 1,000 (missing stats)
-                    │ render 0: unique_rowid()
-                    │ render 1: a
-                    │ render 2: b
-                    │ render 3: c
+                    │ render column13: unique_rowid()
+                    │ render a: a
+                    │ render b: b
+                    │ render c: c
                     │
                     └── • scan
                           columns: (a, b, c)

@@ -807,14 +807,15 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, nil, err
 			}
 
-			var latency time.Duration
-			// If LatencyGetter doesn't exist, latency's nil value of 0 is used.
-			// If latency is 0, it is not included in the displayed stats for
-			// EXPLAIN ANALYZE diagrams.
-			if flowCtx.Cfg.LatencyGetter != nil {
-				latency = time.Duration(flowCtx.Cfg.LatencyGetter.GetLatency(
-					ctx, inputStream.OriginNodeID, inputStream.TargetNodeID,
-				))
+			latency, err := s.nodeDialer.Latency(inputStream.TargetNodeID)
+			if err != nil {
+				// If an error occurred, latency's nil value of 0 is used. If latency is
+				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
+				// diagrams.
+				latency = 0
+				if log.V(1) {
+					log.Infof(ctx, "an error occurred during vectorized planning while getting latency: %v", err)
+				}
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
@@ -948,17 +949,23 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
 						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
-							// At the last outbox, we can accurately retrieve stats for the whole flow from parent monitors.
-							// These stats are added to a flow-level span.
-							// TODO(radu): add a ComponentID type for the flow itself.
+							// At the last outbox, we can accurately retrieve stats for the
+							// whole flow from parent monitors. These stats are added to a
+							// flow-level span.
 							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
 							span.SetSpanStats(&execinfrapb.ComponentStats{
+								Component: execinfrapb.ComponentID{
+									Type:   execinfrapb.ComponentID_FLOW,
+									FlowID: flowCtx.ID,
+									// TODO(radu): the node ID should be part of the ComponentID.
+								},
 								FlowStats: execinfrapb.FlowStats{
 									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
 								},
 							})
 						}
 						finishVectorizedStatsCollectors(ctx, vscs)
+						span.Finish()
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},

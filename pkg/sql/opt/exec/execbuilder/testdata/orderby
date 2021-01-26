@@ -252,7 +252,7 @@ vectorized: true
 └── • render
     │ columns: (r)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: b + 2
+    │ render r: b + 2
     │
     └── • scan
           columns: (b)
@@ -276,7 +276,7 @@ vectorized: true
 └── • render
     │ columns: (y)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: b + 2
+    │ render y: b + 2
     │
     └── • scan
           columns: (b)
@@ -774,10 +774,10 @@ vectorized: true
     └── • render
         │ columns: (a, b, c, c_new)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: true
-        │ render 1: a
-        │ render 2: b
-        │ render 3: c
+        │ render c_new: true
+        │ render a: a
+        │ render b: b
+        │ render c: c
         │
         └── • scan
               columns: (a, b, c)
@@ -867,9 +867,9 @@ vectorized: true
     └── • render
         │ columns: (column6, a, b)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: a
-        │ render 1: a
-        │ render 2: b
+        │ render column6: a
+        │ render a: a
+        │ render b: b
         │
         └── • scan
               columns: (a, b)
@@ -895,9 +895,9 @@ vectorized: true
     └── • render
         │ columns: (column6, a, b)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: b
-        │ render 1: a
-        │ render 2: b
+        │ render column6: b
+        │ render a: a
+        │ render b: b
         │
         └── • scan
               columns: (a, b)

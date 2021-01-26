@@ -140,6 +140,7 @@ var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSchemaNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterTableOwnerNode{}
 var _ planNode = &alterTableSetSchemaNode{}
 var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
@@ -465,14 +466,6 @@ func (p *planTop) savePlanInfo(ctx context.Context) {
 	p.instrumentation.RecordPlanInfo(distribution, vectorized)
 }
 
-// formatOptPlan returns a visual representation of the optimizer plan that was
-// used.
-func (p *planTop) formatOptPlan(flags memo.ExprFmtFlags) string {
-	f := memo.MakeExprFmtCtx(flags, p.mem, p.catalog)
-	f.FormatExpr(p.mem.RootExpr())
-	return f.Buffer.String()
-}
-
 // startExec calls startExec() on each planNode using a depth-first, post-order
 // traversal.  The subqueries, if any, are also started.
 //
@@ -523,14 +516,6 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			return &hookFnNode{f: fn, header: header, subplans: subplans}, nil
 		}
 	}
-	for _, planHook := range wrappedPlanHooks {
-		if node, err := planHook(ctx, stmt, p); err != nil {
-			return nil, err
-		} else if node != nil {
-			return node, err
-		}
-	}
-
 	return nil, nil
 }
 

@@ -20,6 +20,7 @@ import "gogoproto/gogo.proto";
 // an absolute path, which must be contained in external IO dir.
 message GetRequest {
   string filename = 1;
+  int64 offset = 2;
 }
 
 // GetResponse returns contents of the file requested by GetRequest.

@@ -79,9 +79,9 @@ debug-lock-table
 ----
 global: num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # --------------------------------
@@ -100,18 +100,19 @@ debug-lock-table
 ----
 global: num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # Replica loses lease.
 on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -148,7 +149,7 @@ sequence req=req2
 handle-write-intent-error req=req2 lease-seq=2
   intent txn=txn1 key=k2
 ----
-[5] handle write intent error req2: pushing timestamp of txn 00000001 above 0.000000010,1
+[5] handle write intent error req2: pushing timestamp of txn 00000001 above 10.000000000,1
 [5] handle write intent error req2: resolving intent "k2" for txn 00000001 with COMMITTED status
 [5] handle write intent error req2: handled conflicting intents on "k2", released latches
 
@@ -224,7 +225,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
 local: num=0
@@ -241,7 +242,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
@@ -260,6 +261,7 @@ sequence req=reqRes2
 on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 ----
 [-] update lock: committing txn 00000002 @ k
+[11] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [11] sequence req3: acquiring latches
 [11] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
 
@@ -273,7 +275,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
 local: num=0
 
 on-lock-acquired req=req3 key=k
@@ -284,7 +286,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 finish req=req3
@@ -346,7 +348,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # --------------------------------
@@ -365,7 +367,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
@@ -374,6 +376,7 @@ local: num=0
 on-split
 ----
 [-] split range: complete
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -392,7 +395,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 5, txn: 00000002-0000-0000-0000-000000000000
 local: num=0
@@ -418,6 +421,7 @@ sequence req=reqRes1
 on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
@@ -431,7 +435,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  res: req: 5, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+  res: req: 5, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
 local: num=0
 
 on-lock-acquired req=req2 key=k
@@ -442,7 +446,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 finish req=req2
@@ -512,9 +516,9 @@ debug-lock-table
 ----
 global: num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # --------------------------------
@@ -533,17 +537,18 @@ debug-lock-table
 ----
 global: num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 7, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 7
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 on-merge
 ----
 [-] merge range: complete
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -580,7 +585,7 @@ sequence req=req2
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k2
 ----
-[5] handle write intent error req2: pushing timestamp of txn 00000001 above 0.000000010,1
+[5] handle write intent error req2: pushing timestamp of txn 00000001 above 10.000000000,1
 [5] handle write intent error req2: resolving intent "k2" for txn 00000001 with COMMITTED status
 [5] handle write intent error req2: handled conflicting intents on "k2", released latches
 
@@ -664,7 +669,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # --------------------------------
@@ -683,7 +688,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 9, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 9
@@ -692,6 +697,7 @@ local: num=0
 on-snapshot-applied
 ----
 [-] snapshot replica: applied
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -710,7 +716,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 9, txn: 00000002-0000-0000-0000-000000000000
 local: num=0
@@ -736,6 +742,7 @@ sequence req=reqRes1
 on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
@@ -749,7 +756,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  res: req: 9, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+  res: req: 9, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
 local: num=0
 
 on-lock-acquired req=req2 key=k
@@ -760,7 +767,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 finish req=req2

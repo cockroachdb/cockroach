@@ -21,7 +21,7 @@ go_test(
     deps = [
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

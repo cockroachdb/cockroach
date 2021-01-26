@@ -41,7 +41,8 @@ type Inserter struct {
 
 // MakeInserter creates a Inserter for the given table.
 //
-// insertCols must contain every column in the primary key.
+// insertCols must contain every column in the primary key. Virtual columns must
+// be present if they are part of any index.
 func MakeInserter(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -50,16 +51,23 @@ func MakeInserter(
 	insertCols []descpb.ColumnDescriptor,
 	alloc *rowenc.DatumAlloc,
 ) (Inserter, error) {
+	writableIndexes := tableDesc.WritableNonPrimaryIndexes()
+	writableIndexDescs := make([]descpb.IndexDescriptor, len(writableIndexes))
+	for i, index := range writableIndexes {
+		writableIndexDescs[i] = *index.IndexDesc()
+	}
+
 	ri := Inserter{
-		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableIndexes()),
+		Helper:                newRowHelper(codec, tableDesc, writableIndexDescs),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
-	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := ri.InsertColIDtoRowIndex.Get(col); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+		if _, ok := ri.InsertColIDtoRowIndex.Get(colID); !ok {
+			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetColumnName(i))
 		}
 	}
 

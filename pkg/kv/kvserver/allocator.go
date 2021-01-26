@@ -346,7 +346,7 @@ func (a *Allocator) ComputeAction(
 	// On the other hand if we get the race where a leaseholder starts adding a
 	// replica in the replicate queue and during this loses its lease, it should
 	// probably not retry.
-	if learners := desc.Replicas().Learners(); len(learners) > 0 {
+	if learners := desc.Replicas().LearnerDescriptors(); len(learners) > 0 {
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
@@ -356,7 +356,7 @@ func (a *Allocator) ComputeAction(
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
 	}
 	// computeAction expects to operate only on voters.
-	return a.computeAction(ctx, zone, desc.Replicas().Voters())
+	return a.computeAction(ctx, zone, desc.Replicas().VoterDescriptors())
 }
 
 func (a *Allocator) computeAction(
@@ -495,17 +495,17 @@ func (a *Allocator) AllocateTarget(
 
 func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
-	sl StoreList,
+	candidateStores StoreList,
 	zone *zonepb.ZoneConfig,
-	candidateReplicas []roachpb.ReplicaDescriptor,
+	existingReplicas []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (*roachpb.StoreDescriptor, string) {
 	analyzedConstraints := constraint.AnalyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
+		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	candidates := allocateCandidates(
 		ctx,
-		sl, analyzedConstraints, candidateReplicas,
-		a.storePool.getLocalitiesByStore(candidateReplicas),
+		candidateStores, analyzedConstraints, existingReplicas,
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options,
 	)
@@ -560,17 +560,17 @@ func (a Allocator) RemoveTarget(
 	}
 
 	// Retrieve store descriptors for the provided candidates from the StorePool.
-	existingStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
 	for i, exist := range candidates {
-		existingStoreIDs[i] = exist.StoreID
+		candidateStoreIDs[i] = exist.StoreID
 	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, storeFilterNone)
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
 
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
-		sl,
+		candidateStoreList,
 		analyzedConstraints,
 		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,

@@ -244,7 +244,7 @@ func MakeRefresher(
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(context.Background(), "refresher", func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
@@ -306,7 +306,7 @@ func (r *Refresher) Start(
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
 
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			}
 		}

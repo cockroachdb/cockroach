@@ -136,7 +136,7 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexByID(descpb.IndexID(indexComment.subID))
+		idx, err := table.FindIndexWithID(descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}
@@ -145,7 +145,7 @@ func showComments(
 		f.FormatNode(&tree.CommentOnIndex{
 			Index: tree.TableIndexName{
 				Table: *tn,
-				Index: tree.UnrestrictedName(idx.Name),
+				Index: tree.UnrestrictedName(idx.GetName()),
 			},
 			Comment: &indexComment.comment,
 		})
@@ -328,8 +328,23 @@ func ShowCreatePartitioning(
 	indent int,
 	colOffset int,
 ) error {
-	if partDesc.NumColumns == 0 {
+	isPrimaryKeyOfPartitionAllByTable :=
+		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idxDesc.ID && colOffset == 0
+
+	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
+	}
+	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
+	// that is PARTITION BY ALL. The ALL will be printed for the PRIMARY INDEX clause.
+	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idxDesc.ID {
+		return nil
+	}
+	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
+	if c := tableDesc.GetLocalityConfig(); c != nil {
+		switch c.Locality.(type) {
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			return nil
+		}
 	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
@@ -340,11 +355,18 @@ func ShowCreatePartitioning(
 	}
 
 	indentStr := strings.Repeat("\t", indent)
-	buf.WriteString(` PARTITION BY `)
+	buf.WriteString(` PARTITION `)
+	if isPrimaryKeyOfPartitionAllByTable {
+		buf.WriteString(`ALL `)
+	}
+	buf.WriteString(`BY `)
 	if len(partDesc.List) > 0 {
 		buf.WriteString(`LIST`)
 	} else if len(partDesc.Range) > 0 {
 		buf.WriteString(`RANGE`)
+	} else if isPrimaryKeyOfPartitionAllByTable {
+		buf.WriteString(`NOTHING`)
+		return nil
 	} else {
 		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
 	}

@@ -46,7 +46,7 @@ import (
 type ClusterImpl interface {
 	Start(c *SyncedCluster, extraArgs []string)
 	CertsDir(c *SyncedCluster, index int) string
-	NodeDir(c *SyncedCluster, index int) string
+	NodeDir(c *SyncedCluster, index, storeIndex int) string
 	LogDir(c *SyncedCluster, index int) string
 	NodeURL(c *SyncedCluster, host string, port int) string
 	NodePort(c *SyncedCluster, index int) int
@@ -345,7 +345,7 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 			}{
 				OneShot:     oneShot,
 				IgnoreEmpty: ignoreEmptyNodes,
-				Store:       Cockroach{}.NodeDir(c, nodes[i]),
+				Store:       Cockroach{}.NodeDir(c, nodes[i], 1 /* storeIndex */),
 				Port:        Cockroach{}.NodePort(c, nodes[i]),
 			}
 

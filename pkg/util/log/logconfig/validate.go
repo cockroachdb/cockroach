@@ -50,6 +50,10 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	if c.FileDefaults.Auditable == nil {
 		c.FileDefaults.Auditable = &bf
 	}
+	// File sinks are buffered by default.
+	if c.FileDefaults.BufferedWrites == nil {
+		c.FileDefaults.BufferedWrites = &bt
+	}
 	// No format -> populate defaults.
 	if c.FileDefaults.Format == nil {
 		s := DefaultFileFormat
@@ -71,11 +75,11 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// Validate and fill in defaults for file sinks.
 	for prefix, fc := range c.Sinks.FileGroups {
 		if fc == nil {
-			fc = &FileConfig{}
+			fc = &FileSinkConfig{}
 			c.Sinks.FileGroups[prefix] = fc
 		}
 		fc.prefix = prefix
-		if err := c.validateFileConfig(fc, defaultLogDir); err != nil {
+		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintf(&errBuf, "file group %q: %v\n", prefix, err)
 		}
 	}
@@ -87,8 +91,8 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 	if c.Sinks.Stderr.Auditable != nil {
 		if *c.Sinks.Stderr.Auditable {
-			if *c.Sinks.Stderr.Format == DefaultStderrFormat {
-				f := DefaultStderrFormat + "-count"
+			if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
+				f := "crdb-v1-tty-count"
 				c.Sinks.Stderr.Format = &f
 			}
 			c.Sinks.Stderr.Criticality = &bt
@@ -98,7 +102,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	c.Sinks.Stderr.Channels.Sort()
 
 	// fileSinks maps channels to files.
-	fileSinks := make(map[logpb.Channel]*FileConfig)
+	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
 
 	// Check that no channel is listed by more than one file sink,
 	// and every file has at least one channel.
@@ -154,15 +158,15 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// If there is no file group for DEV yet, create one.
 	devch := logpb.Channel_DEV
 	if def := fileSinks[devch]; def == nil {
-		fc := &FileConfig{
+		fc := &FileSinkConfig{
 			Channels: ChannelList{Channels: []logpb.Channel{devch}},
 		}
 		fc.prefix = "default"
-		if err := c.validateFileConfig(fc, defaultLogDir); err != nil {
+		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintln(&errBuf, err)
 		}
 		if c.Sinks.FileGroups == nil {
-			c.Sinks.FileGroups = make(map[string]*FileConfig)
+			c.Sinks.FileGroups = make(map[string]*FileSinkConfig)
 		}
 		c.Sinks.FileGroups[fc.prefix] = fc
 		fileSinks[devch] = fc
@@ -219,7 +223,7 @@ func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
 	}
 }
 
-func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error {
+func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
 	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
 
 	// Inherit file-specific defaults.
@@ -229,8 +233,8 @@ func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error
 	if fc.MaxGroupSize == nil {
 		fc.MaxGroupSize = &c.FileDefaults.MaxGroupSize
 	}
-	if fc.SyncWrites == nil {
-		fc.SyncWrites = &c.FileDefaults.SyncWrites
+	if fc.BufferedWrites == nil {
+		fc.BufferedWrites = c.FileDefaults.BufferedWrites
 	}
 
 	// Set up the directory.
@@ -253,11 +257,11 @@ func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error
 
 	// Apply the auditable flag if set.
 	if *fc.Auditable {
-		bt := true
-		fc.SyncWrites = &bt
+		bf, bt := false, true
+		fc.BufferedWrites = &bf
 		fc.Criticality = &bt
-		if *fc.Format == DefaultFileFormat {
-			s := DefaultFileFormat + "-count"
+		if *fc.Format == "crdb-v1" {
+			s := "`crdb-v1-count"
 			fc.Format = &s
 		}
 	}

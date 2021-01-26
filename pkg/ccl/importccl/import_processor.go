@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -134,16 +135,15 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	// Once the import is done, send back to the controller the serialized
 	// summary of the import operation. For more info see roachpb.BulkOpSummary.
 	countsBytes, err := protoutil.Marshal(idp.summary)
+	idp.MoveToDraining(err)
 	if err != nil {
-		idp.MoveToDraining(err)
 		return nil, idp.DrainHelper()
 	}
 
-	idp.MoveToDraining(nil /* err */)
 	return rowenc.EncDatumRow{
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, idp.DrainHelper()
+	}, nil
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -190,11 +190,10 @@ func makeInputConverter(
 	}
 
 	if singleTable != nil {
-		indexes := singleTable.DeletableIndexes()
-		for _, idx := range indexes {
-			if idx.IsPartial() {
-				return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
-			}
+		if idx := catalog.FindDeletableNonPrimaryIndex(singleTable, func(idx catalog.Index) bool {
+			return idx.IsPartial()
+		}); idx != nil {
+			return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
 		}
 
 		// If we're using a format like CSV where data columns are not "named", and

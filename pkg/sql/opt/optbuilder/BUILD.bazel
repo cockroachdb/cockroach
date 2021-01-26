@@ -71,8 +71,8 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/sequence",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )
 
@@ -86,6 +86,7 @@ go_test(
     embed = [":optbuilder"],
     deps = [
         "//pkg/settings/cluster",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",
@@ -96,6 +97,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

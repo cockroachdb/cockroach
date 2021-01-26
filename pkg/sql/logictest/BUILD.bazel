@@ -34,10 +34,10 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/lib/pq",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
@@ -69,7 +69,7 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_gogo_protobuf//proto",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

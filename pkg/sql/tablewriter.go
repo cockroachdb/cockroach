@@ -118,13 +118,19 @@ type tableWriterBase struct {
 	// rows contains the accumulated result rows if rowsNeeded is set on the
 	// corresponding tableWriter.
 	rows *rowcontainer.RowContainer
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	forceProductionBatchSizes bool
 }
 
-func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc catalog.TableDescriptor) {
+func (tb *tableWriterBase) init(
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *tree.EvalContext,
+) {
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.b = txn.NewBatch()
-	tb.maxBatchSize = mutations.MaxBatchSize()
+	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
+	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between

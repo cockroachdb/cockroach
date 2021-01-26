@@ -17,14 +17,16 @@ import Long from "long";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
-import { Anchor, Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "src/components";
+import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
-  selectStatementDiagnosticsReports, selectStatementByFingerprint, statementDiagnosticsReportsInFlight,
+  selectStatementDiagnosticsReports,
+  selectStatementByFingerprint,
+  statementDiagnosticsReportsInFlight,
 } from "src/redux/statements/statementsSelectors";
 import {
   invalidateStatementDiagnosticsRequests,
@@ -36,18 +38,24 @@ import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import {
-  getDiagnosticsStatus,
-} from "src/views/statements/diagnostics";
-import { SortedTable, ColumnDescriptor } from "src/views/shared/components/sortedtable";
+  SortedTable,
+  ColumnDescriptor,
+} from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
-import { shortStatement } from "src/views/statements/statementsTable";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
-import { EmptyTable } from "@cockroachlabs/admin-ui-components";
+import {
+  DownloadFile,
+  DownloadFileRef,
+  EmptyTable,
+  shortStatement,
+  getDiagnosticsStatus,
+} from "@cockroachlabs/cluster-ui";
 
-type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
+type StatementDiagnosticsHistoryViewProps = MapStateToProps &
+  MapDispatchToProps;
 
 interface StatementDiagnosticsHistoryViewState {
   sortSetting: {
@@ -58,7 +66,9 @@ interface StatementDiagnosticsHistoryViewState {
 
 class StatementDiagnosticsHistoryTable extends SortedTable<{}> {}
 
-const StatementColumn: React.FC<{ fingerprint: string }> = ({ fingerprint }) => {
+const StatementColumn: React.FC<{ fingerprint: string }> = ({
+  fingerprint,
+}) => {
   const summary = summarize(fingerprint);
   const shortenedStatement = shortStatement(summary, fingerprint);
   const showTooltip = fingerprint !== shortenedStatement;
@@ -69,7 +79,7 @@ const StatementColumn: React.FC<{ fingerprint: string }> = ({ fingerprint }) => 
         <Tooltip
           placement="bottom"
           title={
-            <pre className="cl-table-link__description">{ fingerprint }</pre>
+            <pre className="cl-table-link__description">{fingerprint}</pre>
           }
           overlayClassName="cl-table-link__statement-tooltip--fixed-width"
         >
@@ -78,25 +88,30 @@ const StatementColumn: React.FC<{ fingerprint: string }> = ({ fingerprint }) => 
       </Text>
     );
   }
-  return (
-    <Text textType={TextTypes.Code}>{shortenedStatement}</Text>
-  );
+  return <Text textType={TextTypes.Code}>{shortenedStatement}</Text>;
 };
 
-class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosticsHistoryViewProps, StatementDiagnosticsHistoryViewState> {
+class StatementDiagnosticsHistoryView extends React.Component<
+  StatementDiagnosticsHistoryViewProps,
+  StatementDiagnosticsHistoryViewState
+> {
   columns: ColumnDescriptor<IStatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
-      cell: record => moment(record.requested_at.seconds.toNumber() * 1000).format("LL[ at ]h:mm a"),
-      sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
+      cell: (record) =>
+        moment(record.requested_at.seconds.toNumber() * 1000).format(
+          "LL[ at ]h:mm a",
+        ),
+      sort: (record) => moment(record.requested_at.seconds.toNumber() * 1000),
     },
     {
       title: "Statement",
-      cell: record => {
+      cell: (record) => {
         const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
-        const { implicit_txn: implicitTxn = "true", query } = statement?.key?.key_data || {};
+        const { implicit_txn: implicitTxn = "true", query } =
+          statement?.key?.key_data || {};
 
         if (isUndefined(query)) {
           return <StatementColumn fingerprint={fingerprint} />;
@@ -104,23 +119,21 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
 
         return (
           <Link
-            to={ `/statement/${implicitTxn}/${encodeURIComponent(query)}` }
+            to={`/statement/${implicitTxn}/${encodeURIComponent(query)}`}
             className="crl-statements-diagnostics-view__statements-link"
           >
             <StatementColumn fingerprint={fingerprint} />
           </Link>
         );
       },
-      sort: record => record.statement_fingerprint,
+      sort: (record) => record.statement_fingerprint,
     },
     {
       title: "Status",
-      sort: record => `${record.completed}`,
-      cell: record => (
+      sort: (record) => `${record.completed}`,
+      cell: (record) => (
         <Text>
-          <DiagnosticStatusBadge
-            status={getDiagnosticsStatus(record)}
-          />
+          <DiagnosticStatusBadge status={getDiagnosticsStatus(record)} />
         </Text>
       ),
     },
@@ -130,8 +143,12 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
         if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
-              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
-                 onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
+              <a
+                href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+                onClick={() =>
+                  trackDownloadDiagnosticsBundle(record.statement_fingerprint)
+                }
+              >
                 <Button
                   size="small"
                   type="flat"
@@ -139,7 +156,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
                   icon={() => (
                     <span
                       className="crl-statements-diagnostics-view__icon"
-                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                      dangerouslySetInnerHTML={trustIcon(DownloadIcon)}
                     />
                   )}
                 >
@@ -160,13 +177,13 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
 
   constructor(props: StatementDiagnosticsHistoryViewProps) {
     super(props);
-    this.state = {
+    (this.state = {
       sortSetting: {
         sortKey: 0,
         ascending: false,
       },
-    },
-    props.refresh();
+    }),
+      props.refresh();
   }
 
   renderTableTitle = () => {
@@ -186,20 +203,26 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
         <Text>{`${this.tablePageSize} of ${totalCount} traces`}</Text>
       </div>
     );
-  }
+  };
 
   getStatementDiagnostics = async (diagnosticsId: Long) => {
-    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
+    const request = new StatementDiagnosticsRequest({
+      statement_diagnostics_id: diagnosticsId,
+    });
     const response = await getStatementDiagnostics(request);
     const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
-  }
+    this.downloadRef.current?.download(
+      "statement-diagnostics.json",
+      "application/json",
+      trace,
+    );
+  };
 
   changeSortSetting = (ss: SortSetting) => {
     this.setState({
       sortSetting: ss,
     });
-  }
+  };
 
   render() {
     const { diagnosticsReports, loading } = this.props;
@@ -218,7 +241,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             path: "/debug",
           }}
         />
-        { this.renderTableTitle() }
+        {this.renderTableTitle()}
         <StatementDiagnosticsHistoryTable
           className="statements-table"
           data={dataSource}
@@ -228,9 +251,11 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             <EmptyTable
               title="No statement diagnostics to show"
               icon={EmptyTableIcon}
-              message={"Statement diagnostics  can help when troubleshooting issues with specific queries. " +
-              "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
-              " plans, table statistics, and traces."}
+              message={
+                "Statement diagnostics  can help when troubleshooting issues with specific queries. " +
+                "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
+                " plans, table statistics, and traces."
+              }
               footer={
                 <Anchor href={statementDiagnostics} target="_blank">
                   Learn more about statement diagnostics
@@ -241,7 +266,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
-        <DownloadFile ref={this.downloadRef}/>
+        <DownloadFile ref={this.downloadRef} />
       </section>
     );
   }
@@ -250,7 +275,9 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
 interface MapStateToProps {
   loading: boolean;
   diagnosticsReports: IStatementDiagnosticsReport[];
-  getStatementByFingerprint: (fingerprint: string) => ReturnType<typeof selectStatementByFingerprint>;
+  getStatementByFingerprint: (
+    fingerprint: string,
+  ) => ReturnType<typeof selectStatementByFingerprint>;
 }
 
 interface MapDispatchToProps {
@@ -260,10 +287,13 @@ interface MapDispatchToProps {
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   loading: statementDiagnosticsReportsInFlight(state),
   diagnosticsReports: selectStatementDiagnosticsReports(state) || [],
-  getStatementByFingerprint: (fingerprint: string) => selectStatementByFingerprint(state, fingerprint),
+  getStatementByFingerprint: (fingerprint: string) =>
+    selectStatementByFingerprint(state, fingerprint),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>): MapDispatchToProps => ({
+const mapDispatchToProps = (
+  dispatch: Dispatch<Action, AdminUIState>,
+): MapDispatchToProps => ({
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());
@@ -274,4 +304,7 @@ export default connect<
   MapStateToProps,
   MapDispatchToProps,
   StatementDiagnosticsHistoryViewProps
-  >(mapStateToProps, mapDispatchToProps)(StatementDiagnosticsHistoryView);
+>(
+  mapStateToProps,
+  mapDispatchToProps,
+)(StatementDiagnosticsHistoryView);

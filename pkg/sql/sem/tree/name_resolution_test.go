@@ -529,6 +529,7 @@ func newFakeMetadata() *fakeMetadata {
 				{"public", []tree.Name{"foo", "bar"}},
 				{"pg_temp_123", []tree.Name{"foo", "baz"}},
 			}},
+			{"system", []knownSchema{{"public", []tree.Name{"users"}}}},
 		},
 	}
 }
@@ -624,6 +625,9 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`kv`, ``, mpath("public", "pg_catalog"), true, ``, ``, ``, `prefix or object not found`},
 		{`pg_tables`, ``, mpath("public", "pg_catalog"), true, `pg_tables`, `"".pg_catalog.pg_tables`, `.pg_catalog[0]`, ``},
 		{`pg_tables`, ``, mpath(), true, `pg_tables`, `"".pg_catalog.pg_tables`, `.pg_catalog[0]`, ``},
+		{`system.users`, ``, mpath(), true, `system.public.users`, `system.public.users`, `system.public[0]`, ``},
+		{`"".system.users`, ``, mpath(), true, ``, ``, ``, `prefix or object not found`},
+		{`"".system.users`, ``, mpath(), false, ``, ``, ``, `prefix or object not found`},
 
 		{`blix`, ``, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
 		{`blix`, ``, mpath("public", "pg_catalog"), false, `blix`, `"".pg_catalog.blix`, `.pg_catalog`, ``},

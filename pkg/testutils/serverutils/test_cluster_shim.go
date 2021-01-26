@@ -87,10 +87,21 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
-	// RemoveNonVoters removes one or more learners from a range.
+	// AddNonVotersOrFatal is the same as AddNonVoters but will fatal if it fails.
+	AddNonVotersOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
+
+	// RemoveNonVoters removes one or more non-voters from a range.
 	RemoveNonVoters(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
+
+	// RemoveNonVotersOrFatal is the same as RemoveNonVoters but will fatal if it
+	// fails.
+	RemoveNonVotersOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
@@ -136,6 +147,10 @@ type TestClusterInterface interface {
 	// as kv scratch space (it doesn't overlap system spans or SQL tables). The
 	// range is lazily split off on the first call to ScratchRange.
 	ScratchRange(t testing.TB) roachpb.Key
+
+	// WaitForFullReplication waits until all stores in the cluster
+	// have no ranges with replication pending.
+	WaitForFullReplication() error
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

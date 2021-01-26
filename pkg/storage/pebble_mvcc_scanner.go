@@ -374,20 +374,25 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	}
 
 	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
-	maxVisibleTS := p.ts
-	if p.checkUncertainty {
-		maxVisibleTS = p.txn.MaxTimestamp
-	}
-	otherIntentVisible := metaTS.LessEq(maxVisibleTS) || p.failOnMoreRecent
+	conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
 
-	if !ownIntent && !otherIntentVisible {
+	if !ownIntent && !conflictingIntent {
 		// 8. The key contains an intent, but we're reading below the intent.
 		// Seek to the desired version, checking for uncertainty if necessary.
 		//
 		// Note that if we own the intent (i.e. we're reading transactionally)
 		// we want to read the intent regardless of our read timestamp and fall
 		// into case 8 below.
-		return p.seekVersion(maxVisibleTS, p.checkUncertainty)
+		if p.checkUncertainty {
+			if metaTS.LessEq(p.txn.MaxTimestamp) {
+				return p.uncertaintyError(metaTS)
+			}
+			// The intent is not within the uncertainty window, but there could
+			// be an uncertain committed value, so seek and check uncertainty
+			// using MaxTimestamp.
+			return p.seekVersion(p.txn.MaxTimestamp, true)
+		}
+		return p.seekVersion(p.ts, false)
 	}
 
 	if p.inconsistent {

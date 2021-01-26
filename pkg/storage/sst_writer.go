@@ -41,10 +41,15 @@ type writeCloseSyncer interface {
 // SSTs have bloom filters disabled and format set to LevelDB.
 func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
-	opts.TableFormat = sstable.TableFormatLevelDB
-	// Disable bloom filters to produce SSTs matching those from
-	// RocksDBSstFileWriter.
+	opts.TableFormat = sstable.TableFormatRocksDBv2
+
+	// Disable bloom filters since we only ever iterate backups.
 	opts.FilterPolicy = nil
+	// Bump up block size, since we almost never seek or do point lookups, so more
+	// block checksums and more index entries are just overhead and smaller blocks
+	// reduce compression ratio.
+	opts.BlockSize = 128 << 10
+
 	opts.MergerName = "nullptr"
 	sst := sstable.NewWriter(f, opts)
 	return SSTWriter{fw: sst, f: f}

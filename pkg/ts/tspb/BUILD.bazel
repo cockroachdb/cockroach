@@ -1,24 +1,41 @@
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,  @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
+
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "tspb",
-    srcs = [
-        "timeseries.go",
-        "timeseries.pb.go",
-        "timeseries.pb.gw.go",
-    ],
+    srcs = ["timeseries.go"],
+    embed = [":tspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ts/tspb",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/roachpb"],
+)
+
+proto_library(
+    name = "tspb_proto",
+    srcs = ["timeseries.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/golang/protobuf/descriptor",
-        "//vendor/github.com/golang/protobuf/proto",
-        "//vendor/github.com/grpc-ecosystem/grpc-gateway/runtime",
-        "//vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
-        "//vendor/google.golang.org/grpc",
-        "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/grpclog",
-        "//vendor/google.golang.org/grpc/status",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@go_googleapis//google/api:annotations_proto",
+    ],
+)
+
+go_proto_library(
+    name = "tspb_go_proto",
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "@com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ts/tspb",
+    proto = ":tspb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )

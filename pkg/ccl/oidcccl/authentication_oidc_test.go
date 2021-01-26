@@ -287,3 +287,81 @@ func TestOIDCStateEncodeDecode(t *testing.T) {
 		t.Fatal("state didn't match when decoded")
 	}
 }
+
+func Test_getRegionSpecificRedirectURL(t *testing.T) {
+	type args struct {
+		locality roachpb.Locality
+		conf     redirectURLConf
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		// Single redirect configurations
+		{"single redirect: empty locality", args{
+			locality: roachpb.Locality{},
+			conf:     redirectURLConf{sru: &singleRedirectURL{RedirectURL: "correct.example.com"}},
+		}, "correct.example.com", false},
+		{"single redirect: locality with no region", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "who", Value: "knows"}}},
+			conf:     redirectURLConf{sru: &singleRedirectURL{RedirectURL: "correct.example.com"}},
+		}, "correct.example.com", false},
+		{"single redirect: locality with region", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}}},
+			conf:     redirectURLConf{sru: &singleRedirectURL{RedirectURL: "correct.example.com"}},
+		}, "correct.example.com", false},
+		// Multi-region configurations
+		{"multi-region config: empty locality", args{
+			locality: roachpb.Locality{},
+			conf:     redirectURLConf{mrru: &multiRegionRedirectURLs{RedirectURLs: nil}},
+		}, "", true},
+		{"multi-region config: locality with no region", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "who", Value: "knows"}}},
+			conf:     redirectURLConf{mrru: &multiRegionRedirectURLs{RedirectURLs: nil}},
+		}, "", true},
+		{"multi-region config: locality with region but no corresponding URL in config", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}}},
+			conf:     redirectURLConf{mrru: &multiRegionRedirectURLs{RedirectURLs: nil}},
+		}, "", true},
+		{"multi-region config: locality with region and corresponding url", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}}},
+			conf: redirectURLConf{mrru: &multiRegionRedirectURLs{
+				RedirectURLs: map[string]string{
+					"us-east-1": "correct.example.com",
+					"us-west-2": "incorrect.example.com",
+				},
+			}},
+		}, "correct.example.com", false},
+		{"multi-region config: locality with region and corresponding url 2", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west-2"}}},
+			conf: redirectURLConf{mrru: &multiRegionRedirectURLs{
+				RedirectURLs: map[string]string{
+					"us-east-1": "incorrect.example.com",
+					"us-west-2": "correct.example.com",
+				},
+			}},
+		}, "correct.example.com", false},
+		{"multi-region config: locality with unexpected region", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-central-2"}}},
+			conf: redirectURLConf{mrru: &multiRegionRedirectURLs{
+				RedirectURLs: map[string]string{
+					"us-east-1": "incorrect.example.com",
+					"us-west-2": "correct.example.com",
+				},
+			}},
+		}, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getRegionSpecificRedirectURL(tt.args.locality, tt.args.conf)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, got, tt.want)
+		})
+	}
+}

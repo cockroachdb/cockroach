@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/time/rate"
@@ -238,7 +239,8 @@ func (ss *diskSideloadStorage) TruncateTo(
 		// Not worth trying to figure out which one, just try to delete.
 		err := ss.eng.RemoveDir(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
-			return bytesFreed, 0, errors.Wrapf(err, "while purging %q", ss.dir)
+			log.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
+			err = nil // handled
 		}
 	}
 	return bytesFreed, bytesRetained, nil
@@ -247,12 +249,21 @@ func (ss *diskSideloadStorage) TruncateTo(
 func (ss *diskSideloadStorage) forEach(
 	ctx context.Context, visit func(index uint64, filename string) error,
 ) error {
-	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
+	matches, err := ss.eng.List(ss.dir)
+	if oserror.IsNotExist(err) {
+		// Nothing to do.
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	for _, match := range matches {
+		// List returns a relative path, but we want to deal in absolute paths
+		// because we may pass this back to `eng.{Delete,Stat}`, etc, and those
+		// expect absolute paths.
+		match = filepath.Join(ss.dir, match)
 		base := filepath.Base(match)
+		// Extract `i<log-index>` prefix from file.
 		if len(base) < 1 || base[0] != 'i' {
 			continue
 		}
@@ -260,10 +271,11 @@ func (ss *diskSideloadStorage) forEach(
 		upToDot := strings.SplitN(base, ".", 2)
 		logIdx, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
-			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
+			log.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
+			continue
 		}
 		if err := visit(logIdx, match); err != nil {
-			return errors.Wrapf(err, "matching pattern %q", match)
+			return errors.Wrapf(err, "matching pattern %q on dir %s", match, ss.dir)
 		}
 	}
 	return nil

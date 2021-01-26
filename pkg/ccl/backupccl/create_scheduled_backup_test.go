@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -178,6 +179,8 @@ func (t userType) String() string {
 // itself with the actual scheduling and the execution of those backups.
 func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -435,6 +438,8 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 
 func TestScheduleBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -578,6 +583,8 @@ INSERT INTO t1 values (-1), (10), (-100);
 
 func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -599,6 +606,8 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 
 func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -619,6 +628,8 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 
 func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -639,6 +650,8 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 // (eventually), even after the cluster has been down for a long period.
 func TestScheduleBackupRecoversFromClusterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 

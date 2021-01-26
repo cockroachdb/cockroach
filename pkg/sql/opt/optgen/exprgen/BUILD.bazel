@@ -24,7 +24,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/stats",
         "//pkg/sql/types",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -35,6 +35,6 @@ go_test(
     deps = [
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

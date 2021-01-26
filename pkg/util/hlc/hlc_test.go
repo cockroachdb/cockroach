@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type Event uint8
@@ -54,7 +55,7 @@ func ExampleNewClock() {
 	}
 
 	if t.WallTime-s.WallTime > 0 {
-		log.Fatalf(context.Background(), "HLC timestamp %d deviates from physical clock %d", s, t)
+		log.Fatalf(context.Background(), "HLC timestamp %s deviates from physical clock %s", s, t)
 	}
 
 	if s.Logical > 0 {
@@ -303,37 +304,37 @@ func TestHLCClock(t *testing.T) {
 		wallClock int64
 		event     Event
 		// If this is a receive event, this holds the "input" timestamp.
-		input *Timestamp
+		input *ClockTimestamp
 		// The expected timestamp generated from the input.
-		expected Timestamp
+		expected ClockTimestamp
 	}{
 		// A few valid steps to warm up.
-		{5, SEND, nil, Timestamp{WallTime: 5, Logical: 0}},
-		{6, SEND, nil, Timestamp{WallTime: 6, Logical: 0}},
-		{10, RECV, &Timestamp{WallTime: 10, Logical: 5}, Timestamp{WallTime: 10, Logical: 6}},
+		{5, SEND, nil, ClockTimestamp{WallTime: 5, Logical: 0}},
+		{6, SEND, nil, ClockTimestamp{WallTime: 6, Logical: 0}},
+		{10, RECV, &ClockTimestamp{WallTime: 10, Logical: 5}, ClockTimestamp{WallTime: 10, Logical: 6}},
 		// Our clock mysteriously jumps back.
-		{7, SEND, nil, Timestamp{WallTime: 10, Logical: 7}},
+		{7, SEND, nil, ClockTimestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
-		{8, RECV, &Timestamp{WallTime: 10, Logical: 4}, Timestamp{WallTime: 10, Logical: 9}},
+		{8, RECV, &ClockTimestamp{WallTime: 10, Logical: 4}, ClockTimestamp{WallTime: 10, Logical: 9}},
 		// Wall clocks coincide, but the remote logical clock wins.
-		{10, RECV, &Timestamp{WallTime: 10, Logical: 99}, Timestamp{WallTime: 10, Logical: 100}},
+		{10, RECV, &ClockTimestamp{WallTime: 10, Logical: 99}, ClockTimestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
-		{11, RECV, &Timestamp{WallTime: 10, Logical: 31}, Timestamp{WallTime: 11, Logical: 1}},
-		{11, SEND, nil, Timestamp{WallTime: 11, Logical: 2}},
+		{11, RECV, &ClockTimestamp{WallTime: 10, Logical: 31}, ClockTimestamp{WallTime: 11, Logical: 1}},
+		{11, SEND, nil, ClockTimestamp{WallTime: 11, Logical: 2}},
 	}
 
-	var current Timestamp
+	var current ClockTimestamp
 	for i, step := range expectedHistory {
 		m.Set(step.wallClock)
 		switch step.event {
 		case SEND:
-			current = c.Now()
+			current = c.NowAsClockTimestamp()
 		case RECV:
 			fallthrough
 		default:
-			previous := c.Now()
+			previous := c.NowAsClockTimestamp()
 			c.Update(*step.input)
-			current = c.Now()
+			current = c.NowAsClockTimestamp()
 			if current == previous {
 				t.Errorf("%d: clock not updated", i)
 			}
@@ -356,6 +357,41 @@ func TestExampleManualClock(t *testing.T) {
 	if wallNanos := c.Now().WallTime; wallNanos != 20 {
 		t.Fatalf("unexpected wall time: %d", wallNanos)
 	}
+}
+
+// TestHybridManualClock test the basic functionality of the
+// TestHybridManualClock.
+func TestHybridManualClock(t *testing.T) {
+	m := NewHybridManualClock()
+	c := NewClock(m.UnixNano, time.Nanosecond)
+
+	// We do a two sided test to make sure that the physical clock matches
+	// the hybrid value. Since we cant pull a value off both clocks at the same
+	// time, we use two LessOrEqual comparisons with reverse order, to establish
+	// that the values are roughly equal.
+	require.LessOrEqual(t, c.Now().WallTime, UnixNano())
+	require.LessOrEqual(t, UnixNano(), c.Now().WallTime)
+
+	m.Increment(10)
+	require.LessOrEqual(t, c.Now().WallTime, UnixNano()+10)
+	require.LessOrEqual(t, UnixNano()+10, c.Now().WallTime)
+}
+
+// TestHybridManualClockPause test the Pause() functionality of the
+// HybridManualClock.
+func TestHybridManualClockPause(t *testing.T) {
+	m := NewHybridManualClock()
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	now := c.Now().WallTime
+	time.Sleep(10 * time.Millisecond)
+	require.Less(t, now, c.Now().WallTime)
+	m.Pause()
+	now = c.Now().WallTime
+	require.Equal(t, now, c.Now().WallTime)
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, now, c.Now().WallTime)
+	m.Increment(10)
+	require.Equal(t, now+10, c.Now().WallTime)
 }
 
 func TestHLCMonotonicityCheck(t *testing.T) {
@@ -480,7 +516,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 			c := NewClock(m.UnixNano, time.Nanosecond)
 			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
 			fatal = false
-			err := c.UpdateAndCheckMaxOffset(ctx, Timestamp{WallTime: test.messageWallTime})
+			err := c.UpdateAndCheckMaxOffset(ctx, ClockTimestamp{WallTime: test.messageWallTime})
 			a.Nil(err)
 			a.Equal(test.isFatal, fatal)
 		})
@@ -603,15 +639,15 @@ func BenchmarkUpdate(b *testing.B) {
 	// benchmarking the contention of the benchmark synchronization rather than
 	// the HLC.
 	r := rand.New(rand.NewSource(34704832098))
-	timestamps := make([][]Timestamp, concurrency)
+	timestamps := make([][]ClockTimestamp, concurrency)
 	for w := 0; w < concurrency; w++ {
-		timestamps[w] = make([]Timestamp, updates/concurrency)
+		timestamps[w] = make([]ClockTimestamp, updates/concurrency)
 		wallTime := 0
 		for i := 0; i < updates/concurrency; i++ {
 			if r.Float64() < advanceChance {
 				wallTime += r.Intn(advanceMax + 1)
 			}
-			timestamps[w][i] = Timestamp{WallTime: int64(wallTime)}
+			timestamps[w][i] = ClockTimestamp{WallTime: int64(wallTime)}
 		}
 	}
 

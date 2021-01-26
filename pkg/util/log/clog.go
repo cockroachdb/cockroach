@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -93,17 +92,6 @@ type loggingT struct {
 			hideStack bool                   // hides stack trace; only in effect when f is not nil
 		}
 
-		// the Cluster ID is reported on every new log file so as to ease
-		// the correlation of panic reports with self-reported log files.
-		clusterID string
-		// the node ID is reported like the cluster ID, for the same reasons.
-		// We avoid using roahcpb.NodeID to avoid a circular reference.
-		nodeID int32
-		// ditto for the tenant ID.
-		tenantID string
-		// ditto for the SQL instance ID.
-		sqlInstanceID int32
-
 		// fatalCh is closed on fatal errors.
 		fatalCh chan struct{}
 
@@ -112,6 +100,24 @@ type loggingT struct {
 		active        bool
 		firstUseStack string
 	}
+
+	idMu struct {
+		syncutil.RWMutex
+		idPayload
+	}
+}
+
+type idPayload struct {
+	// the Cluster ID is reported on every new log file so as to ease
+	// the correlation of panic reports with self-reported log files.
+	clusterID string
+	// the node ID is reported like the cluster ID, for the same reasons.
+	// We avoid using roahcpb.NodeID to avoid a circular reference.
+	nodeID int32
+	// ditto for the tenant ID.
+	tenantID string
+	// ditto for the SQL instance ID.
+	sqlInstanceID int32
 }
 
 func init() {
@@ -210,18 +216,20 @@ func SetNodeIDs(clusterID string, nodeID int32) {
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%s", nodeID)
+	if nodeID != 0 {
+		logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%d", nodeID)
+	}
 
 	// Perform the change proper.
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	logging.idMu.Lock()
+	defer logging.idMu.Unlock()
 
-	if logging.mu.clusterID != "" {
+	if logging.idMu.clusterID != "" {
 		panic("clusterID already set")
 	}
 
-	logging.mu.clusterID = clusterID
-	logging.mu.nodeID = nodeID
+	logging.idMu.clusterID = clusterID
+	logging.idMu.nodeID = nodeID
 }
 
 // SetTenantIDs stores the tenant ID and instance ID for further reference.
@@ -230,54 +238,53 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.DEV, "tenantID: %s", tenantID)        // TODO(knz): Use OPS here.
-	logfDepth(ctx, 1, severity.INFO, channel.DEV, "instanceID: %d", sqlInstanceID) // TODO(knz): Use OPS here.
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "tenantID: %s", tenantID)
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "instanceID: %d", sqlInstanceID)
 
 	// Perform the change proper.
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	logging.idMu.Lock()
+	defer logging.idMu.Unlock()
 
-	if logging.mu.tenantID != "" {
+	if logging.idMu.tenantID != "" {
 		panic("tenantID already set")
 	}
 
-	logging.mu.tenantID = tenantID
-	logging.mu.sqlInstanceID = sqlInstanceID
+	logging.idMu.tenantID = tenantID
+	logging.idMu.sqlInstanceID = sqlInstanceID
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggerT) outputLogEntry(entry logpb.Entry) {
+func (l *loggerT) outputLogEntry(entry logEntry) {
 	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		f(entry)
+		f(entry.convertToLegacy())
 		return
 	}
 
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.
 	setActive()
-	var stacks []byte
 	var fatalTrigger chan struct{}
-	extraSync := false
+	extraFlush := false
 
-	if entry.Severity == severity.FATAL {
-		extraSync = true
+	if entry.sev == severity.FATAL {
+		extraFlush = true
 		logging.signalFatalCh()
 
 		switch traceback {
 		case tracebackSingle:
-			stacks = getStacks(false)
+			entry.stacks = getStacks(false)
 		case tracebackAll:
-			stacks = getStacks(true)
+			entry.stacks = getStacks(true)
 		}
 
 		for _, s := range l.sinkInfos {
-			stacks = s.sink.attachHints(stacks)
+			entry.stacks = s.sink.attachHints(entry.stacks)
 		}
 
 		// Explain to the (human) user that we would like to hear from them.
-		stacks = append(stacks, []byte(fatalErrorPostamble)...)
+		entry.stacks = append(entry.stacks, []byte(fatalErrorPostamble)...)
 
 		// We don't want to hang forever writing our final log message. If
 		// things are broken (for example, if the disk fills up and there
@@ -296,7 +303,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		logging.mu.Lock()
 		if logging.mu.exitOverride.f != nil {
 			if logging.mu.exitOverride.hideStack {
-				stacks = []byte("stack trace omitted via SetExitFunc()\n")
+				entry.stacks = []byte("stack trace omitted via SetExitFunc()\n")
 			}
 			exitFunc = logging.mu.exitOverride.f
 		}
@@ -337,17 +344,21 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		// Stopper's Stop() call (e.g. the pgwire async processing
 		// goroutine). These asynchronous log calls are concurrent with
 		// the stderrSinkInfo update in (*TestLogScope).Close().
-		if entry.Severity < s.threshold.Get() || !s.sink.active() {
+		if entry.sev < s.threshold.Get() || !s.sink.active() {
 			continue
 		}
-		editedEntry := maybeRedactEntry(entry, s.editor)
+		editedEntry := entry
 
 		// Add a counter. This is important for e.g. the SQL audit logs.
 		// Note: whether the counter is displayed or not depends on
 		// the formatter.
-		editedEntry.Counter = atomic.AddUint64(&s.msgCount, 1)
+		editedEntry.counter = atomic.AddUint64(&s.msgCount, 1)
 
-		bufs.b[i] = s.formatter.formatEntry(editedEntry, stacks)
+		// Process the redation spec.
+		editedEntry.payload = maybeRedactEntry(editedEntry.payload, s.editor)
+
+		// Format the entry for this sink.
+		bufs.b[i] = s.formatter.formatEntry(editedEntry)
 		someSinkActive = true
 	}
 
@@ -368,7 +379,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.sink.output(extraSync, bufs.b[i].Bytes()); err != nil {
+			if err := s.sink.output(extraFlush, bufs.b[i].Bytes()); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
 					// the error and move on.
@@ -398,7 +409,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	}
 
 	// Flush and exit on fatal logging.
-	if entry.Severity == severity.FATAL {
+	if entry.sev == severity.FATAL {
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
 		// below when s == severity.FATAL, this is not so, because the

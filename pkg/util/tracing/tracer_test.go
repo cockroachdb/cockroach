@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/logtags"
@@ -42,7 +43,7 @@ func TestTracerRecording(t *testing.T) {
 	if !noop1.isNoop() {
 		t.Error("expected noop Span")
 	}
-	noop1.LogKV("hello", "void")
+	noop1.Record("hello")
 
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
 	if !noop2.isNoop() {
@@ -66,22 +67,22 @@ func TestTracerRecording(t *testing.T) {
 	}
 	noop3.Finish()
 
-	s1.LogKV("x", 1)
+	s1.Recordf("x=%d", 1)
 	s1.SetVerbose(true)
-	s1.LogKV("x", 2)
+	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	if s2.IsBlackHole() {
 		t.Error("recording Span should not be black hole")
 	}
-	s2.LogKV("x", 3)
+	s2.Recordf("x=%d", 3)
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
 			tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
 			tags: _unfinished=1 _verbose=1
-			x: 3
+			event: x=3
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -89,13 +90,13 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
 		Span b:
 			tags: _unfinished=1 _verbose=1
-			x: 3
+			event: x=3
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
-	s3.LogKV("x", 4)
+	s3.Recordf("x=%d", 4)
 	s3.SetTag("tag", "val")
 
 	s2.Finish()
@@ -103,13 +104,13 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
 			tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
 			tags: _verbose=1
-			x: 3
+			event: x=3
 		Span c:
 			tags: _unfinished=1 _verbose=1 tag=val
-			x: 4
+			event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -117,29 +118,29 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
       tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
       tags: _verbose=1
-			x: 3
+			event: x=3
 		Span c:
 			tags: _verbose=1 tag=val
-			x: 4
+			event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
 	s1.SetVerbose(false)
-	s1.LogKV("x", 100)
+	s1.Recordf("x=%d", 100)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
 	}
 
 	// The child Span is still recording.
-	s3.LogKV("x", 5)
+	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
 			tags: _verbose=1 tag=val
-			x: 4
-			x: 5
+			event: x=4
+			event: x=5
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if trace1 != trace2 {
 		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
-	s2.LogKV("x", 1)
+	s2.Recordf("x=%d", 1)
 	s2.Finish()
 
 	// Verify that recording was started automatically.
@@ -262,7 +263,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err := TestingCheckRecordedSpans(rec, `
 		Span remote op:
 			tags: _verbose=1
-			x: 1
+			event: x=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +285,7 @@ func TestTracerInjectExtract(t *testing.T) {
 			tags: _verbose=1
 		Span remote op:
 			tags: _verbose=1
-			x: 1
+			event: x=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -335,4 +336,51 @@ func TestLightstepContext(t *testing.T) {
 	}
 	require.Equal(t, exp, s2.Meta().Baggage)
 	require.Equal(t, exp, shadowBaggage)
+}
+
+func getSortedActiveSpanOps(tr *Tracer) []string {
+	var sl []string
+	tr.VisitSpans(func(sp *Span) {
+		for _, rec := range sp.GetRecording() {
+			sl = append(sl, rec.Operation)
+		}
+	})
+	sort.Strings(sl)
+	return sl
+}
+
+// TestTracer_VisitSpans verifies that in-flight local root Spans
+// are tracked by the Tracer, and that Finish'ed Spans are not.
+func TestTracer_VisitSpans(t *testing.T) {
+	tr1 := NewTracer()
+	tr2 := NewTracer()
+
+	root := tr1.StartSpan("root", WithForceRealSpan())
+	root.SetVerbose(true)
+	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	require.Len(t, tr1.activeSpans.m, 1)
+
+	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
+	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
+	require.Len(t, tr2.activeSpans.m, 2)
+
+	require.NoError(t, child.ImportRemoteSpans(childChildFinished.GetRecording()))
+
+	childChildFinished.Finish()
+	require.Len(t, tr2.activeSpans.m, 1)
+
+	// Even though only `root` is tracked by tr1, we also reach
+	// root.child and (via ImportRemoteSpans) the remote child.
+	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(tr1))
+	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(tr2))
+
+	childChild.Finish()
+	child.Finish()
+	root.Finish()
+
+	// Nothing is tracked any more.
+	require.Len(t, getSortedActiveSpanOps(tr1), 0)
+	require.Len(t, getSortedActiveSpanOps(tr2), 0)
+	require.Len(t, tr1.activeSpans.m, 0)
+	require.Len(t, tr2.activeSpans.m, 0)
 }

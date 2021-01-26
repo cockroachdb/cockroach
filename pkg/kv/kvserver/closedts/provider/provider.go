@@ -76,12 +76,12 @@ func NewProvider(cfg *Config) *Provider {
 }
 
 // Start implements closedts.Provider.
-//
-// TODO(tschottdorf): the closer functionality could be extracted into its own
-// component, which would make the interfaces a little cleaner. Decide whether
-// it's worth it during testing.
 func (p *Provider) Start() {
-	p.cfg.Stopper.RunWorker(logtags.AddTag(context.Background(), "ct-closer", nil), p.runCloser)
+	if err := p.cfg.Stopper.RunAsyncTask(
+		logtags.AddTag(context.Background(), "ct-closer", nil), "ct-closer", p.runCloser,
+	); err != nil {
+		p.drain()
+	}
 }
 
 func (p *Provider) drain() {
@@ -149,7 +149,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 		}
 
 		next, liveAtEpoch, err := p.cfg.Clock(p.cfg.NodeID)
-		next.WallTime -= int64(targetDuration)
+		next = next.Add(-int64(targetDuration), 0)
 		if err != nil {
 			if everBeenLive && p.everyClockLog.ShouldLog() {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %+v", err)
@@ -186,7 +186,11 @@ func (p *Provider) runCloser(ctx context.Context) {
 			// TODO(tschottdorf): the transport should ignore connection requests from
 			// the node to itself. Those connections would pointlessly loop this around
 			// once more.
-			ch <- entry
+			select {
+			case ch <- entry:
+			case <-p.cfg.Stopper.ShouldQuiesce():
+				return
+			}
 		}
 	}
 }
@@ -196,7 +200,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
 
-	p.cfg.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	_ = p.cfg.Stopper.RunAsyncTask(context.Background(), "provider-notify", func(ctx context.Context) {
 		handle := func(entry ctpb.Entry) {
 			p.cfg.Storage.Add(nodeID, entry)
 		}
@@ -220,8 +224,16 @@ func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 				p.mu.Broadcast()
 			}
 		}
-		for entry := range ch {
-			handle(entry)
+		for {
+			select {
+			case entry, ok := <-ch:
+				if !ok {
+					return
+				}
+				handle(entry)
+			case <-p.cfg.Stopper.ShouldQuiesce():
+				return
+			}
 		}
 	})
 

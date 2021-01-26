@@ -12,16 +12,16 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/blobs/blobspb",
+        "//pkg/blobs/blobspb:blobspb_go_proto",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/metadata",
-        "//vendor/google.golang.org/grpc/status",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -35,7 +35,7 @@ go_test(
     ],
     embed = [":blobs"],
     deps = [
-        "//pkg/blobs/blobspb",
+        "//pkg/blobs/blobspb:blobspb_go_proto",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -45,8 +45,8 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/netutil",
         "//pkg/util/stop",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_stretchr_testify//assert",
     ],
 )

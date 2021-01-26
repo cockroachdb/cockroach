@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -90,6 +91,9 @@ type TestServerInterface interface {
 	// ExecutorConfig returns a copy of the server's ExecutorConfig.
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
+
+	// Tracer returns a *tracing.Tracer as an interface{}.
+	Tracer() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
@@ -174,9 +178,7 @@ type TestServerInterface interface {
 	ClusterSettings() *cluster.Settings
 
 	// SplitRange splits the range containing splitKey.
-	SplitRange(
-		splitKey roachpb.Key,
-	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
+	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 
 	// MergeRanges merges the range containing leftKey with the following adjacent
 	// range.
@@ -194,26 +196,18 @@ type TestServerInterface interface {
 	// inside the specified database.
 	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
 
-	// CheckForUpdates phones home to check for updates and report usage.
-	//
-	// When using this for testing, consider setting DiagnosticsReportingEnabled
-	// to false so the periodic check doesn't interfere with the test.
-	//
-	// This can be slow because of cloud detection; use cloudinfo.Disable() in
-	// tests to avoid that.
-	CheckForUpdates(ctx context.Context)
+	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
+	// interface{}. The UpdateChecker periodically phones home to check for new
+	// updates that are available.
+	UpdateChecker() interface{}
 
-	// ReportDiagnostics phones home to report diagnostics.
-	//
-	// If using this for testing, consider setting DiagnosticsReportingEnabled to
-	// false so the periodic reporting doesn't interfere with the test.
-	//
-	// This can be slow because of cloud detection; use cloudinfo.Disable() in
-	// tests to avoid that.
-	ReportDiagnostics(ctx context.Context)
+	// DiagnosticsReporter returns the server's *diagnostics.Reporter as an
+	// interface{}. The DiagnosticsReporter periodically phones home to report
+	// diagnostics and usage.
+	DiagnosticsReporter() interface{}
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant(params base.TestTenantArgs) (pgAddr string, httpAddr string, _ error)
+	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
@@ -224,6 +218,9 @@ type TestServerInterface interface {
 
 	// Engines returns the TestServer's engines.
 	Engines() []storage.Engine
+
+	// MetricsRecorder periodically records node-level and store-level metrics.
+	MetricsRecorder() *status.MetricsRecorder
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -255,7 +252,8 @@ func StartServer(
 	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	goDB := OpenDBConn(t, server, params, server.Stopper())
+	goDB := OpenDBConn(
+		t, server.ServingSQLAddr(), params.UseDatabase, params.Insecure, server.Stopper())
 	return server, goDB, server.DB()
 }
 
@@ -275,16 +273,16 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
 func OpenDBConnE(
-	server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+		sqlAddr, "StartServer" /* prefix */, url.User(security.RootUser))
 	if err != nil {
 		return nil, err
 	}
 
-	pgURL.Path = params.UseDatabase
-	if params.Insecure {
+	pgURL.Path = useDatabase
+	if insecure {
 		pgURL.RawQuery = "sslmode=disable"
 	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
@@ -302,9 +300,9 @@ func OpenDBConnE(
 
 // OpenDBConn sets up a gosql DB connection to the given server.
 func OpenDBConn(
-	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) *gosql.DB {
-	conn, err := OpenDBConnE(server, params, stopper)
+	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,27 +326,22 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // StartTenant starts a tenant SQL server connecting to the supplied test
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
-func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArgs) *gosql.DB {
-	pgAddr, _, err := ts.StartTenant(params)
+func StartTenant(
+	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
+) (TestTenantInterface, *gosql.DB) {
+	tenant, err := ts.StartTenant(params)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, pgAddr, t.Name() /* prefix */, url.User(security.RootUser))
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	stopper := params.Stopper
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
-	stopper.AddCloser(stop.CloserFn(func() {
-		cleanupGoDB()
-	}))
-	return db
+
+	goDB := OpenDBConn(
+		t, tenant.SQLAddr(), "", false /* insecure */, stopper)
+	return tenant, goDB
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

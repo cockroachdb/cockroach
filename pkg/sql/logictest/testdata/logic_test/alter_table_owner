@@ -16,6 +16,10 @@ ALTER TABLE t OWNER TO testuser
 statement error pq: user testuser does not have CREATE privilege on schema s
 ALTER TABLE s.t OWNER TO testuser
 
+# ALTER TABLE IF EXISTS OWNER succeeds if the table does not exist.
+statement ok
+ALTER TABLE IF EXISTS does_not_exist OWNER TO testuser
+
 statement ok
 GRANT CREATE ON DATABASE test TO testuser, testuser2;
 GRANT CREATE ON SCHEMA s TO testuser, testuser2

@@ -11,10 +11,10 @@ go_library(
     deps = [
         "//pkg/cmd/roachprod/config",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/golang.org/x/crypto/ssh",
-        "//vendor/golang.org/x/crypto/ssh/agent",
-        "//vendor/golang.org/x/crypto/ssh/knownhosts",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_x_crypto//ssh",
+        "@org_golang_x_crypto//ssh/agent",
+        "@org_golang_x_crypto//ssh/knownhosts",
     ],
 )

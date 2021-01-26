@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -444,9 +445,10 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 
 		// Columns for each index.
 		columnIdxMap := table.ColumnIdxMap()
-		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
-			for _, colID := range index.ColumnIDs {
-				idxID := h.IndexOid(table.GetID(), index.ID)
+		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+			for i := 0; i < index.NumColumns(); i++ {
+				colID := index.GetColumnID(i)
+				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.GetColumnAtIdx(columnIdxMap.GetDefault(colID))
 				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
 					return err
@@ -623,31 +625,31 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		}
 
 		// Indexes.
-		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			indexType := forwardIndexOid
-			if index.Type == descpb.IndexDescriptor_INVERTED {
+			if index.GetType() == descpb.IndexDescriptor_INVERTED {
 				indexType = invertedIndexOid
 			}
 			return addRow(
-				h.IndexOid(table.GetID(), index.ID), // oid
-				tree.NewDName(index.Name),           // relname
-				namespaceOid,                        // relnamespace
-				oidZero,                             // reltype
-				oidZero,                             // reloftype
-				getOwnerOID(table),                  // relowner
-				indexType,                           // relam
-				oidZero,                             // relfilenode
-				oidZero,                             // reltablespace
-				tree.DNull,                          // relpages
-				tree.DNull,                          // reltuples
-				zeroVal,                             // relallvisible
-				oidZero,                             // reltoastrelid
-				tree.DBoolFalse,                     // relhasindex
-				tree.DBoolFalse,                     // relisshared
-				relPersistencePermanent,             // relPersistence
-				tree.DBoolFalse,                     // relistemp
-				relKindIndex,                        // relkind
-				tree.NewDInt(tree.DInt(len(index.ColumnNames))), // relnatts
+				h.IndexOid(table.GetID(), index.GetID()), // oid
+				tree.NewDName(index.GetName()),           // relname
+				namespaceOid,                             // relnamespace
+				oidZero,                                  // reltype
+				oidZero,                                  // reloftype
+				getOwnerOID(table),                       // relowner
+				indexType,                                // relam
+				oidZero,                                  // relfilenode
+				oidZero,                                  // reltablespace
+				tree.DNull,                               // relpages
+				tree.DNull,                               // reltuples
+				zeroVal,                                  // relallvisible
+				oidZero,                                  // reltoastrelid
+				tree.DBoolFalse,                          // relhasindex
+				tree.DBoolFalse,                          // relisshared
+				relPersistencePermanent,                  // relPersistence
+				tree.DBoolFalse,                          // relistemp
+				relKindIndex,                             // relkind
+				tree.NewDInt(tree.DInt(index.NumColumns())), // relnatts
 				zeroVal,         // relchecks
 				tree.DBoolFalse, // relhasoids
 				tree.DBoolFalse, // relhaspkey
@@ -786,10 +788,13 @@ func populateTableConstraints(
 			if err != nil {
 				return err
 			}
-			if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
-				// We couldn't find an index that matched. This shouldn't happen.
+			if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+				referencedTable, con.FK.ReferencedColumnIDs,
+			); err != nil {
+				// We couldn't find a unique constraint that matched. This shouldn't
+				// happen.
 				log.Warningf(ctx, "broken fk reference: %v", err)
-			} else {
+			} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
 				conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 			}
 			confrelid = tableOid(con.ReferencedTable.ID)
@@ -916,7 +921,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
-	return r.p.Descriptors().GetDatabaseVersionByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
+	return r.p.Descriptors().GetImmutableDatabaseByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
@@ -1006,7 +1011,8 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, table.GetParentSchemaID())
+					sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{})
 					if err != nil {
 						return false, err
 					}
@@ -1216,10 +1222,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					return err
 				}
 				refObjID := oidZero
-				if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
-					// We couldn't find an index that matched. This shouldn't happen.
+				if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+					referencedTable, con.FK.ReferencedColumnIDs,
+				); err != nil {
+					// We couldn't find a unique constraint that matched. This shouldn't
+					// happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
-				} else {
+				} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
 				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
@@ -1440,21 +1449,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
-				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, isPrimary bool) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
-						table.GetIndexMutationCapabilities(index.ID)
+						table.GetIndexMutationCapabilities(index.GetID())
 					isReady := isMutation && isWriteOnly
-					indkey, err := colIDArrayToVector(index.ColumnIDs)
-					if err != nil {
-						return err
-					}
+
 					// Get the collations for all of the columns. To do this we require
 					// the type of the column.
 					// Also fill in indoption for each column to indicate if the index
 					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
-					for i, columnID := range index.ColumnIDs {
+
+					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
+					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
+						columnID := index.GetColumnID(i)
+						colIDs = append(colIDs, columnID)
 						col, err := table.FindColumnByID(columnID)
 						if err != nil {
 							return err
@@ -1465,7 +1475,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// Currently, nulls always appear first if the order is ascending,
 						// and always appear last if the order is descending.
 						var thisIndOption tree.DInt
-						if index.ColumnDirections[i] == descpb.IndexDescriptor_ASC {
+						if index.GetColumnDirection(i) == descpb.IndexDescriptor_ASC {
 							thisIndOption = indoptionNullsFirst
 						} else {
 							thisIndOption = indoptionDesc
@@ -1474,34 +1484,38 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							return err
 						}
 					}
+					indkey, err := colIDArrayToVector(colIDs)
+					if err != nil {
+						return err
+					}
 					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
 					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
-					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
+					indclass, err := makeZeroedOidVector(len(colIDs))
 					if err != nil {
 						return err
 					}
 					return addRow(
-						h.IndexOid(table.GetID(), index.ID), // indexrelid
-						tableOid,                            // indrelid
-						tree.NewDInt(tree.DInt(len(index.ColumnNames))), // indnatts
-						tree.MakeDBool(tree.DBool(index.Unique)),        // indisunique
-						tree.MakeDBool(tree.DBool(isPrimary)),           // indisprimary
-						tree.DBoolFalse,                                 // indisexclusion
-						tree.MakeDBool(tree.DBool(index.Unique)),        // indimmediate
-						tree.DBoolFalse,                                 // indisclustered
-						tree.MakeDBool(tree.DBool(!isMutation)),         // indisvalid
-						tree.DBoolFalse,                                 // indcheckxmin
-						tree.MakeDBool(tree.DBool(isReady)),             // indisready
-						tree.DBoolTrue,                                  // indislive
-						tree.DBoolFalse,                                 // indisreplident
-						indkey,                                          // indkey
-						collationOidVector,                              // indcollation
-						indclass,                                        // indclass
-						indoptionIntVector,                              // indoption
-						tree.DNull,                                      // indexprs
-						tree.DNull,                                      // indpred
+						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
+						tableOid,                                     // indrelid
+						tree.NewDInt(tree.DInt(index.NumColumns())),  // indnatts
+						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
+						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
+						tree.DBoolFalse,                              // indisexclusion
+						tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
+						tree.DBoolFalse,                              // indisclustered
+						tree.MakeDBool(tree.DBool(!isMutation)),      // indisvalid
+						tree.DBoolFalse,                              // indcheckxmin
+						tree.MakeDBool(tree.DBool(isReady)),          // indisready
+						tree.DBoolTrue,                               // indislive
+						tree.DBoolFalse,                              // indisreplident
+						indkey,                                       // indkey
+						collationOidVector,                           // indcollation
+						indclass,                                     // indclass
+						indoptionIntVector,                           // indoption
+						tree.DNull,                                   // indexprs
+						tree.DNull,                                   // indpred
 					)
 				})
 			})
@@ -1518,18 +1532,18 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
-				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, table, index, tableLookup)
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+					def, err := indexDefFromDescriptor(ctx, p, db, table, index.IndexDesc(), tableLookup)
 					if err != nil {
 						return err
 					}
 					return addRow(
-						h.IndexOid(table.GetID(), index.ID), // oid
-						scNameName,                          // schemaname
-						tblName,                             // tablename
-						tree.NewDName(index.Name),           // indexname
-						tree.DNull,                          // tablespace
-						tree.NewDString(def),                // indexdef
+						h.IndexOid(table.GetID(), index.GetID()), // oid
+						scNameName,                               // schemaname
+						tblName,                                  // tablename
+						tree.NewDName(index.GetName()),           // indexname
+						tree.DNull,                               // tablespace
+						tree.NewDString(def),                     // indexdef
 					)
 				})
 			})
@@ -1547,20 +1561,21 @@ func indexDefFromDescriptor(
 	index *descpb.IndexDescriptor,
 	tableLookup tableLookupFn,
 ) (string, error) {
+	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
 		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
 		Unique:   index.Unique,
-		Columns:  make(tree.IndexElemList, len(index.ColumnNames)),
+		Columns:  make(tree.IndexElemList, len(colNames)),
 		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
 		Inverted: index.Type == descpb.IndexDescriptor_INVERTED,
 	}
-	for i, name := range index.ColumnNames {
+	for i, name := range colNames {
 		elem := tree.IndexElem{
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.ColumnDirections[i] == descpb.IndexDescriptor_DESC {
+		if index.ColumnDirections[index.ExplicitColumnStartIdx()+i] == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
 		indexDef.Columns[i] = elem
@@ -1582,7 +1597,7 @@ func indexDefFromDescriptor(
 		for _, ancestor := range intl.Ancestors {
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
 		}
-		fields := index.ColumnNames[:sharedPrefixLen]
+		fields := colNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
 			Parent: tree.MakeTableName(tree.Name(parentDb.GetName()),
 				tree.Name(parentTable.GetName())),
@@ -2300,7 +2315,7 @@ func addPGTypeRow(
 			typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 		}
 	default:
-		typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
+		typArray = tree.NewDOid(tree.DInt(types.CalcArrayOid(typ)))
 	}
 	if typ.Family() == types.EnumFamily {
 		builtinPrefix = "enum_"
@@ -2368,7 +2383,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Now generate rows for user defined types in this database.
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
-					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
+					sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
 					if err != nil {
 						return err
 					}
@@ -2401,9 +2417,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return true, nil
 				}
 
+				// This oid is not a user-defined type and we didn't find it in the
+				// map of predefined types, return false. Note that in common usage we
+				// only really expect the value 0 here (which cockroach uses internally
+				// in the typelem field amongst others). Users, however, may join on
+				// this index with any value.
+				if ooid <= oidext.CockroachPredefinedOIDMax {
+					return false, nil
+				}
+
 				// Check if it is a user defined type.
 				id := typedesc.UserDefinedTypeOIDToID(ooid)
-				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						return false, nil
@@ -2413,7 +2438,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					}
 					return false, err
 				}
-				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
+				sc, err := p.Descriptors().GetImmutableSchemaByID(
+					ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
 				if err != nil {
 					return false, err
 				}

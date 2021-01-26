@@ -213,7 +213,9 @@ func createTestStoreWithOpts(
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
+			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow(),
+			storeCfg.TestingKnobs,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -237,7 +239,7 @@ func createTestStoreWithOpts(
 	var ba roachpb.BatchRequest
 	get := roachpb.GetRequest{}
 	get.Key = keys.LocalMax
-	ba.Header.Replica = repl.Desc().Replicas().Voters()[0]
+	ba.Header.Replica = repl.Desc().Replicas().VoterDescriptors()[0]
 	ba.Header.RangeID = repl.RangeID
 	ba.Add(&get)
 	_, pErr := store.Send(ctx, ba)
@@ -959,7 +961,9 @@ func (m *multiTestContext) addStore(idx int) {
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			len(m.engines), splits, cfg.Clock.PhysicalNow())
+			len(m.engines), splits, cfg.Clock.PhysicalNow(),
+			cfg.TestingKnobs,
+		)
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -971,8 +975,9 @@ func (m *multiTestContext) addStore(idx int) {
 
 	sender := kvserver.NewStores(ambient, clock)
 	sender.AddStore(store)
-	perReplicaServer := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
-	kvserver.RegisterPerReplicaServer(grpcServer, perReplicaServer)
+	server := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
+	kvserver.RegisterPerReplicaServer(grpcServer, server)
+	kvserver.RegisterPerStoreServer(grpcServer, server)
 
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
@@ -1180,17 +1185,6 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	}
 	m.t.Fatalf("couldn't find range %s on any store", rangeID)
 	return nil // unreached, but the compiler can't tell.
-}
-
-// restart stops and restarts all stores but leaves the engines intact,
-// so the stores should contain the same persistent storage as before.
-func (m *multiTestContext) restart() {
-	for i := range m.stores {
-		m.stopStore(i)
-	}
-	for i := range m.stores {
-		m.restartStore(i)
-	}
 }
 
 // changeReplicas performs a ChangeReplicas operation, retrying until the
@@ -1571,6 +1565,16 @@ func pushTxnArgs(
 	}
 }
 
+func migrateArgs(start, end roachpb.Key, version roachpb.Version) *roachpb.MigrateRequest {
+	return &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    start,
+			EndKey: end,
+		},
+		Version: version,
+	}
+}
+
 func adminTransferLeaseArgs(key roachpb.Key, target roachpb.StoreID) roachpb.Request {
 	return &roachpb.AdminTransferLeaseRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1648,6 +1652,9 @@ func verifyRangeStats(
 	if err != nil {
 		return err
 	}
+	// When used with a real wall clock these will not be the same, since it
+	// takes time to load stats.
+	expMS.AgeTo(ms.LastUpdateNanos)
 	// Clear system counts as these are expected to vary.
 	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	if ms != expMS {

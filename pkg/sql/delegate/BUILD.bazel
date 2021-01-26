@@ -50,6 +50,6 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/errorutil/unimplemented",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

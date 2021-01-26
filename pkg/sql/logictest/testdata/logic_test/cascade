@@ -4322,3 +4322,33 @@ NULL  3
 
 statement ok
 DROP TABLE child, parent
+
+subtest AssignPlaceholders
+
+# Regression test for #58028. Make sure that placeholders get assigned for
+# cascade queries.
+
+statement ok
+CREATE TABLE parent (a INT PRIMARY KEY, b INT);
+CREATE TABLE child (a INT PRIMARY KEY, p_a INT NOT NULL REFERENCES parent(a) ON DELETE CASCADE);
+INSERT INTO parent VALUES (1, 2), (3, 4);
+INSERT INTO child VALUES (1, 1), (3, 3);
+
+statement ok
+PREPARE del AS DELETE FROM parent WHERE a = $1
+
+statement ok
+EXECUTE del (1)
+
+query II rowsort
+SELECT * FROM parent
+----
+3  4
+
+query II rowsort
+SELECT * FROM child
+----
+3  3
+
+statement ok
+DROP TABLE child, parent

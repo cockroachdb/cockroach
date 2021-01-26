@@ -14,9 +14,9 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/circuitbreaker",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 
@@ -37,9 +37,9 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/circuitbreaker",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )

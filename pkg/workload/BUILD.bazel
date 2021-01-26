@@ -22,12 +22,12 @@ go_library(
         "//pkg/util/encoding/csv",
         "//pkg/util/timeutil",
         "//pkg/workload/histogram",
-        "//vendor/github.com/cockroachdb/cockroach-go/crdb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/jackc/pgx",
-        "//vendor/github.com/lib/pq",
-        "//vendor/github.com/spf13/pflag",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx//:pgx",
+        "@com_github_lib_pq//:pq",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -59,6 +59,6 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

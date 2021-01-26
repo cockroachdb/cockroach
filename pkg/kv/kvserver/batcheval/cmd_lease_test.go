@@ -119,7 +119,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner(), ReplicaID: 2},
 	}
 	desc := roachpb.RangeDescriptor{}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			StoreID: voterStoreID,
@@ -155,4 +155,39 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
 		`replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`
 	require.EqualError(t, err, expForLearner)
+}
+
+func TestCheckCanReceiveLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		leaseholderType roachpb.ReplicaType
+		eligible        bool
+	}{
+		{leaseholderType: roachpb.VOTER_FULL, eligible: true},
+		{leaseholderType: roachpb.VOTER_INCOMING, eligible: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING, eligible: false},
+		{leaseholderType: roachpb.LEARNER, eligible: false},
+		{leaseholderType: roachpb.NON_VOTER, eligible: false},
+	} {
+		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
+			repDesc := roachpb.ReplicaDescriptor{
+				ReplicaID: 1,
+				Type:      &tc.leaseholderType,
+			}
+			rngDesc := roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
+			}
+			err := CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
+			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
+		})
+	}
+
+	t.Run("replica not in range desc", func(t *testing.T) {
+		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
+		rngDesc := roachpb.RangeDescriptor{}
+		require.Regexp(t, "replica.*not found", CheckCanReceiveLease(repDesc, &rngDesc))
+	})
 }

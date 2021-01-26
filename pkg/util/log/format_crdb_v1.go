@@ -21,26 +21,147 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 )
 
-// FormatEntry writes the log entry to the specified writer.
-func FormatEntry(e logpb.Entry, w io.Writer) error {
-	var f formatCrdbV1WithCounter
-	buf := f.formatEntry(e, nil)
+// FormatLegacyEntry writes the legacy log entry to the specified writer.
+func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
+	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
 }
 
-// formatCrdbV1 is the canonical log format, without
-// a counter column.
+// formatCrdbV1 is the pre-v21.1 canonical log format, without a
+// counter column.
 type formatCrdbV1 struct{}
 
 func (formatCrdbV1) formatterName() string { return "crdb-v1" }
 
-func (formatCrdbV1) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
-	return formatLogEntryInternal(entry, false /*showCounter*/, nil, stacks)
+func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
+}
+
+func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
+
+func formatCrdbV1CommonDoc(withCounter bool) string {
+	var buf strings.Builder
+
+	if !withCounter {
+		buf.WriteString(`This is the legacy file format used from CockroachDB v1.0.`)
+	} else {
+		buf.WriteString(`This is an alternative, backward-compatible legacy file format used from CockroachDB v2.0.`)
+	}
+
+	buf.WriteString(`
+
+Each log entry is emitted using a common prefix, described below,`)
+
+	if withCounter {
+		buf.WriteString(`
+followed by the text of the log entry.`)
+	} else {
+		buf.WriteString(`
+followed by:
+
+- The logging context tags enclosed between "[" and "]", if any. It is possible
+  for this to be omitted if there were no context tags.
+- the text of the log entry.`)
+	}
+
+	buf.WriteString(`
+
+Beware that the text of the log entry can span multiple lines. In particular,
+the following caveats apply:
+
+`)
+
+	if !withCounter {
+		// If there is no counter, the format is ambiguous. Explain that.
+		buf.WriteString(`
+- the text of the log entry can start with text enclosed between "[" and "]".
+  It is not possible to distinguish between logging context tag information
+  and a "[...]" string in the main text of the log entry, if there were
+  no logging tags to start with. This means that this format is ambiguous.
+  Consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + ` for an unambiguous alternative.
+`)
+	}
+
+	// General disclaimer about the lack of boundaries.
+	buf.WriteString(`
+- the text of the log entry can embed arbitrary application-level strings,
+  including strings that represent log entries. In particular, an accident
+  of implementation can cause the common entry prefix (described below)
+  to also appear on a line of its own, as part of the payload of a previous
+  log entry. There is no automated way to recognize when this occurs.
+  Care must be taken by a human observer to recognize these situations.
+
+- The log entry parser provided by CockroachDB to read log files is faulty
+  and is unable to recognize the aforementioned pitfall; nor can it read
+  entries larger than 64KiB successfully. Generally, use of this internal
+  log entry parser is discouraged for entries written with this format.
+
+See the newer format ` + "`crdb-v2`" + ` for an alternative
+without these limitations.
+
+### Header lines
+
+At the beginning of each file, a header is printed using a similar format as
+regular log entries. This header reports when the file was created,
+which parameters were used to start the server, the server identifiers
+if known, and other metadata about the running process.
+
+This header appears to be logged at severity INFO (with an I prefix at the
+start of the line) even though it does not really have a severity. The
+header is printed unconditionally even when a filter is configured to
+omit entries at the INFO level.
+
+### Common log entry prefix
+
+Each line of output starts with the following prefix:
+
+     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker`)
+
+	if withCounter {
+		buf.WriteString(`tags counter`)
+	}
+
+	buf.WriteString(`
+
+where the fields are defined as follows:
+
+| Field           | Description                                                       |
+|-----------------|------------------------------------------------------------------ |
+| L               | A single character, representing the log level (eg 'I' for INFO). |
+| yy              | The year (zero padded; ie 2016 is '16').                          |
+| mm              | The month (zero padded; ie May is '05').                          |
+| dd              | The day (zero padded).                                            |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.   |
+| goid            | The goroutine id (omitted if zero for use by tests).              |
+| chan            | The channel number (omitted if zero for backward-compatibility).  |
+| file            | The file name where the entry originated.                         |
+| line            | The line number where the entry originated.                       |
+| marker          | Redactability marker (see below for details).                     |`)
+
+	if withCounter {
+		buf.WriteString(`
+| tags            | The logging tags, enclosed between "[" and "]". May be absent.    |
+| counter         | The entry counter. Always present.                                |`)
+	}
+
+	buf.WriteString(`
+
+The redactability marker can be empty; in this case, its position in the common prefix is
+a double ASCII space character which can be used to reliably identify this situation.
+
+If the marker "` + redactableIndicator + `" is present, the remainder of the log entry
+contains delimiters (` + string(redact.StartMarker()) + `...` + string(redact.EndMarker()) + `) around
+fields that are considered sensitive. These markers are automatically recognized
+by ` + "`" + `debug zip` + "`" + ` and ` + "`" + `debug merge-logs` + "`" + ` when log redaction is requested.
+`)
+
+	return buf.String()
 }
 
 // formatCrdbV1WithCounter is the canonical log format including a
@@ -49,9 +170,11 @@ type formatCrdbV1WithCounter struct{}
 
 func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
-func (formatCrdbV1WithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
-	return formatLogEntryInternal(entry, true /*showCounter*/, nil, stacks)
+func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
 }
+
+func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
 
 // formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
 // the stderr output is a TTY and -nocolor is not passed on the
@@ -60,12 +183,22 @@ type formatCrdbV1TTY struct{}
 
 func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
 
-func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
 	cp := ttycolor.StderrProfile
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry, false /*showCounter*/, cp, stacks)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
+}
+
+const ttyFormatDoc = `
+
+In addition, if the output stream happens to be a VT-compatible terminal,
+and the flag ` + "`no-color`" + ` was *not* set in the configuration, the entries
+are decorated using ANSI color codes.`
+
+func (formatCrdbV1TTY) doc() string {
+	return "Same textual format as `" + formatCrdbV1{}.formatterName() + "`." + ttyFormatDoc
 }
 
 // formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
@@ -75,36 +208,27 @@ type formatCrdbV1TTYWithCounter struct{}
 
 func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
 
-func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
 	cp := ttycolor.StderrProfile
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry, true /*showCounter*/, cp, stacks)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
 }
 
-// formatEntryInternal renders a log entry.
+func (formatCrdbV1TTYWithCounter) doc() string {
+	return "Same textual format as `" + formatCrdbV1WithCounter{}.formatterName() + "`." + ttyFormatDoc
+}
+
+const severityChar = "IWEF"
+
+// formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.
 // It uses a newly allocated *buffer. The caller is responsible
 // for calling putBuffer() afterwards.
 //
-// Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line <redactable> [tags] counter msg...
-// where the fields are defined as follows:
-// 	L                A single character, representing the log level (eg 'I' for INFO)
-// 	yy               The year (zero padded; ie 2016 is '16')
-// 	mm               The month (zero padded; ie May is '05')
-// 	dd               The day (zero padded)
-// 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
-// 	goid             The goroutine id (omitted if zero for use by tests)
-// 	chan             The channel number (omitted if zero for backward-compatibility)
-// 	file             The file name
-// 	line             The line number
-// 	tags             The context tags
-// 	counter          The log entry counter, if enabled and non-zero
-// 	msg              The user-supplied message
-func formatLogEntryInternal(
-	entry logpb.Entry, showCounter bool, cp ttycolor.Profile, stacks []byte,
+func formatLogEntryInternalV1(
+	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile,
 ) *buffer {
 	buf := getBuffer()
 	if entry.Line < 0 {
@@ -160,7 +284,7 @@ func formatLogEntryInternal(
 		tmp[n] = ' '
 		n++
 	}
-	if entry.Channel != 0 {
+	if !isHeader && entry.Channel != 0 {
 		// Prefix the filename with the channel number.
 		n += buf.someDigits(n, int(entry.Channel))
 		tmp[n] = '@'
@@ -219,13 +343,6 @@ func formatLogEntryInternal(
 		_ = buf.WriteByte('\n')
 	}
 
-	// If there are stack traces, print them.
-	// Note that stacks are assumed to always contain
-	// a final newline already.
-	if len(stacks) > 0 {
-		buf.Write(stacks)
-	}
-
 	return buf
 }
 
@@ -239,7 +356,7 @@ var entryRE = regexp.MustCompile(
 		/* Goroutine ID     */ `(?:(\d+) )?` +
 		/* Channel/File/Line*/ `([^:]+):(\d+) ` +
 		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
-		/* Context tags     */ `(?:\[([^]]+)\] )?`,
+		/* Context tags     */ `(?:\[((?:[^]]|\][^ ])+)\] )?`,
 )
 
 // EntryDecoder reads successive encoded log entries from the input
@@ -332,9 +449,24 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 			entry.Tags = string(r.msg)
 		}
 
-		// Process the log message itself
+		// If there's an entry counter at the start of the message, process it.
+		msg := b[len(m[0]):]
+		i := 0
+		for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
+			entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
+		}
+		if i > 0 && i < len(msg) && msg[i] == ' ' {
+			// Only accept the entry counter if followed by a space. In all
+			// other cases, the number was part of the message string.
+			msg = msg[i+1:]
+		} else {
+			// This was not truly an entry counter. Ignore the work done previously.
+			entry.Counter = 0
+		}
+
+		// Process the remainder of the log message.
 		r := redactablePackage{
-			msg:        trimFinalNewLines(b[len(m[0]):]),
+			msg:        trimFinalNewLines(msg),
 			redactable: redactable,
 		}
 		r = d.sensitiveEditor(r)

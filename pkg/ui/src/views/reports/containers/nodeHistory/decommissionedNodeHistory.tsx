@@ -16,10 +16,7 @@ import { Moment } from "moment";
 import _ from "lodash";
 
 import { AdminUIState } from "src/redux/state";
-import {
-  nodesSummarySelector,
-  partitionedStatuses,
-} from "src/redux/nodes";
+import { nodesSummarySelector, partitionedStatuses } from "src/redux/nodes";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { INodeStatus } from "src/util/proto";
 import { LongToMoment } from "src/util/convert";
@@ -27,12 +24,14 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
-import { ColumnsConfig, Table, Text } from "src/components";
+import { Text } from "src/components";
+import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 
-const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "nodes/decommissioned_sort_setting", (s) => s.localSettings,
-);
+const decommissionedNodesSortSetting = new LocalSetting<
+  AdminUIState,
+  SortSetting
+>("nodes/decommissioned_sort_setting", (s) => s.localSettings);
 
 interface DecommissionedNodeStatusRow {
   key: string;
@@ -47,15 +46,29 @@ export interface DecommissionedNodeHistoryProps {
   dataSource: DecommissionedNodeStatusRow[];
 }
 
-const sortByNodeId = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
-  if (a.nodeId < b.nodeId) { return -1; }
-  if (a.nodeId > b.nodeId) { return 1; }
+const sortByNodeId = (
+  a: DecommissionedNodeStatusRow,
+  b: DecommissionedNodeStatusRow,
+) => {
+  if (a.nodeId < b.nodeId) {
+    return -1;
+  }
+  if (a.nodeId > b.nodeId) {
+    return 1;
+  }
   return 0;
 };
 
-const sortByDecommissioningDate = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
-  if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
-  if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
+const sortByDecommissioningDate = (
+  a: DecommissionedNodeStatusRow,
+  b: DecommissionedNodeStatusRow,
+) => {
+  if (a.decommissionedDate.isBefore(b.decommissionedDate)) {
+    return -1;
+  }
+  if (a.decommissionedDate.isAfter(b.decommissionedDate)) {
+    return 1;
+  }
   return 0;
 };
 
@@ -65,9 +78,7 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
       key: "id",
       title: "ID",
       sorter: sortByNodeId,
-      render: (_text, record) => (
-        <Text>{`n${record.nodeId}`}</Text>
-      ),
+      render: (_text, record) => <Text>{`n${record.nodeId}`}</Text>,
     },
     {
       key: "address",
@@ -76,7 +87,8 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
       render: (_text, record) => (
         <Link to={`/node/${record.nodeId}`}>
           <Text>{record.address}</Text>
-        </Link>),
+        </Link>
+      ),
     },
     {
       key: "decommissionedOn",
@@ -133,7 +145,10 @@ const decommissionedNodesTableData = createSelector(
     };
 
     const data = _.chain(decommissionedStatuses)
-      .orderBy([(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)], ["desc"])
+      .orderBy(
+        [(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)],
+        ["desc"],
+      )
       .map((ns: INodeStatus, idx: number) => {
         return {
           key: `${idx}`,
@@ -144,7 +159,8 @@ const decommissionedNodesTableData = createSelector(
       })
       .value();
     return data;
-  });
+  },
+);
 
 const mapStateToProps = (state: AdminUIState) => ({
   dataSource: decommissionedNodesTableData(state),
@@ -156,4 +172,6 @@ const mapDispatchToProps = {
   setSort: decommissionedNodesSortSetting.set,
 };
 
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory));
+export default withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory),
+);

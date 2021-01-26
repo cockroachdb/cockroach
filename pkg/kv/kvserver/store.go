@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -734,11 +735,6 @@ type StoreConfig struct {
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
-	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
-	// gossiped store capacity values which need be exceeded before the store will
-	// gossip immediately without waiting for the periodic gossip interval.
-	GossipWhenCapacityDeltaExceedsFraction float64
-
 	// ExternalStorage creates ExternalStorage objects which allows access to external files
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
@@ -790,9 +786,14 @@ func (sc *StoreConfig) SetDefaults() {
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
 	}
 
-	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
-		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
+		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
+}
+
+// GetStoreConfig exposes the config used for this store.
+func (s *Store) GetStoreConfig() *StoreConfig {
+	return &s.cfg
 }
 
 // LeaseExpiration returns an int64 to increment a manual clock with to
@@ -803,6 +804,16 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	// duration, but definitely not by 2x.
 	maxOffset := sc.Clock.MaxOffset()
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
+}
+
+// RaftElectionTimeoutTicks exposed for testing.
+func (s *Store) RaftElectionTimeoutTicks() int {
+	return s.cfg.RaftElectionTimeoutTicks
+}
+
+// CoalescedHeartbeatsInterval exposed for testing.
+func (s *Store) CoalescedHeartbeatsInterval() time.Duration {
+	return s.cfg.CoalescedHeartbeatsInterval
 }
 
 // NewStore returns a new instance of a store.
@@ -1050,7 +1061,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	// To prevent this, we add this code here which adds the missing
 	// cancel + wait in the particular case where the stopper is
 	// completing a shutdown while a graceful SetDrain is still ongoing.
-	ctx, cancelFn := s.stopper.WithCancelOnStop(baseCtx)
+	ctx, cancelFn := s.stopper.WithCancelOnQuiesce(baseCtx)
 	defer cancelFn()
 
 	var wg sync.WaitGroup
@@ -1118,7 +1129,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 					// Learner replicas aren't allowed to become the leaseholder or raft
 					// leader, so only consider the `Voters` replicas.
-					needsLeaseTransfer := len(r.Desc().Replicas().Voters()) > 1 &&
+					needsLeaseTransfer := len(r.Desc().Replicas().VoterDescriptors()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
 
@@ -1553,13 +1564,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
 		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
-		s.stopper.RunWorker(ctx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
 			for {
 				select {
 				case <-gossipUpdateC:
 					cfg := s.cfg.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
-				case <-s.stopper.ShouldStop():
+				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -1574,11 +1585,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
 		// from returning (as doing so might prevent Gossip from ever connecting).
-		s.stopper.RunWorker(ctx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(ctx, "scanner", func(context.Context) {
 			select {
 			case <-s.cfg.Gossip.Connected:
 				s.scanner.Start(s.stopper)
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		})
@@ -1650,13 +1661,6 @@ func (s *Store) startGossip() {
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
 	}
-
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		wakeReplica = func(context.Context, *Replica) error {
-			return errPeriodicGossipsDisabled
-		}
-	}
-
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error
@@ -1692,7 +1696,7 @@ func (s *Store) startGossip() {
 	s.initComplete.Add(len(gossipFns))
 	for _, gossipFn := range gossipFns {
 		gossipFn := gossipFn // per-iteration copy
-		s.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		if err := s.stopper.RunAsyncTask(context.Background(), "store-gossip", func(ctx context.Context) {
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
 			for first := true; ; {
@@ -1701,7 +1705,7 @@ func (s *Store) startGossip() {
 				// making it impossible to get an epoch-based range lease), in which
 				// case we want to retry quickly.
 				retryOptions := base.DefaultRetryOptions()
-				retryOptions.Closer = s.stopper.ShouldStop()
+				retryOptions.Closer = s.stopper.ShouldQuiesce()
 				for r := retry.Start(retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
@@ -1720,11 +1724,13 @@ func (s *Store) startGossip() {
 				}
 				select {
 				case <-ticker.C:
-				case <-s.stopper.ShouldStop():
+				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
-		})
+		}); err != nil {
+			s.initComplete.Done()
+		}
 	}
 }
 
@@ -1738,7 +1744,7 @@ func (s *Store) startGossip() {
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
 		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
@@ -1771,7 +1777,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			case <-s.renewableLeasesSignal:
 			case <-timer.C:
 				timer.Read = true
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}
@@ -1793,7 +1799,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 		return
 	}
 
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "ct-subscriber", func(ctx context.Context) {
 		var replIDs []roachpb.RangeID
 		for {
 			select {
@@ -1918,9 +1924,9 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// the usual periodic interval. Re-gossip more rapidly for RangeCount
 	// changes because allocators with stale information are much more
 	// likely to make bad decisions.
-	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
-	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
@@ -2795,6 +2801,62 @@ func (s *Store) ManuallyEnqueue(
 	processed, processErr := queue.process(ctx, repl, sysCfg)
 	log.Eventf(ctx, "processed: %t", processed)
 	return collect(), processErr, nil
+}
+
+// PurgeOutdatedReplicas purges all replicas with a version less than the one
+// specified. This entails clearing out replicas in the replica GC queue that
+// fit the bill.
+func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Version) error {
+	if interceptor := s.TestingKnobs().PurgeOutdatedReplicasInterceptor; interceptor != nil {
+		interceptor()
+	}
+
+	// Let's set a reasonable bound on the number of replicas being processed in
+	// parallel.
+	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
+	g := ctxgroup.WithContext(ctx)
+	s.VisitReplicas(func(repl *Replica) (wantMore bool) {
+		if (repl.Version() == roachpb.Version{}) {
+			// TODO(irfansharif): This is a stop gap for #58523.
+			return true
+		}
+		if !repl.Version().Less(version) {
+			// Nothing to do here.
+			return true
+		}
+
+		alloc, err := qp.Acquire(ctx, 1)
+		if err != nil {
+			g.GoCtx(func(ctx context.Context) error {
+				return err
+			})
+			return false
+		}
+
+		g.GoCtx(func(ctx context.Context) error {
+			defer alloc.Release()
+
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			if err != nil {
+				return errors.Wrapf(err, "on %s", repl.Desc())
+			}
+			if !processed {
+				// We're either still part of the raft group, in which same
+				// something has gone horribly wrong, or more likely (though
+				// still very unlikely in practice): this range has been merged
+				// away, and this store has the replica of the subsuming range
+				// where we're unable to determine if it has applied the merge
+				// trigger. See replicaGCQueue.process for more details. Either
+				// way, we error out.
+				return errors.Newf("unable to gc %s", repl.Desc())
+			}
+			return nil
+		})
+
+		return true
+	})
+
+	return g.Wait()
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local

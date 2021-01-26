@@ -122,10 +122,14 @@ func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary
 		panic(errors.AssertionFailedf("an empty end boundary must be inclusive"))
 	}
 
-	sp.start = start
-	sp.startBoundary = startBoundary
-	sp.end = end
-	sp.endBoundary = endBoundary
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*sp = Span{
+		start:         start,
+		startBoundary: startBoundary,
+		end:           end,
+		endBoundary:   endBoundary,
+	}
 }
 
 // Compare returns an integer indicating the ordering of the two spans. The
@@ -313,21 +317,33 @@ func (sp *Span) CutFront(numCols int) {
 	sp.end = sp.end.CutFront(numCols)
 }
 
-// KeyCount returns the number of distinct keys contained in this span. Returns
-// zero and false if the operation is not possible. Requirements:
-//   1. The boundaries must be inclusive.
-//   2. The span must have a start and end key.
-//   3. Keys must be of the same length.
-//   4. Keys must have equivalent datums for all but the last column.
-//   5. The last columns are of the same type and either:
-//      a. are countable, or
+// KeyCount returns the number of distinct keys between specified-length
+// prefixes of the start and end keys. Returns zero and false if the operation
+// is not possible. Requirements:
+//   1. The given prefix length must be at least 1.
+//   2. The boundaries must be inclusive.
+//   3. The start and end keys must have at least prefixLength values.
+//   4. The start and end keys be equal up to index [prefixLength-2].
+//   5. The datums at index [prefixLength-1] must be of the same type and:
+//      a. countable, or
 //      b. have the same value (in which case the distinct count is 1).
 //
 // Example:
 //
-//    [/'ASIA'/1 - /'ASIA'/2].KeyCount(keyCtx) => 2, true
+//    [/'ASIA'/1/'postfix' - /'ASIA'/2].KeyCount(keyCtx, length=2) => 2, true
 //
-func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
+// Note that any extra key values beyond the given length are simply ignored.
+// Therefore, the above example will produce equivalent results if postfixes are
+// removed:
+//
+//    ['ASIA'/1 - /'ASIA'/2].KeyCount(keyCtx, length=2) => 2, true
+//
+func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
+	if prefixLength < 1 {
+		// The length must be at least one because distinct count is undefined for
+		// empty keys.
+		return 0, false
+	}
 	if sp.startBoundary == ExcludeBoundary || sp.endBoundary == ExcludeBoundary {
 		// Bounds must be inclusive.
 		return 0, false
@@ -335,19 +351,13 @@ func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
 
 	startKey := sp.start
 	endKey := sp.end
-	if startKey.IsEmpty() || endKey.IsEmpty() {
-		// The span must have both start and end keys.
+	if startKey.Length() < prefixLength || endKey.Length() < prefixLength {
+		// Both keys must have at least 'prefixLength' values.
 		return 0, false
 	}
 
-	// Keys must be same length.
-	n := startKey.Length()
-	if n != endKey.Length() {
-		return 0, false
-	}
-
-	// All the datums up to the last one must be equal.
-	for i := 0; i < n-1; i++ {
+	// All the datums up to index [prefixLength-2] must be equal.
+	for i := 0; i <= (prefixLength - 2); i++ {
 		if startKey.Value(i).ResolvedType() != endKey.Value(i).ResolvedType() {
 			// The datums must be of the same type.
 			return 0, false
@@ -358,15 +368,15 @@ func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
 		}
 	}
 
-	thisVal := startKey.Value(startKey.Length() - 1)
-	otherVal := endKey.Value(endKey.Length() - 1)
+	thisVal := startKey.Value(prefixLength - 1)
+	otherVal := endKey.Value(prefixLength - 1)
 
 	if thisVal.ResolvedType() != otherVal.ResolvedType() {
-		// The last datums must be of the same type.
+		// The datums at index [prefixLength-1] must be of the same type.
 		return 0, false
 	}
-	if keyCtx.Compare(n-1, thisVal, otherVal) == 0 {
-		// If the last datums are equal, the distinct count is 1.
+	if keyCtx.Compare(prefixLength-1, thisVal, otherVal) == 0 {
+		// If the datums are equal, the distinct count is 1.
 		return 1, true
 	}
 
@@ -404,7 +414,7 @@ func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
 		return 0, false
 	}
 
-	if keyCtx.Columns.Get(startKey.Length() - 1).Descending() {
+	if keyCtx.Columns.Get(prefixLength - 1).Descending() {
 		// Normalize delta according to the key ordering.
 		start, end = end, start
 	}
@@ -422,35 +432,60 @@ func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
 	return delta + 1, true
 }
 
-// Split returns a Spans object, with each span containing one key from the
-// original span. Returns nil and false if unsuccessful. The operation is
-// unsuccessful if the number of distinct keys in the span cannot be obtained or
-// the number of keys exceeds the limit. The boundaries are assumed to be
-// inclusive.
+// Split returns a Spans object that describes an equivalent set of rows to the
+// original Span. For each individual Span in the new Spans object, prefixes of
+// the start and end keys up to the given prefixLength will span a single key.
+//
+// Returns nil and false if unsuccessful. The operation is unsuccessful if the
+// number of distinct prefix-keys of specified length in the original span
+// cannot be obtained. Postfixes of the original keys beyond the given prefix
+// length will be concatenated with the start key of the first span and end key
+// of the last span respectively.
 //
 // Example:
 //
-//    [/'ASIA'/1 - /'ASIA'/2].Split(keyCtx, 10)
+//    [/'ASIA'/1/'post' - /'ASIA'/3/'fix'].Split(keyCtx, length=2, limit=10)
 //    =>
-//    ([/'ASIA'/1 - /'ASIA'/1], [/'ASIA'/2 - /'ASIA'/2]), true
+//    (
+//      [/'ASIA'/1/'post' - /'ASIA'/1],
+//      [/'ASIA'/2 - /'ASIA'/2],
+//      [/'ASIA'/3 - /'ASIA'/3/'fix'],
+//    ),
+//    true
 //
-func (sp *Span) Split(keyCtx *KeyContext, limit int64) (spans *Spans, ok bool) {
-	keyCount, ok := sp.KeyCount(keyCtx)
-	if !ok || keyCount > limit {
-		// The key count could not be determined, or the key count exceeds the
-		// limit.
+func (sp *Span) Split(keyCtx *KeyContext, prefixLength int) (spans *Spans, ok bool) {
+	keyCount, ok := sp.KeyCount(keyCtx, prefixLength)
+	if !ok {
+		// The key count could not be determined.
 		return nil, false
 	}
 	spans = &Spans{}
+	if keyCount == 1 {
+		// The start and end prefix keys are already equal.
+		spans.InitSingleSpan(sp)
+		return spans, true
+	}
 	spans.Alloc(int(keyCount))
-	currKey := sp.StartKey()
+	startPostFix := sp.StartKey().CutFront(prefixLength)
+	endPostFix := sp.EndKey().CutFront(prefixLength)
+	currKey := sp.StartKey().CutBack(startPostFix.Length())
 	for i, ok := 0, true; i < int(keyCount); i++ {
 		if !ok {
 			return nil, false
 		}
+		start := currKey
+		end := currKey
+		if i == 0 {
+			// Start key of the first span.
+			start = currKey.Concat(startPostFix)
+		}
+		if i == int(keyCount-1) {
+			// End key of the last span.
+			end = currKey.Concat(endPostFix)
+		}
 		spans.Append(&Span{
-			start:         currKey,
-			end:           currKey,
+			start:         start,
+			end:           end,
 			startBoundary: IncludeBoundary,
 			endBoundary:   IncludeBoundary,
 		})

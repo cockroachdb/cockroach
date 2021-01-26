@@ -57,6 +57,7 @@ func TestExternalHashJoiner(t *testing.T) {
 		monitors []*mon.BytesMonitor
 	)
 	rng, _ := randutil.NewPseudoRand()
+	numForcedRepartitions := rng.Intn(5)
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -64,7 +65,8 @@ func TestExternalHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 			for _, tc := range tcs {
 				delegateFDAcquisitions := rng.Float64() < 0.5
-				log.Infof(ctx, "spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions)
+				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s/delegateFDAcquisitions=%t",
+					spillForced, numForcedRepartitions, tc.description, delegateFDAcquisitions)
 				var semsToCheck []semaphore.Semaphore
 				oldSkipAllNullsInjection := tc.skipAllNullsInjection
 				if !tc.onExpr.Empty() {
@@ -86,7 +88,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					//  will not be drained.
 					hjOp, newAccounts, newMonitors, closers, err := createDiskBackedHashJoiner(
 						ctx, flowCtx, spec, sources, func() {}, queueCfg,
-						2 /* numForcedPartitions */, delegateFDAcquisitions, sem,
+						numForcedRepartitions, delegateFDAcquisitions, sem,
 					)
 					// Expect three closers. These are the external hash joiner, and
 					// one external sorter for each input.

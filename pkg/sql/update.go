@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -148,8 +147,6 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	if u.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	u.run.tu.clearLastBatch(params.ctx)
@@ -299,12 +296,11 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Create a set of partial index IDs to not add entries or remove entries
 	// from.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
+	if n := len(u.run.tu.tableDesc().PartialIndexes()); n > 0 {
 		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
 		partialIndexVals := sourceVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:partialIndexOrds.Len()]
-		partialIndexDelVals := partialIndexVals[partialIndexOrds.Len() : partialIndexOrds.Len()*2]
+		partialIndexPutVals := partialIndexVals[:n]
+		partialIndexDelVals := partialIndexVals[n : n*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {

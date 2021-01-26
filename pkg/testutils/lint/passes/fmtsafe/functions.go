@@ -74,7 +74,8 @@ var requireConstFmt = map[string]bool{
 	// Note: More of the logging functions are populated here via the
 	// init() function below.
 
-	"github.com/cockroachdb/cockroach/pkg/util/log.MakeEntry":              true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.MakeLegacyEntry":        true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.makeUnstructuredEntry":  true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.FormatWithContextTags":  true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.renderArgsAsRedactable": true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.formatArgs":             true,
@@ -83,6 +84,8 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.makeStartLine":          true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
+
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,

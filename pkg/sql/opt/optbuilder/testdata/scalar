@@ -1397,3 +1397,21 @@ build-scalar vars=(a geometry[], b geometry)
 a && b
 ----
 error: unsupported comparison operator: <geometry[]> && <geometry>
+
+# Regression test for #57959. Ensure that the CASE statement is typed as
+# string[].
+build-scalar vars=(a varbit)
+(CASE WHEN (a) IN (a) THEN ARRAY[NULL] ELSE ARRAY[] END) IS NULL
+----
+is [type=bool]
+ ├── case [type=string[]]
+ │    ├── true [type=bool]
+ │    ├── when [type=string[]]
+ │    │    ├── in [type=bool]
+ │    │    │    ├── variable: a:1 [type=varbit]
+ │    │    │    └── tuple [type=tuple{varbit}]
+ │    │    │         └── variable: a:1 [type=varbit]
+ │    │    └── array: [type=string[]]
+ │    │         └── null [type=unknown]
+ │    └── array: [type=string[]]
+ └── null [type=unknown]

@@ -68,6 +68,32 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
 }
 
+// buildUniqueChecksForUpsert builds uniqueness check queries for an upsert.
+// These check queries are used to enforce UNIQUE WITHOUT INDEX constraints.
+func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
+	// We only need to build unique checks if there is at least one unique
+	// constraint without an index.
+	if !mb.hasUniqueWithoutIndexConstraints() {
+		return
+	}
+
+	mb.ensureWithID()
+	h := &mb.uniqueCheckHelper
+
+	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
+		// If this constraint is already enforced by an index we don't need to plan
+		// a check.
+		if mb.tab.Unique(i).WithoutIndex() && h.init(mb, i) {
+			// The insertion check works for upserts too since it simply checks that
+			// the unique columns in the newly inserted or updated rows do not match
+			// any existing rows. The check prevents rows from matching themselves by
+			// adding a filter based on the primary key.
+			mb.uniqueChecks = append(mb.uniqueChecks, h.buildInsertionCheck())
+		}
+	}
+	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
+}
+
 // hasUniqueWithoutIndexConstraints returns true if there are any
 // UNIQUE WITHOUT INDEX constraints on the table.
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
@@ -116,6 +142,8 @@ type uniqueCheckHelper struct {
 // Returns false if the constraint should be ignored (e.g. because the new
 // values for the unique columns are known to be always NULL).
 func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
 	*h = uniqueCheckHelper{
 		mb:            mb,
 		unique:        mb.tab.Unique(uniqueOrdinal),
@@ -207,7 +235,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	}
 	semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(pkFilter))
 
-	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{})
+	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
 
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,

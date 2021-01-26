@@ -19,6 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ apd.Context
+	_ duration.Duration
+)
+
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -61,17 +69,6 @@ func (m *memColumn) Append(args SliceArgs) {
 				// We need to truncate toCol before appending to it, so in case of Bytes,
 				// we append an empty slice.
 				toCol.AppendSlice(toCol, args.DestIdx, 0, 0)
-				// We will be getting all values below to be appended, regardless of
-				// whether the value is NULL. It is possible that Bytes' invariant of
-				// non-decreasing offsets on the source is currently not maintained, so
-				// we explicitly enforce it.
-				maxIdx := 0
-				for _, selIdx := range sel {
-					if selIdx > maxIdx {
-						maxIdx = selIdx
-					}
-				}
-				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol.AppendVal(val)

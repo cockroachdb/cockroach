@@ -20,10 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
 )
 
@@ -147,9 +145,7 @@ func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry logpb.En
 	}
 
 	if sp != nil {
-		// TODO(radu): pass tags directly to sp.LogKV when LightStep supports
-		// that.
-		sp.LogFields(otlog.String(tracingpb.LogMessageField, msg))
+		sp.Record(msg)
 		// if isErr {
 		// 	// TODO(radu): figure out a way to signal that this is an error. We
 		// 	// could use a different "error" key (provided it shows up in
@@ -198,7 +194,7 @@ func Event(ctx context.Context, msg string) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeEntry(ctx,
+	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
@@ -221,7 +217,7 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeEntry(ctx,
+	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
@@ -248,7 +244,7 @@ func vEventf(
 			// Nothing to log. Skip the work.
 			return
 		}
-		entry := MakeEntry(ctx,
+		entry := MakeLegacyEntry(ctx,
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
 			depth+1,

@@ -48,11 +48,7 @@ function DropdownButton(props: DropdownButtonProps) {
       type="flat"
       size="small"
       iconPosition="right"
-      icon={() => (
-        <Icon
-          className="collapse-toggle__icon"
-          type="caret-down" />
-      )}
+      icon={() => <Icon className="collapse-toggle__icon" type="caret-down" />}
     >
       {children}
     </Button>
@@ -68,18 +64,18 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
     this.setState({
       isOpen: !this.state.isOpen,
     });
-  }
+  };
 
   changeMenuState = (nextState: boolean) => {
     this.setState({
       isOpen: nextState,
     });
-  }
+  };
 
   handleItemSelection = (value: string) => {
     this.props.onChange(value);
     this.handleMenuOpen();
-  }
+  };
 
   renderDropdownToggleButton = () => {
     const { children, dropdownToggleButton } = this.props;
@@ -88,15 +84,9 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
     if (dropdownToggleButton) {
       return dropdownToggleButton();
     } else {
-      return (
-        <DropdownButton
-          isOpen={isOpen}
-        >
-          {children}
-        </DropdownButton>
-      );
+      return <DropdownButton isOpen={isOpen}>{children}</DropdownButton>;
     }
-  }
+  };
 
   render() {
     const { items, className, menuPlacement = "left" } = this.props;
@@ -117,25 +107,19 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
         key={idx}
         disabled={menuItem.disabled}
       >
-        { menuItem.name }
+        {menuItem.name}
       </DropdownItem>
     ));
 
     return (
       <div className={`crl-dropdown ${className}`}>
-        <OutsideEventHandler
-          onOutsideClick={() => this.changeMenuState(false)}
-        >
-          <div
-            className="crl-dropdown__handler"
-            onClick={this.handleMenuOpen}>
-            { this.renderDropdownToggleButton() }
+        <OutsideEventHandler onOutsideClick={() => this.changeMenuState(false)}>
+          <div className="crl-dropdown__handler" onClick={this.handleMenuOpen}>
+            {this.renderDropdownToggleButton()}
           </div>
           <div className="crl-dropdown__overlay">
             <div className={menuStyles}>
-              <div className="crl-dropdown__container">
-                {menuItems}
-              </div>
+              <div className="crl-dropdown__container">{menuItems}</div>
             </div>
           </div>
         </OutsideEventHandler>
@@ -153,13 +137,19 @@ export interface DropdownItemProps {
 
 export function DropdownItem(props: DropdownItemProps) {
   const { children, value, onClick, disabled = false } = props;
-  const onClickHandler = React.useCallback(() => !disabled && onClick(value), [disabled, onClick]);
+  const onClickHandler = React.useCallback(() => !disabled && onClick(value), [
+    disabled,
+    onClick,
+    value,
+  ]);
   return (
     <div
       onClick={onClickHandler}
-      className={cn("crl-dropdown__item", {"crl-dropdown__item--disabled": disabled} )}
+      className={cn("crl-dropdown__item", {
+        "crl-dropdown__item--disabled": disabled,
+      })}
     >
-      { children }
+      {children}
     </div>
   );
 }

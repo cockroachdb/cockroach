@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 
@@ -23,8 +23,8 @@ go_test(
     ],
     deps = [
         ":apply",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )

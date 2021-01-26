@@ -62,11 +62,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), !n.IfExists)
+	found, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+		tree.DatabaseLookupFlags{Required: !n.IfExists})
 	if err != nil {
 		return nil, err
 	}
-	if dbDesc == nil {
+	if !found {
 		// IfExists was specified and database was not found.
 		return newZeroNode(nil /* columns */), nil
 	}
@@ -270,7 +271,8 @@ func (p *planner) accumulateOwnedSequences(
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
 				// exist.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				if errors.Is(err, catalog.ErrDescriptorDropped) ||
+					pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 					log.Infof(ctx,
 						"swallowing error for owned sequence that was not found %s", err.Error())
 					continue

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3035,17 +3036,17 @@ type EvalPlanner interface {
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
 
-	// UnsafeUpsertDescriptor is a used to repair descriptors in dire
+	// UnsafeUpsertDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeUpsertDescriptor(
 		ctx context.Context, descID int64, encodedDescriptor []byte, force bool,
 	) error
 
-	// UnsafeDeleteDescriptor is a used to repair descriptors in dire
+	// UnsafeDeleteDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error
 
-	// UnsafeUpsertNamespaceEntry is a used to repair namespace entries in dire
+	// UnsafeUpsertNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeUpsertNamespaceEntry(
 		ctx context.Context,
@@ -3055,7 +3056,7 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
-	// UnsafeDeleteNamespaceEntry is a used to repair namespace entries in dire
+	// UnsafeDeleteNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeDeleteNamespaceEntry(
 		ctx context.Context,
@@ -3064,6 +3065,22 @@ type EvalPlanner interface {
 		descID int64,
 		force bool,
 	) error
+
+	// CompactEngineSpan is used to compact an engine key span at the given
+	// (nodeID, storeID). If we add more overloads to the compact_span builtin,
+	// this parameter list should be changed to a struct union to accommodate
+	// those overloads.
+	CompactEngineSpan(
+		ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
+	) error
+
+	// MemberOfWithAdminOption is used to collect a list of roles (direct and
+	// indirect) that the member is part of. See the comment on the planner
+	// implementation in authorization.go
+	MemberOfWithAdminOption(
+		ctx context.Context,
+		member security.SQLUsername,
+	) (map[security.SQLUsername]bool, error)
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.
@@ -3206,6 +3223,9 @@ type EvalContextTestingKnobs struct {
 	// cost of each expression in the query tree for the purpose of creating
 	// alternate query plans in the optimizer.
 	OptimizerCostPerturbation float64
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	ForceProductionBatchSizes bool
 
 	CallbackGenerators map[string]*CallbackValueGenerator
 }

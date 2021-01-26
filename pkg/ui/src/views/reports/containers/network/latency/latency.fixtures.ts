@@ -145,8 +145,7 @@ export const latencyFixture: ILatencyProps = {
       "3": node3,
       "4": node4,
     },
-
-},
+  },
   std: {
     stddev: 0.3755919319616704,
     stddevMinus2: 0.29658363607665916,
@@ -260,7 +259,12 @@ export const latencyFixtureNoLocality: ILatencyProps = {
   multipleHeader: true,
   collapsed: false,
   nodesSummary: {
-    nodeStatuses: [nodeNoLocality1, nodeNoLocality2, nodeNoLocality3, nodeNoLocality4],
+    nodeStatuses: [
+      nodeNoLocality1,
+      nodeNoLocality2,
+      nodeNoLocality3,
+      nodeNoLocality4,
+    ],
     nodeIDs: [1, 2, 3, 4],
     nodeStatusByID: {
       "1": nodeNoLocality1,
@@ -268,8 +272,7 @@ export const latencyFixtureNoLocality: ILatencyProps = {
       "3": nodeNoLocality3,
       "4": nodeNoLocality4,
     },
-
-},
+  },
   std: {
     stddev: 0.3755919319616704,
     stddevMinus2: 0.29658363607665916,

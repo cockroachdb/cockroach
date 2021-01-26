@@ -37,7 +37,7 @@ func (m *HistogramData) Reset()         { *m = HistogramData{} }
 func (m *HistogramData) String() string { return proto.CompactTextString(m) }
 func (*HistogramData) ProtoMessage()    {}
 func (*HistogramData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_histogram_40b21550afd0ea12, []int{0}
+	return fileDescriptor_histogram_a205654b2eaba308, []int{0}
 }
 func (m *HistogramData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -90,7 +90,7 @@ func (m *HistogramData_Bucket) Reset()         { *m = HistogramData_Bucket{} }
 func (m *HistogramData_Bucket) String() string { return proto.CompactTextString(m) }
 func (*HistogramData_Bucket) ProtoMessage()    {}
 func (*HistogramData_Bucket) Descriptor() ([]byte, []int) {
-	return fileDescriptor_histogram_40b21550afd0ea12, []int{0, 0}
+	return fileDescriptor_histogram_a205654b2eaba308, []int{0, 0}
 }
 func (m *HistogramData_Bucket) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -361,7 +361,7 @@ func (m *HistogramData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthHistogram
 			}
 			if (iNdEx + skippy) > l {
@@ -491,7 +491,7 @@ func (m *HistogramData_Bucket) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthHistogram
 			}
 			if (iNdEx + skippy) > l {
@@ -612,10 +612,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/stats/histogram.proto", fileDescriptor_histogram_40b21550afd0ea12)
+	proto.RegisterFile("sql/stats/histogram.proto", fileDescriptor_histogram_a205654b2eaba308)
 }
 
-var fileDescriptor_histogram_40b21550afd0ea12 = []byte{
+var fileDescriptor_histogram_a205654b2eaba308 = []byte{
 	// 326 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x90, 0x31, 0x4e, 0xf3, 0x30,
 	0x18, 0x86, 0xe3, 0xa6, 0xed, 0xff, 0xe3, 0x50, 0x06, 0x43, 0xa5, 0x10, 0x24, 0x37, 0x42, 0x42,

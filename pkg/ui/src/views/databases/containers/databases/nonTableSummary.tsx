@@ -15,7 +15,7 @@ import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { NonTableStatsResponseMessage } from "src/util/api";
 import { TimeSeriesTooltip } from "src/views/databases/containers/databases/tooltips";
@@ -50,47 +50,51 @@ export class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
         <table className="sort-table">
           <thead>
             <tr className="sort-table__row sort-table__row--header">
-              <td className="sort-table__cell">
-                Data Type
-              </td>
-              <td className="sort-table__cell">
-                Size
-              </td>
-              <td className="sort-table__cell">
-                Ranges
-              </td>
+              <td className="sort-table__cell">Data Type</td>
+              <td className="sort-table__cell">Size</td>
+              <td className="sort-table__cell">Ranges</td>
             </tr>
           </thead>
           <tbody>
             <tr className="sort-table__row sort-table__row--body">
-                <td className="sort-table__cell">
-                  <TimeSeriesTooltip>
-                    Time Series
-                  </TimeSeriesTooltip>
-                </td>
               <td className="sort-table__cell">
-                { Bytes(FixLong(this.props.nonTableStats.time_series_stats.approximate_disk_bytes).toNumber()) }
+                <TimeSeriesTooltip>Time Series</TimeSeriesTooltip>
               </td>
               <td className="sort-table__cell">
-                { FixLong(this.props.nonTableStats.time_series_stats.range_count).toNumber() }
+                {Bytes(
+                  FixLong(
+                    this.props.nonTableStats.time_series_stats
+                      .approximate_disk_bytes,
+                  ).toNumber(),
+                )}
+              </td>
+              <td className="sort-table__cell">
+                {FixLong(
+                  this.props.nonTableStats.time_series_stats.range_count,
+                ).toNumber()}
               </td>
             </tr>
             <tr className="sort-table__row sort-table__row--body">
+              <td className="sort-table__cell">Internal Use</td>
               <td className="sort-table__cell">
-                Internal Use
+                {Bytes(
+                  FixLong(
+                    this.props.nonTableStats.internal_use_stats
+                      .approximate_disk_bytes,
+                  ).toNumber(),
+                )}
               </td>
               <td className="sort-table__cell">
-                { Bytes(FixLong(this.props.nonTableStats.internal_use_stats.approximate_disk_bytes).toNumber()) }
-              </td>
-              <td className="sort-table__cell">
-                { FixLong(this.props.nonTableStats.internal_use_stats.range_count).toNumber() }
+                {FixLong(
+                  this.props.nonTableStats.internal_use_stats.range_count,
+                ).toNumber()}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
     );
-  }
+  };
 
   render() {
     return (
@@ -114,7 +118,8 @@ export class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
 }
 
 // Base selectors to extract data from redux state.
-const nonTableStatsData = (state: AdminUIState) => state.cachedData.nonTableStats;
+const nonTableStatsData = (state: AdminUIState) =>
+  state.cachedData.nonTableStats;
 
 const mapStateToProps = (state: AdminUIState) => {
   const ntStats = nonTableStatsData(state);

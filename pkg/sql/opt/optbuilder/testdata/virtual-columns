@@ -15,6 +15,18 @@ CREATE TABLE t_idx (
 )
 ----
 
+exec-ddl
+CREATE TABLE t_idx2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (a+b) VIRTUAL,
+  w INT AS (c+1) VIRTUAL,
+  INDEX (v),
+  UNIQUE (w)
+)
+----
+
 # -- SELECT tests --
 
 # Column v should be produced.
@@ -355,3 +367,252 @@ project
            │         └── a:5 + b:6 [as=v:7]
            └── filters
                 └── v:7 = 1
+
+# -- UPDATE tests --
+
+build
+UPDATE t SET v=1
+----
+error (55000): cannot write directly to computed column "v"
+
+# TODO(radu): we should prune v from the update mapping, since it's not used
+# for any index.
+build
+UPDATE t SET a=a+1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── project
+      │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    ├── scan t
+      │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    └── computed column expressions
+      │    │    │         └── v:7
+      │    │    │              └── a:5 + b:6
+      │    │    └── projections
+      │    │         └── a:5 + b:6 [as=v:7]
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t SET a=a+1 WHERE v=1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    ├── select
+      │    │    ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    │    ├── project
+      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── scan t
+      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── v:7
+      │    │    │    │              └── a:5 + b:6
+      │    │    │    └── projections
+      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    └── filters
+      │    │         └── v:7 = 1
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t SET a=a+1 WHERE a+b=1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── select
+      │    │    ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── project
+      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── scan t
+      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── v:7
+      │    │    │    │              └── a:5 + b:6
+      │    │    │    └── projections
+      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    └── filters
+      │    │         └── (a:5 + b:6) = 1
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t_idx SET a=a+1
+----
+update t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── project
+      │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    ├── scan t_idx
+      │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    └── computed column expressions
+      │    │    │         └── v:7
+      │    │    │              └── a:5 + b:6
+      │    │    └── projections
+      │    │         └── a:5 + b:6 [as=v:7]
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t_idx SET a=a+1 WHERE v=1
+----
+update t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    ├── select
+      │    │    ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    │    ├── project
+      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── scan t_idx
+      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── v:7
+      │    │    │    │              └── a:5 + b:6
+      │    │    │    └── projections
+      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    └── filters
+      │    │         └── v:7 = 1
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t_idx SET a=a+1 WHERE a+b=1
+----
+update t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── column10:10 => v:3
+ └── project
+      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── project
+      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── select
+      │    │    ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── project
+      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── scan t_idx
+      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── v:7
+      │    │    │    │              └── a:5 + b:6
+      │    │    │    └── projections
+      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    └── filters
+      │    │         └── (a:5 + b:6) = 1
+      │    └── projections
+      │         └── a:5 + 1 [as=a_new:9]
+      └── projections
+           └── a_new:9 + b:6 [as=column10:10]
+
+build
+UPDATE t_idx SET b=b+1 RETURNING v
+----
+project
+ ├── columns: v:3
+ └── update t_idx
+      ├── columns: a:1!null b:2 v:3
+      ├── fetch columns: a:5 b:6 v:7
+      ├── update-mapping:
+      │    ├── b_new:9 => b:2
+      │    └── column10:10 => v:3
+      └── project
+           ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 b_new:9
+           ├── project
+           │    ├── columns: b_new:9 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+           │    ├── project
+           │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    ├── scan t_idx
+           │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    │    └── computed column expressions
+           │    │    │         └── v:7
+           │    │    │              └── a:5 + b:6
+           │    │    └── projections
+           │    │         └── a:5 + b:6 [as=v:7]
+           │    └── projections
+           │         └── b:6 + 1 [as=b_new:9]
+           └── projections
+                └── a:5 + b_new:9 [as=column10:10]
+
+build
+UPDATE t_idx2 SET b=b+1 RETURNING w
+----
+project
+ ├── columns: w:5
+ └── update t_idx2
+      ├── columns: a:1!null b:2 c:3 v:4 w:5
+      ├── fetch columns: a:7 b:8 c:9 v:10 w:11
+      ├── update-mapping:
+      │    ├── b_new:13 => b:2
+      │    └── column14:14 => v:4
+      └── project
+           ├── columns: column14:14 column15:15 a:7!null b:8 c:9 v:10 w:11 crdb_internal_mvcc_timestamp:12 b_new:13
+           ├── project
+           │    ├── columns: b_new:13 a:7!null b:8 c:9 v:10 w:11 crdb_internal_mvcc_timestamp:12
+           │    ├── project
+           │    │    ├── columns: v:10 w:11 a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:12
+           │    │    ├── scan t_idx2
+           │    │    │    ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:12
+           │    │    │    └── computed column expressions
+           │    │    │         ├── v:10
+           │    │    │         │    └── a:7 + b:8
+           │    │    │         └── w:11
+           │    │    │              └── c:9 + 1
+           │    │    └── projections
+           │    │         ├── a:7 + b:8 [as=v:10]
+           │    │         └── c:9 + 1 [as=w:11]
+           │    └── projections
+           │         └── b:8 + 1 [as=b_new:13]
+           └── projections
+                ├── a:7 + b_new:13 [as=column14:14]
+                └── c:9 + 1 [as=column15:15]

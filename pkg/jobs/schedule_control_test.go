@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -133,7 +132,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 	// (e.g. pause-request -> paused).
 	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
 		return FakeResumer{
-			OnResume: func(_ context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
 			},
@@ -237,7 +236,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 	// Our resume never completes any jobs, until this test completes.
 	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
 		return FakeResumer{
-			OnResume: func(_ context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
 			},

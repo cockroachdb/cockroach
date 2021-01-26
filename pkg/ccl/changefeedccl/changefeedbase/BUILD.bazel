@@ -14,8 +14,8 @@ go_library(
         "//pkg/keys",
         "//pkg/settings",
         "//pkg/sql",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/tabledesc",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

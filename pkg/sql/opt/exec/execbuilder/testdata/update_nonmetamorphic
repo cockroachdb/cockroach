@@ -1,0 +1,99 @@
+# LogicTest: local !metamorphic
+
+# Check that updates on tables with multiple column families behave as
+# they should.
+
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+# Update single column family.
+query T
+EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, d, c_new)
+    │ estimated row count: 1,000 (missing stats)
+    │ render c_new: c + 1
+    │ render a: a
+    │ render c: c
+    │ render d: d
+    │
+    └── • scan
+          columns: (a, c, d)
+          estimated row count: 1,000 (missing stats)
+          table: tu@primary
+          spans: FULL SCAN
+          locking strength: for update
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/53/{1-2}
+fetched: /tu/primary/1 -> NULL
+fetched: /tu/primary/1/b -> 2
+fetched: /tu/primary/1/c/d -> /3/4
+Put /Table/53/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
+fast path completed
+rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/53/{1-2}
+fetched: /tu/primary/1 -> NULL
+fetched: /tu/primary/1/b -> 2
+fetched: /tu/primary/1/c/d -> /4/4
+Del /Table/53/1/1/1/1
+Del /Table/53/1/1/2/1
+fast path completed
+rows affected: 1
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+# Update single column family.
+query T
+EXPLAIN UPDATE tu SET c=c+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: tu@primary
+          spans: FULL SCAN
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true

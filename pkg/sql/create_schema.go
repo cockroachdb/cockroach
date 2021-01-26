@@ -58,7 +58,8 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		dbName = n.Schema.Catalog()
 	}
 
-	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, dbName, true /* required */)
+	_, db, err := p.Descriptors().GetMutableDatabaseByName(params.ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -166,12 +167,16 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	); err != nil {
 		return err
 	}
+
+	qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, desc)
+	if err != nil {
+		return err
+	}
+
 	return params.p.logEvent(params.ctx,
 		desc.GetID(),
-		// TODO(knz): This is missing some details about the database.
-		// See: https://github.com/cockroachdb/cockroach/issues/57738
 		&eventpb.CreateSchema{
-			SchemaName: schemaName,
+			SchemaName: qualifiedSchemaName.String(),
 			Owner:      privs.Owner().Normalized(),
 		})
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
@@ -104,8 +105,12 @@ func TestSSTIterator(t *testing.T) {
 		if err := ioutil.WriteFile(path, sstFile.Data(), 0600); err != nil {
 			t.Fatalf("%+v", err)
 		}
+		file, err := vfs.Default.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		iter, err := NewSSTIterator(path)
+		iter, err := NewSSTIterator(file)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}

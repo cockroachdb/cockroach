@@ -128,7 +128,7 @@ func newScrubTableReader(
 		flowCtx, &fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
 		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
-		nil, /* systemColumns */
+		nil /* systemColumns */, nil, /* virtualColumn */
 	); err != nil {
 		return nil, err
 	}
@@ -149,12 +149,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	row rowenc.EncDatumRow, scrubErr *scrub.Error,
 ) (rowenc.EncDatumRow, error) {
 	details := make(map[string]interface{})
-	var index *descpb.IndexDescriptor
-	if tr.indexIdx == 0 {
-		index = &tr.tableDesc.PrimaryIndex
-	} else {
-		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
-	}
+	index := tr.tableDesc.ActiveIndexes()[tr.indexIdx]
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})
 	for i, colIdx := range tr.fetcherResultToColIdx {
@@ -163,7 +158,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 		rowDetails[col.Name] = row[i].String(col.Type)
 	}
 	details["row_data"] = rowDetails
-	details["index_name"] = index.Name
+	details["index_name"] = index.GetName()
 	details["error_message"] = scrub.UnwrapScrubError(error(scrubErr)).Error()
 
 	detailsJSON, err := tree.MakeDJSON(details)
@@ -224,8 +219,8 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV,
+		ctx, tr.FlowCtx.Txn, tr.spans, true /* limit batches */, tr.limitHint,
+		tr.FlowCtx.TraceKV, tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}

@@ -202,7 +202,7 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 }
 
 // PrimaryRegion returns the primary region for a multi-region type descriptor.
-func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
 			"can not get primary region of a non multi-region type desc")
@@ -413,7 +413,21 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// In the case of the multi-region enum, we also keep the logical descriptors
+		// sorted. Validate that's the case.
+		for i := 0; i < len(desc.EnumMembers)-1; i++ {
+			if desc.EnumMembers[i].LogicalRepresentation > desc.EnumMembers[i+1].LogicalRepresentation {
+				return errors.AssertionFailedf(
+					"multi-region enum is out of order %q > %q",
+					desc.EnumMembers[i].LogicalRepresentation,
+					desc.EnumMembers[i+1].LogicalRepresentation,
+				)
+			}
+		}
+		// Now do all of the checking for ordinary enums, which also apply to multi-region enums.
+		fallthrough
+	case descpb.TypeDescriptor_ENUM:
 		// All of the enum members should be in sorted order.
 		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
 			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)
@@ -455,6 +469,11 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		if desc.RegionConfig != nil {
 			return errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String())
 		}
+	}
+
+	// Don't validate cross-references for dropped descriptors.
+	if desc.Dropped() {
+		return nil
 	}
 
 	// Validate all cross references on the descriptor.
@@ -499,13 +518,13 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 					len(dbRegions), len(desc.EnumMembers))
 			}
 
-			regions := make(map[descpb.Region]struct{}, len(dbRegions))
+			regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
 			for _, region := range dbRegions {
 				regions[region] = struct{}{}
 			}
 
 			for i := range desc.EnumMembers {
-				enumRegion := descpb.Region(desc.EnumMembers[i].LogicalRepresentation)
+				enumRegion := descpb.RegionName(desc.EnumMembers[i].LogicalRepresentation)
 				if _, ok := regions[enumRegion]; !ok {
 					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
 				}

@@ -99,21 +99,11 @@ func TestPutS3(t *testing.T) {
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		testExportStore(t, fmt.Sprintf(
-			"s3://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test",
-			cloudimpl.AWSAccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-			cloudimpl.AWSSecretParam, url.QueryEscape(creds.SecretAccessKey),
-		), false, user, nil, nil)
-		testListFiles(t,
-			fmt.Sprintf(
-				"s3://%s/%s?%s=%s&%s=%s",
-				bucket, "listing-test",
-				cloudimpl.AWSAccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-				cloudimpl.AWSSecretParam, url.QueryEscape(creds.SecretAccessKey),
-			),
-			user, nil, nil,
+		uri := cloudimpl.S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
+		testExportStore(t, uri, false, user, nil, nil)
+		testListFiles(t, uri, user, nil, nil)
 	})
 
 	// Tests that we can put an object with server side encryption specified.

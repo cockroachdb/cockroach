@@ -115,6 +115,15 @@ type scanColumnsConfig struct {
 	// columns are not included here.
 	wantedColumnsOrdinals []uint32
 
+	// virtualColumn maps the column ID of the virtual column (if it exists) to
+	// the column type actually stored in the index. For example, the inverted
+	// column of an inverted index has type bytes, even though the column
+	// descriptor matches the source column (Geometry, Geography, JSON or Array).
+	virtualColumn *struct {
+		colID tree.ColumnID
+		typ   *types.T
+	}
+
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
 	addUnwantedAsHidden bool
@@ -221,35 +230,18 @@ func (n *scanNode) initTable(
 func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	if indexFlags.Index != "" {
 		// Search index by name.
-		indexName := string(indexFlags.Index)
-		if indexName == n.desc.PrimaryIndex.Name {
-			n.specifiedIndex = &n.desc.PrimaryIndex
-		} else {
-			for i := range n.desc.Indexes {
-				if indexName == n.desc.Indexes[i].Name {
-					n.specifiedIndex = &n.desc.Indexes[i]
-					break
-				}
-			}
-		}
-		if n.specifiedIndex == nil {
+		foundIndex, _ := n.desc.FindIndexWithName(string(indexFlags.Index))
+		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
+		n.specifiedIndex = foundIndex.IndexDesc()
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == descpb.IndexID(indexFlags.IndexID) {
-			n.specifiedIndex = &n.desc.PrimaryIndex
-		} else {
-			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == descpb.IndexID(indexFlags.IndexID) {
-					n.specifiedIndex = &n.desc.Indexes[i]
-					break
-				}
-			}
-		}
-		if n.specifiedIndex == nil {
+		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
+		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
+		n.specifiedIndex = foundIndex.IndexDesc()
 	}
 	return nil
 }
@@ -283,6 +275,14 @@ func initColsForScan(
 			if err != nil {
 				return cols, err
 			}
+
+			// If this is a virtual column, create a new descriptor with the correct
+			// type.
+			if vc := colCfg.virtualColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(c.Type) {
+				virtualDesc := *c
+				virtualDesc.Type = vc.typ
+				c = &virtualDesc
+			}
 		}
 
 		cols = append(cols, c)
@@ -315,7 +315,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = &n.desc.PrimaryIndex
+	n.index = n.desc.GetPrimaryIndex().IndexDesc()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)

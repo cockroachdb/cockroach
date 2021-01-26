@@ -84,6 +84,7 @@ func WriteInitialClusterData(
 	numStores int,
 	splits []roachpb.RKey,
 	nowNanos int64,
+	knobs StoreTestingKnobs,
 ) error {
 	// Bootstrap version information. We'll add the "bootstrap version" to the
 	// list of initialValues, so that we don't have to handle it specially
@@ -169,7 +170,7 @@ func WriteInitialClusterData(
 				ReplicaID: 1,
 			},
 		}
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+		desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 		if err := desc.Validate(); err != nil {
 			return err
 		}
@@ -233,8 +234,16 @@ func WriteInitialClusterData(
 			}
 		}
 
-		if err := stateloader.WriteInitialRangeState(ctx, batch, *desc); err != nil {
-			return err
+		if tt := knobs.TruncatedStateTypeOverride; tt != nil {
+			if err := stateloader.WriteInitialRangeStateWithTruncatedState(
+				ctx, batch, *desc, bootstrapVersion, *tt,
+			); err != nil {
+				return err
+			}
+		} else {
+			if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, bootstrapVersion); err != nil {
+				return err
+			}
 		}
 		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
 		if err != nil {

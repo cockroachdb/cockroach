@@ -23,16 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -115,7 +118,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myTableID,
 				}
-				myTableDesc.Indexes = myTableDesc.Indexes[:0]
+				myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
 				myTableDesc.GCMutations = append(myTableDesc.GCMutations, descpb.TableDescriptor_GCDescriptorMutation{
 					IndexID: descpb.IndexID(2),
 				})
@@ -169,6 +172,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
+				RunningStatus: sql.RunningStatusWaitingGC,
 				NonCancelable: true,
 			}
 
@@ -181,14 +185,14 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			resultsCh := make(chan tree.Datums)
-			job, _, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
+			job, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Check that the job started.
 			jobIDStr := strconv.Itoa(int(*job.ID()))
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, lookupJR); err != nil {
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
 
@@ -277,12 +281,14 @@ SELECT parent_id, table_id
 	// Now we should be able to find our GC job
 	var jobID int64
 	var status jobs.Status
+	var runningStatus jobs.RunningStatus
 	sqlDB.QueryRow(t, `
-SELECT job_id, status
+SELECT job_id, status, running_status
   FROM crdb_internal.jobs
  WHERE description LIKE 'GC for DROP TABLE db.public.foo';
-`).Scan(&jobID, &status)
+`).Scan(&jobID, &status, &runningStatus)
 	require.Equal(t, jobs.StatusRunning, status)
+	require.Equal(t, sql.RunningStatusWaitingGC, runningStatus)
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -306,5 +312,102 @@ SELECT job_id, status
 			return errors.Errorf("job status %v != %v", status, jobs.StatusSucceeded)
 		}
 		return nil
+	})
+}
+
+// TestGCTenant is lightweight test that tests the branching logic in Resume
+// depending if the job is GC for tenant or tables/indexes and also the GC
+// logic for GC-ing tenant.
+func TestGCResumer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+	gcjob.SetSmallMaxGCIntervalForTest()
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	jobRegistry := execCfg.JobRegistry
+	defer srv.Stopper().Stop(ctx)
+
+	t.Run("tenant GC job past", func(t *testing.T) {
+		const tenID = 10
+		record := jobs.Record{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+					ID:       tenID,
+					DropTime: 1, // guarantees the tenant will expire immediately.
+				},
+			},
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		resultsCh := make(chan tree.Datums)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		require.NoError(t, err)
+		require.NoError(t, sj.AwaitCompletion(ctx))
+		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		require.NoError(t, err)
+		st, err := job.CurrentStatus(ctx)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, st)
+		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		require.EqualError(t, err, `tenant "10" does not exist`)
+		progress := job.Progress()
+		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+	})
+
+	t.Run("tenant GC job soon", func(t *testing.T) {
+		const tenID = 10
+		record := jobs.Record{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+					ID:       tenID,
+					DropTime: timeutil.Now().UnixNano(),
+				},
+			},
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		resultsCh := make(chan tree.Datums)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		require.NoError(t, err)
+
+		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		require.NoError(t, err)
+		require.NoError(t, sj.AwaitCompletion(ctx))
+
+		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		require.NoError(t, err)
+		st, err := job.CurrentStatus(ctx)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, st)
+		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		require.EqualError(t, err, `tenant "10" does not exist`)
+		progress := job.Progress()
+		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+	})
+
+	t.Run("no tenant and tables in same GC job", func(t *testing.T) {
+		gcDetails := jobspb.SchemaChangeGCDetails{
+			Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+				ID:       10,
+				DropTime: 1, // guarantees the tenant will expire immediately.
+			},
+		}
+		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       100,
+			DropTime: 1,
+		})
+		record := jobs.Record{
+			Details:  gcDetails,
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		resultsCh := make(chan tree.Datums)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		require.NoError(t, err)
+		require.Error(t, sj.AwaitCompletion(ctx))
 	})
 }

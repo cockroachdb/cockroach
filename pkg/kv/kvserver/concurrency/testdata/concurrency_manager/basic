@@ -58,7 +58,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 12.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 finish req=req2
@@ -69,7 +69,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 12.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 reset
@@ -116,13 +116,14 @@ sequence req=req3
 [2] sequence req3: acquiring latches
 [2] sequence req3: scanning lock table for conflicting locks
 [2] sequence req3: waiting in lock wait-queues
-[2] sequence req3: pushing timestamp of txn 00000002 above 0.000000014,1
+[2] sequence req3: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
 [2] sequence req3: resolving intent "k" for txn 00000002 with COMMITTED status
+[2] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req3: acquiring latches
 [2] sequence req3: scanning lock table for conflicting locks
 [2] sequence req3: sequencing complete, returned guard
@@ -196,7 +197,7 @@ sequence req=req5
 [2] sequence req5: acquiring latches
 [2] sequence req5: scanning lock table for conflicting locks
 [2] sequence req5: waiting in lock wait-queues
-[2] sequence req5: pushing timestamp of txn 00000002 above 0.000000014,1
+[2] sequence req5: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 new-request name=req6 txn=none ts=16,1
@@ -215,9 +216,11 @@ on-txn-updated txn=txn2 status=pending ts=18,1
 ----
 [-] update txn: increasing timestamp of txn2
 [2] sequence req5: resolving intent "k" for txn 00000002 with PENDING status
+[2] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req5: acquiring latches
 [2] sequence req5: scanning lock table for conflicting locks
 [2] sequence req5: sequencing complete, returned guard
+[3] sequence req6: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [3] sequence req6: acquiring latches
 [3] sequence req6: scanning lock table for conflicting locks
 [3] sequence req6: sequencing complete, returned guard
@@ -248,6 +251,7 @@ on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
 [4] sequence req7: resolving intent "k" for txn 00000002 with COMMITTED status
+[4] sequence req7: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req7: acquiring latches
 [4] sequence req7: scanning lock table for conflicting locks
 [4] sequence req7: sequencing complete, returned guard

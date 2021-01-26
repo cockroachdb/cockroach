@@ -336,7 +336,7 @@ type Replica struct {
 		// - a lease cannot be used after a transfer is initiated. Moreover, even
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
-		minLeaseProposedTS hlc.Timestamp
+		minLeaseProposedTS hlc.ClockTimestamp
 		// A pointer to the zone config for this replica.
 		zone *zonepb.ZoneConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft
@@ -798,6 +798,18 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
+// Version returns the replica version.
+func (r *Replica) Version() roachpb.Version {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.mu.state.Version == nil {
+		// TODO(irfansharif): This is a stop-gap for #58523.
+		return roachpb.Version{}
+	}
+	return *r.mu.state.Version
+}
+
 // getImpliedGCThresholdRLocked returns the gc threshold of the replica which
 // should be used to determine the validity of commands. The returned timestamp
 // may be newer than the replica's true GC threshold if strict enforcement
@@ -858,7 +870,7 @@ func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().All() {
+	for _, repl := range desc.Replicas().Descriptors() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -1059,7 +1071,7 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 	if desc := ri.ReplicaState.Desc; desc != nil {
 		// Learner replicas don't serve follower reads, but they still receive
 		// closed timestamp updates, so include them here.
-		allReplicas := desc.Replicas().All()
+		allReplicas := desc.Replicas().Descriptors()
 		for i := range allReplicas {
 			replDesc := &allReplicas[i]
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {

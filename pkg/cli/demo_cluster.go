@@ -60,6 +60,8 @@ type transientCluster struct {
 
 	adminPassword string
 	adminUser     security.SQLUsername
+
+	stickyEngineRegistry server.StickyInMemEnginesRegistry
 }
 
 func (c *transientCluster) checkConfigAndSetupLogging(
@@ -110,6 +112,7 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 	c.httpFirstPort = demoCtx.httpPort
 	c.sqlFirstPort = demoCtx.sqlPort
 
+	c.stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
 	return nil
 }
 
@@ -138,6 +141,7 @@ func (c *transientCluster) start(
 			c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir,
 			c.sqlFirstPort,
 			c.httpFirstPort,
+			c.stickyEngineRegistry,
 		)
 		if i == 0 {
 			// The first node also auto-inits the cluster.
@@ -149,14 +153,11 @@ func (c *transientCluster) start(
 		servRPCReadyCh := make(chan struct{})
 
 		if demoCtx.simulateLatency {
-			args.Knobs = base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					PauseAfterGettingRPCAddress:  latencyMapWaitCh,
-					SignalAfterGettingRPCAddress: servRPCReadyCh,
-					ContextTestingKnobs: rpc.ContextTestingKnobs{
-						ArtificialLatencyMap: make(map[string]int),
-					},
-				},
+			serverKnobs := args.Knobs.Server.(*server.TestingKnobs)
+			serverKnobs.PauseAfterGettingRPCAddress = latencyMapWaitCh
+			serverKnobs.SignalAfterGettingRPCAddress = servRPCReadyCh
+			serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
+				ArtificialLatencyMap: make(map[string]int),
 			}
 		}
 
@@ -209,27 +210,12 @@ func (c *transientCluster) start(
 			<-servReadyFnCh
 			errCh <- nil
 		}
-
-		// Ensure we close all sticky stores we've created.
-		for _, store := range args.StoreSpecs {
-			if store.StickyInMemoryEngineID != "" {
-				engineID := store.StickyInMemoryEngineID
-				c.stopper.AddCloser(stop.CloserFn(func() {
-					if err := server.CloseStickyInMemEngine(engineID); err != nil {
-						// Something else may have already closed the sticky store.
-						// Since we are closer, it doesn't really matter.
-						log.Warningf(
-							ctx,
-							"could not close sticky in-memory store %s: %+v",
-							engineID,
-							err,
-						)
-					}
-				}))
-			}
-		}
 	}
 
+	// Ensure we close all sticky stores we've created.
+	c.stopper.AddCloser(stop.CloserFn(func() {
+		c.stickyEngineRegistry.CloseAllStickyInMemEngines()
+	}))
 	c.servers = servers
 
 	if demoCtx.simulateLatency {
@@ -288,15 +274,16 @@ func (c *transientCluster) start(
 	// initial replication factor for small clusters and creating the
 	// admin user.
 	const demoUsername = "demo"
-	demoPassword, err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername)
-	if err != nil {
+	demoPassword := genDemoPassword(demoUsername)
+	if err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername, demoPassword); err != nil {
 		return err
 	}
-	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
-	c.adminPassword = demoPassword
 	if demoCtx.insecure {
 		c.adminUser = security.RootUserName()
 		c.adminPassword = "unused"
+	} else {
+		c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
+		c.adminPassword = demoPassword
 	}
 
 	// Prepare the URL for use by the SQL shell.
@@ -306,10 +293,10 @@ func (c *transientCluster) start(
 	}
 
 	// Start up the update check loop.
-	// We don't do this in (*server.Server).Start() because we don't want it
-	// in tests.
+	// We don't do this in (*server.Server).Start() because we don't want this
+	// overhead and possible interference in tests.
 	if !demoCtx.disableTelemetry {
-		c.s.PeriodicallyCheckForUpdates(ctx)
+		c.s.StartDiagnostics(ctx)
 	}
 	return nil
 }
@@ -322,6 +309,7 @@ func testServerArgsForTransientCluster(
 	joinAddr string,
 	demoDir string,
 	sqlBasePort, httpBasePort int,
+	stickyEngineRegistry server.StickyInMemEnginesRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
@@ -337,9 +325,15 @@ func testServerArgsForTransientCluster(
 		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
 		CacheSize:               demoCtx.cacheSize,
 		NoAutoInitializeCluster: true,
+		EnableDemoLoginEndpoint: true,
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				StickyEngineRegistry: stickyEngineRegistry,
+			},
+		},
 	}
 
 	if !testingForceRandomizeDemoPorts {
@@ -503,7 +497,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 	// TODO(#42243): re-compute the latency mapping.
 	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
-		c.sqlFirstPort, c.httpFirstPort)
+		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
 	if err != nil {
 		return err
@@ -757,7 +751,7 @@ func (c *transientCluster) runWorkload(
 						log.Warningf(ctx, "error running workload query: %+v", err)
 					}
 					select {
-					case <-c.s.Stopper().ShouldStop():
+					case <-c.s.Stopper().ShouldQuiesce():
 						return
 					default:
 					}
@@ -767,7 +761,9 @@ func (c *transientCluster) runWorkload(
 		// As the SQL shell is tied to `c.s`, this means we want to tie the workload
 		// onto this as we want the workload to stop when the server dies,
 		// rather than the cluster. Otherwise, interrupts on cockroach demo hangs.
-		c.s.Stopper().RunWorker(ctx, workloadFun(workerFn))
+		if err := c.s.Stopper().RunAsyncTask(ctx, "workload", workloadFun(workerFn)); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -884,8 +880,19 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
-		// Print node ID and admin UI URL.
-		fmt.Fprintf(w, "  (console) %s\n", s.AdminURL())
+		serverURL := s.Cfg.AdminURL()
+		if !demoCtx.insecure {
+			// Print node ID and console URL. Embed the autologin feature inside the URL.
+			// We avoid printing those when insecure, as the autologin path is not available
+			// in that case.
+			pwauth := url.Values{
+				"username": []string{c.adminUser.Normalized()},
+				"password": []string{c.adminPassword},
+			}
+			serverURL.Path = server.DemoLoginPath
+			serverURL.RawQuery = pwauth.Encode()
+		}
+		fmt.Fprintf(w, "  (console) %s\n", serverURL)
 		// Print unix socket if defined.
 		if c.useSockets {
 			sock := c.sockForServer(nodeID)
@@ -906,4 +913,20 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 	if justOne && numNodesLive > 1 {
 		fmt.Fprintln(w, `To display connection parameters for other nodes, use \demo ls.`)
 	}
+}
+
+// genDemoPassword generates a password that prevents accidental
+// misuse of the DB console started by demo shells.
+// It also prevents beginner or naive programmers from scripting the
+// demo shell, before they fully understand the notion of API
+// stability and the lack of forward or backward compatibility in
+// features of 'cockroach demo'. (What we are saying here is that
+// someone needs to be "advanced enough" to script the derivation of
+// the demo password, at which point we're expecting them to properly
+// weigh the trade-off between working to script "demo" which may
+// require non-trivial changes to their script from one version to the
+// next, and starting a regular server with "start-single-node".)
+func genDemoPassword(username string) string {
+	mypid := os.Getpid()
+	return fmt.Sprintf("%s%d", username, mypid)
 }

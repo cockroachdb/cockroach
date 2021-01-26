@@ -13,13 +13,13 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 type refreshMaterializedViewNode struct {
@@ -59,6 +59,8 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
 
+	telemetry.Inc(n.n.TelemetryCounter())
+
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
 		params.p.BufferClientNotice(
@@ -68,10 +70,10 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := protoutil.Clone(&n.desc.PrimaryIndex).(*descpb.IndexDescriptor)
-	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.Indexes))
-	for i := range n.desc.Indexes {
-		newIndexes[i] = *protoutil.Clone(&n.desc.Indexes[i]).(*descpb.IndexDescriptor)
+	newPrimaryIndex := n.desc.GetPrimaryIndex().IndexDescDeepCopy()
+	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.PublicNonPrimaryIndexes()))
+	for i, idx := range n.desc.PublicNonPrimaryIndexes() {
+		newIndexes[i] = idx.IndexDescDeepCopy()
 	}
 
 	// Reset and allocate new IDs for the new indexes.
@@ -87,7 +89,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Queue the refresh mutation.
 	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
-		NewPrimaryIndex: *newPrimaryIndex,
+		NewPrimaryIndex: newPrimaryIndex,
 		NewIndexes:      newIndexes,
 		AsOf:            params.p.Txn().ReadTimestamp(),
 		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,

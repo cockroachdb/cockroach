@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 
 import { generateLocalityRoute } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
-import { intersperse } from "src/util/intersperse";
+import { util } from "@cockroachlabs/cluster-ui";
 import { getLocalityLabel } from "src/util/localities";
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 import { trustIcon } from "src/util/trust";
@@ -24,6 +24,8 @@ interface BreadcrumbsProps {
   tiers: LocalityTier[];
 }
 
+const { intersperse } = util;
+
 export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
   render() {
     const paths = breadcrumbPaths(this.props.tiers);
@@ -33,19 +35,20 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
         <span
           className="breadcrumbs__icon"
           dangerouslySetInnerHTML={trustIcon(mapPinIcon)}
-          />
+        />
         {intersperse(
           paths.map((path, idx) => (
             <span key={idx}>
-              {idx === paths.length - 1
-                ? getLocalityLabel(path)
-                : <Link
+              {idx === paths.length - 1 ? (
+                getLocalityLabel(path)
+              ) : (
+                <Link
                   to={CLUSTERVIZ_ROOT + generateLocalityRoute(path)}
                   className="breadcrumbs__link"
                 >
-                    {getLocalityLabel(path)}
-                  </Link>
-              }
+                  {getLocalityLabel(path)}
+                </Link>
+              )}
             </span>
           )),
           <span className="breadcrumbs__separator"> &gt; </span>,
