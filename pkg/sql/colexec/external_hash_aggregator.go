@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -73,3 +74,12 @@ func NewExternalHashAggregator(
 		numRequiredActivePartitions,
 	)
 }
+
+// HashAggregationDiskSpillingDisabled is a cluster setting that allows for
+// disabling of the disk spilling of the hash aggregator.
+var HashAggregationDiskSpillingDisabled = settings.RegisterBoolSetting(
+	"sql.exec.hash_aggregation_disk_spilling.disabled",
+	"set to true to disable the disk spilling in the hash aggregator "+
+		"(this will improve performance, but the query might hit the memory limit)",
+	false,
+)

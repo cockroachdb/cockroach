@@ -65,6 +65,7 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",
         "//pkg/server/telemetry",  # keep
+        "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
