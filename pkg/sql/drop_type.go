@@ -194,8 +194,8 @@ func (p *planner) removeTypeBackReference(
 func (p *planner) addBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -221,8 +221,8 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 func (p *planner) removeBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}

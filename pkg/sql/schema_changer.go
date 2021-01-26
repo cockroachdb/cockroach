@@ -1059,7 +1059,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 			ctx,
 			txn,
 			scTable.GetParentID(),

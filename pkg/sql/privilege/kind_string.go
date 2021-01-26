@@ -18,11 +18,12 @@ func _() {
 	_ = x[UPDATE-8]
 	_ = x[USAGE-9]
 	_ = x[ZONECONFIG-10]
+	_ = x[CONNECT-11]
 }
 
-const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATEUSAGEZONECONFIG"
+const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATEUSAGEZONECONFIGCONNECT"
 
-var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42, 47, 57}
+var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42, 47, 57, 64}
 
 func (i Kind) String() string {
 	i -= 1
