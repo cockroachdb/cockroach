@@ -194,6 +194,11 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
+	// The start key of a Range remains constant throughout its lifetime.
+	// This is not set for uninitialized replicas, and must not be accessed for
+	// them. For initialized replicas, this is set and can be accessed without a
+	// lock.
+	startKey roachpb.RKey
 
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -1089,8 +1094,6 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 // assertStateLocked can be called from the Raft goroutine to check that the
 // in-memory and on-disk states of the Replica are congruent.
 // Requires that both r.raftMu and r.mu are held.
-//
-// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) {
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
@@ -1105,6 +1108,11 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 		r.mu.state.Desc, diskState.Desc = nil, nil
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
 			log.Safe(pretty.Diff(diskState, r.mu.state)))
+	}
+	if r.isInitializedRLocked() {
+		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {
+			log.Fatalf(ctx, "denormalized start key %s diverged from %s", r.startKey, r.mu.state.Desc.StartKey)
+		}
 	}
 }
 
@@ -1656,10 +1664,6 @@ func checkIfTxnAborted(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), newTxn)
 	}
 	return nil
-}
-
-func (r *Replica) startKey() roachpb.RKey {
-	return r.Desc().StartKey
 }
 
 // GetLeaseHistory returns the lease history stored on this replica.

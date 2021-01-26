@@ -317,6 +317,7 @@ func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Rep
 	}
 
 	rangeID := repl.RangeID
+	repl.startKey = repl.Desc().StartKey
 
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
