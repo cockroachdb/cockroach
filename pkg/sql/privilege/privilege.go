@@ -31,6 +31,7 @@ type Kind uint32
 const (
 	_ Kind = iota
 	ALL
+	CONNECT
 	CREATE
 	DROP
 	GRANT
@@ -60,12 +61,13 @@ const (
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges     = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData          = List{GRANT, SELECT}
-	ReadWriteData     = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges  = List{ALL, GRANT, CREATE, USAGE}
-	TypePrivileges    = List{ALL, GRANT, USAGE}
+	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData         = List{GRANT, CONNECT, SELECT}
+	ReadWriteData    = List{GRANT, CONNECT, SELECT, INSERT, DELETE, UPDATE}
+	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
+	TypePrivileges   = List{ALL, GRANT, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -81,6 +83,7 @@ var ByValue = [...]Kind{
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
 	"ALL":        ALL,
+	"CONNECT":    CREATE,
 	"CREATE":     CREATE,
 	"DROP":       DROP,
 	"GRANT":      GRANT,
@@ -206,7 +209,7 @@ func ListFromStrings(strs []string) (List, error) {
 func ValidatePrivileges(privileges List, objectType ObjectType) error {
 	validPrivs := GetValidPrivilegesForObject(objectType)
 	for _, priv := range privileges {
-		// Check if priv is in DBTablePrivileges.
+		// Check if priv is in TablePrivileges.
 		if validPrivs.ToBitField()&priv.Mask() == 0 {
 			return pgerror.Newf(pgcode.InvalidGrantOperation,
 				"invalid privilege type %s for %s", priv.String(), objectType)
@@ -220,10 +223,12 @@ func ValidatePrivileges(privileges List, objectType ObjectType) error {
 // specified object type.
 func GetValidPrivilegesForObject(objectType ObjectType) List {
 	switch objectType {
-	case Table, Database:
-		return DBTablePrivileges
+	case Table:
+		return TablePrivileges
 	case Schema:
 		return SchemaPrivileges
+	case Database:
+		return DBPrivileges
 	case Type:
 		return TypePrivileges
 	case Any:

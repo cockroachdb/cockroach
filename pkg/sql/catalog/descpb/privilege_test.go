@@ -284,8 +284,8 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		objectType      privilege.ObjectType
 		validPrivileges privilege.List
 	}{
-		{privilege.Table, privilege.DBTablePrivileges},
-		{privilege.Database, privilege.DBTablePrivileges},
+		{privilege.Table, privilege.TablePrivileges},
+		{privilege.Database, privilege.DBPrivileges},
 		{privilege.Schema, privilege.SchemaPrivileges},
 		{privilege.Type, privilege.TypePrivileges},
 	}
