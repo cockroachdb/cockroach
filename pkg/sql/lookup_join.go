@@ -34,13 +34,20 @@ type lookupJoinNode struct {
 	eqColsAreKey bool
 
 	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns in the table scanNode.
+	// join type is semi or anti join) the columns in the table scanNode. It
+	// includes an additional continuation column when IsFirstJoinInPairedJoin
+	// is true.
 	columns colinfo.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on eqCols.
 	onCond tree.TypedExpr
 
+	// At most one of is{First,Second}JoinInPairedJoiner can be true.
+	// IsFirstJoinInPairedJoiner can be true only if reqOrdering asks the join
+	// to preserve ordering (currently a non-empty reqOrdering is interpreted
+	// as a bool to preserve the row ordering of the input).
+	isFirstJoinInPairedJoiner  bool
 	isSecondJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
