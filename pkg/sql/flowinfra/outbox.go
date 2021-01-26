@@ -68,8 +68,12 @@ type Outbox struct {
 
 	// numOutboxes is an atomic that keeps track of how many outboxes are left.
 	// When there is one outbox left, the flow-level stats are added to the last
-	// outbox's span stats.
+	// outbox's span stats unless isGatewayNode is true, in which case, the flow
+	// will do so in its Cleanup method.
 	numOutboxes *int32
+
+	// isGatewayNode specifies whether this outbox is running on the gateway node.
+	isGatewayNode bool
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -81,11 +85,13 @@ func NewOutbox(
 	nodeID roachpb.NodeID,
 	streamID execinfrapb.StreamID,
 	numOutboxes *int32,
+	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
 	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
+	m.isGatewayNode = isGatewayNode
 	m.stats.Component = flowCtx.StreamComponentID(streamID)
 	return m
 }
@@ -292,7 +298,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-					if m.numOutboxes != nil && atomic.AddInt32(m.numOutboxes, -1) == 0 {
+					if !m.isGatewayNode && m.numOutboxes != nil && atomic.AddInt32(m.numOutboxes, -1) == 0 {
 						// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that are associated with streams,
 						// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
 						// complicated to attach this to a flow level span. If the row exec engine gets removed, getting

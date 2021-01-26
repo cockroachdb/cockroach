@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
-// Modifies TraceAnalyzer internal state to add stats for the processor/stream/flow specified
-// in stats.ComponentID and the given node ID.
+// AddComponentStats modifies TraceAnalyzer internal state to add stats for the
+// processor/stream/flow specified in stats.ComponentID and the given node ID.
 func (a *TraceAnalyzer) AddComponentStats(
 	nodeID roachpb.NodeID, stats *execinfrapb.ComponentStats,
 ) {
@@ -40,13 +40,11 @@ func (a *TraceAnalyzer) AddComponentStats(
 		}
 		a.FlowMetadata.streamStats[execinfrapb.StreamID(stats.Component.ID)] = streamStat
 	default:
-		flowStat := &flowStats{
-			nodeID: nodeID,
-		}
+		flowStat := &flowStats{}
 		flowStat.stats = append(flowStat.stats, stats)
 		if a.FlowMetadata.flowStats == nil {
-			a.FlowMetadata.flowStats = make(map[execinfrapb.FlowID]*flowStats)
+			a.FlowMetadata.flowStats = make(map[roachpb.NodeID]*flowStats)
 		}
-		a.FlowMetadata.flowStats[stats.Component.FlowID] = flowStat
+		a.FlowMetadata.flowStats[nodeID] = flowStat
 	}
 }
