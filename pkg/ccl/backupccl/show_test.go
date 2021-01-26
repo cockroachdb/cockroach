@@ -349,7 +349,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 		sqlDB.Exec(t, `BACKUP DATABASE mi5 TO $1;`, showPrivs)
 
 		want := [][]string{
-			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CREATE, DELETE, DROP, GRANT, INSERT, ` +
+			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CONNECT, CREATE, DELETE, DROP, GRANT, INSERT, ` +
 				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
 				`GRANT ALL ON locator TO root; `, `root`},

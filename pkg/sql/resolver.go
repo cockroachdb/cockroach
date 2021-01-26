@@ -226,7 +226,7 @@ func (p *planner) IsTableVisible(
 	}
 	if schemaDesc.Kind != catalog.SchemaVirtual {
 		dbID := tableDesc.GetParentID()
-		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
+		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
 			tree.DatabaseLookupFlags{
 				Required:    true,
 				AvoidCached: p.avoidCachedDescriptors})
@@ -257,7 +257,7 @@ func (p *planner) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	// Note that the value of required doesn't matter for lookups by ID.
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -472,8 +472,9 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
 		tree.DatabaseLookupFlags{
+			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
 		})
@@ -502,9 +503,10 @@ func (p *planner) getQualifiedTableName(
 func (p *planner) getQualifiedSchemaName(
 	ctx context.Context, desc catalog.SchemaDescriptor,
 ) (*tree.ObjectNamePrefix, error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-		Required: true,
-	})
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
+		tree.DatabaseLookupFlags{
+			Required: true,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -521,9 +523,10 @@ func (p *planner) getQualifiedSchemaName(
 func (p *planner) getQualifiedTypeName(
 	ctx context.Context, desc catalog.TypeDescriptor,
 ) (*tree.TypeName, error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-		Required: true,
-	})
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
+		tree.DatabaseLookupFlags{
+			Required: true,
+		})
 	if err != nil {
 		return nil, err
 	}

@@ -129,6 +129,17 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Table,
 		},
+		// Ensure revoking CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// from a user with ALL privilege on a database leaves the user with no privileges.
+		{testUser,
+			privilege.List{privilege.ALL}, privilege.List{privilege.CONNECT, privilege.CREATE,
+				privilege.DROP, privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE,
+				privilege.UPDATE, privilege.ZONECONFIG},
+			[]UserPrivilegeString{
+				{security.AdminRoleName(), []string{"ALL"}},
+			},
+			privilege.Database,
+		},
 	}
 
 	for tcNum, tc := range testCases {
@@ -284,8 +295,8 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		objectType      privilege.ObjectType
 		validPrivileges privilege.List
 	}{
-		{privilege.Table, privilege.DBTablePrivileges},
-		{privilege.Database, privilege.DBTablePrivileges},
+		{privilege.Table, privilege.TablePrivileges},
+		{privilege.Database, privilege.DBPrivileges},
 		{privilege.Schema, privilege.SchemaPrivileges},
 		{privilege.Type, privilege.TypePrivileges},
 	}

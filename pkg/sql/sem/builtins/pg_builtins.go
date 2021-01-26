@@ -521,6 +521,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 // option.
 func evalPrivilegeCheck(
 	ctx *tree.EvalContext,
+	schema string,
 	infoTable string,
 	user security.SQLUsername,
 	pred string,
@@ -546,8 +547,8 @@ func evalPrivilegeCheck(
 	for _, p := range privChecks {
 		query := fmt.Sprintf(`
 			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
-			FROM information_schema.%s WHERE grantee = ANY ($1) AND %s`,
-			privilege.ALL, p, infoTable, pred)
+			FROM %s.%s WHERE grantee = ANY ($1) AND %s`,
+			privilege.ALL, p, schema, infoTable, pred)
 		r, err := ctx.InternalExecutor.QueryRow(
 			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, allRoles,
 		)
@@ -1200,29 +1201,29 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.INSERT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.UPDATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.UPDATE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
 				},
 			})
 		},
@@ -1282,29 +1283,29 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.INSERT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.UPDATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.UPDATE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
 				},
 			})
 		},
@@ -1332,35 +1333,40 @@ SELECT description
 				}
 			}
 
-			pred := fmt.Sprintf("table_catalog = '%s'", db)
+			schemaPrivilegePred := fmt.Sprintf("table_catalog = '%s'", db)
+			databasePrivilegePred := fmt.Sprintf("database_name = '%s'", db)
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.CREATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "crdb_internal",
+						"cluster_database_privileges", user, databasePrivilegePred,
+						privilege.CREATE, withGrantOpt)
 				},
 				"CONNECT": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					// All users have CONNECT privileges for all databases.
-					return tree.DBoolTrue, nil
+					return evalPrivilegeCheck(ctx, "crdb_internal",
+						"cluster_database_privileges", user, databasePrivilegePred,
+						privilege.CONNECT, withGrantOpt)
 				},
 				"TEMPORARY": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.CREATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"schema_privileges", user, schemaPrivilegePred,
+						privilege.CREATE, withGrantOpt)
 				},
 				"TEMP": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.CREATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"schema_privileges", user, schemaPrivilegePred,
+						privilege.CREATE, withGrantOpt)
 				},
 			})
 		},
@@ -1504,15 +1510,17 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.CREATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"schema_privileges", user, pred,
+						privilege.CREATE, withGrantOpt)
 				},
 				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.USAGE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"schema_privileges", user, pred,
+						privilege.USAGE, withGrantOpt)
 				},
 			})
 		},
@@ -1557,22 +1565,25 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.SELECT, withGrantOpt)
 				},
 				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.SELECT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.UPDATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.UPDATE, withGrantOpt)
 				},
 			})
 		},
@@ -1633,50 +1644,57 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.INSERT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.UPDATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.UPDATE, withGrantOpt)
 				},
 				"DELETE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.DELETE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.DELETE, withGrantOpt)
 				},
 				"TRUNCATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.DELETE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.DELETE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.SELECT, withGrantOpt)
 				},
 				"TRIGGER": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "table_privileges",
-						user, pred, privilege.CREATE, withGrantOpt)
+					return evalPrivilegeCheck(ctx, "information_schema",
+						"table_privileges", user, pred,
+						privilege.CREATE, withGrantOpt)
 				},
 			})
 		},

@@ -66,6 +66,7 @@ query TTT
 SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL
+a  readwrite  CONNECT
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
@@ -73,6 +74,7 @@ a  readwrite  GRANT
 a  readwrite  SELECT
 a  readwrite  ZONECONFIG
 a  root       ALL
+a  test-user  CONNECT
 a  test-user  CREATE
 a  test-user  DELETE
 a  test-user  DROP
@@ -83,12 +85,14 @@ a  test-user  ZONECONFIG
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  readwrite  CONNECT
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
 a  readwrite  GRANT
 a  readwrite  SELECT
 a  readwrite  ZONECONFIG
+a  test-user  CONNECT
 a  test-user  CREATE
 a  test-user  DELETE
 a  test-user  DROP
@@ -103,6 +107,7 @@ query TTT
 SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL
+a  readwrite  CONNECT
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
@@ -110,6 +115,7 @@ a  readwrite  GRANT
 a  readwrite  SELECT
 a  readwrite  ZONECONFIG
 a  root       ALL
+a  test-user  CONNECT
 a  test-user  CREATE
 a  test-user  DELETE
 a  test-user  DROP
@@ -122,6 +128,7 @@ REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  readwrite  CONNECT
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
@@ -156,3 +163,24 @@ a              public       t           test-user  ALL
 
 statement error pq: invalid privilege type USAGE for database
 GRANT USAGE ON DATABASE a TO testuser
+
+statement ok
+CREATE DATABASE b
+
+statement ok
+GRANT CREATE, CONNECT ON DATABASE b TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE b.t()
+
+# CONNECT privilege should not be inherited from DB when creating a table.
+
+query TTTTT colnames
+SHOW GRANTS ON b.t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+b              public       t           admin     ALL
+b              public       t           root      ALL
+b              public       t           testuser  CREATE
