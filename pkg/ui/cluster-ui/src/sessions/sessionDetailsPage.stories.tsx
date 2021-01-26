@@ -11,10 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import {
-  withBackgroundFactory,
-  withRouterProvider,
-} from "../../.storybook/decorators";
+import { withRouterProvider } from "src/storybook/decorators";
 import { SessionDetails } from "./sessionDetails";
 import {
   sessionDetailsActiveStmtPropsFixture,
@@ -25,7 +22,6 @@ import {
 
 storiesOf("Session Details Page", module)
   .addDecorator(withRouterProvider)
-  .addDecorator(withBackgroundFactory())
   .add("Idle Session", () => (
     <SessionDetails {...sessionDetailsIdlePropsFixture} />
   ))
