@@ -68,3 +68,6 @@ min	max	benchmark
 2	2	SystemDatabaseQueries/select_system.users_without_schema_name
 1	1	SystemDatabaseQueries/select_system.users_with_empty_database_name
 1	1	SystemDatabaseQueries/select_system.users_with_schema_name
+2	2	ORMQueries/django_table_introspection_1_table
+2	2	ORMQueries/django_table_introspection_4_tables
+2	2	ORMQueries/django_table_introspection_8_tables
