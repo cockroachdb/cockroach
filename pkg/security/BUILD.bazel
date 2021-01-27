@@ -36,8 +36,8 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
-        "@org_golang_x_crypto//ssh/terminal",
         "@org_golang_x_sync//errgroup",
+        "@org_golang_x_term//:term",
     ],
 )
 

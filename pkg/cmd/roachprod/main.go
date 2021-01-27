@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 var rootCmd = &cobra.Command{
@@ -185,7 +185,7 @@ Available clusters:
 		c.Tag = "/" + tag
 	}
 	c.UseTreeDist = useTreeDist
-	c.Quiet = quiet || !terminal.IsTerminal(int(os.Stdout.Fd()))
+	c.Quiet = quiet || !term.IsTerminal(int(os.Stdout.Fd()))
 	c.MaxConcurrency = maxConcurrency
 	return c, nil
 }

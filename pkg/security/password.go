@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // BcryptCost is the cost to use when hashing passwords. It is exposed for
@@ -69,7 +69,7 @@ func HashPassword(password string) ([]byte, error) {
 // This is meant to be used when using a password.
 func PromptForPassword() (string, error) {
 	fmt.Print("Enter password: ")
-	password, err := terminal.ReadPassword(int(os.Stdin.Fd()))
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err
 	}
