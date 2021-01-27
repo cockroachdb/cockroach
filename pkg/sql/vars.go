@@ -918,7 +918,13 @@ var varGen = map[string]sessionVar{
 
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
+	// If this gets properly implemented, we will need to re-evaluate how escape_string_warning is implemented
 	`standard_conforming_strings`: makeCompatBoolVar(`standard_conforming_strings`, true, false /* anyAllowed */),
+
+	// See https://www.postgresql.org/docs/10/runtime-config-compatible.html#GUC-ESCAPE-STRING-WARNING
+	// Supported for PG compatibility only.
+	// If this gets properly implemented, we will need to re-evaluate how standard_conforming_strings is implemented
+	`escape_string_warning`: makeCompatBoolVar(`escape_string_warning`, true, true /* anyAllowed */),
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-SYNCHRONIZE-SEQSCANS
 	// The default in pg is "on" but the behavior in CockroachDB is "off". As this does not affect

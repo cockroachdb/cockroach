@@ -102,7 +102,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "enable_seqscan",
 	"enable_sort",
 	"enable_tidscan",
-	"escape_string_warning",
+	// "escape_string_warning",
 	"exit_on_error",
 	// "extra_float_digits",
 	"force_parallel_mode",
