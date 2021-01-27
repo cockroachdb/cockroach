@@ -17,6 +17,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -36,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/errors"
@@ -43,6 +48,57 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 )
+
+var econnrefused = &net.OpError{Err: &os.SyscallError{
+	Syscall: "test",
+	Err:     sysutil.ECONNREFUSED,
+}}
+
+var econnreset = &net.OpError{Err: &os.SyscallError{
+	Syscall: "test",
+	Err:     sysutil.ECONNRESET,
+}}
+
+type antagonisticDialer struct {
+	net.Dialer
+	rnd               *rand.Rand
+	numRepeatFailures *int
+}
+
+type antagonisticConn struct {
+	net.Conn
+	rnd               *rand.Rand
+	numRepeatFailures *int
+}
+
+func (d *antagonisticDialer) DialContext(
+	ctx context.Context, network, addr string,
+) (net.Conn, error) {
+	if network == "tcp" {
+		// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
+		if *d.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
+			*(d.numRepeatFailures)++
+			return nil, econnrefused
+		}
+		c, err := d.Dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+
+		return &antagonisticConn{Conn: c, rnd: d.rnd, numRepeatFailures: d.numRepeatFailures}, nil
+	}
+	return d.Dialer.DialContext(ctx, network, addr)
+}
+
+func (c *antagonisticConn) Read(b []byte) (int, error) {
+	// The maximum number of injected errors should always be less
+	// than the maximum retry attempts in delayedRetry.
+	if *c.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
+		*(c.numRepeatFailures)++
+		return 0, econnreset
+	}
+	return c.Conn.Read(b[:64])
+}
 
 func appendPath(t *testing.T, s, add string) string {
 	u, err := url.Parse(s)
@@ -613,4 +669,61 @@ func TestWorkloadStorage(t *testing.T) {
 	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`,
 		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
+}
+
+func uploadData(
+	t *testing.T, rnd *rand.Rand, dest roachpb.ExternalStorage, basename string,
+) ([]byte, func()) {
+	data := randutil.RandBytes(rnd, 16<<20)
+	ctx := context.Background()
+
+	s, err := cloudimpl.MakeExternalStorage(
+		ctx, dest, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil)
+	require.NoError(t, err)
+	defer s.Close()
+	require.NoError(t, s.WriteFile(ctx, basename, bytes.NewReader(data)))
+	return data, func() {
+		_ = s.Delete(ctx, basename)
+	}
+}
+
+func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
+	rnd, _ := randutil.NewPseudoRand()
+
+	const basename = "test-antagonistic-read"
+	data, cleanup := uploadData(t, rnd, conf, basename)
+	defer cleanup()
+
+	// Try reading the data while injecting errors.
+	failures := 0
+	// Override DialContext implementation in http transport.
+	dialer := &antagonisticDialer{rnd: rnd, numRepeatFailures: &failures}
+
+	// Override transport to return antagonistic connection.
+	transport := http.DefaultTransport.(*http.Transport)
+	transport.DialContext =
+		func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, addr)
+		}
+	transport.DisableKeepAlives = true
+
+	defer func() {
+		transport.DialContext = nil
+		transport.DisableKeepAlives = false
+	}()
+
+	ctx := context.Background()
+	s, err := cloudimpl.MakeExternalStorage(
+		ctx, conf, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil)
+	require.NoError(t, err)
+	defer s.Close()
+
+	stream, err := s.ReadFile(ctx, basename)
+	require.NoError(t, err)
+	defer stream.Close()
+	read, err := ioutil.ReadAll(stream)
+	require.NoError(t, err)
+	require.Equal(t, data, read)
 }
