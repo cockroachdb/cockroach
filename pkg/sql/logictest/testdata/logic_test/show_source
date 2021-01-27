@@ -46,6 +46,7 @@ enable_implicit_select_for_update                     on
 enable_insert_fast_path                               on
 enable_seqscan                                        on
 enable_zigzag_join                                    on
+escape_string_warning                                 on
 experimental_distsql_planning                         off
 experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
