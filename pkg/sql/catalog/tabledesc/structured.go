@@ -2965,21 +2965,6 @@ func (desc *Immutable) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.Tabl
 	return true
 }
 
-// FindReadableColumnByID finds the readable column with specified ID. The
-// column may be undergoing a schema change and is marked nullable regardless
-// of its configuration. It returns true if the column is undergoing a
-// schema change.
-func (desc *Immutable) FindReadableColumnByID(
-	id descpb.ColumnID,
-) (*descpb.ColumnDescriptor, bool, error) {
-	for i, c := range desc.ReadableColumns() {
-		if c.ID == id {
-			return &c, i >= len(desc.Columns), nil
-		}
-	}
-	return nil, false, fmt.Errorf("column-id \"%d\" does not exist", id)
-}
-
 // FindFamilyByID finds the family with specified ID.
 func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error) {
 	for i := range desc.Families {

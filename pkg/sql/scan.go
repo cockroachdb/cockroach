@@ -12,9 +12,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -246,6 +248,21 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	return nil
 }
 
+// findReadableColumnByID finds the readable column with specified ID. The
+// column may be undergoing a schema change and is marked nullable regardless
+// of its configuration. It returns true if the column is undergoing a
+// schema change.
+func findReadableColumnByID(
+	desc catalog.TableDescriptor, id descpb.ColumnID,
+) (*descpb.ColumnDescriptor, error) {
+	for _, c := range desc.ReadableColumns() {
+		if c.ID == id {
+			return &c, nil
+		}
+	}
+	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
 	desc *tabledesc.Immutable, colCfg scanColumnsConfig,
@@ -270,7 +287,7 @@ func initColsForScan(
 			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
 				c, err = desc.FindActiveColumnByID(id)
 			} else {
-				c, _, err = desc.FindReadableColumnByID(id)
+				c, err = findReadableColumnByID(desc, id)
 			}
 			if err != nil {
 				return cols, err
