@@ -301,6 +301,7 @@ crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
 crdb_internal       node_build_info
+crdb_internal       node_inflight_trace_spans
 crdb_internal       node_metrics
 crdb_internal       node_queries
 crdb_internal       node_runtime_info
@@ -461,6 +462,7 @@ kv_node_status
 kv_store_status
 leases
 node_build_info
+node_inflight_trace_spans
 node_metrics
 node_queries
 node_runtime_info
@@ -640,6 +642,7 @@ system         crdb_internal       kv_node_status                         SYSTEM
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
+system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
 system         crdb_internal       node_metrics                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_queries                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_runtime_info                      SYSTEM VIEW  NO                  1
@@ -1880,6 +1883,7 @@ NULL     public   system         crdb_internal       kv_node_status             
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NULL          YES
@@ -2265,6 +2269,7 @@ NULL     public   system         crdb_internal       kv_node_status             
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NULL          YES
