@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 )
 
@@ -74,7 +75,7 @@ func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 
 func scanBool(tx *pgx.Tx, query string, args ...interface{}) (b bool, err error) {
 	err = tx.QueryRow(query, args...).Scan(&b)
-	return b, err
+	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
 }
 
 func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
@@ -307,7 +308,7 @@ func violatesUniqueConstraintsHelper(
 func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]string, error) {
 	rows, err := tx.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "scanStringArrayRows: %q %q", query, args)
 	}
 	defer rows.Close()
 
@@ -316,12 +317,12 @@ func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]str
 		var columnNames []string
 		err := rows.Scan(&columnNames)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "scan: %q, args %q, scanArgs %q", query, columnNames, args)
 		}
 		results = append(results, columnNames)
 	}
 
-	return results, err
+	return results, nil
 }
 
 func indexExists(tx *pgx.Tx, tableName *tree.TableName, indexName string) (bool, error) {
@@ -367,7 +368,7 @@ func columnsStoredInPrimaryIdx(
 
 func scanStringArray(tx *pgx.Tx, query string, args ...interface{}) (b []string, err error) {
 	err = tx.QueryRow(query, args...).Scan(&b)
-	return b, err
+	return b, errors.Wrapf(err, "scanStringArray %q %q", query, args)
 }
 
 // canApplyUniqueConstraint checks if the rows in a table are unique with respect
