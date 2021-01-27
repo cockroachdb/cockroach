@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1065,8 +1066,8 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 // from all configured engines, filling in zeros when the value is not
 // found.
 func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
-	results := make([]int64, 0, len(tc.Servers))
-	for _, server := range tc.Servers {
+	results := make([]int64, len(tc.Servers))
+	for i, server := range tc.Servers {
 		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
 			val, _, err := storage.MVCCGet(context.Background(), s.Engine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
@@ -1075,11 +1076,10 @@ func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
 			} else if val == nil {
 				log.VEventf(context.Background(), 1, "store %d: missing key %s", s.StoreID(), key)
 			} else {
-				result, err := val.GetInt()
+				results[i], err = val.GetInt()
 				if err != nil {
 					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), val, key, err)
 				}
-				results = append(results, result)
 			}
 			return nil
 		})
@@ -1263,6 +1263,22 @@ func (tc *TestCluster) GetStatusClient(
 		t.Fatalf("failed to create a status client because of %s", err)
 	}
 	return serverpb.NewStatusClient(cc)
+}
+
+// HeartbeatLiveness sends a liveness heartbeat on a particular store.
+func (tc *TestCluster) HeartbeatLiveness(ctx context.Context, storeIdx int) error {
+	nl := tc.Servers[storeIdx].NodeLiveness().(*liveness.NodeLiveness)
+	l, ok := nl.Self()
+	if !ok {
+		return errors.New("liveness not found")
+	}
+	var err error
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, liveness.ErrEpochIncremented) {
+			break
+		}
+	}
+	return err
 }
 
 type testClusterFactoryImpl struct{}
