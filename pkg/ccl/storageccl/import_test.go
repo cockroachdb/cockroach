@@ -68,7 +68,7 @@ func TestMaxImportBatchSize(t *testing.T) {
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, kr prefixRewriter,
 ) []storage.MVCCKeyValue {
-	start, end := storage.MVCCKey{Key: keys.MinKey}, storage.MVCCKey{Key: keys.MaxKey}
+	start, end := storage.MVCCKey{Key: keys.LocalMax}, storage.MVCCKey{Key: keys.MaxKey}
 
 	e := storage.NewDefaultInMem()
 	defer e.Close()
@@ -111,9 +111,9 @@ func slurpSSTablesLatestKey(
 			v := roachpb.Value{RawBytes: newKv.Value}
 			v.ClearChecksum()
 			v.InitChecksum(newKv.Key.Key)
-			// TODO(sumeer): this will not be correct with the separated
-			// lock table. We should iterate using EngineKey on the sst,
-			// and expose a PutEngine method to write directly.
+			// NB: import data does not contain intents, so data with no timestamps
+			// is inline meta and not intents. Therefore this is not affected by the
+			// choice of interleaved or separated intents.
 			if newKv.Key.Timestamp.IsEmpty() {
 				if err := batch.PutUnversioned(newKv.Key.Key, v.RawBytes); err != nil {
 					t.Fatal(err)

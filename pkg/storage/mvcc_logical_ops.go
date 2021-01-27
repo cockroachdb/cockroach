@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -63,8 +64,6 @@ type MVCCLogicalOpDetails struct {
 // OpLoggerBatch records a log of logical MVCC operations.
 type OpLoggerBatch struct {
 	Batch
-	distinct     distinctOpLoggerBatch
-	distinctOpen bool
 
 	ops      []enginepb.MVCCLogicalOp
 	opsAlloc bufalloc.ByteAllocator
@@ -74,7 +73,6 @@ type OpLoggerBatch struct {
 // wraps the provided batch.
 func NewOpLoggerBatch(b Batch) *OpLoggerBatch {
 	ol := &OpLoggerBatch{Batch: b}
-	ol.distinct.parent = ol
 	return ol
 }
 
@@ -82,9 +80,6 @@ var _ Batch = &OpLoggerBatch{}
 
 // LogLogicalOp implements the Writer interface.
 func (ol *OpLoggerBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	if ol.distinctOpen {
-		panic("distinct batch already open")
-	}
 	ol.logLogicalOp(op, details)
 	ol.Batch.LogLogicalOp(op, details)
 }
@@ -92,6 +87,9 @@ func (ol *OpLoggerBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
 	if keys.IsLocal(details.Key) {
 		// Ignore mvcc operations on local keys.
+		if bytes.HasPrefix(details.Key, keys.LocalRangeLockTablePrefix) {
+			panic(fmt.Sprintf("seeing locktable key %s", details.Key.String()))
+		}
 		return
 	}
 
@@ -152,24 +150,4 @@ func (ol *OpLoggerBatch) LogicalOps() []enginepb.MVCCLogicalOp {
 		return nil
 	}
 	return ol.ops
-}
-
-type distinctOpLoggerBatch struct {
-	ReadWriter
-	parent *OpLoggerBatch
-}
-
-// LogLogicalOp implements the Writer interface.
-func (dlw *distinctOpLoggerBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	dlw.parent.logLogicalOp(op, details)
-	dlw.ReadWriter.LogLogicalOp(op, details)
-}
-
-// Close implements the Reader interface.
-func (dlw *distinctOpLoggerBatch) Close() {
-	if !dlw.parent.distinctOpen {
-		panic("distinct batch not open")
-	}
-	dlw.parent.distinctOpen = false
-	dlw.ReadWriter.Close()
 }
