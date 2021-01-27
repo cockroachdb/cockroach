@@ -28,6 +28,10 @@ import (
 //
 // This function does not assume that the expression has been fully normalized.
 func (m *Memo) CheckExpr(e opt.Expr) {
+	if m.disableCheckExpr {
+		return
+	}
+
 	// Check properties.
 	switch t := e.(type) {
 	case RelExpr:
