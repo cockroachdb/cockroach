@@ -2204,7 +2204,7 @@ func (og *operationGenerator) randView(
 		}
 
 		q := fmt.Sprintf(`
-		  SELECT schema_name, table_name
+		  SELECT table_name
 		    FROM [SHOW TABLES]
 		   WHERE table_name LIKE 'view%%'
 				 AND schema_name = '%s'
