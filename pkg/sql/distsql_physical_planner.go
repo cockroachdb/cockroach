@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -967,7 +967,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint32, error) {
+func getIndexIdx(index *descpb.IndexDescriptor, desc catalog.TableDescriptor) (uint32, error) {
 	foundIndex, _ := desc.FindIndexWithID(index.ID)
 	if foundIndex != nil && foundIndex.Public() {
 		return uint32(foundIndex.Ordinal()), nil
@@ -1039,7 +1039,7 @@ func getVirtualColumn(
 
 // tableOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
-	desc *tabledesc.Immutable, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
+	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
 	for i := range desc.GetPublicColumns() {
 		if desc.GetPublicColumns()[i].ID == colID {
@@ -1067,7 +1067,7 @@ func tableOrdinal(
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
-func highestTableOrdinal(desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility) int {
+func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
 	highest := len(desc.GetPublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		highest = len(desc.GetPublicColumns()) + len(desc.MutationColumns()) - 1
@@ -1078,7 +1078,9 @@ func highestTableOrdinal(desc *tabledesc.Immutable, visibility execinfrapb.ScanV
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
 func toTableOrdinals(
-	cols []*descpb.ColumnDescriptor, desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility,
+	cols []*descpb.ColumnDescriptor,
+	desc catalog.TableDescriptor,
+	visibility execinfrapb.ScanVisibility,
 ) []int {
 	res := make([]int, len(cols))
 	for i := range res {
@@ -1234,7 +1236,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 type tableReaderPlanningInfo struct {
 	spec                  *execinfrapb.TableReaderSpec
 	post                  execinfrapb.PostProcessSpec
-	desc                  *tabledesc.Immutable
+	desc                  catalog.TableDescriptor
 	spans                 []roachpb.Span
 	reverse               bool
 	scanVisibility        execinfrapb.ScanVisibility

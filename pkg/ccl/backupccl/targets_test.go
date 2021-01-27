@@ -48,7 +48,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) *tabledesc.Immutable {
+		mkTable := func(descriptor tbDesc) catalog.TableDescriptor {
 			desc := tabledesc.NewImmutable(descriptor)
 			desc.TableDesc().ModificationTime = ts1
 			return desc

@@ -553,13 +553,13 @@ func GetDatabaseDescByID(
 // returning an error if the table is not found.
 func MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		TableDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*tabledesc.Immutable), nil
+	return desc.(catalog.TableDescriptor), nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -5885,14 +5886,13 @@ func getMockIndexDesc(indexID descpb.IndexID) descpb.IndexDescriptor {
 
 func getMockTableDesc(
 	tableID descpb.ID, pkIndex descpb.IndexDescriptor, indexes []descpb.IndexDescriptor,
-) tabledesc.Immutable {
+) catalog.TableDescriptor {
 	mockTableDescriptor := descpb.TableDescriptor{
 		ID:           tableID,
 		PrimaryIndex: pkIndex,
 		Indexes:      indexes,
 	}
-	mockImmutableTableDesc := tabledesc.MakeImmutable(mockTableDescriptor)
-	return mockImmutableTableDesc
+	return tabledesc.NewImmutable(mockTableDescriptor)
 }
 
 // Unit tests for the getLogicallyMergedTableSpans() method.
@@ -5986,7 +5986,7 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			tableDesc := getMockTableDesc(test.tableID, test.pkIndex, test.indexes)
-			spans, err := getLogicallyMergedTableSpans(&tableDesc, unusedMap, codec,
+			spans, err := getLogicallyMergedTableSpans(tableDesc, unusedMap, codec,
 				hlc.Timestamp{}, test.checkForKVInBoundsOverride)
 			var mergedSpans []string
 			for _, span := range spans {

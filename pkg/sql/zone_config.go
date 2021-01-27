@@ -264,7 +264,7 @@ func (p *planner) resolveTableForZone(
 			res = mutRes
 		}
 	} else if zs.TargetsTable() {
-		var immutRes *tabledesc.Immutable
+		var immutRes catalog.TableDescriptor
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 			flags.IncludeOffline = true

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,8 +68,8 @@ func newRowFetcherCache(
 
 func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
-) (*tabledesc.Immutable, error) {
-	var tableDesc *tabledesc.Immutable
+) (catalog.TableDescriptor, error) {
+	var tableDesc catalog.TableDescriptor
 	key, err := c.codec.StripTenantPrefix(key)
 	if err != nil {
 		return nil, err
@@ -94,7 +93,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		if err := c.leaseMgr.Release(desc); err != nil {
 			return nil, err
 		}
-		tableDesc = desc.(*tabledesc.Immutable)
+		tableDesc = desc.(catalog.TableDescriptor)
 		if tableDesc.ContainsUserDefinedTypes() {
 			// If the table contains user defined types, then use the descs.Collection
 			// to retrieve a TableDescriptor with type metadata hydrated. We open a
@@ -140,7 +139,7 @@ func (c *rowFetcherCache) TableDescForKey(
 }
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 ) (*row.Fetcher, error) {
 	idVer := idVersion{id: tableDesc.GetID(), version: tableDesc.GetVersion()}
 	// Ensure that all user defined types are up to date with the cached
@@ -149,7 +148,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// guaranteed that the tables have the same version. Additionally, these
 	// fetchers are always initialized with a single tabledesc.Immutable.
 	if rf, ok := c.fetchers[idVer]; ok &&
-		tableDesc.UserDefinedTypeColsHaveSameVersion(rf.GetTables()[0].(*tabledesc.Immutable)) {
+		tableDesc.UserDefinedTypeColsHaveSameVersion(rf.GetTables()[0].(catalog.TableDescriptor)) {
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.

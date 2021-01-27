@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -59,7 +58,7 @@ type optCatalog struct {
 	// repeated calls for the same data source.
 	// Note that the data source object might still need to be recreated if
 	// something outside of the descriptor has changed (e.g. table stats).
-	dataSources map[*tabledesc.Immutable]cat.DataSource
+	dataSources map[catalog.TableDescriptor]cat.DataSource
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
@@ -72,7 +71,7 @@ var _ cat.Catalog = &optCatalog{}
 // called for each query.
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
-	oc.dataSources = make(map[*tabledesc.Immutable]cat.DataSource)
+	oc.dataSources = make(map[catalog.TableDescriptor]cat.DataSource)
 }
 
 // reset prepares the optCatalog to be used for a new query.
@@ -81,7 +80,7 @@ func (oc *optCatalog) reset() {
 	// This deals with possible edge cases where we do a lot of DDL in a
 	// long-lived session.
 	if len(oc.dataSources) > 100 {
-		oc.dataSources = make(map[*tabledesc.Immutable]cat.DataSource)
+		oc.dataSources = make(map[catalog.TableDescriptor]cat.DataSource)
 	}
 
 	oc.cfg = oc.planner.execCfg.SystemConfig.GetSystemConfig()
@@ -276,7 +275,7 @@ func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, e
 	}
 }
 
-func getDescForDataSource(o cat.DataSource) (*tabledesc.Immutable, error) {
+func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 	switch t := o.(type) {
 	case *optTable:
 		return t.desc, nil
@@ -358,7 +357,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
-	ctx context.Context, flags cat.Flags, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// Because they are backed by physical data, we treat materialized views
 	// as tables for the purposes of planning.
@@ -390,7 +389,7 @@ func (oc *optCatalog) dataSourceForDesc(
 // dataSourceForTable returns a table data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForTable(
-	ctx context.Context, flags cat.Flags, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	if desc.IsVirtualTable() {
 		// Virtual tables can have multiple effective instances that utilize the
@@ -438,7 +437,7 @@ var emptyZoneConfig = &zonepb.ZoneConfig{}
 // ZoneConfigs are stored in protobuf binary format in the SystemConfig, which
 // is gossiped around the cluster. Note that the returned ZoneConfig might be
 // somewhat stale, since it's taken from the gossiped SystemConfig.
-func (oc *optCatalog) getZoneConfig(desc *tabledesc.Immutable) (*zonepb.ZoneConfig, error) {
+func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (*zonepb.ZoneConfig, error) {
 	// Lookup table's zone if system config is available (it may not be as node
 	// is starting up and before it's received the gossiped config). If it is
 	// not available, use an empty config that has no zone constraints.
@@ -460,15 +459,15 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 	return oc.planner.ExecCfg().Codec
 }
 
-// optView is a wrapper around sqlbase.Immutable that implements
+// optView is a wrapper around catalog.TableDescriptor that implements
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 }
 
 var _ cat.View = &optView{}
 
-func newOptView(desc *tabledesc.Immutable) *optView {
+func newOptView(desc catalog.TableDescriptor) *optView {
 	return &optView{desc: desc}
 }
 
@@ -516,16 +515,16 @@ func (ov *optView) ColumnName(i int) tree.Name {
 	return tree.Name(ov.desc.GetPublicColumns()[i].Name)
 }
 
-// optSequence is a wrapper around sqlbase.Immutable that
+// optSequence is a wrapper around catalog.TableDescriptor that
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 }
 
 var _ cat.DataSource = &optSequence{}
 var _ cat.Sequence = &optSequence{}
 
-func newOptSequence(desc *tabledesc.Immutable) *optSequence {
+func newOptSequence(desc catalog.TableDescriptor) *optSequence {
 	return &optSequence{desc: desc}
 }
 
@@ -556,10 +555,10 @@ func (os *optSequence) Name() tree.Name {
 // SequenceMarker is part of the cat.Sequence interface.
 func (os *optSequence) SequenceMarker() {}
 
-// optTable is a wrapper around sqlbase.Immutable that caches
+// optTable is a wrapper around catalog.TableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	// columns contains all the columns presented to the catalog. This includes:
 	//  - ordinary table columns (those in the table descriptor)
@@ -613,7 +612,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	codec keys.SQLCodec,
 	stats []*stats.TableStatistic,
 	tblZone *zonepb.ZoneConfig,
@@ -897,7 +896,7 @@ func (ot *optTable) PostgresDescriptorID() cat.StableID {
 // isStale checks if the optTable object needs to be refreshed because the stats,
 // zone config, or used types have changed. False positives are ok.
 func (ot *optTable) isStale(
-	rawDesc *tabledesc.Immutable, tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig,
+	rawDesc catalog.TableDescriptor, tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig,
 ) bool {
 	// Fast check to verify that the statistics haven't changed: we check the
 	// length and the address of the underlying array. This is not a perfect
@@ -1625,7 +1624,7 @@ func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction 
 
 // optVirtualTable is similar to optTable but is used with virtual tables.
 type optVirtualTable struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	// columns contains all the columns presented to the catalog. This includes
 	// the dummy PK column and the columns in the table descriptor.
@@ -1664,7 +1663,7 @@ type optVirtualTable struct {
 var _ cat.Table = &optVirtualTable{}
 
 func newOptVirtualTable(
-	ctx context.Context, oc *optCatalog, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, oc *optCatalog, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (*optVirtualTable, error) {
 	// Calculate the stable ID (see the comment for optVirtualTable.id).
 	id := cat.StableID(desc.GetID())

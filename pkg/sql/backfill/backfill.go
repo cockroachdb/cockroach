@@ -76,7 +76,7 @@ type ColumnBackfiller struct {
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
-func (cb *ColumnBackfiller) initCols(desc *tabledesc.Immutable) {
+func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
 	for _, m := range desc.GetMutations() {
 		if ColumnMutationFilter(m) {
 			desc := *m.GetColumn()
@@ -96,7 +96,7 @@ func (cb *ColumnBackfiller) init(
 	evalCtx *tree.EvalContext,
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
 	cb.evalCtx = evalCtx
@@ -155,7 +155,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
 	cb.initCols(desc)
@@ -186,7 +186,10 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 // necessary due to the different procedure for accessing user defined type
 // metadata as part of a distributed flow.
 func (cb *ColumnBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable, mon *mon.BytesMonitor,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	desc catalog.TableDescriptor,
+	mon *mon.BytesMonitor,
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
@@ -246,7 +249,7 @@ func (cb *ColumnBackfiller) Close(ctx context.Context) {
 func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
@@ -364,7 +367,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 }
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
-func ConvertBackfillError(ctx context.Context, tableDesc *tabledesc.Immutable, b *kv.Batch) error {
+func ConvertBackfillError(
+	ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch,
+) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
@@ -444,7 +449,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
@@ -563,7 +568,10 @@ func constructExprs(
 // due to the different procedure for accessing user defined type metadata as
 // part of a distributed flow.
 func (ib *IndexBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable, mon *mon.BytesMonitor,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	desc catalog.TableDescriptor,
+	mon *mon.BytesMonitor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
 	ib.initCols(desc)
@@ -641,7 +649,7 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
-func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
+func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
 	for i := range desc.GetPublicColumns() {
 		col := &desc.GetPublicColumns()[i]
 		ib.cols = append(ib.cols, *col)
@@ -679,7 +687,7 @@ func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
 // populates the added field. It returns a set of column ordinals that must be
 // fetched in order to backfill the added indexes.
-func (ib *IndexBackfiller) initIndexes(desc *tabledesc.Immutable) util.FastIntSet {
+func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIntSet {
 	var valNeededForCol util.FastIntSet
 	mutationID := desc.GetMutations()[0].MutationID
 
@@ -714,7 +722,7 @@ func (ib *IndexBackfiller) init(
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	valNeededForCol util.FastIntSet,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
 	ib.evalCtx = evalCtx
@@ -773,7 +781,7 @@ func (ib *IndexBackfiller) init(
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
@@ -956,7 +964,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,

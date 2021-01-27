@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,7 +42,7 @@ func gcTables(
 			continue
 		}
 
-		var table *tabledesc.Immutable
+		var table catalog.TableDescriptor
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
@@ -87,7 +86,7 @@ func ClearTableData(
 	db *kv.DB,
 	distSender *kvcoord.DistSender,
 	codec keys.SQLCodec,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.

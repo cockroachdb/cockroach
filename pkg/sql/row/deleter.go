@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +41,7 @@ type Deleter struct {
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, requestedCols []descpb.ColumnDescriptor,
+	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []descpb.ColumnDescriptor,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 	indexDescs := make([]descpb.IndexDescriptor, len(indexes))

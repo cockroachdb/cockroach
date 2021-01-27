@@ -48,7 +48,7 @@ var ScrubTypes = []*types.T{
 
 type scrubTableReader struct {
 	tableReader
-	tableDesc tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -79,7 +79,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = tabledesc.MakeImmutable(spec.Table)
+	tr.tableDesc = tabledesc.NewImmutable(spec.Table)
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(
@@ -125,7 +125,7 @@ func newScrubTableReader(
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
+		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
 		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
 		nil /* systemColumns */, nil, /* virtualColumn */

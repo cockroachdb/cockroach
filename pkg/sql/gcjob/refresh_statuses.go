@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -145,7 +144,7 @@ func updateTableStatus(
 	execCfg *sql.ExecutorConfig,
 	ttlSeconds int64,
 	protectedtsCache protectedts.Cache,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	tableDropTimes map[descpb.ID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
 ) time.Time {
@@ -190,7 +189,7 @@ func updateIndexesStatus(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	tableTTL int32,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	protectedtsCache protectedts.Cache,
 	zoneCfg *zonepb.ZoneConfig,
 	indexDropTimes map[descpb.IndexID]int64,

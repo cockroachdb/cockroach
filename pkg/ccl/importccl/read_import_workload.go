@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,14 +36,14 @@ import (
 
 type workloadReader struct {
 	evalCtx *tree.EvalContext
-	table   *tabledesc.Immutable
+	table   catalog.TableDescriptor
 	kvCh    chan row.KVBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan row.KVBatch, table *tabledesc.Immutable, evalCtx *tree.EvalContext,
+	kvCh chan row.KVBatch, table catalog.TableDescriptor, evalCtx *tree.EvalContext,
 ) *workloadReader {
 	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
@@ -178,7 +178,7 @@ func (w *workloadReader) readFiles(
 
 // WorkloadKVConverter converts workload.BatchedTuples to []roachpb.KeyValues.
 type WorkloadKVConverter struct {
-	tableDesc      *tabledesc.Immutable
+	tableDesc      catalog.TableDescriptor
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
@@ -194,7 +194,7 @@ type WorkloadKVConverter struct {
 // range of batches, emitted converted kvs to the given channel.
 func NewWorkloadKVConverter(
 	fileID int32,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,

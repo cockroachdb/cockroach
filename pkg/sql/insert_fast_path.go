@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -87,7 +86,7 @@ type insertFastPathFKSpanInfo struct {
 type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
-	tabDesc     *tabledesc.Immutable
+	tabDesc     catalog.TableDescriptor
 	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
 	colMap      catalog.TableColMap

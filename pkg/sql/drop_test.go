@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -709,7 +710,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	const numRows = 2*row.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
-	var descs []*tabledesc.Immutable
+	var descs []catalog.TableDescriptor
 	for i := 0; i < numTables; i++ {
 		tableName := fmt.Sprintf("test%d", i)
 		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -162,7 +161,7 @@ type FetcherTableArgs struct {
 
 // InitCols initializes the columns in FetcherTableArgs.
 func (fta *FetcherTableArgs) InitCols(
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	scanVisibility execinfrapb.ScanVisibility,
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
