@@ -40,6 +40,10 @@ function check_linux() {
   curl -s https://binaries.cockroachdb.com/cockroach-${BETA_TAG}${linux}.tgz | tar xz
   local tag=$($(dirname $0)/../build/builder.sh ./cockroach-${BETA_TAG}${linux}/cockroach version |
               grep 'Build Tag:' | awk '{print $NF}' | tr -d '\r')
+  if test -z "$tag"; then
+      # From v21.1 onwards.
+      tag=$($(dirname $0)/../build/builder.sh ./cockroach-${BETA_TAG}${linux}/cockroach version --build-tag | tr -d '\r')
+  fi
   rm -fr ./cockroach-${BETA_TAG}${linux}
   verify_tag "${tag}"
 
@@ -56,7 +60,11 @@ function check_darwin() {
 
   curl -s https://binaries.cockroachdb.com/cockroach-${BETA_TAG}${darwin}.tgz | tar xz
   local tag=$(./cockroach-${BETA_TAG}${darwin}/cockroach version |
-              grep 'Build Tag:' | awk '{print $NF}' | tr -d '\r')
+		  grep 'Build Tag:' | awk '{print $NF}' | tr -d '\r')
+  if test -z "$tag"; then
+      # From v21.1 onwards.
+      tag=$(./cockroach-${BETA_TAG}${darwin}/cockroach version | tr -d '\r')
+  fi
   rm -fr cockroach-${BETA_TAG}${darwin}
   verify_tag "${tag}"
 
@@ -69,6 +77,10 @@ function check_docker() {
   trap "rm -f docker.stderr" 0
   local tag=$(docker run --rm cockroachdb/cockroach:${BETA_TAG} version 2>docker.stderr |
               grep 'Build Tag:' | awk '{print $NF}' | tr -d '\r')
+  if test -z "$tag"; then
+      # From v21.1 onwards.
+      tag=$(docker run --rm cockroachdb/cockroach:${BETA_TAG} version --build-tag 2>docker.stderr | tr -d '\r')
+  fi
   if [ -z "${tag}" ]; then
       echo
       cat docker.stderr

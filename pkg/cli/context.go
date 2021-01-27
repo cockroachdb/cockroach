@@ -180,6 +180,9 @@ type cliContext struct {
 	// that no log directory was specified and there were multiple
 	// on-disk stores.
 	ambiguousLogDir bool
+
+	// For `cockroach version --build-tag`.
+	showVersionUsingOnlyBuildTag bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -220,6 +223,7 @@ func setCliContextDefaults() {
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()
+	cliCtx.showVersionUsingOnlyBuildTag = false
 }
 
 // sqlCtx captures the configuration of the `sql` command.
