@@ -2175,7 +2175,7 @@ insert partial_index_virtual
       │    │    │    │    │         └── lower(c:12)
       │    │    │    │    └── partial index predicates
       │    │    │    │         └── secondary: filters
-      │    │    │    │              └── d:13 = 'foo'
+      │    │    │    │              └── lower(c:12) = 'foo'
       │    │    │    └── projections
       │    │    │         └── lower(c:12) [as=d:13]
       │    │    └── filters
@@ -2245,7 +2245,7 @@ upsert partial_index_virtual
       │    │    │    │    │    │    │         └── lower(c:12)
       │    │    │    │    │    │    └── partial index predicates
       │    │    │    │    │    │         └── secondary: filters
-      │    │    │    │    │    │              └── d:13 = 'foo'
+      │    │    │    │    │    │              └── lower(c:12) = 'foo'
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── lower(c:12) [as=d:13]
       │    │    │    │    └── filters
@@ -2315,7 +2315,7 @@ upsert partial_index_virtual
       │    │    │    │    │         └── lower(c:12)
       │    │    │    │    └── partial index predicates
       │    │    │    │         └── secondary: filters
-      │    │    │    │              └── d:13 = 'foo'
+      │    │    │    │              └── lower(c:12) = 'foo'
       │    │    │    └── projections
       │    │    │         └── lower(c:12) [as=d:13]
       │    │    └── filters
