@@ -108,8 +108,11 @@ type TableDescriptor interface {
 
 	GetState() descpb.DescriptorState
 	GetSequenceOpts() *descpb.TableDescriptor_SequenceOpts
+	GetCreateQuery() string
 	GetViewQuery() string
 	GetLease() *descpb.TableDescriptor_SchemaChangeLease
+	GetCreateAsOfTime() hlc.Timestamp
+	GetModificationTime() hlc.Timestamp
 	GetDropTime() int64
 	GetFormatVersion() descpb.FormatVersion
 
@@ -191,6 +194,8 @@ type TableDescriptor interface {
 	// canonical order, see Index.Ordinal().
 	FindIndexWithName(name string) (Index, error)
 
+	GetNextIndexID() descpb.IndexID
+
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
 
@@ -212,6 +217,16 @@ type TableDescriptor interface {
 	ContainsUserDefinedTypes() bool
 	GetColumnOrdinalsWithUserDefinedTypes() []int
 	UserDefinedTypeColsHaveSameVersion(otherDesc TableDescriptor) bool
+	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
+	WritableColumns() []descpb.ColumnDescriptor
+	ReadableColumns() []descpb.ColumnDescriptor
+	GetNextColumnID() descpb.ColumnID
+	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)
+	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error)
+	ColumnTypes() []*types.T
+	ColumnTypesWithMutations(mutations bool) []*types.T
+	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
+	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	NumFamilies() int
@@ -226,7 +241,12 @@ type TableDescriptor interface {
 	IsPhysicalTable() bool
 	IsInterleaved() bool
 	MaterializedView() bool
+	IsAs() bool
 
+	HasColumnBackfillMutation() bool
+	MakeFirstMutationPublic(includeConstraints bool) (MutableDescriptor, error)
+	GetMutations() []descpb.DescriptorMutation
+	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
 	GetReplacementOf() descpb.TableDescriptor_Replacement
@@ -246,38 +266,15 @@ type TableDescriptor interface {
 	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
 	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
-	WritableColumns() []descpb.ColumnDescriptor
+	GetConstraintInfo(ctx context.Context, dg DescGetter) (map[string]descpb.ConstraintDetail, error)
+	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
+	GetInboundFKs() []descpb.ForeignKeyConstraint
+	GetOutboundFKs() []descpb.ForeignKeyConstraint
 
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
 	IsLocalityRegionalByRow() bool
 	IsLocalityRegionalByTable() bool
 	IsLocalityGlobal() bool
-
-	HasColumnBackfillMutation() bool
-	MakeFirstMutationPublic(includeConstraints bool) (MutableDescriptor, error)
-	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error)
-	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
-	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)
-	ReadableColumns() []descpb.ColumnDescriptor
-	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
-	GetConstraintInfo(ctx context.Context, dg DescGetter) (map[string]descpb.ConstraintDetail, error)
-	FindIndexByIndexIdx(indexIdx int) (index *descpb.IndexDescriptor, isSecondary bool, err error) // deprecated
-	ColumnTypes() []*types.T
-	ColumnTypesWithMutations(mutations bool) []*types.T
-	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
-	GetMutations() []descpb.DescriptorMutation
-	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
-	IsAs() bool
-	GetInboundFKs() []descpb.ForeignKeyConstraint
-	GetOutboundFKs() []descpb.ForeignKeyConstraint
-	GetCreateQuery() string
-	GetCreateAsOfTime() hlc.Timestamp
-	GetModificationTime() hlc.Timestamp
-	GetTemporary() bool
-	GetDependedOnBy() []descpb.TableDescriptor_Reference
-	GetNextColumnID() descpb.ColumnID
-	GetNextIndexID() descpb.IndexID
 }
 
 // Index is an interface around the index descriptor types.

@@ -197,10 +197,11 @@ func newInvertedJoiner(
 	ij.colIdxMap = ij.desc.ColumnIdxMap()
 
 	var err error
-	ij.index, _, err = ij.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
-	if err != nil {
-		return nil, err
+	indexIdx := int(spec.IndexIdx)
+	if indexIdx >= len(ij.desc.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	ij.index = ij.desc.ActiveIndexes()[indexIdx].IndexDesc()
 	ij.invertedColID = ij.index.InvertedColumnID()
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
