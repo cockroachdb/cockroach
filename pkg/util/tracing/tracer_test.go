@@ -338,15 +338,21 @@ func TestLightstepContext(t *testing.T) {
 	require.Equal(t, exp, shadowBaggage)
 }
 
-func getSortedActiveSpanOps(tr *Tracer) []string {
+func getSortedActiveSpanOps(tr *Tracer) ([]string, error) {
 	var sl []string
-	tr.VisitSpans(func(sp *Span) {
+	err := tr.VisitSpans(func(sp *Span) error {
 		for _, rec := range sp.GetRecording() {
 			sl = append(sl, rec.Operation)
 		}
+		return nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
 	sort.Strings(sl)
-	return sl
+	return sl, nil
 }
 
 // TestTracer_VisitSpans verifies that in-flight local root Spans
@@ -371,16 +377,34 @@ func TestTracer_VisitSpans(t *testing.T) {
 
 	// Even though only `root` is tracked by tr1, we also reach
 	// root.child and (via ImportRemoteSpans) the remote child.
-	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(tr1))
-	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(tr2))
+	tr1ActualSpanOps, err := getSortedActiveSpanOps(tr1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, tr1ActualSpanOps)
+
+	tr2ActualSpanOps, err := getSortedActiveSpanOps(tr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, []string{"root.child.remotechild"}, tr2ActualSpanOps)
 
 	childChild.Finish()
 	child.Finish()
 	root.Finish()
 
 	// Nothing is tracked any more.
-	require.Len(t, getSortedActiveSpanOps(tr1), 0)
-	require.Len(t, getSortedActiveSpanOps(tr2), 0)
+	tr1ActualSpanOps, err = getSortedActiveSpanOps(tr1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Len(t, tr1ActualSpanOps, 0)
+
+	tr2ActualSpanOps, err = getSortedActiveSpanOps(tr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Len(t, tr2ActualSpanOps, 0)
 	require.Len(t, tr1.activeSpans.m, 0)
 	require.Len(t, tr2.activeSpans.m, 0)
 }
