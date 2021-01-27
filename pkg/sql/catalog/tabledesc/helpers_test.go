@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
