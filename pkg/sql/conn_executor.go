@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -566,16 +567,17 @@ func (s *Server) newConnExecutor(
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
 	sdMutator := new(sessionDataMutator)
 	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
-
+	distMetric := execinfra.MakeDistSQLMetrics(base.DefaultHistogramWindowInterval())
 	ex := &connExecutor{
-		server:      s,
-		metrics:     srvMetrics,
-		stmtBuf:     stmtBuf,
-		clientComm:  clientComm,
-		mon:         sessionRootMon,
-		sessionMon:  sessionMon,
-		sessionData: sd,
-		dataMutator: sdMutator,
+		server:         s,
+		metrics:        srvMetrics,
+		distSQLMetrics: &distMetric,
+		stmtBuf:        stmtBuf,
+		clientComm:     clientComm,
+		mon:            sessionRootMon,
+		sessionMon:     sessionMon,
+		sessionData:    sd,
+		dataMutator:    sdMutator,
 		state: txnState{
 			mon:     txnMon,
 			connCtx: ctx,
