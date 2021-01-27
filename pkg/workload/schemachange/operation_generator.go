@@ -1768,7 +1768,7 @@ func (og *operationGenerator) getTableColumns(
 `, tableName)
 	rows, err := tx.Query(q)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
 	}
 	defer rows.Close()
 	var typNames []string
@@ -1855,7 +1855,7 @@ ORDER BY random()
 	var col column
 	var typ string
 	if err := tx.QueryRow(q).Scan(&col.name, &typ, &col.nullable); err != nil {
-		return column{}, err
+		return column{}, errors.Wrapf(err, "randColumnWithMeta: %q", q)
 	}
 
 	var err error
@@ -2405,7 +2405,7 @@ func (og *operationGenerator) newUniqueSeqNum() int64 {
 func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*types.T, error) {
 	stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'placeholder'::%s", typeName))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "typeFromTypeName: %s", typeName)
 	}
 	typ, err := tree.ResolveType(
 		context.Background(),
@@ -2413,7 +2413,7 @@ func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*ty
 		&txTypeResolver{tx: tx},
 	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
 }
