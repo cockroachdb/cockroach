@@ -37,7 +37,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(ajwerner): There should be a constructor for an Immutable
+	// TODO(ajwerner): There should be a constructor for an immutable
 	// and really all of the leasable descriptor types which includes its initial
 	// DescriptorMeta. This refactoring precedes the actual adoption of
 	// DescriptorMeta.

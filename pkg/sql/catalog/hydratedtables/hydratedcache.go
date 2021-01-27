@@ -45,7 +45,7 @@ import (
 // of the referenced types which ensures that user always uses properly leased
 // descriptors. While all of the types will need to be resolved, they should
 // already be cached so, in this way, this cache prevents the need to copy
-// and re-construct the tabledesc.Immutable in most cases.
+// and re-construct the tabledesc.immutable in most cases.
 type Cache struct {
 	settings *cluster.Settings
 	g        singleflight.Group
