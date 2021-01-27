@@ -745,7 +745,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.rowVals,
 			buffer,
 			false, /* includeEmpty */
-			ib.boundAccount,
+			&ib.boundAccount,
 		); err != nil {
 			return nil, nil, err
 		}
