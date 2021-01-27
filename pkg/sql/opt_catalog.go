@@ -347,12 +347,12 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		return cat.DataSourceName{}, err
 	}
 
-	dbID := desc.ParentID
+	dbID := desc.GetParentID()
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, oc.codec(), dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.Name)), nil
+	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.GetName())), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -404,7 +404,7 @@ func (oc *optCatalog) dataSourceForTable(
 	var tableStats []*stats.TableStatistic
 	if !flags.NoTableStats {
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.GetID())
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
@@ -445,7 +445,7 @@ func (oc *optCatalog) getZoneConfig(desc *tabledesc.Immutable) (*zonepb.ZoneConf
 	if oc.cfg == nil || desc.IsVirtualTable() {
 		return emptyZoneConfig, nil
 	}
-	zone, err := oc.cfg.GetZoneConfigForObject(oc.codec(), uint32(desc.ID))
+	zone, err := oc.cfg.GetZoneConfigForObject(oc.codec(), uint32(desc.GetID()))
 	if err != nil {
 		return nil, err
 	}
@@ -474,12 +474,12 @@ func newOptView(desc *tabledesc.Immutable) *optView {
 
 // ID is part of the cat.Object interface.
 func (ov *optView) ID() cat.StableID {
-	return cat.StableID(ov.desc.ID)
+	return cat.StableID(ov.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ov *optView) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ov.desc.ID)
+	return cat.StableID(ov.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -488,12 +488,12 @@ func (ov *optView) Equals(other cat.Object) bool {
 	if !ok {
 		return false
 	}
-	return ov.desc.ID == otherView.desc.ID && ov.desc.Version == otherView.desc.Version
+	return ov.desc.GetID() == otherView.desc.GetID() && ov.desc.GetVersion() == otherView.desc.GetVersion()
 }
 
 // Name is part of the cat.View interface.
 func (ov *optView) Name() tree.Name {
-	return tree.Name(ov.desc.Name)
+	return tree.Name(ov.desc.GetName())
 }
 
 // IsSystemView is part of the cat.View interface.
@@ -503,17 +503,17 @@ func (ov *optView) IsSystemView() bool {
 
 // Query is part of the cat.View interface.
 func (ov *optView) Query() string {
-	return ov.desc.ViewQuery
+	return ov.desc.GetViewQuery()
 }
 
 // ColumnNameCount is part of the cat.View interface.
 func (ov *optView) ColumnNameCount() int {
-	return len(ov.desc.Columns)
+	return len(ov.desc.GetPublicColumns())
 }
 
 // ColumnName is part of the cat.View interface.
 func (ov *optView) ColumnName(i int) tree.Name {
-	return tree.Name(ov.desc.Columns[i].Name)
+	return tree.Name(ov.desc.GetPublicColumns()[i].Name)
 }
 
 // optSequence is a wrapper around sqlbase.Immutable that
@@ -531,12 +531,12 @@ func newOptSequence(desc *tabledesc.Immutable) *optSequence {
 
 // ID is part of the cat.Object interface.
 func (os *optSequence) ID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSequence) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -545,12 +545,12 @@ func (os *optSequence) Equals(other cat.Object) bool {
 	if !ok {
 		return false
 	}
-	return os.desc.ID == otherSeq.desc.ID && os.desc.Version == otherSeq.desc.Version
+	return os.desc.GetID() == otherSeq.desc.GetID() && os.desc.GetVersion() == otherSeq.desc.GetVersion()
 }
 
 // Name is part of the cat.Sequence interface.
 func (os *optSequence) Name() tree.Name {
-	return tree.Name(os.desc.Name)
+	return tree.Name(os.desc.GetName())
 }
 
 // SequenceMarker is part of the cat.Sequence interface.
@@ -637,7 +637,7 @@ func newOptTable(
 	}
 
 	ot.columns = make([]cat.Column, len(colDescs), numCols)
-	numOrdinary := len(ot.desc.Columns)
+	numOrdinary := len(ot.desc.GetPublicColumns())
 	numWritable := len(ot.desc.WritableColumns())
 	for ordinal := range colDescs {
 		desc := colDescs[ordinal]
@@ -721,9 +721,9 @@ func newOptTable(
 
 	// Add unique without index constraints. Constraints for implicitly
 	// partitioned unique indexes will be added below.
-	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.UniqueWithoutIndexConstraints))
-	for i := range ot.desc.UniqueWithoutIndexConstraints {
-		u := &ot.desc.UniqueWithoutIndexConstraints[i]
+	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.GetUniqueWithoutIndexConstraints()))
+	for i := range ot.desc.GetUniqueWithoutIndexConstraints() {
+		u := &ot.desc.GetUniqueWithoutIndexConstraints()[i]
 		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 			name:         u.Name,
 			table:        ot.ID(),
@@ -795,8 +795,8 @@ func newOptTable(
 		}
 	}
 
-	for i := range ot.desc.OutboundFKs {
-		fk := &ot.desc.OutboundFKs[i]
+	for i := range ot.desc.GetOutboundFKs() {
+		fk := &ot.desc.GetOutboundFKs()[i]
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -809,8 +809,8 @@ func newOptTable(
 			updateAction:      fk.OnUpdate,
 		})
 	}
-	for i := range ot.desc.InboundFKs {
-		fk := &ot.desc.InboundFKs[i]
+	for i := range ot.desc.GetInboundFKs() {
+		fk := &ot.desc.GetInboundFKs()[i]
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),
@@ -824,10 +824,10 @@ func newOptTable(
 		})
 	}
 
-	ot.primaryFamily.init(ot, &desc.Families[0])
-	ot.families = make([]optFamily, len(desc.Families)-1)
+	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
+	ot.families = make([]optFamily, len(desc.GetFamilies())-1)
 	for i := range ot.families {
-		ot.families[i].init(ot, &desc.Families[i+1])
+		ot.families[i].init(ot, &desc.GetFamilies()[i+1])
 	}
 
 	// Synthesize any check constraints for user defined types.
@@ -886,12 +886,12 @@ func newOptTable(
 
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // isStale checks if the optTable object needs to be refreshed because the stats,
@@ -929,7 +929,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 		// Fast path when it is the same object.
 		return true
 	}
-	if ot.desc.ID != otherTable.desc.ID || ot.desc.Version != otherTable.desc.Version {
+	if ot.desc.GetID() != otherTable.desc.GetID() || ot.desc.GetVersion() != otherTable.desc.GetVersion() {
 		return false
 	}
 
@@ -969,7 +969,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 
 // Name is part of the cat.Table interface.
 func (ot *optTable) Name() tree.Name {
-	return tree.Name(ot.desc.Name)
+	return tree.Name(ot.desc.GetName())
 }
 
 // IsVirtualTable is part of the cat.Table interface.
@@ -1292,7 +1292,7 @@ func (oi *optIndex) Span() roachpb.Span {
 	desc := oi.tab.desc
 	// Tables up to MaxSystemConfigDescID are grouped in a single system config
 	// span.
-	if desc.ID <= keys.MaxSystemConfigDescID {
+	if desc.GetID() <= keys.MaxSystemConfigDescID {
 		return keys.SystemConfigSpan
 	}
 	return desc.IndexSpan(oi.tab.codec, oi.desc.ID)
@@ -1667,7 +1667,7 @@ func newOptVirtualTable(
 	ctx context.Context, oc *optCatalog, desc *tabledesc.Immutable, name *cat.DataSourceName,
 ) (*optVirtualTable, error) {
 	// Calculate the stable ID (see the comment for optVirtualTable.id).
-	id := cat.StableID(desc.ID)
+	id := cat.StableID(desc.GetID())
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
 		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
@@ -1698,7 +1698,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.Columns)+1)
+	ot.columns = make([]cat.Column, len(desc.GetPublicColumns())+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
 		0,
@@ -1711,8 +1711,8 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 	)
-	for i := range desc.Columns {
-		d := desc.Columns[i]
+	for i := range desc.GetPublicColumns() {
+		d := desc.GetPublicColumns()[i]
 		ot.columns[i+1].InitNonVirtual(
 			i+1,
 			cat.StableID(d.ID),
@@ -1776,7 +1776,7 @@ func (ot *optVirtualTable) ID() cat.StableID {
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optVirtualTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -1789,7 +1789,7 @@ func (ot *optVirtualTable) Equals(other cat.Object) bool {
 		// Fast path when it is the same object.
 		return true
 	}
-	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
+	if ot.id != otherTable.id || ot.desc.GetVersion() != otherTable.desc.GetVersion() {
 		return false
 	}
 
@@ -1823,8 +1823,8 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i > 0 && i <= len(ot.desc.Columns) {
-		return &ot.desc.Columns[i-1]
+	if i > 0 && i <= len(ot.desc.GetPublicColumns()) {
+		return &ot.desc.GetPublicColumns()[i-1]
 	}
 	return nil
 }

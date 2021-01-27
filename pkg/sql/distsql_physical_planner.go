@@ -972,7 +972,7 @@ func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint
 	if foundIndex != nil && foundIndex.Public() {
 		return uint32(foundIndex.Ordinal()), nil
 	}
-	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.Name)
+	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.GetName())
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
@@ -1041,13 +1041,13 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc *tabledesc.Immutable, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for i := range desc.Columns {
-		if desc.Columns[i].ID == colID {
+	for i := range desc.GetPublicColumns() {
+		if desc.GetPublicColumns()[i].ID == colID {
 			return i
 		}
 	}
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		offset := len(desc.Columns)
+		offset := len(desc.GetPublicColumns())
 		mutationColumns := desc.MutationColumns()
 		for i := range mutationColumns {
 			if mutationColumns[i].ID == colID {
@@ -1061,16 +1061,16 @@ func tableOrdinal(
 	// different for each system column kind. MVCCTimestampColumnID is the
 	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.Columns) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
+		return len(desc.GetPublicColumns()) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
 func highestTableOrdinal(desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.Columns) - 1
+	highest := len(desc.GetPublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.Columns) + len(desc.MutationColumns()) - 1
+		highest = len(desc.GetPublicColumns()) + len(desc.MutationColumns()) - 1
 	}
 	return highest
 }
@@ -1321,8 +1321,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planToStreamColMap := make([]int, len(info.cols))
 	var descColumnIDs util.FastIntMap
 	colID := 0
-	for i := range info.desc.Columns {
-		descColumnIDs.Set(colID, int(info.desc.Columns[i].ID))
+	for i := range info.desc.GetPublicColumns() {
+		descColumnIDs.Set(colID, int(info.desc.GetPublicColumns()[i].ID))
 		colID++
 	}
 	if returnMutations {
@@ -2267,7 +2267,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 
-		numStreamCols += len(side.scan.desc.Columns)
+		numStreamCols += len(side.scan.desc.GetPublicColumns())
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
@@ -2324,7 +2324,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			i++
 		}
 
-		colOffset += len(side.scan.desc.Columns)
+		colOffset += len(side.scan.desc.GetPublicColumns())
 	}
 
 	// Set the ON condition.

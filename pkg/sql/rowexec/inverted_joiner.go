@@ -219,13 +219,13 @@ func newInvertedJoiner(
 		}
 		tableRowIdx := ij.colIdxMap.GetDefault(colID)
 		ij.indexRowToTableRowMap[indexRowIdx] = tableRowIdx
-		ij.indexRowTypes[indexRowIdx] = ij.desc.Columns[tableRowIdx].Type
+		ij.indexRowTypes[indexRowIdx] = ij.desc.GetPublicColumns()[tableRowIdx].Type
 		indexRowIdx++
 	}
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.ColumnTypesWithMutations(false /* mutations */)
+	rightColTypes := ij.desc.ColumnTypes()
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)

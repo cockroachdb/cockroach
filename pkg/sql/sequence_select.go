@@ -30,7 +30,7 @@ type sequenceSelectNode struct {
 var _ planNode = &sequenceSelectNode{}
 
 func (p *planner) SequenceSelectNode(desc *tabledesc.Immutable) (planNode, error) {
-	if desc.SequenceOpts == nil {
+	if desc.GetSequenceOpts() == nil {
 		return nil, errors.New("descriptor is not a sequence")
 	}
 	return &sequenceSelectNode{

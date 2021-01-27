@@ -1699,7 +1699,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 			},
 			expUpgrade: true,
 			verify: func(i int, desc *Immutable) {
-				if len(desc.Families) == 0 {
+				if len(desc.GetFamilies()) == 0 {
 					t.Errorf("%d: expected families to be set, but it was empty", i)
 				}
 			},

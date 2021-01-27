@@ -82,10 +82,10 @@ func kvsToRows(
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := details.Targets[desc.ID]; !ok {
+		if _, ok := details.Targets[desc.GetID()]; !ok {
 			// This kv is for an interleaved table that we're not watching.
 			if log.V(3) {
-				log.Infof(ctx, `skipping key from unwatched table %s: %s`, desc.Name, kv.Key)
+				log.Infof(ctx, `skipping key from unwatched table %s: %s`, desc.GetName(), kv.Key)
 			}
 			return nil, nil
 		}

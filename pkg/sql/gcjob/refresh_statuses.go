@@ -154,7 +154,7 @@ func updateTableStatus(
 
 	for i, t := range progress.Tables {
 		droppedTable := &progress.Tables[i]
-		if droppedTable.ID != table.ID || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
+		if droppedTable.ID != table.GetID() || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
 			continue
 		}
 
@@ -211,19 +211,19 @@ func updateIndexesStatus(
 		deadlineNanos := indexDropTimes[idxProgress.IndexID] + int64(ttlSeconds)*time.Second.Nanoseconds()
 		deadline := timeutil.Unix(0, deadlineNanos)
 		if isProtected(ctx, protectedtsCache, indexDropTimes[idxProgress.IndexID], sp) {
-			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.ID)
+			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
 		lifetime := time.Until(deadline)
 		if lifetime > 0 {
 			if log.V(2) {
-				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.ID, lifetime)
+				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
 			}
 		}
 		if lifetime < 0 {
 			expired = true
 			if log.V(2) {
-				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.ID)
+				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
 			}
 			idxProgress.Status = jobspb.SchemaChangeGCProgress_DELETING
 		} else if deadline.Before(soonestDeadline) {

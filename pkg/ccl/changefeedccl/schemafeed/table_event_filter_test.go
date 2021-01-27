@@ -75,7 +75,7 @@ func TestTableEventFilter(t *testing.T) {
 			e: TableEvent{
 				Before: func() *tabledesc.Immutable {
 					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1))
-					col := td.Mutations[0].GetColumn()
+					col := td.GetMutations()[0].GetColumn()
 					col.Nullable = true
 					col.ComputeExpr = proto.String("1")
 					return td

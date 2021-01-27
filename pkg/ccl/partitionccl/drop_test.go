@@ -91,7 +91,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	// All zone configs should still exist.
 	var buf []byte
 	cfg := &zonepb.ZoneConfig{}
-	sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.ID).Scan(&buf)
+	sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.GetID()).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		} else if l := 0; len(kvs) != l {
 			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))
 		}
-		sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.ID).Scan(&buf)
+		sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.GetID()).Scan(&buf)
 		if err := protoutil.Unmarshal(buf, cfg); err != nil {
 			return err
 		}

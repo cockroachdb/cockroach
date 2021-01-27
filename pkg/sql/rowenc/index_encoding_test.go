@@ -210,11 +210,11 @@ func TestIndexKey(t *testing.T) {
 			colNames []string
 			colIDs   descpb.ColumnIDs
 		)
-		for _, c := range tableDesc.Columns {
+		for _, c := range tableDesc.GetPublicColumns() {
 			colNames = append(colNames, c.Name)
 			colIDs = append(colIDs, c.ID)
 		}
-		tableDesc.Families = []descpb.ColumnFamilyDescriptor{{
+		tableDesc.TableDesc().Families = []descpb.ColumnFamilyDescriptor{{
 			Name:            "defaultFamily",
 			ID:              0,
 			ColumnNames:     colNames,
@@ -979,7 +979,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex().IndexDesc())
+			equivSigs, err := TableEquivSignatures(desc.TableDesc(), desc.GetPrimaryIndex().IndexDesc())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1070,7 +1070,7 @@ func TestEquivSignature(t *testing.T) {
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex().IndexDesc())
+				tempEquivSigs, err := TableEquivSignatures(desc.TableDesc(), desc.GetPrimaryIndex().IndexDesc())
 				if err != nil {
 					t.Fatal(err)
 				}
