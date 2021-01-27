@@ -543,10 +543,15 @@ type descriptorState struct {
 		// entry is created with the expiration time of the new lease and
 		// the older entry is removed.
 		active descriptorSet
-		// Indicates that the has been dropped, or is being dropped.
+
+		// Indicates that the descriptor has been, or is being, dropped or taken
+		// offline.
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
-		dropped bool
+		// This flag will be unset by any subsequent lease acquisition, which can
+		// happen after the table came back online again after having been taken
+		// offline temporarily (as opposed to dropped).
+		takenOffline bool
 
 		// acquisitionsInProgress indicates that at least one caller is currently
 		// in the process of performing an acquisition. This tracking is critical
@@ -865,6 +870,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		}
 		t := m.findDescriptorState(id, false /* create */)
 		t.mu.Lock()
+		t.mu.takenOffline = false
 		defer t.mu.Unlock()
 		toRelease, err = t.upsertLocked(newCtx, desc)
 		if err != nil {
@@ -906,9 +912,9 @@ func (t *descriptorState) release(
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// invalid.
 		removeOnceDereferenced = removeOnceDereferenced ||
-			// Release from the store if the descriptor has been dropped; no leases
-			// can be acquired any more.
-			t.mu.dropped ||
+			// Release from the store if the descriptor has been dropped or taken
+			// offline.
+			t.mu.takenOffline ||
 			// Release from the store if the lease is not for the latest
 			// version; only leases for the latest version can be acquired.
 			s != t.mu.active.findNewest()
@@ -984,9 +990,9 @@ func purgeOldVersions(
 		return nil
 	}
 
-	removeInactives := func(drop bool) {
+	removeInactives := func(takenOffline bool) {
 		t.mu.Lock()
-		t.mu.dropped = drop
+		t.mu.takenOffline = takenOffline
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
@@ -2040,9 +2046,9 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 			break
 		}
 		desc.mu.Lock()
-		dropped := desc.mu.dropped
+		takenOffline := desc.mu.takenOffline
 		desc.mu.Unlock()
-		if !dropped {
+		if !takenOffline {
 			ids = append(ids, k)
 		}
 	}
@@ -2142,7 +2148,7 @@ func (m *Manager) Codec() keys.SQLCodec {
 // TODO(ajwerner): consider refactoring the function to take a struct, maybe
 // called LeaseInfo.
 func (m *Manager) VisitLeases(
-	f func(desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp) (wantMore bool),
+	f func(desc catalog.Descriptor, takenOffline bool, refCount int, expiration tree.DTimestamp) (wantMore bool),
 ) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -2151,7 +2157,7 @@ func (m *Manager) VisitLeases(
 			ts.mu.Lock()
 			defer ts.mu.Unlock()
 
-			dropped := ts.mu.dropped
+			takenOffline := ts.mu.takenOffline
 
 			for _, state := range ts.mu.active.data {
 				state.mu.Lock()
@@ -2163,7 +2169,7 @@ func (m *Manager) VisitLeases(
 					continue
 				}
 
-				if !f(state.Descriptor, dropped, refCount, lease.expiration) {
+				if !f(state.Descriptor, takenOffline, refCount, lease.expiration) {
 					return false
 				}
 			}
