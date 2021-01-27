@@ -684,10 +684,11 @@ func (sc *SchemaChanger) validateConstraints(
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+			descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
+			desc := descI.(*tabledesc.Mutable)
 			// Each check operates at the historical timestamp.
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				// If the constraint is a check constraint that fails validation, we
@@ -1670,10 +1671,11 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		// added earlier in the same mutation. Make the mutations public in an
 		// in-memory copy of the descriptor and add it to the Collection's synthetic
 		// descriptors, so that we can use SQL below to perform the validation.
-		desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+		descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
 		if err != nil {
 			return err
 		}
+		desc := descI.(*tabledesc.Mutable)
 
 		// Count the number of rows in the table.
 		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {

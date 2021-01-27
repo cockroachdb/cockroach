@@ -388,12 +388,11 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	}
 
 	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
-	immutable := tabledesc.NewImmutable(*desc.TableDesc())
 	if err != nil {
 		return err
 	}
 	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, immutable, typed.Key, v)
+	return row.NewUniquenessConstraintViolationError(ctx, desc, typed.Key, v)
 }
 
 const indexBackfillProgressReportInterval = 10 * time.Second

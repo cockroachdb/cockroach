@@ -373,7 +373,7 @@ func ConvertBackfillError(ctx context.Context, tableDesc *tabledesc.Immutable, b
 	if err != nil {
 		return err
 	}
-	return row.ConvertBatchError(ctx, tabledesc.NewImmutable(*desc.TableDesc()), b)
+	return row.ConvertBatchError(ctx, desc, b)
 }
 
 type muBoundAccount struct {
