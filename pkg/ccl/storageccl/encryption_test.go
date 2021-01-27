@@ -191,8 +191,8 @@ func TestEncryptDecrypt(t *testing.T) {
 					r, err := decryptingReader(bytes.NewReader(ciphertext), key)
 					require.NoError(t, err)
 					for k := 0; k < reads; k++ {
-						start := rng.Int63n(int64(float64(len(plaintext)) * 1.1))
-						expected := make([]byte, rng.Int63n(int64(len(plaintext))/2))
+						start := rng.Int63n(int64(float64(len(plaintext)+1) * 1.1))
+						expected := make([]byte, rng.Int63n(int64(len(plaintext)/2+1)))
 						got := make([]byte, len(expected))
 						expectedN, expectedErr := plainReader.ReadAt(expected, start)
 						gotN, gotErr := r.(io.ReaderAt).ReadAt(got, start)
