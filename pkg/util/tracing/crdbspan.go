@@ -258,15 +258,19 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 	onlyBackgroundTracing := m == modeBackground && s.recordingType() == RecordingOff
 	if !onlyBackgroundTracing {
 		if rs.Duration == -1 {
-			// -1 indicates an unfinished Span. For a recording it's better to put some
-			// duration in it, otherwise tools get confused. For example, we export
-			// recordings to Jaeger, and spans with a zero duration don't look nice.
-			rs.Duration = timeutil.Now().Sub(rs.StartTime)
 			addTag("_unfinished", "1")
 		}
 		if s.mu.recording.recordingType.load() == RecordingVerbose {
 			addTag("_verbose", "1")
 		}
+	}
+
+	if rs.Duration == -1 {
+		// -1 indicates an unfinished Span. For a recording it's better to put some
+		// duration in it, otherwise tools get confused. For example, we export
+		// recordings to Jaeger, and spans with a zero duration don't look nice.
+		rs.Duration = timeutil.Now().Sub(rs.StartTime)
+		addTag("_unfinished", "1")
 	}
 
 	if s.mu.stats != nil {
