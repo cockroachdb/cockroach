@@ -1414,6 +1414,41 @@ project
                 └── ((v:3 > 100) AND (v:3 < 200)) AND (u:2 > 50)
 
 exec-ddl
+CREATE TABLE partial_index_comp (
+  k INT PRIMARY KEY,
+  u INT,
+  v INT AS (u + 10) VIRTUAL,
+  w INT AS (u + 100) STORED,
+  INDEX v_idx (u) WHERE v > 0,
+  INDEX w_idx (u) WHERE w > 0
+)
+----
+
+# Inline virtual computed column expressions in partial index predicates in
+# table metadata. Do not inline stored computed column expressions.
+build
+SELECT k FROM partial_index_comp
+----
+project
+ ├── columns: k:1!null
+ └── project
+      ├── columns: v:3 k:1!null u:2 w:4 crdb_internal_mvcc_timestamp:5
+      ├── scan partial_index_comp
+      │    ├── columns: k:1!null u:2 w:4 crdb_internal_mvcc_timestamp:5
+      │    ├── computed column expressions
+      │    │    ├── v:3
+      │    │    │    └── u:2 + 10
+      │    │    └── w:4
+      │    │         └── u:2 + 100
+      │    └── partial index predicates
+      │         ├── v_idx: filters
+      │         │    └── (u:2 + 10) > 0
+      │         └── w_idx: filters
+      │              └── w:4 > 0
+      └── projections
+           └── u:2 + 10 [as=v:3]
+
+exec-ddl
 CREATE TABLE inaccessible (
     k INT PRIMARY KEY,
     "v:inaccessible" INT
