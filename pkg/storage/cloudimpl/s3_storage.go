@@ -244,6 +244,32 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 	return errors.Wrap(err, "failed to put s3 object")
 }
 
+func (s *s3Storage) openStreamAt(
+	ctx context.Context, basename string, pos int64,
+) (*s3.GetObjectOutput, error) {
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
+	if pos != 0 {
+		req.Range = aws.String(fmt.Sprintf("bytes=%d-", pos))
+	}
+
+	out, err := client.GetObjectWithContext(ctx, req)
+	if err != nil {
+		if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
+			switch aerr.Code() {
+			// Relevant 404 errors reported by AWS.
+			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
+				return nil, errors.Wrapf(ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
+			}
+		}
+		return nil, errors.Wrap(err, "failed to get s3 object")
+	}
+	return out, nil
+}
+
 // ReadFile is shorthand for ReadFileAt with offset 0.
 func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	reader, _, err := s.ReadFileAt(ctx, basename, 0)
@@ -254,45 +280,38 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 func (s *s3Storage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
-	// https://github.com/cockroachdb/cockroach/issues/23859
-	client, err := s.newS3Client(ctx)
+	stream, err := s.openStreamAt(ctx, basename, offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
-	if offset != 0 {
-		req.Range = aws.String(fmt.Sprintf("bytes=%d-", offset))
-	}
-
-	out, err := client.GetObjectWithContext(ctx, req)
-	if err != nil {
-		if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
-			switch aerr.Code() {
-			// Relevant 404 errors reported by AWS.
-			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
-			}
-		}
-		return nil, 0, errors.Wrap(err, "failed to get s3 object")
-	}
-
 	var size int64
 	if offset != 0 {
-		if out.ContentRange == nil {
+		if stream.ContentRange == nil {
 			return nil, 0, errors.New("expected content range for read at offset")
 		}
-		size, err = checkHTTPContentRangeHeader(*out.ContentRange, offset)
+		size, err = checkHTTPContentRangeHeader(*stream.ContentRange, offset)
 		if err != nil {
 			return nil, 0, err
 		}
 	} else {
-		if out.ContentLength == nil {
+		if stream.ContentLength == nil {
 			return nil, 0, errors.New("expected content length")
 		}
-		size = *out.ContentLength
+		size = *stream.ContentLength
 	}
 
-	return out.Body, size, nil
+	return &resumingReader{
+		ctx: ctx,
+		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+			s, err := s.openStreamAt(ctx, basename, pos)
+			if err != nil {
+				return nil, err
+			}
+			return s.Body, nil
+		},
+		reader: stream.Body,
+		pos:    offset,
+	}, size, nil
 }
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {

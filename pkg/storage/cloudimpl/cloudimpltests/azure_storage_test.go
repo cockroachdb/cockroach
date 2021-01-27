@@ -18,35 +18,62 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe/testdata/src/github.com/cockroachdb/errors"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
+type azureConfig struct {
+	account, key, bucket string
+}
+
+func (a azureConfig) filePath(f string) string {
+	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
+		a.bucket, f,
+		cloudimpl.AzureAccountNameParam, url.QueryEscape(a.account),
+		cloudimpl.AzureAccountKeyParam, url.QueryEscape(a.key))
+}
+
+func getAzureConfig() (azureConfig, error) {
+	cfg := azureConfig{
+		account: os.Getenv("AZURE_ACCOUNT_NAME"),
+		key:     os.Getenv("AZURE_ACCOUNT_KEY"),
+		bucket:  os.Getenv("AZURE_CONTAINER"),
+	}
+	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" {
+		return azureConfig{}, errors.New("AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, AZURE_CONTAINER must all be set")
+	}
+	return cfg, nil
+}
 func TestPutAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
-	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if accountName == "" || accountKey == "" {
-		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
-	}
-	bucket := os.Getenv("AZURE_CONTAINER")
-	if bucket == "" {
-		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
+	cfg, err := getAzureConfig()
+	if err != nil {
+		skip.IgnoreLint(t, "Test not configured for Azure")
+		return
 	}
 
-	testExportStore(t, fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
-		bucket, "backup-test",
-		cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
-		cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
-	), false, security.RootUserName(), nil, nil)
+	testExportStore(t, cfg.filePath("backup-test"),
+		false, security.RootUserName(), nil, nil)
 	testListFiles(
-		t,
-		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
-			bucket, "listing-test",
-			cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
-			cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
-		),
-		security.RootUserName(), nil, nil,
+		t, cfg.filePath("listing-test"), security.RootUserName(), nil, nil,
 	)
+}
+
+func TestAntagonisticAzureRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg, err := getAzureConfig()
+	if err != nil {
+		skip.IgnoreLint(t, "Test not configured for Azure")
+		return
+	}
+
+	conf, err := cloudimpl.ExternalStorageConfFromURI(
+		cfg.filePath("antagonistic-read"), security.RootUserName())
+	require.NoError(t, err)
+
+	testAntagonisticRead(t, conf)
 }
