@@ -58,11 +58,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -100,6 +102,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalGossipLivenessTableID:            crdbInternalGossipLivenessTable,
 		catconstants.CrdbInternalGossipNetworkTableID:             crdbInternalGossipNetworkTable,
 		catconstants.CrdbInternalIndexColumnsTableID:              crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalInflightTracingTableID:           crdbInternalInflightTracingTable,
 		catconstants.CrdbInternalJobsTableID:                      crdbInternalJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:              crdbInternalKVNodeStatusTable,
 		catconstants.CrdbInternalKVStoreStatusTableID:             crdbInternalKVStoreStatusTable,
@@ -1127,6 +1130,40 @@ CREATE TABLE crdb_internal.session_trace (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+// crdbInternalInflightTracingTable exposes the node-local registry of in-flight spans.
+var crdbInternalInflightTracingTable = virtualSchemaTable{
+	comment: `in-flight spans (RAM; local node only)`,
+	schema: `
+CREATE TABLE crdb_internal.node_inflight_tracing (
+  span_id    INT NOT NULL,        -- The span's ID.
+  trace_id   INT NOT NULL,        -- The trace's ID.
+  duration   INTERVAL             -- The span's duration, measured by time of 
+                                  -- collection - start time for all in-flight spans.
+)`,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		p.ExecCfg().Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+			for _, rec := range span.GetRecording() {
+				spanID := rec.SpanID
+				traceID := rec.TraceID
+				spanDuration := rec.Duration
+
+				if err := addRow(
+					tree.NewDInt(tree.DInt(spanID)),
+					tree.NewDInt(tree.DInt(traceID)),
+					tree.NewDInterval(
+						duration.MakeDuration(spanDuration.Nanoseconds(), 0, 0),
+						types.DefaultIntervalTypeMetadata,
+					),
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 		return nil
 	},
 }
