@@ -167,16 +167,16 @@ CREATE TABLE data2.foo (a int);
 		// Note the absence of the jobs table. Jobs are tested by another test as
 		// jobs are created during the RESTORE process.
 		systemTablesToVerify := []string{
-			systemschema.CommentsTable.Name,
-			systemschema.LocationsTable.Name,
-			systemschema.RoleMembersTable.Name,
-			systemschema.RoleOptionsTable.Name,
-			systemschema.SettingsTable.Name,
-			systemschema.TableStatisticsTable.Name,
-			systemschema.UITable.Name,
-			systemschema.UsersTable.Name,
-			systemschema.ZonesTable.Name,
-			systemschema.ScheduledJobsTable.Name,
+			systemschema.CommentsTable.GetName(),
+			systemschema.LocationsTable.GetName(),
+			systemschema.RoleMembersTable.GetName(),
+			systemschema.RoleOptionsTable.GetName(),
+			systemschema.SettingsTable.GetName(),
+			systemschema.TableStatisticsTable.GetName(),
+			systemschema.UITable.GetName(),
+			systemschema.UsersTable.GetName(),
+			systemschema.ZonesTable.GetName(),
+			systemschema.ScheduledJobsTable.GetName(),
 		}
 
 		verificationQueries := make([]string, len(systemTablesToVerify))
@@ -184,11 +184,11 @@ CREATE TABLE data2.foo (a int);
 		// that can be used to ensure that data in those tables is restored.
 		for i, table := range systemTablesToVerify {
 			switch table {
-			case systemschema.TableStatisticsTable.Name:
+			case systemschema.TableStatisticsTable.GetName():
 				// createdAt and statisticsID are re-generated on RESTORE.
 				query := `SELECT "tableID", name, "columnIDs", "rowCount" FROM system.table_statistics`
 				verificationQueries[i] = query
-			case systemschema.SettingsTable.Name:
+			case systemschema.SettingsTable.GetName():
 				// We don't include the cluster version.
 				query := fmt.Sprintf("SELECT * FROM system.%s WHERE name <> 'version'", table)
 				verificationQueries[i] = query

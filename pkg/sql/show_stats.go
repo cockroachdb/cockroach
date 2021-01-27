@@ -79,7 +79,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				 FROM system.table_statistics
 				 WHERE "tableID" = $1
 				 ORDER BY "createdAt"`,
-				desc.ID,
+				desc.GetID(),
 			)
 			if err != nil {
 				return nil, err

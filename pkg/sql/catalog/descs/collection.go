@@ -497,9 +497,9 @@ func (tc *Collection) getObjectByName(
 	// (i.e., the ones used during authn/authz flows).
 	// TODO (lucy): Reevaluate the above. We have many more system tables now and
 	// should be able to lease most of them.
-	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.Name ||
-		objectName == systemschema.RoleOptionsTable.Name ||
-		objectName == systemschema.UsersTable.Name
+	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.GetName() ||
+		objectName == systemschema.RoleOptionsTable.GetName() ||
+		objectName == systemschema.UsersTable.GetName()
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {

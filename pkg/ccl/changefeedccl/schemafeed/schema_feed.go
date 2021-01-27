@@ -47,7 +47,7 @@ type TableEvent struct {
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
 func (e TableEvent) Timestamp() hlc.Timestamp {
-	return e.After.ModificationTime
+	return e.After.GetModificationTime()
 }
 
 // Config configures a SchemaFeed.
@@ -475,7 +475,7 @@ func (e TableEvent) String() string {
 }
 
 func formatDesc(desc *tabledesc.Immutable) string {
-	return fmt.Sprintf("%d:%d@%v", desc.ID, desc.Version, desc.ModificationTime)
+	return fmt.Sprintf("%d:%d@%v", desc.GetID(), desc.GetVersion(), desc.GetModificationTime())
 }
 
 func formatEvent(e TableEvent) string {
@@ -500,9 +500,9 @@ func (tf *SchemaFeed) validateDescriptor(
 			return err
 		}
 		log.Infof(ctx, "validate %v", formatDesc(desc))
-		if lastVersion, ok := tf.mu.previousTableVersion[desc.ID]; ok {
+		if lastVersion, ok := tf.mu.previousTableVersion[desc.GetID()]; ok {
 			// NB: Writes can occur to a table
-			if desc.ModificationTime.LessEq(lastVersion.ModificationTime) {
+			if desc.GetModificationTime().LessEq(lastVersion.GetModificationTime()) {
 				return nil
 			}
 
@@ -513,7 +513,7 @@ func (tf *SchemaFeed) validateDescriptor(
 			// allowed; without this explicit load, the lease manager might therefore
 			// return the previous version of the table, which is still technically
 			// allowed by the schema change system.
-			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
+			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
 				return err
 			}
 
@@ -534,7 +534,7 @@ func (tf *SchemaFeed) validateDescriptor(
 				// The head could already have been handed out and sorting is not
 				// stable.
 				idxToSort := sort.Search(len(tf.mu.events), func(i int) bool {
-					return !tf.mu.events[i].After.ModificationTime.Less(earliestTsBeingIngested)
+					return !tf.mu.events[i].After.GetModificationTime().Less(earliestTsBeingIngested)
 				})
 				tf.mu.events = append(tf.mu.events, e)
 				toSort := tf.mu.events[idxToSort:]
@@ -545,7 +545,7 @@ func (tf *SchemaFeed) validateDescriptor(
 		}
 		// Add the types used by the table into the dependency tracker.
 		tf.mu.typeDeps.ingestTable(desc)
-		tf.mu.previousTableVersion[desc.ID] = desc
+		tf.mu.previousTableVersion[desc.GetID()] = desc
 		return nil
 	default:
 		return errors.AssertionFailedf("unexpected descriptor type %T", desc)

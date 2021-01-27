@@ -347,9 +347,9 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 	if !(table.Adding() && table.IsAs()) {
 		return nil
 	}
-	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.CreateQuery)
+	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.GetCreateQuery())
 
-	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.CreateQuery, table.CreateAsOfTime, "ctasBackfill")
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill")
 }
 
 func (sc *SchemaChanger) maybeBackfillMaterializedView(
@@ -358,9 +358,9 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 	if !(table.Adding() && table.MaterializedView()) {
 		return nil
 	}
-	log.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.ViewQuery)
+	log.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.GetViewQuery())
 
-	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.ViewQuery, table.CreateAsOfTime, "materializedViewBackfill")
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.GetViewQuery(), table.GetCreateAsOfTime(), "materializedViewBackfill")
 }
 
 // maybe make a table PUBLIC if it's in the ADD state.
@@ -380,7 +380,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.ID, txn)
+		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
 		if err != nil {
 			return err
 		}
@@ -512,7 +512,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 		// descriptor, it seems possible for a job to be resumed after the mutation
 		// has already been removed. If there's a mutation provided, we should check
 		// whether it actually exists on the table descriptor and exit the job if not.
-		for i, mutation := range tableDesc.TableDesc().Mutations {
+		for i, mutation := range tableDesc.GetMutations() {
 			if mutation.MutationID == sc.mutationID {
 				if i != 0 {
 					log.Infof(ctx,
@@ -631,8 +631,8 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		if tableDesc.IsPhysicalTable() {
 			// We've dropped this physical table, let's kick off a GC job.
 			dropTime := timeutil.Now().UnixNano()
-			if tableDesc.TableDesc().DropTime > 0 {
-				dropTime = tableDesc.TableDesc().DropTime
+			if tableDesc.GetDropTime() > 0 {
+				dropTime = tableDesc.GetDropTime()
 			}
 			gcDetails := jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -670,7 +670,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	if sc.mutationID == descpb.InvalidMutationID {
 		// Nothing more to do.
-		isCreateTableAs := tableDesc.Adding() && tableDesc.TableDesc().IsAs()
+		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
 		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
 	}
 
@@ -784,7 +784,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 		}
 
 		var runStatus jobs.RunningStatus
-		for _, mutation := range desc.Mutations {
+		for _, mutation := range desc.GetMutations() {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -1658,12 +1658,12 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 // updateJobForRollback updates the schema change job in the case of a rollback.
 func (sc *SchemaChanger) updateJobForRollback(
-	ctx context.Context, txn *kv.Txn, tableDesc *tabledesc.Immutable,
+	ctx context.Context, txn *kv.Txn, tableDesc catalog.TableDescriptor,
 ) error {
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 	var spanList []jobspb.ResumeSpanList
-	for _, m := range tableDesc.Mutations {
+	for _, m := range tableDesc.GetMutations() {
 		if m.MutationID == sc.mutationID {
 			spanList = append(spanList,
 				jobspb.ResumeSpanList{
@@ -2397,7 +2397,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 func DeleteTableDescAndZoneConfig(
 	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable,
 ) error {
-	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.ID)
+	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err
@@ -2405,11 +2405,11 @@ func DeleteTableDescAndZoneConfig(
 		b := &kv.Batch{}
 
 		// Delete the descriptor.
-		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.ID)
+		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID())
 		b.Del(descKey)
 		// Delete the zone config entry for this table, if necessary.
 		if codec.ForSystemTenant() {
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.ID))
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.GetID()))
 			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}
 		return txn.Run(ctx, b)

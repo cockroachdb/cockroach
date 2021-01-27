@@ -404,7 +404,7 @@ func createIndexCheckOperations(
 		}
 		return nil, pgerror.Newf(pgcode.UndefinedObject,
 			"specified indexes to check that do not exist on table %q: %v",
-			tableDesc.Name, strings.Join(missingIndexNames, ", "))
+			tableDesc.GetName(), strings.Join(missingIndexNames, ", "))
 	}
 	return results, nil
 }
@@ -437,7 +437,7 @@ func createConstraintCheckOperations(
 				wantedConstraints[string(constraintName)] = v
 			} else {
 				return nil, pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
+					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())
 			}
 		}
 		constraints = wantedConstraints

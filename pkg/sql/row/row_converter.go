@@ -272,12 +272,12 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 				return err
 			}
 
-			seqOpts := seqDesc.SequenceOpts
+			seqOpts := seqDesc.GetSequenceOpts()
 			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.Name)
+				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
 			}
 
-			seqNameToMetadata[seqDesc.Name] = &SequenceMetadata{
+			seqNameToMetadata[seqDesc.GetName()] = &SequenceMetadata{
 				id:      seqID,
 				seqDesc: seqDesc,
 			}
@@ -415,12 +415,12 @@ func NewDatumRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.Families))
+	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.Columns))
-	for _, col := range c.tableDesc.Columns {
+	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.GetPublicColumns()))
+	for _, col := range c.tableDesc.GetPublicColumns() {
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
 		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.ID)] = col
@@ -433,7 +433,7 @@ func NewDatumRowConverter(
 		colsOrdered,
 		c.tableDesc.GetPublicColumns(),
 		c.tableDesc,
-		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
+		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
 		&semaCtx)
 	if err != nil {
@@ -442,7 +442,7 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.Columns,
+		Cols:    tableDesc.GetPublicColumns(),
 	}
 	return c, nil
 }
@@ -475,7 +475,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	var computedColsLookup []descpb.ColumnDescriptor
 	if len(c.computedExprs) > 0 {
-		computedColsLookup = c.tableDesc.Columns
+		computedColsLookup = c.tableDesc.GetPublicColumns()
 	}
 
 	insertRow, err := GenerateInsertRow(

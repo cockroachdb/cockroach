@@ -42,7 +42,7 @@ func createAndIncrementSeqDescriptor(
 		ID:           descpb.ID(id),
 		SequenceOpts: &seqOpts,
 	})
-	seqValueKey := codec.SequenceKey(uint32(desc.ID))
+	seqValueKey := codec.SequenceKey(uint32(desc.GetID()))
 	_, err := kv.IncrementValRetryable(
 		ctx, db, seqValueKey, incrementBy)
 	require.NoError(t, err)

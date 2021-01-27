@@ -496,7 +496,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 	if err != nil {
 		return 0, err
 	}
-	return tree.ID(desc.ID), nil
+	return tree.ID(desc.GetID()), nil
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the

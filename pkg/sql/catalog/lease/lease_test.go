@@ -580,7 +580,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
-	_, _, err = t.acquireMinVersion(1, tableDesc.ID, tableDesc.Version+1)
+	_, _, err = t.acquireMinVersion(1, tableDesc.GetID(), tableDesc.GetVersion()+1)
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
@@ -644,11 +644,11 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	ctx := context.Background()
 
-	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease2, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +658,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Also install a way to wait for the config update to be processed.
 	mu.Lock()
 	clearSchemaChangers = true
-	waitTableID = tableDesc.ID
+	waitTableID = tableDesc.GetID()
 	mu.Unlock()
 
 	// DROP the table
@@ -671,7 +671,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease3, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +687,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
-	_, _, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	_, _, err = acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
@@ -741,7 +741,7 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
-	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
+	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
 
 	if _, err := sqlDB.Exec(`
 SELECT * FROM t.foo;
@@ -871,7 +871,7 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
-	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
+	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -1113,13 +1113,13 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	// Allow async schema change waiting for GC to complete (when dropping an
 	// index) and clear the index keys.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv"); len(tableDesc.GCMutations) != 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
+		if tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv"); len(tableDesc.GetGCMutations()) != 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
 		}
 		return nil
 	})
@@ -1182,7 +1182,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		if !updated {
 			leaseMgr := s.LeaseManager().(*lease.Manager)
 			if _, err := leaseMgr.Publish(
-				context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
+				context.Background(), tableDesc.GetID(), func(catalog.MutableDescriptor) error {
 					// Do nothing: increments the version.
 					return nil
 				}, nil); err != nil {
@@ -1228,8 +1228,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test")
-	dbID := tableDesc.ParentID
-	tableName := tableDesc.Name
+	dbID := tableDesc.GetParentID()
+	tableName := tableDesc.GetName()
 	leaseManager := t.node(1)
 
 	// Acquire the lease so it is put into the nameCache.
@@ -1313,7 +1313,7 @@ CREATE TABLE t.test2 ();
 
 	test1Desc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test1")
 	test2Desc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
-	dbID := test2Desc.ParentID
+	dbID := test2Desc.GetParentID()
 
 	// Acquire a lease on test1 by name.
 	ts1, eo1, err := t.node(1).AcquireByName(
@@ -1333,7 +1333,7 @@ CREATE TABLE t.test2 ();
 	}
 
 	// Acquire a lease on test2 by ID.
-	ts2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	ts2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts2); err != nil {
@@ -1382,7 +1382,7 @@ CREATE TABLE t.test2 ();
 		// Acquire another lease by ID on test2. At first this will be the same
 		// lease, but eventually we will asynchronously renew a lease and our
 		// acquire will get a newer lease.
-		ts2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+		ts2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1446,8 +1446,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if tableDesc.Version != 1 {
-		t.Fatalf("invalid version %d", tableDesc.Version)
+	if tableDesc.GetVersion() != 1 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
 
 	tx, err := sqlDB.Begin()
@@ -1467,8 +1467,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 	// The first schema change will succeed and increment the version.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv1")
-	if tableDesc.Version != 2 {
-		t.Fatalf("invalid version %d", tableDesc.Version)
+	if tableDesc.GetVersion() != 2 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
 
 	if l := atomic.LoadInt64(&violations); l > 0 {
@@ -1497,8 +1497,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// doesn't rollback the transaction this descriptor read will
 	// hang.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv1")
-	if tableDesc.Version != 2 {
-		t.Fatalf("invalid version %d", tableDesc.Version)
+	if tableDesc.GetVersion() != 2 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
 
 	// Transaction successfully used the old version.
@@ -1508,8 +1508,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 	wg.Wait()
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
-	if tableDesc.Version != 3 {
-		t.Fatalf("invalid version %d", tableDesc.Version)
+	if tableDesc.GetVersion() != 3 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
 }
 
@@ -1549,8 +1549,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if tableDesc.Version != 1 {
-		t.Fatalf("invalid version %d", tableDesc.Version)
+	if tableDesc.GetVersion() != 1 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
 
 	tx, err := sqlDB.Begin()
@@ -1682,10 +1682,10 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// This checks that the modification timestamp is not lying about
 			// the transaction commit time (and that the txn commit time wasn't
 			// bumped past it).
-			log.Infof(ctx, "checking version %d", table.Version)
+			log.Infof(ctx, "checking version %d", table.GetVersion())
 			txn := kv.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
 			// Make the txn look back at the known modification timestamp.
-			txn.SetFixedTimestamp(ctx, table.ModificationTime)
+			txn.SetFixedTimestamp(ctx, table.GetModificationTime())
 
 			// Look up the descriptor.
 			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descID)
@@ -1697,9 +1697,9 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// Look at the descriptor that comes back from the database.
 			dbTable := descpb.TableFromDescriptor(dbDesc, ts)
 
-			if dbTable.Version != table.Version || dbTable.ModificationTime != table.ModificationTime {
+			if dbTable.Version != table.GetVersion() || dbTable.ModificationTime != table.GetModificationTime() {
 				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
-					dbTable.Version, dbTable.ModificationTime, table.Version, table.ModificationTime)
+					dbTable.Version, dbTable.ModificationTime, table.GetVersion(), table.GetModificationTime())
 			}
 		}
 		wg.Done()
@@ -1771,7 +1771,7 @@ CREATE TABLE t.test2 ();
 
 	test1Desc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
 	test2Desc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
-	dbID := test2Desc.ParentID
+	dbID := test2Desc.GetParentID()
 
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
 
@@ -1802,7 +1802,7 @@ CREATE TABLE t.test2 ();
 	}
 
 	// Acquire a lease on test2 by ID.
-	ts2, _, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	ts2, _, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts2); err != nil {
@@ -1968,7 +1968,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 
 	beforeDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "before")
 	afterDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "after")
-	dbID := beforeDesc.ParentID
+	dbID := beforeDesc.GetParentID()
 
 	// Acquire a lease on "before" by name.
 	beforeTable, _, err := t.node(1).AcquireByName(
@@ -2001,14 +2001,14 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	} else if err := t.release(1, afterTable); err != nil {
 		t.Fatal(err)
 	}
-	t.expectLeases(beforeDesc.ID, "/1/1")
-	t.expectLeases(afterDesc.ID, "/1/1")
+	t.expectLeases(beforeDesc.GetID(), "/1/1")
+	t.expectLeases(afterDesc.GetID(), "/1/1")
 
 	// Call DeleteOrphanedLeases() with the server startup time.
 	t.node(1).DeleteOrphanedLeases(now)
 	// Orphaned lease is gone.
-	t.expectLeases(beforeDesc.ID, "")
-	t.expectLeases(afterDesc.ID, "/1/1")
+	t.expectLeases(beforeDesc.GetID(), "")
+	t.expectLeases(afterDesc.GetID(), "/1/1")
 }
 
 // Test that acquiring a lease doesn't block on other transactions performing
@@ -2415,7 +2415,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	require.NoError(t, err)
 
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	atomic.StoreUint32(&descID, uint32(desc.ID))
+	atomic.StoreUint32(&descID, uint32(desc.GetID()))
 
 	// Sets table descriptor state and waits for that change to propagate to the
 	// lease manager's refresh worker.

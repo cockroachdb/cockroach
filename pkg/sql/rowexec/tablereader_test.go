@@ -433,7 +433,7 @@ func TestLimitScans(t *testing.T) {
 	// specific so that we don't count range resolving requests, and we dedupe
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
-	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.ID))
+	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.GetID()))
 	spans := sp.GetRecording()
 	ranges := make(map[string]struct{})
 	for _, span := range spans {

@@ -2500,7 +2500,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			// for rowsAffected because we want to make sure that stats always get
 			// created/refreshed here.
 			ex.planner.execCfg.StatsRefresher.
-				NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
+				NotifyMutation(desc.GetID(), math.MaxInt32 /* rowsAffected */)
 		}
 	}
 }

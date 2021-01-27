@@ -240,7 +240,7 @@ func (p *planner) ShowCreate(
 ) (string, error) {
 	var stmt string
 	var err error
-	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
 		stmt, err = ShowCreateView(ctx, &tn, desc)
 	} else if desc.IsSequence() {

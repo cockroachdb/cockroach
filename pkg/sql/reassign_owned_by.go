@@ -153,7 +153,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	tbDesc *tabledesc.Immutable, params runParams,
 ) error {
 	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, tbDesc.ID, params.p.txn)
+		params.ctx, tbDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}

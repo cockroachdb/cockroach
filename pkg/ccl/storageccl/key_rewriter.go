@@ -107,7 +107,7 @@ func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, er
 
 		for _, index := range desc.NonDropIndexes() {
 			oldPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(oldID, index.GetID()))
-			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.GetID()))
+			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.GetID(), index.GetID()))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
 				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{

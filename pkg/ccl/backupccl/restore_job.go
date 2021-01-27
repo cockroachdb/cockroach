@@ -855,7 +855,7 @@ func spansForAllRestoreTableIndexes(
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
 			tbl := tabledesc.NewImmutable(*rawTbl)
 			for _, idx := range tbl.NonDropIndexes() {
-				key := tableAndIndex{tableID: tbl.ID, indexID: idx.GetID()}
+				key := tableAndIndex{tableID: tbl.GetID(), indexID: idx.GetID()}
 				if !added[key] {
 					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.GetID())), false); err != nil {
 						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))

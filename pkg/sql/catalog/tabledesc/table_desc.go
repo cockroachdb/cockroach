@@ -199,6 +199,21 @@ func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 
 // ReadableColumns returns a list of columns (including those undergoing a
 // schema change) which can be scanned.
+func (desc *wrapper) ReadableColumns() []descpb.ColumnDescriptor {
+	cols := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	cols = append(cols, desc.Columns...)
+	for _, m := range desc.Mutations {
+		if columnMutation := m.GetColumn(); columnMutation != nil {
+			col := *columnMutation
+			col.Nullable = true
+			cols = append(cols, col)
+		}
+	}
+	return cols
+}
+
+// ReadableColumns returns a list of columns (including those undergoing a
+// schema change) which can be scanned.
 func (desc *Immutable) ReadableColumns() []descpb.ColumnDescriptor {
 	return desc.readableColumns
 }

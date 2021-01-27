@@ -68,7 +68,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
-			n.tableDesc.ID,
+			n.tableDesc.GetID(),
 			col.ID,
 			*n.n.Comment)
 		if err != nil {
@@ -82,7 +82,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
-			n.tableDesc.ID,
+			n.tableDesc.GetID(),
 			col.ID)
 		if err != nil {
 			return err
@@ -100,7 +100,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 	}
 
 	return params.p.logEvent(params.ctx,
-		n.tableDesc.ID,
+		n.tableDesc.GetID(),
 		&eventpb.CommentOnColumn{
 			TableName:   tn.FQString(),
 			ColumnName:  string(n.n.ColumnItem.ColumnName),

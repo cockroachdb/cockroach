@@ -632,7 +632,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return tabledesc.NewExistingMutable(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
+	return tabledesc.NewExistingMutable(*optIdx.tab.desc.TableDesc()), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -801,9 +801,9 @@ func newInternalLookupCtx(
 			}
 		case *tabledesc.Immutable:
 			tbDescs[desc.GetID()] = desc
-			if prefix == nil || prefix.GetID() == desc.ParentID {
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, desc.ID)
+				tbIDs = append(tbIDs, desc.GetID())
 			}
 		case *typedesc.Immutable:
 			typDescs[desc.GetID()] = desc

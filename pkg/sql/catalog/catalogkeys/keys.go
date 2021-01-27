@@ -276,12 +276,12 @@ func (ddk DeprecatedDatabaseKey) Name() string {
 func MakeNameMetadataKey(
 	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
 ) roachpb.Key {
-	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.ID), uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
+	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.GetID()), uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.Columns[3].ID))
+		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.GetPublicColumns()[3].ID))
 	}
 	return k
 }
@@ -334,11 +334,11 @@ func MakeDeprecatedNameMetadataKey(
 	codec keys.SQLCodec, parentID descpb.ID, name string,
 ) roachpb.Key {
 	k := codec.IndexPrefix(
-		uint32(systemschema.DeprecatedNamespaceTable.ID), uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
+		uint32(systemschema.DeprecatedNamespaceTable.GetID()), uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.Columns[2].ID))
+		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.GetPublicColumns()[2].ID))
 	}
 	return k
 }

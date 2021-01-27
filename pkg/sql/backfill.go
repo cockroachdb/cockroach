@@ -285,7 +285,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		version = descs[tableDesc.ID].Version
+		version = descs[tableDesc.ID].GetVersion()
 	}
 
 	// Drop indexes not to be removed by `ClearRange`.
@@ -698,8 +698,8 @@ func (sc *SchemaChanger) getTableVersion(
 	if err != nil {
 		return nil, err
 	}
-	if version != tableDesc.Version {
-		return nil, makeErrTableVersionMismatch(tableDesc.Version, version)
+	if version != tableDesc.GetVersion() {
+		return nil, makeErrTableVersionMismatch(tableDesc.GetVersion(), version)
 	}
 	return tableDesc, nil
 }
@@ -723,7 +723,7 @@ func TruncateInterleavedIndexes(
 	for _, desc := range indexes {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.ID, rowIdx, resume)
+			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.GetID(), rowIdx, resume)
 			resumeAt := resume
 			// Make a new txn just to drop this chunk.
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -748,7 +748,7 @@ func TruncateInterleavedIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.ParentID, indexes)
+			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.GetParentID(), indexes)
 		}); err != nil {
 			return err
 		}
@@ -1365,7 +1365,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	var forwardIndexes []*descpb.IndexDescriptor
 	var invertedIndexes []*descpb.IndexDescriptor
 
-	for _, m := range tableDesc.Mutations {
+	for _, m := range tableDesc.GetMutations() {
 		if sc.mutationID != m.MutationID {
 			break
 		}
@@ -1455,7 +1455,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				return err
 			}
 			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
-				tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
+				tableDesc.GetName(), idx.Name, idxLen, timeutil.Since(start))
 			select {
 			case <-countReady[i]:
 				if idxLen != expectedCount[i] {
@@ -1484,12 +1484,12 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
-						col, idx.Version, tableDesc.ID,
+						col, idx.Version, tableDesc.GetID(),
 					)
 				} else {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
-						tableDesc.ID, idx.ID, col, tableDesc.ID,
+						tableDesc.GetID(), idx.ID, col, tableDesc.GetID(),
 					)
 				}
 				// If the index is a partial index the predicate must be added
@@ -1511,7 +1511,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				return err
 			}
 			log.Infof(ctx, "column %s/%s expected inverted index count = %d, took %s",
-				tableDesc.Name, col, expectedCount[i], timeutil.Since(start))
+				tableDesc.GetName(), col, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
 	}
@@ -1595,7 +1595,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			}
 
 			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
-				tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
+				tableDesc.GetName(), idx.Name, idxLen, timeutil.Since(start))
 
 			// Now compare with the row count in the table.
 			select {
@@ -1662,7 +1662,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 			// Force the primary index so that the optimizer does not create a
 			// query plan that uses the indexes being backfilled.
-			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.ID, desc.GetPrimaryIndexID())
+			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
 
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
 			if err != nil {
@@ -1688,7 +1688,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 		tableRowCountTime = timeutil.Since(start)
 		log.Infof(ctx, "validation: table %s row count = %d, took %s",
-			tableDesc.Name, tableRowCount, tableRowCountTime)
+			tableDesc.GetName(), tableRowCount, tableRowCountTime)
 		return nil
 	})
 
@@ -2220,5 +2220,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []descpb.IndexDescriptor{*idx})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.GetID(), []descpb.IndexDescriptor{*idx})
 }

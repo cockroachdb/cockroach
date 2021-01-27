@@ -1087,7 +1087,7 @@ func addInterleave(
 	}
 
 	intl := descpb.InterleaveDescriptor_Ancestor{
-		TableID:         parentTable.ID,
+		TableID:         parentTable.GetID(),
 		IndexID:         parentIndex.GetID(),
 		SharedPrefixLen: uint32(parentIndex.NumColumns()),
 	}

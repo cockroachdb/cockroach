@@ -270,7 +270,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		Details: jobspb.CreateStatsDetails{
 			Name:            string(n.Name),
 			FQTableName:     fqTableName,
-			Table:           tableDesc.TableDescriptor,
+			Table:           *tableDesc.TableDesc(),
 			ColumnStats:     colStats,
 			Statement:       eventLogStatement,
 			AsOf:            asOf,
@@ -427,8 +427,8 @@ func createStatsDefaultColumns(
 
 	// Add all remaining columns in the table, up to maxNonIndexCols.
 	nonIdxCols := 0
-	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
-		col := &desc.Columns[i]
+	for i := 0; i < len(desc.GetPublicColumns()) && nonIdxCols < maxNonIndexCols; i++ {
+		col := &desc.GetPublicColumns()[i]
 		colList := []descpb.ColumnID{col.ID}
 
 		if !trackStatsIfNotExists(colList) {

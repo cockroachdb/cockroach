@@ -270,19 +270,19 @@ type rawTableFeed struct {
 
 func newRawTableFeed(descs []*tabledesc.Immutable, initialHighWater hlc.Timestamp) rawTableFeed {
 	sort.Slice(descs, func(i, j int) bool {
-		if descs[i].ID != descs[j].ID {
-			return descs[i].ID < descs[j].ID
+		if descs[i].GetID() != descs[j].GetID() {
+			return descs[i].GetID() < descs[j].GetID()
 		}
-		return descs[i].ModificationTime.Less(descs[j].ModificationTime)
+		return descs[i].GetModificationTime().Less(descs[j].GetModificationTime())
 	})
 	f := rawTableFeed{}
 	curID := descpb.ID(math.MaxUint32)
 	for i, d := range descs {
-		if d.ID != curID {
-			curID = d.ID
+		if d.GetID() != curID {
+			curID = d.GetID()
 			continue
 		}
-		if d.ModificationTime.Less(initialHighWater) {
+		if d.GetModificationTime().Less(initialHighWater) {
 			continue
 		}
 		f.events = append(f.events, schemafeed.TableEvent{
