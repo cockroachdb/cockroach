@@ -1038,13 +1038,13 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for i := range desc.TableDesc().Columns {
-		if desc.TableDesc().Columns[i].ID == colID {
+	for i := range desc.GetPublicColumns() {
+		if desc.GetPublicColumns()[i].ID == colID {
 			return i
 		}
 	}
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		offset := len(desc.TableDesc().Columns)
+		offset := len(desc.GetPublicColumns())
 		mutationColumns := desc.MutationColumns()
 		for i := range mutationColumns {
 			if mutationColumns[i].ID == colID {
@@ -1058,16 +1058,16 @@ func tableOrdinal(
 	// different for each system column kind. MVCCTimestampColumnID is the
 	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.TableDesc().Columns) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
+		return len(desc.GetPublicColumns()) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.TableDesc().Columns) - 1
+	highest := len(desc.GetPublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.TableDesc().Columns) + len(desc.MutationColumns()) - 1
+		highest = len(desc.GetPublicColumns()) + len(desc.MutationColumns()) - 1
 	}
 	return highest
 }
@@ -1320,8 +1320,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planToStreamColMap := make([]int, len(info.cols))
 	var descColumnIDs util.FastIntMap
 	colID := 0
-	for i := range info.desc.TableDesc().Columns {
-		descColumnIDs.Set(colID, int(info.desc.TableDesc().Columns[i].ID))
+	for i := range info.desc.GetPublicColumns() {
+		descColumnIDs.Set(colID, int(info.desc.GetPublicColumns()[i].ID))
 		colID++
 	}
 	if returnMutations {
@@ -2266,7 +2266,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 
-		numStreamCols += len(side.scan.desc.TableDesc().Columns)
+		numStreamCols += len(side.scan.desc.GetPublicColumns())
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
@@ -2323,7 +2323,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			i++
 		}
 
-		colOffset += len(side.scan.desc.TableDesc().Columns)
+		colOffset += len(side.scan.desc.GetPublicColumns())
 	}
 
 	// Set the ON condition.

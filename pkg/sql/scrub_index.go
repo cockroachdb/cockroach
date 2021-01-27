@@ -75,8 +75,8 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
 	var colToIdx catalog.TableColMap
-	for i := range o.tableDesc.TableDesc().Columns {
-		id := o.tableDesc.TableDesc().Columns[i].ID
+	for i := range o.tableDesc.GetPublicColumns() {
+		id := o.tableDesc.GetPublicColumns()[i].ID
 		colToIdx.Set(id, i)
 	}
 
@@ -84,7 +84,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		colID := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
-		col := &o.tableDesc.TableDesc().Columns[colToIdx.GetDefault(colID)]
+		col := &o.tableDesc.GetPublicColumns()[colToIdx.GetDefault(colID)]
 		pkColumns = append(pkColumns, col)
 		colToIdx.Set(colID, -1)
 	}
@@ -95,7 +95,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 			// Skip PK column.
 			return
 		}
-		col := &o.tableDesc.TableDesc().Columns[pos]
+		col := &o.tableDesc.GetPublicColumns()[pos]
 		otherColumns = append(otherColumns, col)
 	}
 

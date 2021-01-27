@@ -2243,10 +2243,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	// TODO(erik): Ignore errors or individually drop indexes in
 	// DELETE_AND_WRITE_ONLY which failed during the creation backfill
 	// as a rollback from a drop.
-	if e := 1; e != len(tableDesc.TableDesc().Columns) {
-		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.TableDesc().Columns), tableDesc.TableDesc().Columns)
-	} else if tableDesc.TableDesc().Columns[0].Name != "k" {
-		t.Fatalf("columns %+v", tableDesc.TableDesc().Columns)
+	if e := 1; e != len(tableDesc.GetPublicColumns()) {
+		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.GetPublicColumns()), tableDesc.GetPublicColumns())
+	} else if tableDesc.GetPublicColumns()[0].Name != "k" {
+		t.Fatalf("columns %+v", tableDesc.GetPublicColumns())
 	} else if len(tableDesc.TableDesc().Mutations) != 2 {
 		t.Fatalf("mutations %+v", tableDesc.TableDesc().Mutations)
 	}
@@ -4409,10 +4409,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if num := len(tableDesc.TableDesc().Mutations); num > 0 {
 		t.Fatalf("%d outstanding mutation", num)
 	}
-	if lenCols := len(tableDesc.TableDesc().Columns); lenCols != 2 {
+	if lenCols := len(tableDesc.GetPublicColumns()); lenCols != 2 {
 		t.Fatalf("%d columns", lenCols)
 	}
-	if k, x := tableDesc.TableDesc().Columns[0].Name, tableDesc.TableDesc().Columns[1].Name; k != "k" && x != "x" {
+	if k, x := tableDesc.GetPublicColumns()[0].Name, tableDesc.GetPublicColumns()[1].Name; k != "k" && x != "x" {
 		t.Fatalf("columns %q, %q in descriptor", k, x)
 	}
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {

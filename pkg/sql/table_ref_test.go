@@ -49,8 +49,8 @@ CREATE INDEX bc ON test.t(b, c);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tID := tableDesc.GetID()
 	var aID, bID, cID descpb.ColumnID
-	for i := range tableDesc.TableDesc().Columns {
-		c := &tableDesc.TableDesc().Columns[i]
+	for i := range tableDesc.GetPublicColumns() {
+		c := &tableDesc.GetPublicColumns()[i]
 		switch c.Name {
 		case "a":
 			aID = c.ID
@@ -67,8 +67,8 @@ CREATE INDEX bc ON test.t(b, c);
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
 	tIDHidden := tableDesc.GetID()
 	var rowIDHidden descpb.ColumnID
-	for i := range tableDesc.TableDesc().Columns {
-		c := &tableDesc.TableDesc().Columns[i]
+	for i := range tableDesc.GetPublicColumns() {
+		c := &tableDesc.GetPublicColumns()[i]
 		switch c.Name {
 		case "rowid":
 			rowIDHidden = c.ID

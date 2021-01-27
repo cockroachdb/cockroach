@@ -44,7 +44,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	if err != nil {
 		return nil, err
 	}
-	for _, col := range tableDesc.TableDesc().Columns {
+	for _, col := range tableDesc.GetPublicColumns() {
 		if col.ColName() == columnName {
 			// Seems like we have no way of detecting whether this was done using "SERIAL".
 			// Guess by assuming it is SERIAL it it uses only one sequence.

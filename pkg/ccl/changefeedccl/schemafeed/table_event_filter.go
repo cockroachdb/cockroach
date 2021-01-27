@@ -108,12 +108,12 @@ func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
 func newColumnBackfillComplete(e TableEvent) (res bool) {
 	// TODO(ajwerner): What is the case where the before has a backfill mutation
 	// and the After doesn't? What about other queued mutations?
-	return len(e.Before.TableDesc().Columns) < len(e.After.TableDesc().Columns) &&
+	return len(e.Before.GetPublicColumns()) < len(e.After.GetPublicColumns()) &&
 		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
 func newColumnNoBackfill(e TableEvent) (res bool) {
-	return len(e.Before.TableDesc().Columns) < len(e.After.TableDesc().Columns) &&
+	return len(e.Before.GetPublicColumns()) < len(e.After.GetPublicColumns()) &&
 		!e.Before.HasColumnBackfillMutation()
 }
 

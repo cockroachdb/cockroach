@@ -68,14 +68,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	var columnIDs []tree.ColumnID
 	var colIDToIdx catalog.TableColMap
 	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
-	for i := range o.tableDesc.TableDesc().Columns {
-		colIDToIdx.Set(o.tableDesc.TableDesc().Columns[i].ID, i)
+	for i := range o.tableDesc.GetPublicColumns() {
+		colIDToIdx.Set(o.tableDesc.GetPublicColumns()[i].ID, i)
 	}
 
 	// Collect all of the columns being scanned.
 	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {
-		for i := range o.tableDesc.TableDesc().Columns {
-			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.TableDesc().Columns[i].ID))
+		for i := range o.tableDesc.GetPublicColumns() {
+			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.GetPublicColumns()[i].ID))
 		}
 	} else {
 		for _, id := range o.indexDesc.ColumnIDs {
@@ -91,7 +91,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	for i := range columnIDs {
 		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
-		columns = append(columns, &o.tableDesc.TableDesc().Columns[idx])
+		columns = append(columns, &o.tableDesc.GetPublicColumns()[idx])
 	}
 
 	// Find the row indexes for all of the primary index columns.

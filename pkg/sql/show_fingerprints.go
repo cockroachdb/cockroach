@@ -96,7 +96,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 	index := n.indexes[n.run.rowIdx]
 
-	cols := make([]string, 0, len(n.tableDesc.TableDesc().Columns))
+	cols := make([]string, 0, len(n.tableDesc.GetPublicColumns()))
 	addColumn := func(col *descpb.ColumnDescriptor) {
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
@@ -110,13 +110,13 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 
 	if index.ID == n.tableDesc.GetPrimaryIndexID() {
-		for i := range n.tableDesc.TableDesc().Columns {
-			addColumn(&n.tableDesc.TableDesc().Columns[i])
+		for i := range n.tableDesc.GetPublicColumns() {
+			addColumn(&n.tableDesc.GetPublicColumns()[i])
 		}
 	} else {
 		colsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor)
-		for i := range n.tableDesc.TableDesc().Columns {
-			col := &n.tableDesc.TableDesc().Columns[i]
+		for i := range n.tableDesc.GetPublicColumns() {
+			col := &n.tableDesc.GetPublicColumns()[i]
 			colsByID[col.ID] = col
 		}
 		colIDs := append(append(index.ColumnIDs, index.ExtraColumnIDs...), index.StoreColumnIDs...)

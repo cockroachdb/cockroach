@@ -166,7 +166,7 @@ func (fta *FetcherTableArgs) InitCols(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) {
-	cols := desc.TableDesc().Columns
+	cols := desc.GetPublicColumns()
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns()
 	}

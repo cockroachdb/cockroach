@@ -281,7 +281,7 @@ func MakeNameMetadataKey(
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.TableDesc().Columns[3].ID))
+		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.GetPublicColumns()[3].ID))
 	}
 	return k
 }
@@ -338,7 +338,7 @@ func MakeDeprecatedNameMetadataKey(
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.TableDesc().Columns[2].ID))
+		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.GetPublicColumns()[2].ID))
 	}
 	return k
 }

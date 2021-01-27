@@ -123,7 +123,7 @@ func checkDistAggregationInfo(
 	fn execinfrapb.AggregatorSpec_Func,
 	info DistAggregationInfo,
 ) {
-	colType := tableDesc.TableDesc().Columns[colIdx].Type
+	colType := tableDesc.GetPublicColumns()[colIdx].Type
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
@@ -463,9 +463,9 @@ func TestDistAggregationTable(t *testing.T) {
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
-		for colIdx := 1; colIdx < len(desc.TableDesc().Columns); colIdx++ {
+		for colIdx := 1; colIdx < len(desc.GetPublicColumns()); colIdx++ {
 			// See if this column works with this function.
-			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.TableDesc().Columns[colIdx].Type)
+			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.GetPublicColumns()[colIdx].Type)
 			if err != nil {
 				continue
 			}
@@ -477,7 +477,7 @@ func TestDistAggregationTable(t *testing.T) {
 			}
 			foundCol = true
 			for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
-				name := fmt.Sprintf("%s/%s/%d", fn, desc.TableDesc().Columns[colIdx].Name, numRows)
+				name := fmt.Sprintf("%s/%s/%d", fn, desc.GetPublicColumns()[colIdx].Name, numRows)
 				t.Run(name, func(t *testing.T) {
 					checkDistAggregationInfo(
 						context.Background(), t, tc.Server(0), desc, colIdx, numRows, fn, info)

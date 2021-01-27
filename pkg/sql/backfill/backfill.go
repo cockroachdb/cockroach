@@ -121,13 +121,13 @@ func (cb *ColumnBackfiller) init(
 
 	// We need all the columns.
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(desc.TableDesc().Columns)-1)
+	valNeededForCol.AddRange(0, len(desc.GetPublicColumns())-1)
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
 		Index:           desc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       desc.ColumnIdxMap(),
-		Cols:            desc.TableDesc().Columns,
+		Cols:            desc.GetPublicColumns(),
 		ValNeededForCol: valNeededForCol,
 	}
 
@@ -257,8 +257,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.TableDesc().Columns)+len(cb.added)+len(cb.dropped))
-	requestedCols = append(requestedCols, tableDesc.TableDesc().Columns...)
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.GetPublicColumns())+len(cb.added)+len(cb.dropped))
+	requestedCols = append(requestedCols, tableDesc.GetPublicColumns()...)
 	requestedCols = append(requestedCols, cb.added...)
 	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
@@ -303,7 +303,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	b := txn.NewBatch()
 	rowLength := 0
 	iv := &schemaexpr.RowIndexedVarContainer{
-		Cols:    append(tableDesc.TableDesc().Columns, cb.added...),
+		Cols:    append(tableDesc.GetPublicColumns(), cb.added...),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
 	cb.evalCtx.IVarContainer = iv
@@ -555,13 +555,13 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
-	ib.cols = desc.TableDesc().Columns
+	ib.cols = desc.GetPublicColumns()
 
 	// If there are ongoing mutations, add columns that are being added and in
 	// the DELETE_AND_WRITE_ONLY state.
 	if len(desc.TableDesc().Mutations) > 0 {
-		ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.TableDesc().Columns)+len(desc.TableDesc().Mutations))
-		ib.cols = append(ib.cols, desc.TableDesc().Columns...)
+		ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.GetPublicColumns())+len(desc.TableDesc().Mutations))
+		ib.cols = append(ib.cols, desc.GetPublicColumns()...)
 		for _, m := range desc.TableDesc().Mutations {
 			if column := m.GetColumn(); column != nil &&
 				m.Direction == descpb.DescriptorMutation_ADD &&

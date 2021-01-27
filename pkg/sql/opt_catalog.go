@@ -507,12 +507,12 @@ func (ov *optView) Query() string {
 
 // ColumnNameCount is part of the cat.View interface.
 func (ov *optView) ColumnNameCount() int {
-	return len(ov.desc.TableDesc().Columns)
+	return len(ov.desc.GetPublicColumns())
 }
 
 // ColumnName is part of the cat.View interface.
 func (ov *optView) ColumnName(i int) tree.Name {
-	return tree.Name(ov.desc.TableDesc().Columns[i].Name)
+	return tree.Name(ov.desc.GetPublicColumns()[i].Name)
 }
 
 // optSequence is a wrapper around catalog.TableDescriptor that
@@ -636,7 +636,7 @@ func newOptTable(
 	}
 
 	ot.columns = make([]cat.Column, len(colDescs), numCols)
-	numOrdinary := len(ot.desc.TableDesc().Columns)
+	numOrdinary := len(ot.desc.GetPublicColumns())
 	numWritable := len(ot.desc.WritableColumns())
 	for ordinal := range colDescs {
 		desc := colDescs[ordinal]
@@ -1682,7 +1682,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.TableDesc().Columns)+1)
+	ot.columns = make([]cat.Column, len(desc.GetPublicColumns())+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
 		0,
@@ -1695,8 +1695,8 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 	)
-	for i := range desc.TableDesc().Columns {
-		d := desc.TableDesc().Columns[i]
+	for i := range desc.GetPublicColumns() {
+		d := desc.GetPublicColumns()[i]
 		ot.columns[i+1].InitNonVirtual(
 			i+1,
 			cat.StableID(d.ID),
@@ -1807,8 +1807,8 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i > 0 && i <= len(ot.desc.TableDesc().Columns) {
-		return &ot.desc.TableDesc().Columns[i-1]
+	if i > 0 && i <= len(ot.desc.GetPublicColumns()) {
+		return &ot.desc.GetPublicColumns()[i-1]
 	}
 	return nil
 }

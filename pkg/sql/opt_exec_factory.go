@@ -657,7 +657,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		return nil, err
 	}
 	tableScan.index = indexDesc
-	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.TableDesc().Columns)
+	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.GetPublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
 	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
 	outputCols = append(outputCols, inputCols...)
@@ -758,7 +758,7 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.TableDesc().Columns[c].ID))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.GetPublicColumns()[c].ID))
 	}
 
 	scan := ef.planner.Scan()
@@ -1198,7 +1198,7 @@ func (ef *execFactory) ConstructInsert(
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.TableDesc().Columns, returnColDescs)
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1273,7 +1273,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.TableDesc().Columns, returnColDescs)
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1490,7 +1490,7 @@ func (ef *execFactory) ConstructUpsert(
 		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
 		// non-mutation columns specified, in the same order they are defined
 		// in the table.
-		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.TableDesc().Columns, returnColDescs)
+		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ups.run.tw.returnCols = returnColDescs
 		ups.run.tw.rowsNeeded = true
 	}
@@ -1680,7 +1680,7 @@ func (ef *execFactory) ConstructCreateView(
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.TableDesc().Columns[ord].ID)
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.GetPublicColumns()[ord].ID)
 			})
 		}
 		entry := planDeps[desc.GetID()]

@@ -418,8 +418,8 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.TableDesc().Columns))
-	for _, col := range c.tableDesc.TableDesc().Columns {
+	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.GetPublicColumns()))
+	for _, col := range c.tableDesc.GetPublicColumns() {
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
 		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.ID)] = col
@@ -440,7 +440,7 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.TableDesc().Columns,
+		Cols:    tableDesc.GetPublicColumns(),
 	}
 	return c, nil
 }
@@ -473,7 +473,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	var computedColsLookup []descpb.ColumnDescriptor
 	if len(c.computedExprs) > 0 {
-		computedColsLookup = c.tableDesc.TableDesc().Columns
+		computedColsLookup = c.tableDesc.GetPublicColumns()
 	}
 
 	insertRow, err := GenerateInsertRow(

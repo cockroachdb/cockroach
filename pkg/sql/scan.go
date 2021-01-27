@@ -306,8 +306,8 @@ func initColsForScan(
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for i := range desc.TableDesc().Columns {
-			c := &desc.TableDesc().Columns[i]
+		for i := range desc.GetPublicColumns() {
+			c := &desc.GetPublicColumns()[i]
 			found := false
 			for _, wc := range colCfg.wantedColumns {
 				if descpb.ColumnID(wc) == c.ID {

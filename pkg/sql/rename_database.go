@@ -274,7 +274,7 @@ func isAllowedDependentDescInRenameDatabase(
 		colIDs.Add(int(colID))
 	}
 
-	for _, column := range dependentDesc.TableDesc().Columns {
+	for _, column := range dependentDesc.GetPublicColumns() {
 		if !colIDs.Contains(int(column.ID)) {
 			continue
 		}
