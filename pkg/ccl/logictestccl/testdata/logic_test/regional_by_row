@@ -206,6 +206,82 @@ CREATE INDEX new_idx ON regional_by_row_table(a, b)
 statement ok
 ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
+# We should plan uniqueness checks for all unique indexes in
+# REGIONAL BY ROW tables.
+query T
+EXPLAIN INSERT INTO regional_by_row_table VALUES (1, 1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table(pk, a, b, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@primary
+│           │ equality: (lookup_join_const_col_@17, column1) = (crdb_region,pk)
+│           │ equality cols are key
+│           │ pred: column10 != crdb_region
+│           │
+│           └── • cross join
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_b_key
+│           │ equality: (lookup_join_const_col_@26, column3) = (crdb_region,b)
+│           │ equality cols are key
+│           │ pred: (column1 != pk) OR (column10 != crdb_region)
+│           │
+│           └── • cross join
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@new_idx
+            │ equality: (lookup_join_const_col_@36, column2, column3) = (crdb_region,a,b)
+            │ equality cols are key
+            │ pred: (column1 != pk) OR (column10 != crdb_region)
+            │
+            └── • cross join
+                │
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
+INSERT INTO regional_by_row_table (crdb_region, pk, a, b) VALUES ('us-east-1', 2, 2, 3)
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----

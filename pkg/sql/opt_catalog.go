@@ -719,6 +719,20 @@ func newOptTable(
 		ot.colMap.Set(descpb.ColumnID(ot.columns[i].ColID()), i)
 	}
 
+	// Add unique without index constraints. Constraints for implicitly
+	// partitioned unique indexes will be added below.
+	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.UniqueWithoutIndexConstraints))
+	for i := range ot.desc.UniqueWithoutIndexConstraints {
+		u := &ot.desc.UniqueWithoutIndexConstraints[i]
+		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+			name:         u.Name,
+			table:        ot.ID(),
+			columns:      u.ColumnIDs,
+			withoutIndex: true,
+			validity:     u.Validity,
+		})
+	}
+
 	// Build the indexes.
 	ot.indexes = make([]optIndex, 1+len(secondaryIndexes))
 
@@ -766,18 +780,19 @@ func newOptTable(
 		} else {
 			ot.indexes[i].init(ot, i, idxDesc, idxZone, -1 /* virtualColOrd */)
 		}
-	}
 
-	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.UniqueWithoutIndexConstraints))
-	for i := range ot.desc.UniqueWithoutIndexConstraints {
-		u := &ot.desc.UniqueWithoutIndexConstraints[i]
-		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-			name:         u.Name,
-			table:        ot.ID(),
-			columns:      u.ColumnIDs,
-			withoutIndex: true,
-			validity:     u.Validity,
-		})
+		// Add unique constraints for implicitly partitioned unique indexes.
+		if idxDesc.Unique && idxDesc.Partitioning.NumImplicitColumns > 0 {
+			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+				name:         idxDesc.Name,
+				table:        ot.ID(),
+				columns:      idxDesc.ColumnIDs[idxDesc.Partitioning.NumImplicitColumns:],
+				withoutIndex: true,
+				// TODO(rytaft): will we ever support an unvalidated unique constraint
+				// here?
+				validity: descpb.ConstraintValidity_Validated,
+			})
+		}
 	}
 
 	for i := range ot.desc.OutboundFKs {
