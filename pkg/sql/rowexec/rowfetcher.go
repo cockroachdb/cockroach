@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // rowFetcher is an interface used to abstract a row fetcher so that a stat
@@ -78,10 +79,12 @@ func initRowFetcher(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
-	if err != nil {
-		return nil, false, err
+	if indexIdx >= len(desc.ActiveIndexes()) {
+		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	indexI := desc.ActiveIndexes()[indexIdx]
+	index = indexI.IndexDesc()
+	isSecondaryIndex = !indexI.Primary()
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
