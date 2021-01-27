@@ -48,6 +48,7 @@ crdb_internal  kv_node_status               table  NULL  NULL  NULL
 crdb_internal  kv_store_status              table  NULL  NULL  NULL
 crdb_internal  leases                       table  NULL  NULL  NULL
 crdb_internal  node_build_info              table  NULL  NULL  NULL
+crdb_internal  node_inflight_tracing        table  NULL  NULL  NULL
 crdb_internal  node_metrics                 table  NULL  NULL  NULL
 crdb_internal  node_queries                 table  NULL  NULL  NULL
 crdb_internal  node_runtime_info            table  NULL  NULL  NULL
@@ -254,11 +255,17 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
+
 query IITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
 zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
 raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
+
+query IIT colnames
+SELECT * FROM crdb_internal.node_inflight_tracing WHERE span_id < 0
+----
+span_id  trace_id  duration
 
 statement error not fully contained in tenant keyspace
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0

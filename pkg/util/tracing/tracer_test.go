@@ -340,10 +340,11 @@ func TestLightstepContext(t *testing.T) {
 
 func getSortedActiveSpanOps(tr *Tracer) []string {
 	var sl []string
-	tr.VisitSpans(func(sp *Span) {
+	tr.VisitSpans(func(sp *Span) error {
 		for _, rec := range sp.GetRecording() {
 			sl = append(sl, rec.Operation)
 		}
+		return nil
 	})
 	sort.Strings(sl)
 	return sl
