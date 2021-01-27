@@ -345,6 +345,7 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
+        "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
