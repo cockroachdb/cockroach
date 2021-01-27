@@ -154,16 +154,6 @@ func (ol *OpLoggerBatch) LogicalOps() []enginepb.MVCCLogicalOp {
 	return ol.ops
 }
 
-// Distinct implements the Batch interface.
-func (ol *OpLoggerBatch) Distinct() ReadWriter {
-	if ol.distinctOpen {
-		panic("distinct batch already open")
-	}
-	ol.distinctOpen = true
-	ol.distinct.ReadWriter = ol.Batch.Distinct()
-	return &ol.distinct
-}
-
 type distinctOpLoggerBatch struct {
 	ReadWriter
 	parent *OpLoggerBatch

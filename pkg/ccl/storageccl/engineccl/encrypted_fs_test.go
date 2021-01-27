@@ -240,7 +240,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.Equal(t, int32(enginepbccl.EncryptionType_AES128_CTR), stats.EncryptionType)
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 
-	batch := db.NewWriteOnlyBatch()
+	batch := db.NewUnIndexedBatch(false /* supportReader */)
 	require.NoError(t, batch.PutUnversioned(roachpb.Key("a"), []byte("a")))
 	require.NoError(t, batch.Commit(true))
 	require.NoError(t, db.Flush())
