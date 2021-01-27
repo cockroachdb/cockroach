@@ -124,8 +124,8 @@ query TTBT colnames
 SHOW REGIONS FROM DATABASE
 ----
 database              region          primary  zones
-multi_region_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 multi_region_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+multi_region_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 multi_region_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
@@ -349,8 +349,8 @@ query TTBT colnames
 show regions from database alter_test_db
 ----
 database       region          primary  zones
-alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -377,8 +377,8 @@ query TTBT colnames
 show regions from database alter_test_db
 ----
 database       region          primary  zones
-alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
@@ -495,8 +495,8 @@ query TTBT colnames
 show regions from database alter_primary_region_db
 ----
 database                 region          primary  zones
-alter_primary_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 alter_primary_region_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_primary_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 
 statement ok
 ALTER DATABASE alter_primary_region_db PRIMARY REGION "ap-southeast-2"
