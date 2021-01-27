@@ -53,11 +53,20 @@ func (ex *connExecutor) execPrepare(
 	// type OIDs into types.T's.
 	if parseCmd.TypeHints != nil {
 		for i := range parseCmd.TypeHints {
-			if parseCmd.TypeHints[i] == nil && types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
-				var err error
-				parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
-				if err != nil {
-					return retErr(err)
+			if parseCmd.TypeHints[i] == nil {
+				if i >= len(parseCmd.RawTypeHints) {
+					return retErr(pgerror.Newf(
+						pgcode.ProtocolViolation,
+						"expected type hint at position %d",
+						i+1,
+					))
+				}
+				if types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
+					var err error
+					parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
+					if err != nil {
+						return retErr(err)
+					}
 				}
 			}
 		}
