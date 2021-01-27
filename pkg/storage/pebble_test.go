@@ -160,7 +160,11 @@ func TestPebbleIterReuse(t *testing.T) {
 	// previous iterator should get zeroed.
 	iter2 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
 	valuesCount = 0
-	iter2.SeekGE(MVCCKey{Key: []byte{0}})
+	// This is a peculiar test that is disregarding how local and global keys
+	// affect the behavior of MVCCIterators. This test is writing []byte{0}
+	// which precedes the localPrefix. Ignore the local and preceding keys in
+	// this seek.
+	iter2.SeekGE(MVCCKey{Key: []byte{2}})
 	for ; ; iter2.Next() {
 		ok, err := iter2.Valid()
 		if err != nil {
@@ -176,8 +180,8 @@ func TestPebbleIterReuse(t *testing.T) {
 		valuesCount++
 	}
 
-	if valuesCount != 10 {
-		t.Fatalf("expected 10 values, got %d", valuesCount)
+	if valuesCount != 8 {
+		t.Fatalf("expected 8 values, got %d", valuesCount)
 	}
 	iter2.Close()
 }

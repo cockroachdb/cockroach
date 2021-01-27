@@ -71,7 +71,7 @@ var (
 	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
 	KeyDict = KeyComprehensionTable{
 		{Name: "/Local", start: localPrefix, end: LocalMax, Entries: []DictEntry{
-			{Name: "/Store", prefix: roachpb.Key(localStorePrefix),
+			{Name: "/Store", prefix: roachpb.Key(LocalStorePrefix),
 				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
 			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
 				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
@@ -218,11 +218,11 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 		if bytes.HasPrefix(key, v.key) {
 			if v.key.Equal(localStoreNodeTombstoneSuffix) {
 				return v.name + "/" + nodeTombstoneKeyPrint(
-					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
 			} else if v.key.Equal(localStoreCachedSettingsSuffix) {
 				return v.name + "/" + cachedSettingsKeyPrint(
-					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
 			}
 			return v.name

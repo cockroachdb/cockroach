@@ -161,7 +161,8 @@ var (
 	// double duty as a reference to a provisional MVCC value.
 	// TODO(sumeer): remember to adjust this comment when adding locks of
 	// other strengths, or range locks.
-	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("l")))
+	// TODO: cleanup this change.
+	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("x")))
 	LockTableSingleKeyInfix   = []byte("k")
 	// LockTableSingleKeyStart is the inclusive start key of the key range
 	// containing single key locks.
@@ -173,8 +174,8 @@ var (
 
 	// 5. Store local keys
 	//
-	// localStorePrefix is the prefix identifying per-store data.
-	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
+	// LocalStorePrefix is the prefix identifying per-store data.
+	LocalStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")

@@ -66,18 +66,27 @@ func GC(
 	// safe because they can simply be re-collected later on the correct
 	// replica. Discrepancies here can arise from race conditions during
 	// range splitting.
-	keys := make([]roachpb.GCRequest_GCKey, 0, len(args.Keys))
+	globalKeys := make([]roachpb.GCRequest_GCKey, 0, len(args.Keys))
+	// Local keys are rarer, so don't pre-allocate slice. We separate the two
+	// kinds of keys since it is a requirement when calling MVCCGarbageCollect.
+	var localKeys []roachpb.GCRequest_GCKey
 	for _, k := range args.Keys {
 		if cArgs.EvalCtx.ContainsKey(k.Key) {
-			keys = append(keys, k)
+			if keys.IsLocal(k.Key) {
+				localKeys = append(localKeys, k)
+			} else {
+				globalKeys = append(globalKeys, k)
+			}
 		}
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	if err := storage.MVCCGarbageCollect(
-		ctx, readWriter, cArgs.Stats, keys, h.Timestamp,
-	); err != nil {
-		return result.Result{}, err
+	for _, gcKeys := range [][]roachpb.GCRequest_GCKey{localKeys, globalKeys} {
+		if err := storage.MVCCGarbageCollect(
+			ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp,
+		); err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	// Optionally bump the GC threshold timestamp.
