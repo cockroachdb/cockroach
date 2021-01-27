@@ -53,11 +53,22 @@ func (ex *connExecutor) execPrepare(
 	// type OIDs into types.T's.
 	if parseCmd.TypeHints != nil {
 		for i := range parseCmd.TypeHints {
-			if parseCmd.TypeHints[i] == nil && types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
-				var err error
-				parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
-				if err != nil {
-					return retErr(err)
+			if parseCmd.TypeHints[i] == nil {
+				if i >= len(parseCmd.RawTypeHints) {
+					return retErr(
+						pgwirebase.NewProtocolViolationErrorf(
+							"expected %d arguments, got %d",
+							len(parseCmd.TypeHints),
+							len(parseCmd.RawTypeHints),
+						),
+					)
+				}
+				if types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
+					var err error
+					parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
+					if err != nil {
+						return retErr(err)
+					}
 				}
 			}
 		}
