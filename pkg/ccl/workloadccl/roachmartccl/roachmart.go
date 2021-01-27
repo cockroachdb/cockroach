@@ -138,6 +138,9 @@ func (m *roachmart) Hooks() workload.Hooks {
 			if !m.partition {
 				return nil
 			}
+			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+				return err
+			}
 			for _, z := range zones {
 				// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
 				// with 2.0 clusters we still need to try with it if the
