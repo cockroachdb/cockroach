@@ -267,6 +267,17 @@ type TableDescriptor interface {
 	ColumnTypesWithMutations(mutations bool) []*types.T
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 	GetMutations() []descpb.DescriptorMutation
+	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
+	IsAs() bool
+	GetInboundFKs() []descpb.ForeignKeyConstraint
+	GetOutboundFKs() []descpb.ForeignKeyConstraint
+	GetCreateQuery() string
+	GetCreateAsOfTime() hlc.Timestamp
+	GetModificationTime() hlc.Timestamp
+	GetTemporary() bool
+	GetDependedOnBy() []descpb.TableDescriptor_Reference
+	GetNextColumnID() descpb.ColumnID
+	GetNextIndexID() descpb.IndexID
 }
 
 // Index is an interface around the index descriptor types.

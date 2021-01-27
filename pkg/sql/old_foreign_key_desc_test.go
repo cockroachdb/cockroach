@@ -53,14 +53,14 @@ CREATE INDEX ON t.t1 (x);
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t1")
 	desc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remember the old foreign keys.
-	oldInboundFKs := append([]descpb.ForeignKeyConstraint{}, desc.TableDesc().InboundFKs...)
+	oldInboundFKs := append([]descpb.ForeignKeyConstraint{}, desc.GetInboundFKs()...)
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
 	// to the pre-19.2 table descriptor format where foreign key information
 	// is stored on the index.
 	downgradeForeignKey := func(tbl catalog.TableDescriptor) catalog.TableDescriptor {
 		// Downgrade the outbound foreign keys.
-		for i := range tbl.TableDesc().OutboundFKs {
-			fk := &tbl.TableDesc().OutboundFKs[i]
+		for i := range tbl.GetOutboundFKs() {
+			fk := &tbl.GetOutboundFKs()[i]
 			idx, err := tabledesc.FindFKOriginIndex(tbl, fk.OriginColumnIDs)
 			if err != nil {
 				t.Fatal(err)
@@ -90,8 +90,8 @@ CREATE INDEX ON t.t1 (x);
 		}
 		tbl.TableDesc().OutboundFKs = nil
 		// Downgrade the inbound foreign keys.
-		for i := range tbl.TableDesc().InboundFKs {
-			fk := &tbl.TableDesc().InboundFKs[i]
+		for i := range tbl.GetInboundFKs() {
+			fk := &tbl.GetInboundFKs()[i]
 			refIdx, err := tabledesc.FindFKReferencedUniqueConstraint(desc, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
@@ -142,7 +142,7 @@ CREATE INDEX ON t.t1 (x);
 	for i := range oldInboundFKs {
 		oldInboundFKs[i].Validity = descpb.ConstraintValidity_Validated
 	}
-	if !reflect.DeepEqual(desc.TableDesc().InboundFKs, oldInboundFKs) {
-		t.Error("expected fks", oldInboundFKs, "but found", desc.TableDesc().InboundFKs)
+	if !reflect.DeepEqual(desc.GetInboundFKs(), oldInboundFKs) {
+		t.Error("expected fks", oldInboundFKs, "but found", desc.GetInboundFKs())
 	}
 }

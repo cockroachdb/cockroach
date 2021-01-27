@@ -1572,9 +1572,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// There is still a DROP INDEX mutation waiting for GC.
-	if e := 1; len(tableDesc.TableDesc().GCMutations) != e {
-		t.Fatalf("the table has %d instead of %d GC mutations", len(tableDesc.TableDesc().GCMutations), e)
-	} else if m := tableDesc.TableDesc().GCMutations[0]; m.IndexID != 2 && m.DropTime == 0 && m.JobID == 0 {
+	if e := 1; len(tableDesc.GetGCMutations()) != e {
+		t.Fatalf("the table has %d instead of %d GC mutations", len(tableDesc.GetGCMutations()), e)
+	} else if m := tableDesc.GetGCMutations()[0]; m.IndexID != 2 && m.DropTime == 0 && m.JobID == 0 {
 		t.Fatalf("unexpected GC mutation %v", m)
 	}
 
@@ -1598,8 +1598,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.TableDesc().GCMutations) > 0 {
-			return errors.Errorf("%d GC mutations remaining", len(tableDesc.TableDesc().GCMutations))
+		if len(tableDesc.GetGCMutations()) > 0 {
+			return errors.Errorf("%d GC mutations remaining", len(tableDesc.GetGCMutations()))
 		}
 		return nil
 	})
@@ -1929,8 +1929,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.TableDesc().GCMutations) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.TableDesc().GCMutations))
+		if len(tableDesc.GetGCMutations()) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
 		}
 		return nil
 	})
@@ -5172,7 +5172,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
 					// drop an index value before validation.
-					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.TableDesc().NextIndexID))
+					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetNextIndexID()))
 					kv, err := db.Scan(context.Background(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
@@ -5243,7 +5243,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
 					// drop an index value before validation.
-					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.TableDesc().NextIndexID))
+					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetNextIndexID()))
 					kv, err := db.Scan(context.Background(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
@@ -6011,20 +6011,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if e := 1; e != len(tableDesc.TableDesc().GCMutations) {
-		t.Fatalf("e = %d, v = %d", e, len(tableDesc.TableDesc().GCMutations))
+	if e := 1; e != len(tableDesc.GetGCMutations()) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GetGCMutations()))
 	}
 
 	// Delete the associated job.
-	jobID := tableDesc.TableDesc().GCMutations[0].JobID
+	jobID := tableDesc.GetGCMutations()[0].JobID
 	if _, err := sqlDB.Exec(fmt.Sprintf("DELETE FROM system.jobs WHERE id=%d", jobID)); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure the GCMutations has not yet been completed.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if e := 1; e != len(tableDesc.TableDesc().GCMutations) {
-		t.Fatalf("e = %d, v = %d", e, len(tableDesc.TableDesc().GCMutations))
+	if e := 1; e != len(tableDesc.GetGCMutations()) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GetGCMutations()))
 	}
 
 	// Enable async schema change processing for purged schema changes.
@@ -6039,8 +6039,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// cleared.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.TableDesc().GCMutations) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.TableDesc().GCMutations))
+		if len(tableDesc.GetGCMutations()) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
 		}
 		return nil
 	})

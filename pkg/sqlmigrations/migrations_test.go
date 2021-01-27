@@ -799,16 +799,16 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.NamespaceTable.TableDesc().CreateAsOfTime
-			table.ModificationTime = systemschema.NamespaceTable.TableDesc().ModificationTime
+			table.CreateAsOfTime = systemschema.NamespaceTable.GetCreateAsOfTime()
+			table.ModificationTime = systemschema.NamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
 		}
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.TableDesc().CreateAsOfTime
-			table.ModificationTime = systemschema.DeprecatedNamespaceTable.TableDesc().ModificationTime
+			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.GetCreateAsOfTime()
+			table.ModificationTime = systemschema.DeprecatedNamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
 		}
 		return nil

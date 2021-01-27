@@ -55,7 +55,7 @@ func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDe
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
 		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_DROP,
-		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.TableDesc().NextColumnID - 1)},
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID() - 1)},
 	})
 	return desc
 }
@@ -64,7 +64,7 @@ func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDe
 // Yes, this does modify an immutable.
 func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
-		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.TableDesc().NextColumnID)},
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID())},
 		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_ADD,
 		MutationID:  0,

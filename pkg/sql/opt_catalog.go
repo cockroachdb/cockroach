@@ -779,8 +779,8 @@ func newOptTable(
 		})
 	}
 
-	for i := range ot.desc.TableDesc().OutboundFKs {
-		fk := &ot.desc.TableDesc().OutboundFKs[i]
+	for i := range ot.desc.GetOutboundFKs() {
+		fk := &ot.desc.GetOutboundFKs()[i]
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -793,8 +793,8 @@ func newOptTable(
 			updateAction:      fk.OnUpdate,
 		})
 	}
-	for i := range ot.desc.TableDesc().InboundFKs {
-		fk := &ot.desc.TableDesc().InboundFKs[i]
+	for i := range ot.desc.GetInboundFKs() {
+		fk := &ot.desc.GetInboundFKs()[i]
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),

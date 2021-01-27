@@ -341,12 +341,12 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 	ctx context.Context, table catalog.TableDescriptor,
 ) error {
-	if !(table.Adding() && table.TableDesc().IsAs()) {
+	if !(table.Adding() && table.IsAs()) {
 		return nil
 	}
-	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.TableDesc().CreateQuery)
+	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.GetCreateQuery())
 
-	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.TableDesc().CreateQuery, table.TableDesc().CreateAsOfTime, "ctasBackfill")
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill")
 }
 
 func (sc *SchemaChanger) maybeBackfillMaterializedView(
@@ -357,7 +357,7 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 	}
 	log.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.GetViewQuery())
 
-	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.GetViewQuery(), table.TableDesc().CreateAsOfTime, "materializedViewBackfill")
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.GetViewQuery(), table.GetCreateAsOfTime(), "materializedViewBackfill")
 }
 
 // maybe make a table PUBLIC if it's in the ADD state.
@@ -628,8 +628,8 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		if tableDesc.IsPhysicalTable() {
 			// We've dropped this physical table, let's kick off a GC job.
 			dropTime := timeutil.Now().UnixNano()
-			if tableDesc.TableDesc().DropTime > 0 {
-				dropTime = tableDesc.TableDesc().DropTime
+			if tableDesc.GetDropTime() > 0 {
+				dropTime = tableDesc.GetDropTime()
 			}
 			gcDetails := jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -667,7 +667,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	if sc.mutationID == descpb.InvalidMutationID {
 		// Nothing more to do.
-		isCreateTableAs := tableDesc.Adding() && tableDesc.TableDesc().IsAs()
+		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
 		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
 	}
 

@@ -108,7 +108,7 @@ func formatSafeColumn(
 
 func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescriptor) {
 	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
-	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
+	w.Printf(", NextIndexID: %d", desc.GetNextIndexID())
 	w.Printf(", Indexes: [")
 	_ = catalog.ForEachActiveIndex(desc, func(idx catalog.Index) error {
 		if !idx.Primary() {
