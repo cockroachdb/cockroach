@@ -19,19 +19,18 @@ import (
 // DistSQLMetrics contains pointers to the metrics for monitoring DistSQL
 // processing.
 type DistSQLMetrics struct {
-	QueriesActive             *metric.Gauge
-	QueriesTotal              *metric.Counter
-	ContendedQueriesCount     *metric.Counter
-	FlowsActive               *metric.Gauge
-	FlowsTotal                *metric.Counter
-	FlowsQueued               *metric.Gauge
-	QueueWaitHist             *metric.Histogram
-	MaxBytesHist              *metric.Histogram
-	CurBytesCount             *metric.Gauge
-	VecOpenFDs                *metric.Gauge
-	CurDiskBytesCount         *metric.Gauge
-	MaxDiskBytesHist          *metric.Histogram
-	FullTableOrIndexScanCount *metric.Counter
+	QueriesActive         *metric.Gauge
+	QueriesTotal          *metric.Counter
+	ContendedQueriesCount *metric.Counter
+	FlowsActive           *metric.Gauge
+	FlowsTotal            *metric.Counter
+	FlowsQueued           *metric.Gauge
+	QueueWaitHist         *metric.Histogram
+	MaxBytesHist          *metric.Histogram
+	CurBytesCount         *metric.Gauge
+	VecOpenFDs            *metric.Gauge
+	CurDiskBytesCount     *metric.Gauge
+	MaxDiskBytesHist      *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -112,12 +111,6 @@ var (
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaFullTableOrIndexScanCount = metric.Metadata{
-		Name:        "sql.full.scan.count",
-		Help:        "Number of full table or index scans",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -127,19 +120,18 @@ const log10int64times1000 = 19 * 1000
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
 func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
-		QueriesActive:             metric.NewGauge(metaQueriesActive),
-		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
-		ContendedQueriesCount:     metric.NewCounter(metaContendedQueriesCount),
-		FlowsActive:               metric.NewGauge(metaFlowsActive),
-		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
-		FlowsQueued:               metric.NewGauge(metaFlowsQueued),
-		QueueWaitHist:             metric.NewLatency(metaQueueWaitHist, histogramWindow),
-		MaxBytesHist:              metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
-		CurBytesCount:             metric.NewGauge(metaMemCurBytes),
-		VecOpenFDs:                metric.NewGauge(metaVecOpenFDs),
-		CurDiskBytesCount:         metric.NewGauge(metaDiskCurBytes),
-		MaxDiskBytesHist:          metric.NewHistogram(metaDiskMaxBytes, histogramWindow, log10int64times1000, 3),
-		FullTableOrIndexScanCount: metric.NewCounter(metaFullTableOrIndexScanCount),
+		QueriesActive:         metric.NewGauge(metaQueriesActive),
+		QueriesTotal:          metric.NewCounter(metaQueriesTotal),
+		ContendedQueriesCount: metric.NewCounter(metaContendedQueriesCount),
+		FlowsActive:           metric.NewGauge(metaFlowsActive),
+		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
+		FlowsQueued:           metric.NewGauge(metaFlowsQueued),
+		QueueWaitHist:         metric.NewLatency(metaQueueWaitHist, histogramWindow),
+		MaxBytesHist:          metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		CurBytesCount:         metric.NewGauge(metaMemCurBytes),
+		VecOpenFDs:            metric.NewGauge(metaVecOpenFDs),
+		CurDiskBytesCount:     metric.NewGauge(metaDiskCurBytes),
+		MaxDiskBytesHist:      metric.NewHistogram(metaDiskMaxBytes, histogramWindow, log10int64times1000, 3),
 	}
 }
 
