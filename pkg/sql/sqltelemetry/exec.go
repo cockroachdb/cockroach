@@ -33,3 +33,7 @@ func VecModeCounter(mode string) telemetry.Counter {
 // CascadesLimitReached is to be incremented whenever the limit of foreign key
 // cascade for a single query is exceeded.
 var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reached")
+
+// HashAggregationDiskSpillingDisabled is to be incremented whenever the disk
+// spilling of the vectorized hash aggregator is disabled.
+var HashAggregationDiskSpillingDisabled = telemetry.GetCounterOnce("sql.exec.hash-agg-spilling-disabled")

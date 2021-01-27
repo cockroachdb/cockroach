@@ -889,12 +889,12 @@ func waitForReplicasInit(
 //    old replicas and the new replica sets is required for decision making.
 //    Transitioning into this joint configuration, the RangeDescriptor (which is
 //    the source of truth of the replication configuration) is updated with
-//    corresponding replicas of type VOTER_INCOMING and VOTER_OUTGOING.
+//    corresponding replicas of type VOTER_INCOMING and VOTER_DEMOTING.
 //    Immediately after committing this change, a second transition updates the
 //    descriptor with and activates the final configuration.
 //
 // Concretely, if the initial members of the range are s1/1, s2/2, and s3/3, and
-// an atomic membership change were to adds s4/4 and s5/5 while removing s1/1 and
+// an atomic membership change were to add s4/4 and s5/5 while removing s1/1 and
 // s2/2, the following range descriptors would form the overall transition:
 //
 // 1. s1/1 s2/2 s3/3 (VOTER_FULL is implied)
