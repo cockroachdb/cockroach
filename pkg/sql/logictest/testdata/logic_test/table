@@ -556,6 +556,7 @@ kv_node_status                         NULL
 kv_store_status                        NULL
 leases                                 NULL
 node_build_info                        NULL
+node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL
 node_runtime_info                      NULL

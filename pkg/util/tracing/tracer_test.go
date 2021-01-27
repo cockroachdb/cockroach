@@ -338,13 +338,17 @@ func TestLightstepContext(t *testing.T) {
 	require.Equal(t, exp, shadowBaggage)
 }
 
-func getSortedActiveSpanOps(tr *Tracer) []string {
+func getSortedActiveSpanOps(t *testing.T, tr *Tracer) []string {
+	t.Helper()
 	var sl []string
-	tr.VisitSpans(func(sp *Span) {
+
+	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
 		for _, rec := range sp.GetRecording() {
 			sl = append(sl, rec.Operation)
 		}
-	})
+		return nil
+	}))
+
 	sort.Strings(sl)
 	return sl
 }
@@ -371,16 +375,16 @@ func TestTracer_VisitSpans(t *testing.T) {
 
 	// Even though only `root` is tracked by tr1, we also reach
 	// root.child and (via ImportRemoteSpans) the remote child.
-	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(tr1))
-	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(tr2))
+	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(t, tr1))
+	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(t, tr2))
 
 	childChild.Finish()
 	child.Finish()
 	root.Finish()
 
 	// Nothing is tracked any more.
-	require.Len(t, getSortedActiveSpanOps(tr1), 0)
-	require.Len(t, getSortedActiveSpanOps(tr2), 0)
+	require.Len(t, getSortedActiveSpanOps(t, tr1), 0)
+	require.Len(t, getSortedActiveSpanOps(t, tr2), 0)
 	require.Len(t, tr1.activeSpans.m, 0)
 	require.Len(t, tr2.activeSpans.m, 0)
 }

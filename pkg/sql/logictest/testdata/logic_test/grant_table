@@ -49,6 +49,7 @@ test           crdb_internal       kv_node_status                         public
 test           crdb_internal       kv_store_status                        public   SELECT
 test           crdb_internal       leases                                 public   SELECT
 test           crdb_internal       node_build_info                        public   SELECT
+test           crdb_internal       node_inflight_trace_spans              public   SELECT
 test           crdb_internal       node_metrics                           public   SELECT
 test           crdb_internal       node_queries                           public   SELECT
 test           crdb_internal       node_runtime_info                      public   SELECT

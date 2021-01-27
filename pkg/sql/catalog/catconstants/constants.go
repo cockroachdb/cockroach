@@ -50,6 +50,7 @@ const (
 	CrdbInternalGossipLivenessTableID
 	CrdbInternalGossipNetworkTableID
 	CrdbInternalIndexColumnsTableID
+	CrdbInternalInflightTraceSpanTableID
 	CrdbInternalJobsTableID
 	CrdbInternalKVNodeStatusTableID
 	CrdbInternalKVStoreStatusTableID
