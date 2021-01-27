@@ -35,6 +35,8 @@ type Config struct {
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
 	InternalExecutor     sqlutil.InternalExecutor
+	// Allow to override the cache for testing purposes.
+	Cache protectedts.Cache
 }
 
 type provider struct {
@@ -50,11 +52,14 @@ func New(cfg Config) (protectedts.Provider, error) {
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor)
 	verifier := ptverifier.New(cfg.DB, storage)
-	cache := ptcache.New(ptcache.Config{
+	var cache protectedts.Cache = ptcache.New(ptcache.Config{
 		DB:       cfg.DB,
 		Storage:  storage,
 		Settings: cfg.Settings,
 	})
+	if cfg.Cache != nil {
+		cache = cfg.Cache
+	}
 	return &provider{
 		Storage:  storage,
 		Cache:    cache,
@@ -76,5 +81,8 @@ func validateConfig(cfg Config) error {
 }
 
 func (p *provider) Start(ctx context.Context, stopper *stop.Stopper) error {
-	return p.Cache.(*ptcache.Cache).Start(ctx, stopper)
+	if cache, ok := p.Cache.(*ptcache.Cache); ok {
+		return cache.Start(ctx, stopper)
+	}
+	return nil
 }

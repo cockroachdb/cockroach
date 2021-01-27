@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -83,6 +84,9 @@ type TestingKnobs struct {
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	ClockSource func() int64
+	// ProtectedTimestampCache allows a test to override the protected timestamp
+	// machinery of a store. This is typically useful when testing GC behavior.  .
+	ProtectedTimestampCache protectedts.Cache
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
