@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +36,7 @@ func TestSpillingQueue(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
+	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 	for _, rewindable := range []bool{false, true} {
 		for _, memoryLimit := range []int64{
@@ -105,12 +108,20 @@ func TestSpillingQueue(t *testing.T) {
 			queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 			queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 
+			// We need to create a separate unlimited allocator for the spilling
+			// queue so that it could measure only its own memory usage
+			// (testAllocator might account for other things, thus confusing the
+			// spilling queue).
+			memAcc := testMemMonitor.MakeBoundAccount()
+			defer memAcc.Close(ctx)
+			spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
 			// Create queue.
 			var q *spillingQueue
 			if rewindable {
 				q = newRewindableSpillingQueue(
 					&NewSpillingQueueArgs{
-						UnlimitedAllocator: testAllocator,
+						UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 						Types:              typs,
 						MemoryLimit:        memoryLimit,
 						DiskQueueCfg:       queueCfg,
@@ -121,7 +132,7 @@ func TestSpillingQueue(t *testing.T) {
 			} else {
 				q = newSpillingQueue(
 					&NewSpillingQueueArgs{
-						UnlimitedAllocator: testAllocator,
+						UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 						Types:              typs,
 						MemoryLimit:        memoryLimit,
 						DiskQueueCfg:       queueCfg,
@@ -167,7 +178,6 @@ func TestSpillingQueue(t *testing.T) {
 				return windowedBatch
 			}
 
-			ctx := context.Background()
 			for {
 				b = op.Next(ctx)
 				require.NoError(t, q.enqueue(ctx, b))
@@ -228,6 +238,181 @@ func TestSpillingQueue(t *testing.T) {
 			require.NoError(t, q.close(ctx))
 
 			// Verify no directories are left over.
+			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
+			require.NoError(t, err)
+			require.Equal(t, 0, len(directories))
+		}
+	}
+}
+
+// TestSpillingQueueDidntSpill verifies that in a scenario when every enqueue()
+// is followed by dequeue() the non-rewindable spilling queue doesn't actually
+// spill to disk.
+func TestSpillingQueueDidntSpill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
+	// We don't expect to spill to disk and we want to give the whole memory
+	// limit to the spilling queue's in-memory batch buffer.
+	queueCfg.BufferSizeBytes = 1
+
+	rng, _ := randutil.NewPseudoRand()
+	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
+	op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
+		// TODO(yuzefovich): for some types (e.g. types.MakeArray(types.Int))
+		// the memory estimation diverges from 0 after enqueue() / dequeue()
+		// sequence. Figure it out.
+		DeterministicTyps: []*types.T{types.Int},
+		NumBatches:        numBatches,
+		BatchSize:         1 + rng.Intn(coldata.BatchSize()),
+		Nulls:             true,
+	})
+
+	typs := op.Typs()
+	// Choose a memory limit such that at most two batches can be kept in the
+	// in-memory buffer at a time (single batch is not enough because the queue
+	// delays the release of the memory by one batch).
+	memoryLimit := int64(2*colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()) + queueCfg.BufferSizeBytes)
+	if memoryLimit < mon.DefaultPoolAllocationSize {
+		memoryLimit = mon.DefaultPoolAllocationSize
+	}
+
+	// We need to create a separate unlimited allocator for the spilling queue
+	// so that it could measure only its own memory usage (testAllocator might
+	// account for other things, thus confusing the spilling queue).
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	q := newSpillingQueue(
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: spillingQueueUnlimitedAllocator,
+			Types:              typs,
+			MemoryLimit:        memoryLimit,
+			DiskQueueCfg:       queueCfg,
+			FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+			DiskAcc:            testDiskAcc,
+		},
+	)
+
+	for {
+		b := op.Next(ctx)
+		require.NoError(t, q.enqueue(ctx, b))
+		b, err := q.dequeue(ctx)
+		require.NoError(t, err)
+		if b.Length() == 0 {
+			break
+		}
+	}
+
+	// Ensure that the spilling didn't occur.
+	require.False(t, q.spilled())
+
+	// Close queue.
+	require.NoError(t, q.close(ctx))
+
+	// Verify no directories are left over.
+	directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
+	require.NoError(t, err)
+	require.Equal(t, 0, len(directories))
+}
+
+// TestSpillingQueueMemoryAccounting is a simple check of the memory accounting
+// of the spilling queue that performs a series of enqueue() and dequeue()
+// operations and verifies that the reported memory usage is as expected.
+//
+// Note that this test intentionally doesn't randomize many things (e.g. the
+// size of input batches, the types of the vectors) since those randomizations
+// would make it hard to compute the expected memory usage (the spilling queue
+// has coalescing logic, etc). Thus, the test is more of a sanity check, yet it
+// should be sufficient to catch any regressions.
+func TestSpillingQueueMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	typs := []*types.T{types.Int}
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	for _, rewindable := range []bool{false, true} {
+		for _, dequeueProbability := range []float64{0, 0.2} {
+			if rewindable && dequeueProbability != 0 {
+				// For rewindable queues we require that all enqueues occur
+				// before any dequeue() call.
+				continue
+			}
+			// We need to create a separate unlimited allocator for the spilling
+			// queue so that it could measure only its own memory usage
+			// (testAllocator might account for other things, thus confusing the
+			// spilling queue).
+			memAcc := testMemMonitor.MakeBoundAccount()
+			defer memAcc.Close(ctx)
+			spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+			newQueueArgs := &NewSpillingQueueArgs{
+				UnlimitedAllocator: spillingQueueUnlimitedAllocator,
+				Types:              typs,
+				MemoryLimit:        defaultMemoryLimit,
+				DiskQueueCfg:       queueCfg,
+				FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+				DiskAcc:            testDiskAcc,
+			}
+			var q *spillingQueue
+			if rewindable {
+				q = newRewindableSpillingQueue(newQueueArgs)
+			} else {
+				q = newSpillingQueue(newQueueArgs)
+			}
+
+			numInputBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
+			numDequeuedBatches := 0
+			batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), coldata.BatchSize(), nullProbability)
+			batchSize := colmem.GetBatchMemSize(batch)
+			getExpectedMemUsage := func(numEnqueuedBatches int) int64 {
+				batchesAccountedFor := numEnqueuedBatches
+				if !rewindable && numDequeuedBatches > 0 {
+					// We release the memory under the dequeued batches only
+					// from the non-rewindable queue, and that release is
+					// lagging by one batch, so we have -1 here.
+					//
+					// Note that this logic also works correctly when zero batch
+					// has been dequeued once.
+					batchesAccountedFor -= numDequeuedBatches - 1
+				}
+				return int64(batchesAccountedFor) * batchSize
+			}
+			for numEnqueuedBatches := 1; numEnqueuedBatches <= numInputBatches; numEnqueuedBatches++ {
+				require.NoError(t, q.enqueue(ctx, batch))
+				if rng.Float64() < dequeueProbability {
+					b, err := q.dequeue(ctx)
+					require.NoError(t, err)
+					coldata.AssertEquivalentBatches(t, batch, b)
+					numDequeuedBatches++
+				}
+				require.Equal(t, getExpectedMemUsage(numEnqueuedBatches), q.unlimitedAllocator.Used())
+			}
+			require.NoError(t, q.enqueue(ctx, coldata.ZeroBatch))
+			for {
+				b, err := q.dequeue(ctx)
+				require.NoError(t, err)
+				numDequeuedBatches++
+				require.Equal(t, getExpectedMemUsage(numInputBatches), q.unlimitedAllocator.Used())
+				if b.Length() == 0 {
+					break
+				}
+				coldata.AssertEquivalentBatches(t, batch, b)
+			}
+
+			// Some sanity checks.
+			require.False(t, q.spilled())
+			require.NoError(t, q.close(ctx))
 			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 			require.NoError(t, err)
 			require.Equal(t, 0, len(directories))

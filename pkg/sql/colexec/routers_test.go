@@ -1285,6 +1285,16 @@ func BenchmarkHashRouter(b *testing.B) {
 						}
 					}
 					copy(actualDistribution, zeroDistribution)
+					// Sanity check the spilling queues' memory management.
+					for i := range outputs {
+						sq := outputs[i].(*routerOutputOp).mu.data
+						if sq.spilled() {
+							b.Fatal("unexpectedly spilling queue spilled to disk")
+						}
+						if sq.unlimitedAllocator.Used() > 0 {
+							b.Fatal("unexpectedly spilling queue's allocator has non-zero usage")
+						}
+					}
 				}
 			})
 		}
