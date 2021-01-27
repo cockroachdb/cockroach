@@ -18,9 +18,9 @@ import (
 )
 
 func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
-	imm, ok := immI.(*Immutable)
+	imm, ok := immI.(*immutable)
 	if !ok {
-		return errors.Errorf("expected Immutable descriptor")
+		return errors.Errorf("expected immutable descriptor")
 	}
 	return imm.ValidateTable(ctx)
 }
@@ -28,17 +28,17 @@ func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
 func ValidateCrossReferences(
 	ctx context.Context, dg catalog.DescGetter, immI catalog.TableDescriptor,
 ) error {
-	imm, ok := immI.(*Immutable)
+	imm, ok := immI.(*immutable)
 	if !ok {
-		return errors.Errorf("expected Immutable descriptor")
+		return errors.Errorf("expected immutable descriptor")
 	}
 	return imm.validateCrossReferences(ctx, dg)
 }
 
 func ValidatePartitioning(immI catalog.TableDescriptor) error {
-	imm, ok := immI.(*Immutable)
+	imm, ok := immI.(*immutable)
 	if !ok {
-		return errors.Errorf("expected Immutable descriptor")
+		return errors.Errorf("expected immutable descriptor")
 	}
 	return imm.validatePartitioning()
 }
@@ -46,9 +46,9 @@ func ValidatePartitioning(immI catalog.TableDescriptor) error {
 func GetPostDeserializationChanges(
 	immI catalog.TableDescriptor,
 ) (PostDeserializationTableDescriptorChanges, error) {
-	imm, ok := immI.(*Immutable)
+	imm, ok := immI.(*immutable)
 	if !ok {
-		return PostDeserializationTableDescriptorChanges{}, errors.Errorf("expected Immutable descriptor")
+		return PostDeserializationTableDescriptorChanges{}, errors.Errorf("expected immutable descriptor")
 	}
 	return imm.GetPostDeserializationChanges(), nil
 }
