@@ -47,7 +47,7 @@ type TableEvent struct {
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
 func (e TableEvent) Timestamp() hlc.Timestamp {
-	return e.After.TableDesc().ModificationTime
+	return e.After.GetModificationTime()
 }
 
 // Config configures a SchemaFeed.

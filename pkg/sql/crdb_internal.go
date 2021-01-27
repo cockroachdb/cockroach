@@ -333,7 +333,7 @@ CREATE TABLE crdb_internal.tables (
 					}
 				}
 				locality := tree.DNull
-				if c := table.TableDesc().LocalityConfig; c != nil {
+				if c := table.GetLocalityConfig(); c != nil {
 					f := tree.NewFmtCtx(tree.FmtSimple)
 					if err := tabledesc.FormatTableLocalityConfig(c, f); err != nil {
 						return err

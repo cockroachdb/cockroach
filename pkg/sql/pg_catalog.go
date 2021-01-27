@@ -1682,7 +1682,7 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 					tree.NewDName(desc.GetName()), // matviewname
 					getOwnerName(desc),            // matviewowner
 					tree.DNull,                    // tablespace
-					tree.MakeDBool(len(desc.TableDesc().Indexes) > 0), // hasindexes
+					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
 					tree.DBoolTrue,                       // ispopulated,
 					tree.NewDString(desc.GetViewQuery()), // definition
 				)
