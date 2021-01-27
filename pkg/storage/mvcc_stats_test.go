@@ -51,15 +51,17 @@ func assertEqImpl(
 		t.Errorf("%s: diff(ms, expMS) nontrivial", debug)
 	}
 
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-	defer it.Close()
 	keyMin := roachpb.KeyMin
+	keyMax := keys.LocalMax
 	if globalKeys {
 		keyMin = keys.LocalMax
+		keyMax = roachpb.KeyMax
 	}
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: keyMax})
+	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
-		compMS, err := mvccStatsTest.fn(it, keyMin, roachpb.KeyMax, ms.LastUpdateNanos)
+		compMS, err := mvccStatsTest.fn(it, keyMin, keyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1415,7 +1417,13 @@ func (s *state) intent(status roachpb.TransactionStatus) roachpb.LockUpdate {
 }
 
 func (s *state) intentRange(status roachpb.TransactionStatus) roachpb.LockUpdate {
-	intent := roachpb.MakeLockUpdate(s.Txn, roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
+	keyMin := keys.LocalMax
+	keyMax := roachpb.KeyMax
+	if isLocal(s.key) {
+		keyMin = roachpb.KeyMin
+		keyMax = keys.LocalMax
+	}
+	intent := roachpb.MakeLockUpdate(s.Txn, roachpb.Span{Key: keyMin, EndKey: keyMax})
 	intent.Status = status
 	return intent
 }
@@ -1665,7 +1673,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					_, err := mvccStatsTest.fn(iter, roachpb.KeyMin, roachpb.KeyMax, 100)
+					_, err := mvccStatsTest.fn(iter, keys.LocalMax, roachpb.KeyMax, 100)
 					if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
 						t.Fatalf("expected %s, got %v", e, err)
 					}

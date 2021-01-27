@@ -3016,10 +3016,19 @@ func GetBufUsingIter(iter MVCCIterator) IterAndBuf {
 	}
 }
 
+// SwitchIterInBuf switches to iter, and relinquishes ownership of the
+// existing iter.
+func SwitchIterInBuf(iterAndBuf IterAndBuf, iter MVCCIterator) IterAndBuf {
+	iterAndBuf.iter = iter
+	return iterAndBuf
+}
+
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
-	b.iter.Close()
+	if b.iter != nil {
+		b.iter.Close()
+	}
 }
 
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the
@@ -3115,6 +3124,11 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // timestamp parameter is used to compute the intent age on GC.
 //
 // Note that this method will be sorting the keys.
+//
+// REQUIRES: the keys are either all local keys, or all global keys, and
+// not a mix of the two. This is to accommodate the implementation below
+// that creates an iterator with bounds that span from the first to last
+// key (in sorted order).
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3147,6 +3161,7 @@ func MVCCGarbageCollect(
 	// TODO(sumeer): this can span from local to global keys. Fix in cmd_gc.go
 	// which is already examining all the keys and can separate out the local
 	// keys to call MVCCGarbageCollect separately.
+	// TODO(sumeer): do we even need these coarse bounds?
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),

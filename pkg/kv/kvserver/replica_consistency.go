@@ -571,9 +571,6 @@ func (r *Replica) sha512(
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
-	defer iter.Close()
-
 	var alloc bufalloc.ByteAllocator
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
@@ -635,9 +632,12 @@ func (r *Replica) sha512(
 		// we will probably not have any interleaved intents so we could stop
 		// using MVCCKeyAndIntentsIterKind and consider all locks here.
 		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
+			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
+				storage.IterOptions{UpperBound: span.End.Key})
 			spanMS, err := storage.ComputeStatsForRange(
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
+			iter.Close()
 			if err != nil {
 				return nil, err
 			}
