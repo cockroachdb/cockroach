@@ -138,6 +138,7 @@ else
             for lcat in "${cats[@]}"; do
                 case $lcat in
                     "cli change") ;;
+                    "ops change") ;;
                     "sql change") ;;
                     "api change") ;;
                     "ui change") ;;
@@ -148,6 +149,8 @@ else
                     "performance improvement") ;;
                     "bug fix") ;;
                     "security update") ;;
+                    operational*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (ops change)'" ;;
                     bugfix)
                         hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
                     security*)
