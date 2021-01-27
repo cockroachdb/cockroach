@@ -45,6 +45,12 @@ message SetupFlowRequest {
   optional EvalContext evalContext = 6 [(gogoproto.nullable) = false];
 
   optional bool TraceKV = 8 [(gogoproto.nullable) = false];
+
+  // CollectStats specifies whether stats collection should be enabled for this
+  // flow. Note that some form of tracing must be enabled for these stats to be
+  // observed, since the resulting stats are added as structured data to a
+  // trace.
+  optional bool CollectStats = 9 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
