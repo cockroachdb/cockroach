@@ -116,6 +116,16 @@ CREATE TABLE computed (
 )
 ----
 
+exec-ddl
+CREATE TABLE virtual (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT AS (b + 10) VIRTUAL,
+    INDEX (a) WHERE c IN (10, 20, 30)
+)
+----
+
 # --------------------------------------------------
 # GeneratePartialIndexScans
 # --------------------------------------------------
@@ -320,6 +330,58 @@ DROP INDEX idx
 exec-ddl
 DROP INDEX idx2
 ----
+
+opt
+SELECT k FROM virtual WHERE c IN (10, 20, 30)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan virtual@secondary,partial
+      ├── columns: k:1!null
+      └── key: (1)
+
+# TODO(mgartner): The normalization of the query filter from (c = 20) to ((b +
+# 10) = 20) to (b = 10) and the lack of constraints for the partial index
+# predicate ((b + 10) IN (10, 20, 30)) prevents implication from being proven. A
+# normalization rule similar to NormalizeCmpPlusConst, but that applies to an IN
+# expression might resolve this specific issue. However, there could be many
+# more combinations of filters and predicates that make partial index
+# implication difficult or impossible.
+opt
+SELECT k FROM virtual WHERE c = 20
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null b:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3)
+      ├── scan virtual
+      │    ├── columns: k:1!null b:3
+      │    ├── computed column expressions
+      │    │    └── c:4
+      │    │         └── b:3 + 10
+      │    ├── partial index predicates
+      │    │    └── secondary: filters
+      │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3)
+      └── filters
+           └── b:3 = 10 [outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+
+opt
+SELECT k FROM virtual WHERE (b + 10) IN (10, 20, 30)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan virtual@secondary,partial
+      ├── columns: k:1!null
+      └── key: (1)
 
 # --------------------------------------------------
 # GenerateConstrainedScans
@@ -1591,6 +1653,52 @@ memo (optimized, ~7KB, required=[presentation: i:1])
 exec-ddl
 DROP INDEX idx
 ----
+
+# Constrained partial index scan with a virtual computed column in the
+# predicate.
+opt
+SELECT k FROM virtual WHERE a > 10 AND a < 20 AND c IN (10, 20, 30)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan virtual@secondary,partial
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/1: [/11 - /19]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# TODO(mgartner): The normalization of the query filter from (c = 20) to ((b +
+# 10) = 20) to (b = 10) and the lack of constraints for the partial index
+# predicate ((b + 10) IN (10, 20, 30)) prevents implication from being proven. A
+# normalization rule similar to NormalizeCmpPlusConst, but that applies to an IN
+# expression might resolve this specific issue. However, there could be many
+# more combinations of filters and predicates that make partial index
+# implication difficult or impossible.
+opt
+SELECT k FROM virtual WHERE a > 10 AND a < 20 AND c = 20
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan virtual
+      │    ├── columns: k:1!null a:2 b:3
+      │    ├── computed column expressions
+      │    │    └── c:4
+      │    │         └── b:3 + 10
+      │    ├── partial index predicates
+      │    │    └── secondary: filters
+      │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── (a:2 > 10) AND (a:2 < 20) [outer=(2), constraints=(/2: [/11 - /19]; tight)]
+           └── b:3 = 10 [outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
 
 # Regression test for #55387. GenerateConstrainedScans should not reduce the
 # input filters when proving partial index implication.
