@@ -93,7 +93,7 @@ func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 }
 
 func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
-	for _, m := range desc.TableDesc().Mutations {
+	for _, m := range desc.GetMutations() {
 		if m.GetColumn() == nil {
 			continue
 		}
@@ -118,7 +118,7 @@ func newColumnNoBackfill(e TableEvent) (res bool) {
 }
 
 func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
-	for _, m := range desc.TableDesc().Mutations {
+	for _, m := range desc.GetMutations() {
 		if m.Direction == descpb.DescriptorMutation_ADD && m.GetPrimaryKeySwap() != nil {
 			return true
 		}

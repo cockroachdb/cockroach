@@ -266,6 +266,7 @@ type TableDescriptor interface {
 	ColumnTypes() []*types.T
 	ColumnTypesWithMutations(mutations bool) []*types.T
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
+	GetMutations() []descpb.DescriptorMutation
 }
 
 // Index is an interface around the index descriptor types.

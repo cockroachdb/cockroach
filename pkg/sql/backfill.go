@@ -1364,7 +1364,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	var forwardIndexes []*descpb.IndexDescriptor
 	var invertedIndexes []*descpb.IndexDescriptor
 
-	for _, m := range tableDesc.TableDesc().Mutations {
+	for _, m := range tableDesc.GetMutations() {
 		if sc.mutationID != m.MutationID {
 			break
 		}

@@ -163,7 +163,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	for _, direction := range []descpb.DescriptorMutation_Direction{
 		descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_DROP,
 	} {
-		tableDesc.TableDesc().Mutations[0].Direction = direction
+		tableDesc.GetMutations()[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
 			ctx,
@@ -189,7 +189,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			if newVersion != expectedVersion {
 				t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 			}
-			state := tableDesc.TableDesc().Mutations[0].State
+			state := tableDesc.GetMutations()[0].State
 			if state != expectedState {
 				t.Fatalf("bad state; e = %d, v = %d", expectedState, state)
 			}
@@ -198,7 +198,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
 	tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.TableDesc().Mutations) == 0 {
+	if len(tableDesc.GetMutations()) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
 }
@@ -1823,8 +1823,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// Wait until all the mutations have been processed.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.TableDesc().Mutations) > 0 {
-			return errors.Errorf("%d mutations remaining", len(tableDesc.TableDesc().Mutations))
+		if len(tableDesc.GetMutations()) > 0 {
+			return errors.Errorf("%d mutations remaining", len(tableDesc.GetMutations()))
 		}
 		return nil
 	})
@@ -2247,8 +2247,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.GetPublicColumns()), tableDesc.GetPublicColumns())
 	} else if tableDesc.GetPublicColumns()[0].Name != "k" {
 		t.Fatalf("columns %+v", tableDesc.GetPublicColumns())
-	} else if len(tableDesc.TableDesc().Mutations) != 2 {
-		t.Fatalf("mutations %+v", tableDesc.TableDesc().Mutations)
+	} else if len(tableDesc.GetMutations()) != 2 {
+		t.Fatalf("mutations %+v", tableDesc.GetMutations())
 	}
 }
 
@@ -2818,8 +2818,8 @@ COMMIT;
 	// Ensure that t.test doesn't have any pending mutations
 	// after the primary key change.
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(desc.TableDesc().Mutations) != 0 {
-		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.TableDesc().Mutations))
+	if len(desc.GetMutations()) != 0 {
+		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.GetMutations()))
 	}
 }
 
@@ -3091,8 +3091,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	// that the job did not succeed even though it was canceled.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.TableDesc().Mutations) != 0 {
-			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.TableDesc().Mutations))
+		if len(tableDesc.GetMutations()) != 0 {
+			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.GetMutations()))
 		}
 		if tableDesc.GetPrimaryIndex().NumColumns() != 1 || tableDesc.GetPrimaryIndex().GetColumnName(0) != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
@@ -3393,7 +3393,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	// Wait until both mutations are queued up.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if l := len(tableDesc.TableDesc().Mutations); l != 3 {
+		if l := len(tableDesc.GetMutations()); l != 3 {
 			return errors.Errorf("number of mutations = %d", l)
 		}
 		return nil
@@ -3491,7 +3491,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if l := len(tableDesc.TableDesc().Mutations); l != 3 {
+	if l := len(tableDesc.GetMutations()); l != 3 {
 		t.Fatalf("number of mutations = %d", l)
 	}
 
@@ -4379,7 +4379,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that an outstanding schema change exists.
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	oldID := tableDesc.GetID()
-	if lenMutations := len(tableDesc.TableDesc().Mutations); lenMutations != 3 {
+	if lenMutations := len(tableDesc.GetMutations()); lenMutations != 3 {
 		t.Fatalf("%d outstanding schema change", lenMutations)
 	}
 
@@ -4406,7 +4406,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Col "x" is public and col "v" is dropped.
-	if num := len(tableDesc.TableDesc().Mutations); num > 0 {
+	if num := len(tableDesc.GetMutations()); num > 0 {
 		t.Fatalf("%d outstanding mutation", num)
 	}
 	if lenCols := len(tableDesc.GetPublicColumns()); lenCols != 2 {
@@ -5219,8 +5219,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.TableDesc().Mutations) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.TableDesc().Mutations))
+	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.GetMutations()) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.GetMutations()))
 	}
 }
 
@@ -5293,8 +5293,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.TableDesc().Mutations) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.TableDesc().Mutations))
+	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.GetMutations()) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.GetMutations()))
 	}
 }
 

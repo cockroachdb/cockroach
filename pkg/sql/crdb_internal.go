@@ -491,7 +491,7 @@ CREATE TABLE crdb_internal.schema_changes (
 			tableID := tree.NewDInt(tree.DInt(int64(table.GetID())))
 			parentID := tree.NewDInt(tree.DInt(int64(table.GetParentID())))
 			tableName := tree.NewDString(table.GetName())
-			for _, mut := range table.TableDesc().Mutations {
+			for _, mut := range table.GetMutations() {
 				mutType := "UNKNOWN"
 				targetID := tree.DNull
 				targetName := tree.DNull

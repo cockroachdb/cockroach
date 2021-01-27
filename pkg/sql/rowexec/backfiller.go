@@ -200,14 +200,12 @@ func GetResumeSpans(
 	// Find the index of the first mutation that is being worked on.
 	const noIndex = -1
 	mutationIdx := noIndex
-	if len(tableDesc.TableDesc().Mutations) > 0 {
-		for i, m := range tableDesc.TableDesc().Mutations {
-			if m.MutationID != mutationID {
-				break
-			}
-			if mutationIdx == noIndex && filter(m) {
-				mutationIdx = i
-			}
+	for i, m := range tableDesc.GetMutations() {
+		if m.MutationID != mutationID {
+			break
+		}
+		if mutationIdx == noIndex && filter(m) {
+			mutationIdx = i
 		}
 	}
 

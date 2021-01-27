@@ -509,7 +509,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 		// descriptor, it seems possible for a job to be resumed after the mutation
 		// has already been removed. If there's a mutation provided, we should check
 		// whether it actually exists on the table descriptor and exit the job if not.
-		for i, mutation := range tableDesc.TableDesc().Mutations {
+		for i, mutation := range tableDesc.GetMutations() {
 			if mutation.MutationID == sc.mutationID {
 				if i != 0 {
 					log.Infof(ctx,
@@ -781,7 +781,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 		}
 
 		var runStatus jobs.RunningStatus
-		for _, mutation := range desc.TableDesc().Mutations {
+		for _, mutation := range desc.GetMutations() {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -1648,7 +1648,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 	var spanList []jobspb.ResumeSpanList
-	for _, m := range tableDesc.TableDesc().Mutations {
+	for _, m := range tableDesc.GetMutations() {
 		if m.MutationID == sc.mutationID {
 			spanList = append(spanList,
 				jobspb.ResumeSpanList{

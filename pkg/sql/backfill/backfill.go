@@ -77,16 +77,14 @@ type ColumnBackfiller struct {
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
 func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
-	if len(desc.TableDesc().Mutations) > 0 {
-		for _, m := range desc.TableDesc().Mutations {
-			if ColumnMutationFilter(m) {
-				desc := *m.GetColumn()
-				switch m.Direction {
-				case descpb.DescriptorMutation_ADD:
-					cb.added = append(cb.added, desc)
-				case descpb.DescriptorMutation_DROP:
-					cb.dropped = append(cb.dropped, desc)
-				}
+	for _, m := range desc.GetMutations() {
+		if ColumnMutationFilter(m) {
+			desc := *m.GetColumn()
+			switch m.Direction {
+			case descpb.DescriptorMutation_ADD:
+				cb.added = append(cb.added, desc)
+			case descpb.DescriptorMutation_DROP:
+				cb.dropped = append(cb.dropped, desc)
 			}
 		}
 	}
@@ -559,10 +557,10 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
 
 	// If there are ongoing mutations, add columns that are being added and in
 	// the DELETE_AND_WRITE_ONLY state.
-	if len(desc.TableDesc().Mutations) > 0 {
-		ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.GetPublicColumns())+len(desc.TableDesc().Mutations))
+	if len(desc.GetMutations()) > 0 {
+		ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.GetPublicColumns())+len(desc.GetMutations()))
 		ib.cols = append(ib.cols, desc.GetPublicColumns()...)
-		for _, m := range desc.TableDesc().Mutations {
+		for _, m := range desc.GetMutations() {
 			if column := m.GetColumn(); column != nil &&
 				m.Direction == descpb.DescriptorMutation_ADD &&
 				m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
@@ -582,11 +580,11 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
 // fetched in order to backfill the added indexes.
 func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIntSet {
 	var valNeededForCol util.FastIntSet
-	mutationID := desc.TableDesc().Mutations[0].MutationID
+	mutationID := desc.GetMutations()[0].MutationID
 
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
-	for _, m := range desc.TableDesc().Mutations {
+	for _, m := range desc.GetMutations() {
 		if m.MutationID != mutationID {
 			break
 		}
