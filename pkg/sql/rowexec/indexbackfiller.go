@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -387,11 +388,11 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
-	immutable := tabledesc.NewImmutable(*desc.TableDesc())
+	descI, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
 	if err != nil {
 		return err
 	}
+	immutable := tabledesc.NewImmutable(*descI.(catalog.TableDescriptor).TableDesc())
 	v := &roachpb.Value{RawBytes: typed.Value}
 	return row.NewUniquenessConstraintViolationError(ctx, immutable, typed.Key, v)
 }

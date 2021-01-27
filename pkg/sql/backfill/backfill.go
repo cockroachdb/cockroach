@@ -369,10 +369,11 @@ func ConvertBackfillError(ctx context.Context, tableDesc *tabledesc.Immutable, b
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
 	if err != nil {
 		return err
 	}
+	desc := descI.(*tabledesc.Mutable)
 	return row.ConvertBatchError(ctx, tabledesc.NewImmutable(*desc.TableDesc()), b)
 }
 
