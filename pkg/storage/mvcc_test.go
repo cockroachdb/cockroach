@@ -961,7 +961,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 					case "computeStats":
 						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-						_, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
+						_, err = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
 						iter.Close()
 					}
 					if err != nil {
@@ -4598,7 +4598,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					expMS, err := mvccStatsTest.fn(iter, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
+					expMS, err := mvccStatsTest.fn(iter, localMax, roachpb.KeyMax, ts3.WallTime)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -4695,6 +4695,8 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 		})
 	}
 }
+
+// TODO: add MVCCGarbageCollect that fails with a mix of local and global keys
 
 // readWriterReturningSeekLTTrackingIterator is used in a test to inject errors
 // and ensure that SeekLT is returned an appropriate number of times.

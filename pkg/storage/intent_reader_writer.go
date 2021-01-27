@@ -42,10 +42,11 @@ import (
 // potentially be of committed transactions whose intent resolution did not
 // happen yet).
 
+// TODO: undo the following changes before merge.
 // DisallowSeparatedIntents is true when separated intents have never been allowed.
-const DisallowSeparatedIntents = true
+const DisallowSeparatedIntents = false
 
-const enabledSeparatedIntents = false
+const enabledSeparatedIntents = true
 
 // This file defines wrappers for Reader and Writer, and functions to do the
 // wrapping, which depend on the configuration settings above.

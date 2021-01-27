@@ -96,7 +96,12 @@ func TestMVCCHistories(t *testing.T) {
 				if strings.Contains(path, "_disallow_separated") && !DisallowSeparatedIntents {
 					return
 				}
-				if strings.Contains(path, "_allow_separated") && DisallowSeparatedIntents {
+				if strings.Contains(path, "_allow_separated") &&
+					(DisallowSeparatedIntents || enabledSeparatedIntents) {
+					return
+				}
+				if strings.Contains(path, "_enable_separated") &&
+					(DisallowSeparatedIntents || !enabledSeparatedIntents) {
 					return
 				}
 				// We start from a clean slate in every test file.

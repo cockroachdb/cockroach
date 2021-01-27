@@ -350,6 +350,79 @@ func TestIntentInterleavingIter(t *testing.T) {
 	})
 }
 
+func TestIntentInterleavingIterBoundaries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+	// Boundary cases for constrainedToLocal.
+	func() {
+		opts := IterOptions{LowerBound: keys.MinKey}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToLocal, iter.constraint)
+		iter.SetUpperBound(keys.LocalMax)
+		require.Equal(t, constrainedToLocal, iter.constraint)
+		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
+		iter.Close()
+	}()
+	func() {
+		opts := IterOptions{UpperBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToLocal, iter.constraint)
+		iter.SetUpperBound(keys.LocalMax)
+		require.Equal(t, constrainedToLocal, iter.constraint)
+		iter.Close()
+	}()
+	recoverFunc := func() {
+		if r := recover(); r == nil {
+			t.Fatalf("test did not panic")
+		}
+	}
+	func() {
+		defer recoverFunc()
+		opts := IterOptions{UpperBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iter.SeekLT(MVCCKey{Key: keys.MaxKey})
+	}()
+	// Boundary cases for constrainedToGlobal
+	func() {
+		opts := IterOptions{LowerBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToGlobal, iter.constraint)
+		iter.Close()
+	}()
+	func() {
+		defer recoverFunc()
+		opts := IterOptions{LowerBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToGlobal, iter.constraint)
+		iter.SetUpperBound(keys.LocalMax)
+		iter.Close()
+	}()
+	func() {
+		defer recoverFunc()
+		opts := IterOptions{LowerBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToGlobal, iter.constraint)
+		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
+		iter.Close()
+	}()
+	func() {
+		// Prefix iteration does not affect the constraint if bounds are
+		// specified.
+		opts := IterOptions{Prefix: true, LowerBound: keys.LocalMax}
+		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		require.Equal(t, constrainedToGlobal, iter.constraint)
+		iter.Close()
+	}()
+	// Prefix iteration with no bounds.
+	func() {
+		iter := newIntentInterleavingIterator(eng, IterOptions{Prefix: true}).(*intentInterleavingIter)
+		require.Equal(t, notConstrained, iter.constraint)
+		iter.Close()
+	}()
+}
+
 type lockKeyValue struct {
 	key LockTableKey
 	val []byte
