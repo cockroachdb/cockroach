@@ -605,7 +605,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 }
 
 // VisitSpans invokes the visitor with all active Spans.
-func (t *Tracer) VisitSpans(visitor func(*Span)) {
+func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	t.activeSpans.Lock()
 	sl := make([]*Span, 0, len(t.activeSpans.m))
 	for sp := range t.activeSpans.m {
@@ -614,8 +614,11 @@ func (t *Tracer) VisitSpans(visitor func(*Span)) {
 	t.activeSpans.Unlock()
 
 	for _, sp := range sl {
-		visitor(sp)
+		if err := visitor(sp); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
