@@ -486,11 +486,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
-
+	var protectedtsCache protectedts.Cache
+	if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
+		if knobs.ProtectedTimestampCache != nil {
+			protectedtsCache = knobs.ProtectedTimestampCache
+		}
+	}
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
 		DB:               db,
 		InternalExecutor: internalExecutor,
 		Settings:         st,
+		Cache:            protectedtsCache,
 	})
 	if err != nil {
 		return nil, err
