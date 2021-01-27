@@ -67,6 +67,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"range_min_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"range_max_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"num_replicas":    {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
+	"global_reads":    {types.Bool, func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) }},
 	"gc.ttlseconds": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
 	}},

@@ -184,36 +184,43 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	prefs = strings.TrimSpace(prefs)
 
 	useComma := false
+	maybeWriteComma := func(f *tree.FmtCtx) {
+		if useComma {
+			f.Printf(",\n")
+		}
+		useComma = true
+	}
+
 	f := tree.NewFmtCtx(tree.FmtParsable)
 	f.WriteString("ALTER ")
 	f.FormatNode(zs)
 	f.WriteString(" CONFIGURE ZONE USING\n")
 	if zone.RangeMinBytes != nil {
+		maybeWriteComma(f)
 		f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
-		useComma = true
 	}
 	if zone.RangeMaxBytes != nil {
-		writeComma(f, useComma)
+		maybeWriteComma(f)
 		f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
-		useComma = true
 	}
 	if zone.GC != nil {
-		writeComma(f, useComma)
+		maybeWriteComma(f)
 		f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
-		useComma = true
+	}
+	if zone.GlobalReads != nil {
+		maybeWriteComma(f)
+		f.Printf("\tglobal_reads = %t", *zone.GlobalReads)
 	}
 	if zone.NumReplicas != nil {
-		writeComma(f, useComma)
+		maybeWriteComma(f)
 		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
-		useComma = true
 	}
 	if !zone.InheritedConstraints {
-		writeComma(f, useComma)
+		maybeWriteComma(f)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
-		useComma = true
 	}
 	if !zone.InheritedLeasePreferences {
-		writeComma(f, useComma)
+		maybeWriteComma(f)
 		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
 	}
 	return f.String(), nil
@@ -315,13 +322,6 @@ func generateZoneConfigIntrospectionValues(
 		values[fullConfigSQLCol] = tree.NewDString(sqlStr)
 	}
 	return nil
-}
-
-// Writes a comma followed by a newline if useComma is true.
-func writeComma(f *tree.FmtCtx, useComma bool) {
-	if useComma {
-		f.Printf(",\n")
-	}
 }
 
 func yamlMarshalFlow(v interface{}) (string, error) {
