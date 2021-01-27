@@ -927,7 +927,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 					planner.stmt.SQL),
 				"try overriding the `disallow_full_table_scans` cluster/session setting")
 		}
-		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1)
+		ex.distSQLMetrics.FullTableOrIndexScanCount.Inc(1)
 	}
 
 	// TODO(knz): Remove this accounting if/when savepoint rollbacks

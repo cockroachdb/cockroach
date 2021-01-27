@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -295,18 +296,12 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 }
 
 func makeMetrics(internal bool) Metrics {
-	// fullTableIndexScan is only instantiated for non-internal queries.
-	var fullTableIndexScan *metric.Counter
-	if !internal {
-		fullTableIndexScan = metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal))
-	}
 	return Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:        metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
-			SQLOptFallbackCount:       metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
-			SQLOptPlanCacheHits:       metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
-			SQLOptPlanCacheMisses:     metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
-			FullTableOrIndexScanCount: fullTableIndexScan,
+			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewLatency(getMetricMeta(MetaDistSQLExecLatency, internal),
 				6*metricsSampleInterval),
@@ -904,6 +899,9 @@ type connExecutor struct {
 	// This is different whether the executor is for regular client
 	// queries or for "internal" queries.
 	metrics *Metrics
+
+	// distSQLMetrics contains distributed metrics to be accounted for.
+	distSQLMetrics *execinfra.DistSQLMetrics
 
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
