@@ -498,54 +498,6 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
-// gossipStores forces each store to gossip its store descriptor and then
-// blocks until all nodes have received these updated descriptors.
-func (m *multiTestContext) gossipStores() {
-	timestamps := make(map[string]int64)
-	for i := 0; i < len(m.stores); i++ {
-		<-m.gossips[i].Connected
-		if err := m.stores[i].GossipStore(context.Background(), false /* useCached */); err != nil {
-			m.t.Fatal(err)
-		}
-		infoStatus := m.gossips[i].GetInfoStatus()
-		storeKey := gossip.MakeStoreKey(m.stores[i].Ident.StoreID)
-		timestamps[storeKey] = infoStatus.Infos[storeKey].OrigStamp
-	}
-	// Wait until all stores know about each other.
-	testutils.SucceedsSoon(m.t, func() error {
-		for i := 0; i < len(m.stores); i++ {
-			nodeID := m.stores[i].Ident.NodeID
-			infoStatus := m.gossips[i].GetInfoStatus()
-			for storeKey, timestamp := range timestamps {
-				info, ok := infoStatus.Infos[storeKey]
-				if !ok {
-					return errors.Errorf("node %d does not have a storeDesc for %s yet", nodeID, storeKey)
-				}
-				if info.OrigStamp < timestamp {
-					return errors.Errorf("node %d's storeDesc for %s is not up to date", nodeID, storeKey)
-				}
-			}
-		}
-		return nil
-	})
-}
-
-// initGossipNetwork gossips all store descriptors and waits until all
-// storePools have received those descriptors.
-func (m *multiTestContext) initGossipNetwork() {
-	m.gossipStores()
-	testutils.SucceedsSoon(m.t, func() error {
-		for i := 0; i < len(m.stores); i++ {
-			if _, alive, _ := m.storePools[i].GetStoreList(); alive != len(m.stores) {
-				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
-					m.stores[i].Ident.NodeID, alive, len(m.stores))
-			}
-		}
-		return nil
-	})
-	log.Info(context.Background(), "gossip network initialized")
-}
-
 type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	idx      int
