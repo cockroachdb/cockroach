@@ -510,3 +510,38 @@ delete t
       │         └── t.partial_index_del1:4 = 5
       └── projections
            └── t.partial_index_del1:4 > 0 [as=partial_index_del1:7]
+
+# Test partial indexes with virtual columns in the predicate.
+exec-ddl
+CREATE TABLE partial_index_virtual (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    d STRING AS (lower(c)) VIRTUAL,
+    INDEX (b) WHERE d = 'foo'
+)
+----
+
+build
+DELETE FROM partial_index_virtual
+----
+delete partial_index_virtual
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 d:9
+ ├── partial index del columns: partial_index_del1:11
+ └── project
+      ├── columns: partial_index_del1:11 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
+      ├── project
+      │    ├── columns: d:9 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:10
+      │    ├── scan partial_index_virtual
+      │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:10
+      │    │    ├── computed column expressions
+      │    │    │    └── d:9
+      │    │    │         └── lower(c:8)
+      │    │    └── partial index predicates
+      │    │         └── secondary: filters
+      │    │              └── d:9 = 'foo'
+      │    └── projections
+      │         └── lower(c:8) [as=d:9]
+      └── projections
+           └── d:9 = 'foo' [as=partial_index_del1:11]
