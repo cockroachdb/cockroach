@@ -1235,7 +1235,7 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
-	indexBoundAccount mon.BoundAccount,
+	indexBoundAccount *mon.BoundAccount,
 ) ([]IndexEntry, error) {
 	if len(secondaryIndexEntries) > 0 {
 		panic(errors.AssertionFailedf("length of secondaryIndexEntries was non-zero"))
