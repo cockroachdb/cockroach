@@ -166,7 +166,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 // allow a subsequent up-replication to an odd number.
 func TestReplicateQueueUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 57144, "flaky test")
+	skip.UnderRaceWithIssue(t, 57144, "flaky under race")
 	defer log.Scope(t).Close(t)
 	const replicaCount = 3
 
