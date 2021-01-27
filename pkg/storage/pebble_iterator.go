@@ -620,10 +620,15 @@ func findSplitKeyUsingIterator(
 
 // SetUpperBound implements the MVCCIterator interface.
 func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
+	if upperBound == nil {
+		panic("SetUpperBound must not use a nil key")
+	}
 	p.curBuf = (p.curBuf + 1) % 2
 	i := p.curBuf
-	p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], p.options.LowerBound...)
-	p.options.LowerBound = p.lowerBoundBuf[i]
+	if p.options.LowerBound != nil {
+		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], p.options.LowerBound...)
+		p.options.LowerBound = p.lowerBoundBuf[i]
+	}
 	p.upperBoundBuf[i] = append(p.upperBoundBuf[i][:0], upperBound...)
 	p.upperBoundBuf[i] = append(p.upperBoundBuf[i], 0x00)
 	p.options.UpperBound = p.upperBoundBuf[i]

@@ -987,7 +987,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			var expectedKVs []MVCCKeyValue
 			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{})
+			iter.SeekGE(MVCCKey{Key: localMax})
 			for {
 				ok, err := iter.Valid()
 				if err != nil {

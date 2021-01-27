@@ -173,8 +173,8 @@ var (
 
 	// 5. Store local keys
 	//
-	// localStorePrefix is the prefix identifying per-store data.
-	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
+	// LocalStorePrefix is the prefix identifying per-store data.
+	LocalStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")

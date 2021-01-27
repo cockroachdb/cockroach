@@ -126,13 +126,12 @@ func createRangeData(
 }
 
 func verifyRDReplicatedOnlyMVCCIter(
-	t *testing.T,
-	desc *roachpb.RangeDescriptor,
-	readWriter storage.ReadWriter,
-	expectedKeys []storage.MVCCKey,
+	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []storage.MVCCKey,
 ) {
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
+		readWriter := eng.NewReadOnly()
+		defer readWriter.Close()
 		if useSpanSet {
 			var spans spanset.SpanSet
 			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
@@ -192,11 +191,10 @@ func verifyRDReplicatedOnlyMVCCIter(
 }
 
 func verifyRDEngineIter(
-	t *testing.T,
-	desc *roachpb.RangeDescriptor,
-	readWriter storage.ReadWriter,
-	expectedKeys []storage.MVCCKey,
+	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []storage.MVCCKey,
 ) {
+	readWriter := eng.NewReadOnly()
+	defer readWriter.Close()
 	iter := NewReplicaEngineDataIterator(desc, readWriter, false)
 	defer iter.Close()
 	i := 0
