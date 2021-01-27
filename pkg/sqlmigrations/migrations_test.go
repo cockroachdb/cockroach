@@ -883,11 +883,11 @@ CREATE TABLE system.jobs (
 	require.Equal(t, 7, len(newJobsTable.GetPublicColumns()))
 	require.Equal(t, "created_by_type", newJobsTable.GetPublicColumns()[5].Name)
 	require.Equal(t, "created_by_id", newJobsTable.GetPublicColumns()[6].Name)
-	require.Equal(t, 2, len(newJobsTable.TableDesc().Families))
+	require.Equal(t, 2, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family name.
-	require.Equal(t, primaryFamilyName, newJobsTable.TableDesc().Families[0].Name)
+	require.Equal(t, primaryFamilyName, newJobsTable.GetFamilies()[0].Name)
 	// Make sure our primary family has new columns added to it.
-	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.TableDesc().Families[0].ColumnNames)
+	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.GetFamilies()[0].ColumnNames)
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))
@@ -965,12 +965,12 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	require.Equal(t, 9, len(newJobsTable.GetPublicColumns()))
 	require.Equal(t, "claim_session_id", newJobsTable.GetPublicColumns()[7].Name)
 	require.Equal(t, "claim_instance_id", newJobsTable.GetPublicColumns()[8].Name)
-	require.Equal(t, 3, len(newJobsTable.TableDesc().Families))
+	require.Equal(t, 3, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family names.
-	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.TableDesc().Families[0].Name)
-	require.Equal(t, "progress", newJobsTable.TableDesc().Families[1].Name)
+	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.GetFamilies()[0].Name)
+	require.Equal(t, "progress", newJobsTable.GetFamilies()[1].Name)
 	// ... and that the new one is here.
-	require.Equal(t, "claim", newJobsTable.TableDesc().Families[2].Name)
+	require.Equal(t, "claim", newJobsTable.GetFamilies()[2].Name)
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))

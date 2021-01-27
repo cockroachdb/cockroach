@@ -198,7 +198,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	//   column families, but actually do not, since they're written to with
 	//   raw KV puts in a "legacy" way.)
 	isSystemTable := s.table.GetID() > 0 && s.table.GetID() < keys.MaxReservedDescID
-	return !isSystemTable && s.index.Unique && len(s.table.TableDesc().Families) > 1 &&
+	return !isSystemTable && s.index.Unique && len(s.table.GetFamilies()) > 1 &&
 		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
@@ -206,7 +206,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 				len(s.index.StoreColumnIDs) > 0 &&
 				s.index.Type == descpb.IndexDescriptor_FORWARD)) &&
 		prefixLen == len(s.index.ColumnIDs) &&
-		numNeededFamilies < len(s.table.TableDesc().Families)
+		numNeededFamilies < len(s.table.GetFamilies())
 }
 
 // Functions for optimizer related span generation are below.

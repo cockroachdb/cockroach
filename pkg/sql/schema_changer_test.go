@@ -2005,7 +2005,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if tableDesc.TableDesc().Families[0].DefaultColumnID != 0 {
+	if tableDesc.GetFamilies()[0].DefaultColumnID != 0 {
 		t.Fatalf("default column id not set properly: %s", tableDesc)
 	}
 
@@ -2047,7 +2047,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if tableDesc.TableDesc().Families[0].DefaultColumnID != 2 {
+	if tableDesc.GetFamilies()[0].DefaultColumnID != 2 {
 		t.Fatalf("default column id not set properly: %s", tableDesc)
 	}
 

@@ -359,7 +359,7 @@ INSERT INTO t.test VALUES (10, 2);
 	}
 
 	// Add the family suffix to the key.
-	family := tableDesc.TableDesc().Families[0]
+	family := tableDesc.GetFamilies()[0]
 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 
 	// Generate a k/v that has a different value that violates the
@@ -599,7 +599,7 @@ INSERT INTO t.test VALUES (217, 314);
 	}
 
 	// Add the family suffix to the key.
-	family := tableDesc.TableDesc().Families[0]
+	family := tableDesc.GetFamilies()[0]
 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 
 	// Create an empty sentinel value.
@@ -683,7 +683,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 
 	// Add the family suffix to the key, in particular we care about the
 	// second column family.
-	family := tableDesc.TableDesc().Families[1]
+	family := tableDesc.GetFamilies()[1]
 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 
 	// Encode the second column value.
@@ -787,7 +787,7 @@ CREATE TABLE t.test (
 	}
 
 	// Add the correct family suffix to the key.
-	primaryIndexKeyWithFamily := keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.TableDesc().Families[1].ID))
+	primaryIndexKeyWithFamily := keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.GetFamilies()[1].ID))
 
 	// Encode the second column value.
 	valueBuf, err := rowenc.EncodeTableValue(
@@ -805,7 +805,7 @@ CREATE TABLE t.test (
 
 	// Create a k/v with an incorrect family suffix to the key.
 	primaryIndexKeyWithFamily = keys.MakeFamilyKey(primaryIndexKey,
-		uint32(oldTableDesc.TableDesc().Families[1].ID))
+		uint32(oldTableDesc.GetFamilies()[1].ID))
 
 	// Encode the second column value.
 	valueBuf, err = rowenc.EncodeTableValue(
@@ -891,7 +891,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Add the default family suffix to the key.
-	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.TableDesc().Families[0].ID))
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.GetFamilies()[0].ID))
 
 	// Encode the second column values. The second column is encoded with
 	// a garbage colIDDiff.
