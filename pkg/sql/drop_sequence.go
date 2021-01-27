@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -174,18 +175,28 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			}
 			return err
 		}
-		dependedOnBy := seqDesc.GetDependedOnBy()
-		affectsNoColumns := len(dependedOnBy) == 0
-		// It is okay if the sequence is depended on by columns that are being
-		// dropped in the same transaction
-		canBeSafelyRemoved := len(dependedOnBy) == 1 && dependedOnBy[0].ID == desc.ID
-		// If only the column is being dropped, no other columns of the table can
-		// depend on that sequence either
-		if isColumnDrop {
-			canBeSafelyRemoved = canBeSafelyRemoved && len(dependedOnBy[0].ColumnIDs) == 1 &&
-				dependedOnBy[0].ColumnIDs[0] == col.ID
-		}
 
+		affectsNoColumns := true
+		canBeSafelyRemoved := false
+		_ = seqDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			if affectsNoColumns {
+				// First DependedOnBy.
+				affectsNoColumns = false
+				// It is okay if the sequence is depended on by columns that are being
+				// dropped in the same transaction
+				canBeSafelyRemoved = dep.ID == desc.ID
+				// If only the column is being dropped, no other columns of the table can
+				// depend on that sequence either
+				if isColumnDrop {
+					canBeSafelyRemoved = canBeSafelyRemoved && len(dep.ColumnIDs) == 1 &&
+						dep.ColumnIDs[0] == col.ID
+				}
+				return nil
+			}
+			// Second DependedOnBy.
+			canBeSafelyRemoved = false
+			return iterutil.StopIteration()
+		})
 		canRemove := affectsNoColumns || canBeSafelyRemoved
 
 		// Once Drop Sequence Cascade actually respects the drop behavior, this
