@@ -3699,6 +3699,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 59453, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
