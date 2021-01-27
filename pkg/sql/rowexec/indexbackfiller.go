@@ -43,7 +43,7 @@ type indexBackfiller struct {
 
 	adder kvserverbase.BulkAdder
 
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	spec execinfrapb.BackfillerSpec
 

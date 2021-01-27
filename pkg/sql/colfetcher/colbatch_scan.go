@@ -239,7 +239,7 @@ func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	colIdxMap catalog.TableColMap,
 	valNeededForCol util.FastIntSet,
 	spec *execinfrapb.TableReaderSpec,

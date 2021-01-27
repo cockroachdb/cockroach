@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -34,7 +33,7 @@ import (
 type Builder struct {
 	evalCtx       *tree.EvalContext
 	codec         keys.SQLCodec
-	table         *tabledesc.Immutable
+	table         catalog.TableDescriptor
 	index         *descpb.IndexDescriptor
 	indexColTypes []*types.T
 	indexColDirs  []descpb.IndexDescriptor_Direction
@@ -60,7 +59,7 @@ var _ = (*Builder).UnsetNeededFamilies
 func MakeBuilder(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{

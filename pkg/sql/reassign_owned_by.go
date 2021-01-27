@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -150,7 +151,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 }
 
 func (n *reassignOwnedByNode) reassignTableOwner(
-	tbDesc *tabledesc.Immutable, params runParams,
+	tbDesc catalog.TableDescriptor, params runParams,
 ) error {
 	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
 		params.ctx, tbDesc.GetID(), params.p.txn)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -54,7 +55,7 @@ func TestKafkaSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.Immutable {
+	table := func(name string) catalog.TableDescriptor {
 		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 
@@ -144,7 +145,7 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.Immutable {
+	table := func(name string) catalog.TableDescriptor {
 		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 
@@ -183,7 +184,7 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.Immutable {
+	table := func(name string) catalog.TableDescriptor {
 		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 

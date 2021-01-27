@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -46,7 +45,7 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	desc  *tabledesc.Immutable
+	desc  catalog.TableDescriptor
 	index *descpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -204,7 +203,7 @@ func (n *scanNode) limitHint() int64 {
 func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) error {
@@ -265,7 +264,7 @@ func findReadableColumnByID(
 
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
-	desc *tabledesc.Immutable, colCfg scanColumnsConfig,
+	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) (cols []*descpb.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")

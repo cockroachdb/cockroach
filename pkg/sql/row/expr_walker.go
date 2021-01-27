@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -102,7 +102,7 @@ func makeBuiltinOverride(
 // default expressions which use sequences.
 type SequenceMetadata struct {
 	id              descpb.ID
-	seqDesc         *tabledesc.Immutable
+	seqDesc         catalog.TableDescriptor
 	instancesPerRow int64
 	curChunk        *jobspb.SequenceValChunk
 	curVal          int64
@@ -307,7 +307,7 @@ func (j *SeqChunkProvider) RequestChunk(
 
 func incrementSequenceByVal(
 	ctx context.Context,
-	descriptor *tabledesc.Immutable,
+	descriptor catalog.TableDescriptor,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	incrementBy int64,
@@ -334,7 +334,7 @@ func incrementSequenceByVal(
 	return val, nil
 }
 
-func boundsExceededError(descriptor *tabledesc.Immutable) error {
+func boundsExceededError(descriptor catalog.TableDescriptor) error {
 	seqOpts := descriptor.GetSequenceOpts()
 	isAscending := seqOpts.Increment > 0
 

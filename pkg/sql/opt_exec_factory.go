@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -135,7 +134,7 @@ func (ef *execFactory) ConstructScan(
 func generateScanSpans(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	tabDesc *tabledesc.Immutable,
+	tabDesc catalog.TableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
@@ -750,7 +749,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
 	indexDesc *descpb.IndexDescriptor,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
 
@@ -1597,7 +1596,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	if len(interleavedTables) > 0 {
 		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]*tabledesc.Immutable, len(interleavedTables))
+		dr.interleavedDesc = make([]catalog.TableDescriptor, len(interleavedTables))
 		for i := range dr.interleavedDesc {
 			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
 		}

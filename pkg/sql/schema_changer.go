@@ -342,7 +342,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 // this writing) this code path is only used for standalone CREATE
 // TABLE AS statements, which cannot be traced.
 func (sc *SchemaChanger) maybeBackfillCreateTableAs(
-	ctx context.Context, table *tabledesc.Immutable,
+	ctx context.Context, table catalog.TableDescriptor,
 ) error {
 	if !(table.Adding() && table.IsAs()) {
 		return nil
@@ -353,7 +353,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 }
 
 func (sc *SchemaChanger) maybeBackfillMaterializedView(
-	ctx context.Context, table *tabledesc.Immutable,
+	ctx context.Context, table catalog.TableDescriptor,
 ) error {
 	if !(table.Adding() && table.MaterializedView()) {
 		return nil
@@ -365,7 +365,7 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 
 // maybe make a table PUBLIC if it's in the ADD state.
 func (sc *SchemaChanger) maybeMakeAddTablePublic(
-	ctx context.Context, table *tabledesc.Immutable,
+	ctx context.Context, table catalog.TableDescriptor,
 ) error {
 	if !table.Adding() {
 		return nil
@@ -608,7 +608,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		return nil
 	}
 
-	tableDesc, ok := desc.(*tabledesc.Immutable)
+	tableDesc, ok := desc.(catalog.TableDescriptor)
 	if !ok {
 		// If our descriptor is not a table, then just drain leases.
 		if err := waitToUpdateLeases(false /* refreshStats */); err != nil {
@@ -1609,7 +1609,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			return err
 		}
 
-		tableDesc := scTable.ImmutableCopy().(*tabledesc.Immutable)
+		tableDesc := scTable.ImmutableCopy().(catalog.TableDescriptor)
 		// Mark the schema change job as failed and create a rollback job.
 		err = sc.updateJobForRollback(ctx, txn, tableDesc)
 		if err != nil {
@@ -2395,7 +2395,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 
 // DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.
 func DeleteTableDescAndZoneConfig(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable,
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc catalog.TableDescriptor,
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -412,14 +412,14 @@ func newImportRowError(err error, row string, num int64) error {
 
 // parallelImportContext describes state associated with the import.
 type parallelImportContext struct {
-	walltime         int64                 // Import time stamp.
-	numWorkers       int                   // Parallelism.
-	batchSize        int                   // Number of records to batch.
-	evalCtx          *tree.EvalContext     // Evaluation context.
-	tableDesc        *tabledesc.Immutable  // Table descriptor we're importing into.
-	targetCols       tree.NameList         // List of columns to import.  nil if importing all columns.
-	kvCh             chan row.KVBatch      // Channel for sending KV batches.
-	seqChunkProvider *row.SeqChunkProvider // Used to reserve chunks of sequence values.
+	walltime         int64                   // Import time stamp.
+	numWorkers       int                     // Parallelism.
+	batchSize        int                     // Number of records to batch.
+	evalCtx          *tree.EvalContext       // Evaluation context.
+	tableDesc        catalog.TableDescriptor // Table descriptor we're importing into.
+	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
+	kvCh             chan row.KVBatch        // Channel for sending KV batches.
+	seqChunkProvider *row.SeqChunkProvider   // Used to reserve chunks of sequence values.
 }
 
 // importFileContext describes state specific to a file being imported.

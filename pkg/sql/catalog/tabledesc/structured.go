@@ -107,8 +107,8 @@ func NewFilledInExistingMutable(
 	return &Mutable{wrapper: w, ClusterVersion: *tbl}, nil
 }
 
-// MakeImmutable returns an Immutable from the given TableDescriptor.
-func MakeImmutable(tbl descpb.TableDescriptor) Immutable {
+// makeImmutable returns an Immutable from the given TableDescriptor.
+func makeImmutable(tbl descpb.TableDescriptor) Immutable {
 	publicAndNonPublicCols := tbl.Columns
 
 	readableCols := tbl.Columns
@@ -174,7 +174,7 @@ func MakeImmutable(tbl descpb.TableDescriptor) Immutable {
 // NewImmutable returns a Immutable from the given TableDescriptor.
 // This function assumes that this descriptor has not been modified from the
 // version stored in the key-value store.
-func NewImmutable(tbl descpb.TableDescriptor) *Immutable {
+func NewImmutable(tbl descpb.TableDescriptor) catalog.TableDescriptor {
 	return NewImmutableWithIsUncommittedVersion(tbl, false /* isUncommittedVersion */)
 }
 
@@ -184,8 +184,8 @@ func NewImmutable(tbl descpb.TableDescriptor) *Immutable {
 // an Immutable from an existing descriptor which may have a new version.
 func NewImmutableWithIsUncommittedVersion(
 	tbl descpb.TableDescriptor, isUncommittedVersion bool,
-) *Immutable {
-	desc := MakeImmutable(tbl)
+) catalog.TableDescriptor {
+	desc := makeImmutable(tbl)
 	desc.isUncommittedVersion = isUncommittedVersion
 	return &desc
 }
@@ -194,12 +194,12 @@ func NewImmutableWithIsUncommittedVersion(
 // post-deserialization upgrades.
 func NewFilledInImmutable(
 	ctx context.Context, dg catalog.DescGetter, tbl *descpb.TableDescriptor,
-) (*Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	changes, err := maybeFillInDescriptor(ctx, dg, tbl, false /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return nil, err
 	}
-	desc := MakeImmutable(*tbl)
+	desc := makeImmutable(*tbl)
 	desc.postDeserializationChanges = changes
 	return &desc, nil
 }

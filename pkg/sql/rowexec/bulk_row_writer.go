@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -38,7 +39,7 @@ type bulkRowWriter struct {
 	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
-	tableDesc      tabledesc.Immutable
+	tableDesc      catalog.TableDescriptor
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
 	output         execinfra.RowReceiver
@@ -59,7 +60,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      tabledesc.MakeImmutable(spec.Table),
+		tableDesc:      tabledesc.NewImmutable(spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,
@@ -103,7 +104,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	var g ctxgroup.Group
 
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil /* seqChunkProvider */)
+		sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil /* seqChunkProvider */)
 	if err != nil {
 		return err
 	}
@@ -127,7 +128,7 @@ func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, &sp.tableDesc, typed.Key, v)
+	return row.NewUniquenessConstraintViolationError(ctx, sp.tableDesc, typed.Key, v)
 }
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {

@@ -348,7 +348,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 // on the new version of the table descriptor. It returns the new table descs.
 func (sc *SchemaChanger) dropConstraints(
 	ctx context.Context, constraints []descpb.ConstraintToUpdate,
-) (map[descpb.ID]*tabledesc.Immutable, error) {
+) (map[descpb.ID]catalog.TableDescriptor, error) {
 	log.Infof(ctx, "dropping %d constraints", len(constraints))
 
 	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
@@ -443,7 +443,7 @@ func (sc *SchemaChanger) dropConstraints(
 	}
 
 	log.Info(ctx, "finished dropping constraints")
-	tableDescs := make(map[descpb.ID]*tabledesc.Immutable, len(fksByBackrefTable)+1)
+	tableDescs := make(map[descpb.ID]catalog.TableDescriptor, len(fksByBackrefTable)+1)
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
@@ -613,7 +613,7 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *tabledesc.Immutable
+	var tableDesc catalog.TableDescriptor
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
@@ -694,7 +694,7 @@ func (sc *SchemaChanger) validateConstraints(
 // reuse an existing kv.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	tableDesc, err := tc.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
@@ -714,7 +714,7 @@ func (sc *SchemaChanger) getTableVersion(
 func TruncateInterleavedIndexes(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	indexes []descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
@@ -1355,7 +1355,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *tabledesc.Immutable
+	var tableDesc catalog.TableDescriptor
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
@@ -1414,7 +1414,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateInvertedIndexes(
 	ctx context.Context,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
@@ -1528,7 +1528,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateForwardIndexes(
 	ctx context.Context,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
@@ -2125,7 +2125,7 @@ func columnBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
@@ -2167,7 +2167,7 @@ func indexBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
 	var indexBackfillerMon *mon.BytesMonitor
@@ -2202,7 +2202,7 @@ func indexTruncateInTxn(
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
