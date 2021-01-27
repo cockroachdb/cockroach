@@ -350,7 +350,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
@@ -399,7 +399,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 

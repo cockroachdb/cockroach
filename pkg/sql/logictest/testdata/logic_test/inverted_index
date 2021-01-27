@@ -753,6 +753,22 @@ SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
 {"a": 1, "b": 2}
 {"a": 1, "c": 3}
 
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' OR j->'b' = '2' ORDER BY k
+----
+{"a": 1}
+{"b": 2}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' OR j @> '{"b": 2}' ORDER BY k
+----
+{"a": 1}
+{"b": 2}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
 subtest arrays
 
 statement ok

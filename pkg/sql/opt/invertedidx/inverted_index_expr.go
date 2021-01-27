@@ -72,6 +72,7 @@ func TryFilterInvertedIndex(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	computedColumns map[opt.ColumnID]opt.ScalarExpr,
 ) (
 	spanExpr *invertedexpr.SpanExpression,
 	constraint *constraint.Constraint,
@@ -109,8 +110,9 @@ func TryFilterInvertedIndex(
 		typ = types.Geometry
 	} else {
 		filterPlanner = &jsonOrArrayFilterPlanner{
-			tabID: tabID,
-			index: index,
+			tabID:           tabID,
+			index:           index,
+			computedColumns: computedColumns,
 		}
 		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
@@ -496,4 +498,23 @@ func extractInvertedFilterCondition(
 	default:
 		return filterPlanner.extractInvertedFilterConditionFromLeaf(evalCtx, filterCond)
 	}
+}
+
+// isIndexColumn returns true if e is an expression that corresponds to an
+// inverted index column. The expression can be either:
+//  - a variable on the index column, or
+//  - an expression that matches the computed column expression (if the index
+//    column is computed).
+//
+func isIndexColumn(
+	tabID opt.TableID, index cat.Index, e opt.Expr, computedColumns map[opt.ColumnID]opt.ScalarExpr,
+) bool {
+	invertedSourceCol := tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal())
+	if v, ok := e.(*memo.VariableExpr); ok && v.Col == invertedSourceCol {
+		return true
+	}
+	if computedColumns != nil && e == computedColumns[invertedSourceCol] {
+		return true
+	}
+	return false
 }

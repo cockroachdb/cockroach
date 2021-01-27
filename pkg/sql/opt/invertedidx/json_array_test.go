@@ -391,6 +391,73 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:           false,
 			remainingFilters: "j @> '[[1, 2]]'",
 		},
+		{
+			filters:  "j->'a' = '1'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+			unique:   true,
+		},
+		{
+			// Integer indexes are not yet supported.
+			filters:  "j->0 = '1'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// Arrays on the right side of the equality are not yet supported.
+			filters:  "j->'a' = '[1]'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// Objects on the right side of the equality are not yet supported.
+			filters:  `j->'a' = '{"b": "c"}'`,
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "j->'a' = '1'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			filters:  "j->'a' = '1' AND j->'b' = '2'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+			unique:   false,
+		},
+		{
+			filters:  "j->'a' = '1' OR j->'b' = '2'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+			unique:   false,
+		},
+		{
+			filters:  `j->'a' = '1' AND j @> '{"b": "c"}'`,
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+			unique:   false,
+		},
+		{
+			filters:  `j->'a' = '1' OR j @> '{"b": "c"}'`,
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+			unique:   false,
+		},
+		{
+			filters:          `j->'a' = '1' AND j @> '[[1, 2]]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j @> '[[1, 2]]'",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -402,7 +469,13 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 		// the index when we expect to and we have the correct values for tight,
 		// unique, and remainingFilters.
 		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
-			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+			evalCtx,
+			&f,
+			filters,
+			nil, /* optionalFilters */
+			tab,
+			md.Table(tab).Index(tc.indexOrd),
+			nil, /* computedColumns */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
