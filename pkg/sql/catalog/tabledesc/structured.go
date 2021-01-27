@@ -3805,7 +3805,9 @@ const IncludeConstraints = true
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
-func (desc *wrapper) MakeFirstMutationPublic(includeConstraints bool) (*Mutable, error) {
+func (desc *wrapper) MakeFirstMutationPublic(
+	includeConstraints bool,
+) (catalog.TableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewExistingMutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
