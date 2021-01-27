@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// SafeMessage makes Immutable a SafeMessager.
-func (desc *Immutable) SafeMessage() string {
-	return formatSafeTableDesc("tabledesc.Immutable", desc)
+// SafeMessage makes immutable a SafeMessager.
+func (desc *immutable) SafeMessage() string {
+	return formatSafeTableDesc("tabledesc.immutable", desc)
 }
 
 // SafeMessage makes Mutable a SafeMessager.

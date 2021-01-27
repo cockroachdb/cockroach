@@ -107,13 +107,13 @@ func NewFilledInExistingMutable(
 	return &Mutable{wrapper: w, ClusterVersion: *tbl}, nil
 }
 
-// makeImmutable returns an Immutable from the given TableDescriptor.
-func makeImmutable(tbl descpb.TableDescriptor) Immutable {
+// makeImmutable returns an immutable from the given TableDescriptor.
+func makeImmutable(tbl descpb.TableDescriptor) immutable {
 	publicAndNonPublicCols := tbl.Columns
 
 	readableCols := tbl.Columns
 
-	desc := Immutable{wrapper: wrapper{TableDescriptor: tbl, indexCache: newIndexCache(&tbl)}}
+	desc := immutable{wrapper: wrapper{TableDescriptor: tbl, indexCache: newIndexCache(&tbl)}}
 
 	if len(tbl.Mutations) > 0 {
 		publicAndNonPublicCols = make([]descpb.ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
@@ -171,17 +171,17 @@ func makeImmutable(tbl descpb.TableDescriptor) Immutable {
 	return desc
 }
 
-// NewImmutable returns a Immutable from the given TableDescriptor.
+// NewImmutable returns a immutable from the given TableDescriptor.
 // This function assumes that this descriptor has not been modified from the
 // version stored in the key-value store.
 func NewImmutable(tbl descpb.TableDescriptor) catalog.TableDescriptor {
 	return NewImmutableWithIsUncommittedVersion(tbl, false /* isUncommittedVersion */)
 }
 
-// NewImmutableWithIsUncommittedVersion returns a Immutable from the given
+// NewImmutableWithIsUncommittedVersion returns a immutable from the given
 // TableDescriptor and allows the caller to mark the table as corresponding to
 // an uncommitted version. This should be used when constructing a new copy of
-// an Immutable from an existing descriptor which may have a new version.
+// an immutable from an existing descriptor which may have a new version.
 func NewImmutableWithIsUncommittedVersion(
 	tbl descpb.TableDescriptor, isUncommittedVersion bool,
 ) catalog.TableDescriptor {
@@ -190,7 +190,7 @@ func NewImmutableWithIsUncommittedVersion(
 	return &desc
 }
 
-// NewFilledInImmutable will construct an Immutable and potentially perform
+// NewFilledInImmutable will construct an immutable and potentially perform
 // post-deserialization upgrades.
 func NewFilledInImmutable(
 	ctx context.Context, dg catalog.DescGetter, tbl *descpb.TableDescriptor,
@@ -804,7 +804,7 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	switch descV := descI.(type) {
 	case *wrapper:
 		desc = descV
-	case *Immutable:
+	case *immutable:
 		desc = &descV.wrapper
 	case *Mutable:
 		desc = &descV.wrapper
@@ -1433,7 +1433,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		unupgradedFKsPresent := false
 		if err := catalog.ForEachIndex(referencedTable, catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
 			if found {
-				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
+				// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
 				// a way to break out of the index loop.
 				return nil
 			}
@@ -1512,7 +1512,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		unupgradedFKsPresent := false
 		if err := catalog.ForEachIndex(originTable, catalog.IndexOpts{}, func(originIdx catalog.Index) error {
 			if found {
-				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
+				// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
 				// a way to break out of the index loop.
 				return nil
 			}
@@ -2918,15 +2918,15 @@ func (desc *wrapper) ContainsUserDefinedTypes() bool {
 
 // ContainsUserDefinedTypes returns whether or not this table descriptor has
 // any columns of user defined types.
-// This method is re-implemented for Immutable only for the purpose of calling
+// This method is re-implemented for immutable only for the purpose of calling
 // the correct GetColumnOrdinalsWithUserDefinedTypes() method on desc.
-func (desc *Immutable) ContainsUserDefinedTypes() bool {
+func (desc *immutable) ContainsUserDefinedTypes() bool {
 	return len(desc.GetColumnOrdinalsWithUserDefinedTypes()) > 0
 }
 
 // GetColumnOrdinalsWithUserDefinedTypes returns a slice of column ordinals
 // of columns that contain user defined types.
-func (desc *Immutable) GetColumnOrdinalsWithUserDefinedTypes() []int {
+func (desc *immutable) GetColumnOrdinalsWithUserDefinedTypes() []int {
 	return desc.columnsWithUDTs
 }
 
@@ -2950,10 +2950,10 @@ func (desc *wrapper) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.TableD
 // with user defined type metadata have the same versions of metadata as in the
 // other descriptor. Note that this function is only valid on two descriptors
 // representing the same table at the same version.
-// This method is re-implemented for Immutable only for the purpose of calling
+// This method is re-implemented for immutable only for the purpose of calling
 // the correct DeletableColumns() and GetColumnOrdinalsWithUserDefinedTypes()
 // methods on desc.
-func (desc *Immutable) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.TableDescriptor) bool {
+func (desc *immutable) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.TableDescriptor) bool {
 	thisCols := desc.DeletableColumns()
 	otherCols := otherDesc.DeletableColumns()
 	for _, idx := range desc.GetColumnOrdinalsWithUserDefinedTypes() {
@@ -3747,7 +3747,7 @@ const IgnoreConstraints = false
 const IncludeConstraints = true
 
 // MakeFirstMutationPublic creates a Mutable from the
-// Immutable by making the first mutation public.
+// immutable by making the first mutation public.
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
@@ -4089,22 +4089,22 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 // ActiveChecks returns a list of all check constraints that should be enforced
 // on writes (including constraints being added/validated). The columns
 // referenced by the returned checks are writable, but not necessarily public.
-func (desc *Immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
+func (desc *immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 	return desc.allChecks
 }
 
 // WritableColumns returns a list of public and write-only mutation columns.
-func (desc *Immutable) WritableColumns() []descpb.ColumnDescriptor {
+func (desc *immutable) WritableColumns() []descpb.ColumnDescriptor {
 	return desc.publicAndNonPublicCols[:len(desc.Columns)+desc.writeOnlyColCount]
 }
 
 // DeletableColumns returns a list of public and non-public columns.
-func (desc *Immutable) DeletableColumns() []descpb.ColumnDescriptor {
+func (desc *immutable) DeletableColumns() []descpb.ColumnDescriptor {
 	return desc.publicAndNonPublicCols
 }
 
 // MutationColumns returns a list of mutation columns.
-func (desc *Immutable) MutationColumns() []descpb.ColumnDescriptor {
+func (desc *immutable) MutationColumns() []descpb.ColumnDescriptor {
 	return desc.publicAndNonPublicCols[len(desc.Columns):]
 }
 
