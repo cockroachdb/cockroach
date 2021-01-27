@@ -582,7 +582,11 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
+	tr := tc.store.ClusterSettings().Tracer
+	tr.LinkForkedSpans()
+	ctx, collect, cancel := tracing.ContextWithRecordingSpanUsing(
+		context.Background(), tr, "test-recording",
+	)
 	defer cancel()
 
 	const (

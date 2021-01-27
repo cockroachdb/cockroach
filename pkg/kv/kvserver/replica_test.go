@@ -8372,6 +8372,8 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, cfg)
+	tr := tc.store.ClusterSettings().Tracer
+	tr.LinkForkedSpans()
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -8402,7 +8404,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	}
 	r.mu.Unlock()
 
-	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+	opCtx, collect, cancel := tracing.ContextWithRecordingSpanUsing(ctx, tr, "test-recording")
 	defer cancel()
 
 	ba = roachpb.BatchRequest{}

@@ -69,7 +69,10 @@ func TestDBAddSSTable(t *testing.T) {
 		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
-		runTestDBAddSSTable(ctx, t, db, nil)
+
+		tr := s.ClusterSettings().Tracer
+		tr.LinkForkedSpans()
+		runTestDBAddSSTable(ctx, t, db, tr, nil)
 	})
 	t.Run("store=on-disk", func(t *testing.T) {
 		dir, dirCleanupFn := testutils.TempDir(t)
@@ -88,12 +91,15 @@ func TestDBAddSSTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		runTestDBAddSSTable(ctx, t, db, store)
+
+		tr := s.ClusterSettings().Tracer
+		tr.LinkForkedSpans()
+		runTestDBAddSSTable(ctx, t, db, tr, store)
 	})
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
-func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kvserver.Store) {
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, tracer *tracing.Tracer, store *kvserver.Store) {
 	{
 		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
@@ -115,7 +121,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 		}
 
 		// Do an initial ingest.
-		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpanUsing(ctx, tracer, "test-recording")
 		defer cancel()
 		if err := db.AddSSTable(
 			ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
@@ -194,7 +200,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 			before = metrics.AddSSTableApplicationCopies.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpanUsing(ctx, tracer, "test-recording")
 			defer cancel()
 
 			if err := db.AddSSTable(
@@ -249,7 +255,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 			before = metrics.AddSSTableApplications.Count()
 		}
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpanUsing(ctx, tracer, "test-recording")
 			defer cancel()
 
 			if err := db.AddSSTable(
