@@ -610,18 +610,24 @@ type Engine interface {
 	// and can guarantee that all iterators created from a read-only engine are
 	// consistent. To do this, we will want to add an MVCCIterator.Clone method.
 	NewReadOnly() ReadWriter
-	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
-	// this engine. A write-only batch accumulates all mutations and applies them
-	// atomically on a call to Commit(). Read operations return an error.
+	// NewUnIndexedBatch returns a new instance of a batched engine which wraps
+	// this engine. It is un-indexed, in that writes to the batch are not
+	// visible to reads until after it commits. The batch accumulates all
+	// mutations and applies them atomically on a call to Commit(). Read
+	// operations return an error, unless supportReader is set to true.
 	//
-	// Note that a distinct write-only batch allows reads. Distinct batches are a
-	// means of indicating that the user does not need to read its own writes.
+	// When supportReader is true, reads will be satisfied by reading from the
+	// underlying engine, i.e., the caller does not see its own writes. This
+	// setting should be used only when the caller is certain that this
+	// optimization is correct, and beneficial. There are subtleties here -- see
+	// the discussion on https://github.com/cockroachdb/cockroach/pull/57661 for
+	// more details.
 	//
-	// TODO(peter): This should return a WriteBatch interface, but there are mild
-	// complications in both defining that interface and implementing it. In
-	// particular, Batch.Close would no longer come from Reader and we'd need to
-	// refactor a bunch of code in rocksDBBatch.
-	NewWriteOnlyBatch() Batch
+	// TODO(sumeer): We should separate the supportReader=false case into a
+	// separate method, that returns a WriteBatch interface. Even better would
+	// be not having an option to pass supportReader=true, and have the caller
+	// explicitly work with a separate WriteBatch and Reader.
+	NewUnIndexedBatch(supportReader bool) Batch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
@@ -675,32 +681,6 @@ type Batch interface {
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
-	// Distinct returns a view of the existing batch which only sees writes that
-	// were performed before the Distinct batch was created. That is, the
-	// returned batch will not read its own writes, but it will read writes to
-	// the parent batch performed before the call to Distinct(), except if the
-	// parent batch is a WriteOnlyBatch, in which case the Distinct() batch will
-	// read from the underlying engine.
-	//
-	// The returned
-	// batch needs to be closed before using the parent batch again. This is used
-	// as an optimization to avoid flushing mutations buffered by the batch in
-	// situations where we know all of the batched operations are for distinct
-	// keys.
-	//
-	// TODO(tbg): it seems insane that you cannot read from a WriteOnlyBatch but
-	// you can read from a Distinct on top of a WriteOnlyBatch but randomly don't
-	// see the batch at all. I was personally just bitten by this.
-	//
-	// TODO(itsbilal): Improve comments around how/why distinct batches are an
-	// optimization in the rocksdb write path.
-	//
-	// TODO(sumeer): Most Distinct() batches are being created on Pebble indexed
-	// batches, so the comment about only seeing writes before the batch was
-	// created is incorrect. See discussion in
-	// https://github.com/cockroachdb/pebble/issues/943
-	// https://github.com/cockroachdb/cockroach/pull/57661
-	Distinct() ReadWriter
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
 	// Len returns the size of the underlying representation of the batch.

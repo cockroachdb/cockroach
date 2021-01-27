@@ -654,13 +654,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.sendRaftMessages(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch. Any reads are performed via the "distinct" batch
-	// which passes the reads through to the underlying DB.
-	batch := r.store.Engine().NewWriteOnlyBatch()
+	// reads from the batch. Any reads are performed on the underlying DB.
+	batch := r.store.Engine().NewUnIndexedBatch(true /* supportReader */)
 	defer batch.Close()
 
-	// We know that all of the writes from here forward will be to distinct keys.
-	writer := batch.Distinct()
 	prevLastIndex := lastIndex
 	if len(rd.Entries) > 0 {
 		// All of the entries are appended to distinct keys, returning a new
@@ -672,7 +669,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		raftLogSize += sideLoadedEntriesSize
 		if lastIndex, lastTerm, raftLogSize, err = r.append(
-			ctx, writer, lastIndex, lastTerm, raftLogSize, thinEntries,
+			ctx, batch, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)
@@ -690,12 +687,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		//
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
-		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 	}
-	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
 	//
