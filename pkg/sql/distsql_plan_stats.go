@@ -186,7 +186,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.ID)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		InvertedSketches: invSketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
-		TableID:          desc.ID,
+		TableID:          desc.GetID(),
 		JobID:            jobID,
 		RowsExpected:     rowsExpected,
 	}

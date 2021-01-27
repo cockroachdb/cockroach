@@ -125,7 +125,7 @@ func newRandomStreamClient(streamURL *url.URL) (Client, error) {
 		50, /* defaultdb */
 		descpb.ID(tableID),
 		RandomStreamSchema,
-		systemschema.JobsTable.Privileges,
+		systemschema.JobsTable.GetPrivileges(),
 	)
 	if err != nil {
 		return nil, err

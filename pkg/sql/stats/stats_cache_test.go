@@ -355,7 +355,7 @@ CREATE STATISTICS s FROM tt;
 	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	_, err := sc.GetTableStats(ctx, tbl.ID)
+	_, err := sc.GetTableStats(ctx, tbl.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -806,7 +806,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						for _, tableName := range errorOriginSpec.tableNames {
 							filters[nodeIdx].tableIDsToFilter = append(
 								filters[nodeIdx].tableIDsToFilter,
-								int(catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).ID),
+								int(catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).GetID()),
 							)
 						}
 						filters[nodeIdx].Unlock()

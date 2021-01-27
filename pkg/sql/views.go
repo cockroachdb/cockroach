@@ -49,7 +49,8 @@ type planDependencies map[descpb.ID]planDependencyInfo
 func (d planDependencies) String() string {
 	var buf bytes.Buffer
 	for id, deps := range d {
-		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrNameStringP(&deps.desc.Name))
+		name := deps.desc.GetName()
+		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrNameStringP(&name))
 		for _, dep := range deps.deps {
 			buf.WriteString(" [")
 			if dep.IndexID != 0 {

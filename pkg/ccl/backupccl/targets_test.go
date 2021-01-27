@@ -50,7 +50,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		ts1 := hlc.Timestamp{WallTime: 1}
 		mkTable := func(descriptor tbDesc) *tabledesc.Immutable {
 			desc := tabledesc.NewImmutable(descriptor)
-			desc.ModificationTime = ts1
+			desc.TableDesc().ModificationTime = ts1
 			return desc
 		}
 		mkDB := func(id descpb.ID, name string) *dbdesc.Immutable {

@@ -448,13 +448,13 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 
 	ctx := context.Background()
 	getDefault := func(desc *tabledesc.Immutable) string {
-		return *desc.Columns[0].DefaultExpr
+		return *desc.GetPublicColumns()[0].DefaultExpr
 	}
 	getComputed := func(desc *tabledesc.Immutable) string {
-		return *desc.Columns[0].ComputeExpr
+		return *desc.GetPublicColumns()[0].ComputeExpr
 	}
 	getCheck := func(desc *tabledesc.Immutable) string {
-		return desc.Checks[0].Expr
+		return desc.GetChecks()[0].Expr
 	}
 	testdata := []struct {
 		colSQL       string

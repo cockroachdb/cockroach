@@ -78,7 +78,7 @@ func MakeBuilder(
 	s.indexColTypes = make([]*types.T, len(columnIDs))
 	for i, colID := range columnIDs {
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
-		for _, col := range table.Columns {
+		for _, col := range table.GetPublicColumns() {
 			if col.ID == colID {
 				s.indexColTypes[i] = col.Type
 				break
@@ -102,7 +102,7 @@ func MakeBuilder(
 				s.interstices[sharedPrefixLen])
 		}
 		s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-			s.interstices[sharedPrefixLen], table.ID, index.ID)
+			s.interstices[sharedPrefixLen], table.GetID(), index.ID)
 	}
 
 	return s
@@ -198,8 +198,8 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	// * The table is not a special system table. (System tables claim to have
 	//   column families, but actually do not, since they're written to with
 	//   raw KV puts in a "legacy" way.)
-	isSystemTable := s.table.ID > 0 && s.table.ID < keys.MaxReservedDescID
-	return !isSystemTable && s.index.Unique && len(s.table.Families) > 1 &&
+	isSystemTable := s.table.GetID() > 0 && s.table.GetID() < keys.MaxReservedDescID
+	return !isSystemTable && s.index.Unique && len(s.table.GetFamilies()) > 1 &&
 		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
@@ -207,7 +207,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 				len(s.index.StoreColumnIDs) > 0 &&
 				s.index.Type == descpb.IndexDescriptor_FORWARD)) &&
 		prefixLen == len(s.index.ColumnIDs) &&
-		numNeededFamilies < len(s.table.Families)
+		numNeededFamilies < len(s.table.GetFamilies())
 }
 
 // Functions for optimizer related span generation are below.

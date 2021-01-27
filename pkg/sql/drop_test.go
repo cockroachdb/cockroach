@@ -131,14 +131,14 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.GetID(), buf); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.GetID(), buf); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 	if err := zoneExists(sqlDB, &cfg, dbDesc.GetID()); err != nil {
@@ -160,11 +160,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// Data is not deleted.
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 
-	if err := descExists(sqlDB, true, tbDesc.ID); err != nil {
+	if err := descExists(sqlDB, true, tbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 	tbNameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec,
-		tbDesc.GetParentID(), keys.PublicSchemaID, tbDesc.Name)
+		tbDesc.GetParentID(), keys.PublicSchemaID, tbDesc.GetName())
 	if gr, err := kvDB.Get(ctx, tbNameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -186,7 +186,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("database descriptor key still exists after database is dropped")
 	}
 
-	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -203,7 +203,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		Username:    security.RootUserName(),
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: descpb.IDs{
-			tbDesc.ID,
+			tbDesc.GetID(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -319,7 +319,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		Username:    security.RootUserName(),
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: descpb.IDs{
-			tbDesc.ID, tb2Desc.ID,
+			tbDesc.GetID(), tb2Desc.GetID(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -327,16 +327,16 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	// Push a new zone config for the table with TTL=0 so the data is
 	// deleted immediately.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := descExists(sqlDB, false, tbDesc.ID); err != nil {
+		if err := descExists(sqlDB, false, tbDesc.GetID()); err != nil {
 			return err
 		}
 
-		return zoneExists(sqlDB, nil, tbDesc.ID)
+		return zoneExists(sqlDB, nil, tbDesc.GetID())
 	})
 
 	// Table 1 data is deleted.
@@ -353,12 +353,12 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 			Username:    security.RootUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
-				tbDesc.ID, tb2Desc.ID,
+				tbDesc.GetID(), tb2Desc.GetID(),
 			},
 		})
 	})
 
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.GetID()); err != nil {
@@ -366,11 +366,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := descExists(sqlDB, false, tb2Desc.ID); err != nil {
+		if err := descExists(sqlDB, false, tb2Desc.GetID()); err != nil {
 			return err
 		}
 
-		return zoneExists(sqlDB, nil, tb2Desc.ID)
+		return zoneExists(sqlDB, nil, tb2Desc.GetID())
 	})
 
 	// Table 2 data is deleted.
@@ -380,7 +380,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		Username:    security.RootUserName(),
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: descpb.IDs{
-			tbDesc.ID, tb2Desc.ID,
+			tbDesc.GetID(), tb2Desc.GetID(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -451,7 +451,7 @@ func TestDropIndex(t *testing.T) {
 		Username:    security.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
 		DescriptorIDs: descpb.IDs{
-			tableDesc.ID,
+			tableDesc.GetID(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -472,7 +472,7 @@ func TestDropIndex(t *testing.T) {
 
 	clearIndexAttempt = true
 	// Add a zone config for the table.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -481,7 +481,7 @@ func TestDropIndex(t *testing.T) {
 			Username:    security.RootUserName(),
 			Description: `DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
-				tableDesc.ID,
+				tableDesc.GetID(),
 			},
 		})
 	})
@@ -491,7 +491,7 @@ func TestDropIndex(t *testing.T) {
 			Username:    security.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
-				tableDesc.ID,
+				tableDesc.GetID(),
 			},
 		})
 	})
@@ -546,7 +546,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
+	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.GetID(), zoneConfigBytes)
 	if !sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
 		t.Fatal("zone config for index does not exist")
 	}
@@ -630,12 +630,12 @@ func TestDropTable(t *testing.T) {
 	}
 
 	// Add a zone config for the table.
-	cfg, err := sqltestutils.AddDefaultZoneConfig(sqlDB, tableDesc.ID)
+	cfg, err := sqltestutils.AddDefaultZoneConfig(sqlDB, tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -666,7 +666,7 @@ func TestDropTable(t *testing.T) {
 		Username:    security.RootUserName(),
 		Description: `DROP TABLE t.public.kv`,
 		DescriptorIDs: descpb.IDs{
-			tableDesc.ID,
+			tableDesc.GetID(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -681,11 +681,11 @@ func TestDropTable(t *testing.T) {
 	// asynchronous path.
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 
-	if err := descExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := descExists(sqlDB, true, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -742,7 +742,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	// Data hasn't been GC-ed.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
-		if err := descExists(sqlDB, true, descs[i].ID); err != nil {
+		if err := descExists(sqlDB, true, descs[i].GetID()); err != nil {
 			t.Fatal(err)
 		}
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
@@ -752,7 +752,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			Username:    security.RootUserName(),
 			Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			DescriptorIDs: descpb.IDs{
-				descs[i].ID,
+				descs[i].GetID(),
 			},
 		}); err != nil {
 			t.Fatal(err)
@@ -761,18 +761,18 @@ func TestDropTableDeleteData(t *testing.T) {
 
 	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
 	pushZoneCfg := func(i int) {
-		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descs[i].ID); err != nil {
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descs[i].GetID()); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	checkTableGCed := func(i int) {
 		testutils.SucceedsSoon(t, func() error {
-			if err := descExists(sqlDB, false, descs[i].ID); err != nil {
+			if err := descExists(sqlDB, false, descs[i].GetID()); err != nil {
 				return err
 			}
 
-			return zoneExists(sqlDB, nil, descs[i].ID)
+			return zoneExists(sqlDB, nil, descs[i].GetID())
 		})
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, 0)
@@ -782,7 +782,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			Username:    security.RootUserName(),
 			Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			DescriptorIDs: descpb.IDs{
-				descs[i].ID,
+				descs[i].GetID(),
 			},
 		}); err != nil {
 			t.Fatal(err)
@@ -794,7 +794,7 @@ func TestDropTableDeleteData(t *testing.T) {
 				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{
-					descs[i].ID,
+					descs[i].GetID(),
 				},
 			})
 		})
@@ -948,12 +948,12 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDescInterleaved.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDescInterleaved.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return descExists(sqlDB, false, tableDescInterleaved.ID)
+		return descExists(sqlDB, false, tableDescInterleaved.GetID())
 	})
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
@@ -1038,7 +1038,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 			Username:    security.RootUserName(),
 			Description: "DROP TABLE t.public.kv",
 			DescriptorIDs: descpb.IDs{
-				tableDesc.ID,
+				tableDesc.GetID(),
 			},
 		}); err != nil {
 		t.Fatal(err)

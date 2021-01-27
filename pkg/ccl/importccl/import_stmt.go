@@ -1679,7 +1679,7 @@ func (r *importResumer) dropTables(
 
 	for i := range empty {
 		if err := gcjob.ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, empty[i]); err != nil {
-			return errors.Wrapf(err, "clearing data for table %d", empty[i].ID)
+			return errors.Wrapf(err, "clearing data for table %d", empty[i].GetID())
 		}
 	}
 

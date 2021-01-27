@@ -226,14 +226,14 @@ func (f *kvFeed) scanIfShould(
 		// Only backfill for the tables which have events which may not be all
 		// of the targets.
 		for _, ev := range events {
-			tablePrefix := f.codec.TablePrefix(uint32(ev.After.ID))
+			tablePrefix := f.codec.TablePrefix(uint32(ev.After.GetID()))
 			tableSpan := roachpb.Span{Key: tablePrefix, EndKey: tablePrefix.PrefixEnd()}
 			for _, sp := range f.spans {
 				if tableSpan.Overlaps(sp) {
 					spansToBackfill = append(spansToBackfill, sp)
 				}
 			}
-			if !scanTime.Equal(ev.After.ModificationTime) {
+			if !scanTime.Equal(ev.After.GetModificationTime()) {
 				log.Fatalf(ctx, "found event in shouldScan which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}

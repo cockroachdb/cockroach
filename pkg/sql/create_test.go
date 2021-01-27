@@ -236,24 +236,24 @@ func verifyTables(
 		tableName := fmt.Sprintf("table_%d", id)
 		kvDB := tc.Servers[count%tc.NumServers()].DB()
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-		if tableDesc.ID < descIDStart {
+		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
 				tableName,
-				tableDesc.ID,
+				tableDesc.GetID(),
 				descIDStart,
 			)
 
-			if _, ok := tableIDs[tableDesc.ID]; ok {
+			if _, ok := tableIDs[tableDesc.GetID()]; ok {
 				t.Fatalf("duplicate ID: %d", id)
 			}
-			tableIDs[tableDesc.ID] = struct{}{}
-			if tableDesc.ID > maxID {
-				maxID = tableDesc.ID
+			tableIDs[tableDesc.GetID()] = struct{}{}
+			if tableDesc.GetID() > maxID {
+				maxID = tableDesc.GetID()
 			}
 
 		}
-		usedTableIDs[tableDesc.ID] = tableName
+		usedTableIDs[tableDesc.GetID()] = tableName
 	}
 
 	if e, a := expectedNumOfTables, len(usedTableIDs); e != a {

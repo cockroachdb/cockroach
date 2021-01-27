@@ -269,7 +269,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 // showCreateLocality creates the LOCALITY clauses for a CREATE statement, writing them
 // to tree.FmtCtx f.
 func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
-	if c := desc.TableDesc().LocalityConfig; c != nil {
+	if c := desc.GetLocalityConfig(); c != nil {
 		f.WriteString(" LOCALITY ")
 		return tabledesc.FormatTableLocalityConfig(c, f)
 	}

@@ -338,7 +338,7 @@ func newZigzagJoiner(
 		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables); err != nil {
 			return nil, err
 		}
-		colOffset += len(z.infos[i].table.Columns)
+		colOffset += len(z.infos[i].table.GetPublicColumns())
 	}
 	z.side = 0
 	return z, nil
@@ -440,7 +440,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
 	outCols := z.Out.NeededColumns()
-	maxCol := colOffset + len(info.table.Columns)
+	maxCol := colOffset + len(info.table.GetPublicColumns())
 	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
 		neededCols.Add(i - colOffset)
 	}
@@ -653,7 +653,7 @@ func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 	ordering := make(colinfo.ColumnOrdering, len(zi.eqColumns))
 	for i := range zi.eqColumns {
-		colID := zi.table.Columns[zi.eqColumns[i]].ID
+		colID := zi.table.GetPublicColumns()[zi.eqColumns[i]].ID
 		// Search the index columns, then the primary keys to find an ordering for
 		// the current column, 'colID'.
 		var direction encoding.Direction

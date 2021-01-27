@@ -192,7 +192,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.ScheduledJobsTableID, systemschema.ScheduledJobsTableSchema, systemschema.ScheduledJobsTable},
 		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
 	} {
-		privs := *test.pkg.Privileges
+		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
@@ -208,7 +208,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		if !test.pkg.TableDesc().Equal(gen.TableDesc()) {
 			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
-				"hardcoded table descriptor:\n%s", test.pkg.Name, diff)
+				"hardcoded table descriptor:\n%s", test.pkg.GetName(), diff)
 		}
 	}
 }

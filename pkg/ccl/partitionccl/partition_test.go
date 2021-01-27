@@ -1413,7 +1413,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 	// Get the zone config corresponding to the table.
 	table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
-	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.ID)))
+	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.GetID())))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1436,7 +1436,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 	}
 
 	// Subzone spans have the table prefix omitted.
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.ID))
+	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.GetID()))
 	for i := range expectedSpans {
 		// Subzone spans have the table prefix omitted.
 		expected := bytes.TrimPrefix(expectedSpans[i], prefix)

@@ -427,9 +427,9 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 		col := &columns[i]
 		datum := datums[i]
 		if datum == tree.DNull {
-			if !e.desc.Columns[i].Nullable {
+			if !e.desc.GetPublicColumns()[i].Nullable {
 				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
-					e.desc.Name, col.Name)
+					e.desc.GetName(), col.Name)
 			}
 		} else if !datum.ResolvedType().Equivalent(col.Typ) {
 			return errors.AssertionFailedf("datum column %q expected to be type %s; found type %s",
@@ -449,8 +449,8 @@ func (e *virtualDefEntry) getPlanInfo(
 	idxConstraint *constraint.Constraint,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
-	for i := range e.desc.Columns {
-		col := &e.desc.Columns[i]
+	for i := range e.desc.GetPublicColumns() {
+		col := &e.desc.GetPublicColumns()[i]
 		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.Name,
 			Typ:            col.Type,
@@ -507,7 +507,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			if index.ID == 1 {
 				return nil, errors.AssertionFailedf(
-					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.Name)
+					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.GetName())
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.

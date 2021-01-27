@@ -85,7 +85,7 @@ func clearIndex(
 	tableDesc *tabledesc.Immutable,
 	index descpb.IndexDescriptor,
 ) error {
-	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.ID)
+	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.GetID())
 	if index.IsInterleaved() {
 		return errors.Errorf("unexpected interleaved index %d", index.ID)
 	}
@@ -113,7 +113,7 @@ func completeDroppedIndex(
 	indexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	if err := updateDescriptorGCMutations(ctx, execCfg, table.ID, indexID); err != nil {
+	if err := updateDescriptorGCMutations(ctx, execCfg, table.GetID(), indexID); err != nil {
 		return errors.Wrapf(err, "updating GC mutations")
 	}
 
