@@ -296,15 +296,18 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tableHasRows, err := tableHasRows(tx, tableName)
-	if err != nil {
-		return "", err
+	var hasRows bool
+	if tableExists {
+		hasRows, err = tableHasRows(tx, tableName)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: !typeExists},
-		{code: pgcode.NotNullViolation, condition: tableHasRows && def.Nullable.Nullability == tree.NotNull},
+		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
