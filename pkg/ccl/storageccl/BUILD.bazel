@@ -78,7 +78,6 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
