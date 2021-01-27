@@ -961,7 +961,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 					case "computeStats":
 						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-						_, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
+						_, err = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
 						iter.Close()
 					}
 					if err != nil {
@@ -4598,7 +4598,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					expMS, err := mvccStatsTest.fn(iter, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
+					expMS, err := mvccStatsTest.fn(iter, localMax, roachpb.KeyMax, ts3.WallTime)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -4692,6 +4692,37 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 			if err := MVCCGarbageCollect(ctx, engine, nil, keys, ts2); err == nil {
 				t.Fatal("expected error garbage collecting an intent")
 			}
+		})
+	}
+}
+
+// TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys verifies that
+// MVCCGarbageCollect panics when presented with a mix of local and global
+// keys.
+func TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if DisallowSeparatedIntents || !enabledSeparatedIntents {
+		return
+	}
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			require.Panics(t, func() {
+				ts := hlc.Timestamp{WallTime: 1e9}
+				k := roachpb.Key("a")
+				keys := []roachpb.GCRequest_GCKey{
+					{Key: k, Timestamp: ts},
+					{Key: keys.RangeDescriptorKey(roachpb.RKey(k))},
+				}
+				if err := MVCCGarbageCollect(ctx, engine, nil, keys, ts); err != nil {
+					panic(err)
+				}
+			})
 		})
 	}
 }

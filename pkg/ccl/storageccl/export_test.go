@@ -729,6 +729,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		return keys, timestamps
 	}
 
+	localMax := keys.LocalMax
 	testWithTargetSize := func(t *testing.T, targetSize uint64) {
 		e, cleanup := mkEngine(t)
 		defer cleanup()
@@ -736,7 +737,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		numKeys := getNumKeys(t, rnd, targetSize)
 		keys, timestamps := mkData(t, e, rnd, numKeys)
 		var (
-			keyMin = roachpb.KeyMin
+			keyMin = localMax
 			keyMax = roachpb.KeyMax
 
 			tsMin = hlc.Timestamp{WallTime: 0, Logical: 0}
