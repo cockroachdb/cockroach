@@ -3235,27 +3235,6 @@ func (desc *Mutable) RenameConstraint(
 	}
 }
 
-// FindIndexByIndexIdx returns an active index with the specified
-// index's index which has a domain of [0, # of secondary indexes] and whether
-// the index is a secondary index.
-// The primary index has an index of 0 and the first secondary index
-// (if it exists) has an index of 1.
-func (desc *wrapper) FindIndexByIndexIdx(
-	indexIdx int,
-) (index *descpb.IndexDescriptor, isSecondary bool, err error) {
-	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
-	// secondary index.
-	if indexIdx < 0 || indexIdx > len(desc.Indexes) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-
-	if indexIdx > 0 {
-		return &desc.Indexes[indexIdx-1], true, nil
-	}
-
-	return &desc.PrimaryIndex, false, nil
-}
-
 // GetIndexMutationCapabilities returns:
 // 1. Whether the index is a mutation
 // 2. if so, is it in state DELETE_AND_WRITE_ONLY
@@ -3478,10 +3457,10 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				if err != nil {
 					return err
 				}
-				oldIndex, _, err := desc.FindIndexByIndexIdx(oldIndexIdx)
-				if err != nil {
-					return err
+				if oldIndexIdx >= len(desc.ActiveIndexes()) {
+					return errors.Errorf("invalid indexIdx %d", oldIndexIdx)
 				}
+				oldIndex := desc.ActiveIndexes()[oldIndexIdx].IndexDesc()
 				oldIndexCopy := protoutil.Clone(oldIndex).(*descpb.IndexDescriptor)
 				newIndex.IndexDesc().Name = oldIndexCopy.Name
 				// Splice out old index from the indexes list.

@@ -204,10 +204,13 @@ func newJoinReader(
 	}
 	var err error
 	var isSecondary bool
-	jr.index, isSecondary, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
-	if err != nil {
-		return nil, err
+	indexIdx := int(spec.IndexIdx)
+	if indexIdx >= len(jr.desc.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	indexI := jr.desc.ActiveIndexes()[indexIdx]
+	jr.index = indexI.IndexDesc()
+	isSecondary = !indexI.Primary()
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
