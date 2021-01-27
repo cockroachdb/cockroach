@@ -48,3 +48,56 @@ query II
 SELECT 42, x FROM t
 ----
 42  123
+
+# Check that the hidden column can be renamed
+
+statement ok
+ALTER TABLE kv RENAME COLUMN v to x;
+
+query I
+SELECT x FROM t
+----
+123
+
+# Verify indexes can be created on hidden columns
+
+statement ok
+CREATE INDEX ON kv(x);
+
+# Check that the hidden column can be droped
+
+statement ok
+ALTER TABLE kv Drop COLUMN x;
+
+statement error column "x" does not exist
+SELECT x FROM kv;
+
+
+# adding a foreign key constraint on a hidden column
+
+statement ok
+CREATE TABLE t1(a INT, b INT, c INT NOT VISIBLE , PRIMARY KEY(b));
+
+statement ok
+CREATE TABLE t2(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d), FOREIGN KEY(b) REFERENCES t1(b));
+
+
+# adding a foreign key constraint that references a hidden column
+
+statement ok
+CREATE TABLE t3(a INT, b INT NOT NULL, c INT NOT VISIBLE, PRIMARY KEY(c));
+
+statement ok
+CREATE TABLE t4(c INT, d INT, e INT NOT NULL NOT VISIBLE, PRIMARY KEY(d), FOREIGN KEY(c) REFERENCES t3(c));
+
+
+# ALTER PRIMARY KEY on a primary key with hidden columns
+
+statement ok
+ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS(b);
+
+statement ok
+ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
+
+
+
