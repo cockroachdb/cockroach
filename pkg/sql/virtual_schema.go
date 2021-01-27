@@ -376,7 +376,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *tabledesc.Immutable
+	desc                       catalog.TableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -737,7 +737,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (*virtualD
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.Immutable, error)
+	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (*virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (*virtualDefEntry, error)
@@ -750,7 +750,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil || t == nil {
 		return nil, err

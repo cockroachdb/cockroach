@@ -1641,15 +1641,15 @@ func (r *importResumer) dropTables(
 		return nil
 	}
 
-	var revert []*tabledesc.Immutable
-	var empty []*tabledesc.Immutable
+	var revert []catalog.TableDescriptor
+	var empty []catalog.TableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
 			desc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 			if err != nil {
 				return err
 			}
-			imm := desc.ImmutableCopy().(*tabledesc.Immutable)
+			imm := desc.ImmutableCopy().(catalog.TableDescriptor)
 			if tbl.WasEmpty {
 				empty = append(empty, imm)
 			} else {

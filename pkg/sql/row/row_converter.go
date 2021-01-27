@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -94,7 +93,7 @@ func GenerateInsertRow(
 	insertCols []descpb.ColumnDescriptor,
 	computedColsLookup []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
@@ -206,7 +205,7 @@ type DatumRowConverter struct {
 	KvBatch  KVBatch
 	BatchCap int
 
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
@@ -290,7 +289,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,

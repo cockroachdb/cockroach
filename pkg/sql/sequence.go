@@ -111,7 +111,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	return val, nil
 }
 
-func boundsExceededError(descriptor *tabledesc.Immutable) error {
+func boundsExceededError(descriptor catalog.TableDescriptor) error {
 	seqOpts := descriptor.GetSequenceOpts()
 	isAscending := seqOpts.Increment > 0
 
@@ -212,7 +212,7 @@ func MakeSequenceKeyVal(
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, codec keys.SQLCodec, desc *tabledesc.Immutable,
+	ctx context.Context, codec keys.SQLCodec, desc catalog.TableDescriptor,
 ) (int64, error) {
 	if desc.GetSequenceOpts() == nil {
 		return 0, errors.New("descriptor is not a sequence")

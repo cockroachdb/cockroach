@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +32,7 @@ import (
 // Table.
 func ToTableDescriptor(
 	t workload.Table, tableID descpb.ID, ts time.Time,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	stmt, err := parser.ParseOne(fmt.Sprintf(`CREATE TABLE "%s" %s`, t.Name, t.Schema))
@@ -49,7 +49,7 @@ func ToTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc.ImmutableCopy().(*tabledesc.Immutable), nil
+	return tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil
 }
 
 // ToSSTable constructs a single sstable with the kvs necessary to represent a

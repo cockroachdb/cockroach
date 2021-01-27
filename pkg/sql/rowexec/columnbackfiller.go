@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -28,7 +29,7 @@ type columnBackfiller struct {
 
 	backfill.ColumnBackfiller
 
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 }
 
 var _ execinfra.Processor = &columnBackfiller{}

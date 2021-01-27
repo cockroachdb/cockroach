@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -24,7 +24,7 @@ import (
 
 type commentOnTableNode struct {
 	n         *tree.CommentOnTable
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 }
 
 // CommentOnTable add comment on a table.

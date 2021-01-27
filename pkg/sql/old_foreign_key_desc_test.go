@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -56,7 +57,7 @@ CREATE INDEX ON t.t1 (x);
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
 	// to the pre-19.2 table descriptor format where foreign key information
 	// is stored on the index.
-	downgradeForeignKey := func(tbl *tabledesc.Immutable) *tabledesc.Immutable {
+	downgradeForeignKey := func(tbl catalog.TableDescriptor) catalog.TableDescriptor {
 		// Downgrade the outbound foreign keys.
 		for i := range tbl.GetOutboundFKs() {
 			fk := &tbl.GetOutboundFKs()[i]
@@ -64,7 +65,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			var referencedTbl *tabledesc.Immutable
+			var referencedTbl catalog.TableDescriptor
 			err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				referencedTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.ReferencedTableID)
 				return err
@@ -95,7 +96,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			var originTbl *tabledesc.Immutable
+			var originTbl catalog.TableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				originTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.OriginTableID)
 				return err

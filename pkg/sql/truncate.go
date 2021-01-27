@@ -315,7 +315,11 @@ func (p *planner) truncateTable(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func ClearTableDataInChunks(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable, traceKV bool,
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	traceKV bool,
 ) error {
 	const chunkSize = row.TableTruncateChunkSize
 	var resume roachpb.Span

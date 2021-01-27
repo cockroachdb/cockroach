@@ -160,7 +160,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	var tables []tabledesc.Immutable
+	var tables []catalog.TableDescriptor
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
@@ -171,7 +171,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, *table.(*tabledesc.Immutable))
+			tables = append(tables, table.(catalog.TableDescriptor))
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -220,7 +220,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// without a lease.
 	ts.mu.Lock()
 	tableVersion := &descriptorVersionState{
-		Descriptor: &tables[0],
+		Descriptor: tables[0],
 		expiration: tables[5].GetModificationTime(),
 	}
 	ts.mu.active.insert(tableVersion)
@@ -326,7 +326,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.GetID() {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
 	}
-	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.Immutable)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -353,7 +353,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.GetID() {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
 	}
-	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.Immutable)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -386,7 +386,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	} else {
-		if err := leaseManager.Release(lease.Descriptor.(*tabledesc.Immutable)); err != nil {
+		if err := leaseManager.Release(lease.Descriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -437,7 +437,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
 
-	tracker := removalTracker.TrackRemoval(lease.Descriptor.(*tabledesc.Immutable))
+	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
 	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.GetID()); err != nil {
@@ -453,7 +453,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("same lease %s", newLease.expiration.GoTime())
 	}
 
-	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.Immutable)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -462,7 +462,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.Immutable)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -544,7 +544,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Release.
 	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
-	tableChan := make(chan *tabledesc.Immutable)
+	tableChan := make(chan catalog.TableDescriptor)
 	errChan := make(chan error)
 	go func() {
 		for table := range tableChan {
@@ -566,7 +566,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := desc.(*tabledesc.Immutable)
+		table := desc.(catalog.TableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -735,7 +735,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
-		table *tabledesc.Immutable
+		table catalog.TableDescriptor
 		exp   hlc.Timestamp
 		err   error
 	}
@@ -749,7 +749,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		acquireChan chan Result,
 	) {
 		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table.(*tabledesc.Immutable)}
+		acquireChan <- Result{err: err, exp: e, table: table.(catalog.TableDescriptor)}
 	}
 
 	testCases := []struct {
@@ -852,7 +852,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 						return
 					}
 					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table.(*tabledesc.Immutable)}
+					acquireChan <- Result{err: err, exp: e, table: table.(catalog.TableDescriptor)}
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {

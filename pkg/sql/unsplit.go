@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -26,7 +25,7 @@ import (
 type unsplitNode struct {
 	optColumnsSlot
 
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 	index     *descpb.IndexDescriptor
 	run       unsplitRun
 	rows      planNode

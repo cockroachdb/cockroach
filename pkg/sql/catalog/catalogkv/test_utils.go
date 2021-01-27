@@ -30,8 +30,8 @@ import (
 // trivial change that just touches lots of lines.
 func TestingGetTableDescriptorFromSchema(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, table string,
-) *tabledesc.Immutable {
-	return testingGetObjectDescriptor(kvDB, codec, database, schema, table).(*tabledesc.Immutable)
+) catalog.TableDescriptor {
+	return testingGetObjectDescriptor(kvDB, codec, database, schema, table).(catalog.TableDescriptor)
 }
 
 // TestingGetTableDescriptor retrieves a table descriptor directly from the KV
@@ -42,7 +42,7 @@ func TestingGetTableDescriptorFromSchema(
 // removing it altogether.
 func TestingGetTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *tabledesc.Immutable {
+) catalog.TableDescriptor {
 	return TestingGetImmutableTableDescriptor(kvDB, codec, database, table)
 }
 
@@ -50,8 +50,8 @@ func TestingGetTableDescriptor(
 // directly from the KV layer.
 func TestingGetImmutableTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *tabledesc.Immutable {
-	return testingGetObjectDescriptor(kvDB, codec, database, "public", table).(*tabledesc.Immutable)
+) catalog.TableDescriptor {
+	return testingGetObjectDescriptor(kvDB, codec, database, "public", table).(catalog.TableDescriptor)
 }
 
 // TestingGetMutableExistingTableDescriptor retrieves a Mutable

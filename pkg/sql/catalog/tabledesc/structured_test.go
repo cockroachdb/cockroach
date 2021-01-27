@@ -1687,7 +1687,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	tests := []struct {
 		desc       descpb.TableDescriptor
 		expUpgrade bool
-		verify     func(int, *Immutable) // nil means no extra verification.
+		verify     func(int, catalog.TableDescriptor) // nil means no extra verification.
 	}{
 		{
 			desc: descpb.TableDescriptor{
@@ -1698,7 +1698,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: true,
-			verify: func(i int, desc *Immutable) {
+			verify: func(i int, desc catalog.TableDescriptor) {
 				if len(desc.GetFamilies()) == 0 {
 					t.Errorf("%d: expected families to be set, but it was empty", i)
 				}

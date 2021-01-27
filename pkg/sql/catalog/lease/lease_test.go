@@ -1671,7 +1671,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
 			}
-			table := desc.(*tabledesc.Immutable)
+			table := desc.(catalog.TableDescriptor)
 
 			// Wait a little time to give a chance to other goroutines to
 			// race past.
