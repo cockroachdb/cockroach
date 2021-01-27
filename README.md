@@ -104,6 +104,22 @@ Guide](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
 For the original design motivation, see our [design
 doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
+## Licensing
+
+Current CockroachDB code is licensed in three ways:
+
+- [Business Source License (BSL)](https://www.cockroachlabs.com/docs/stable/licensing.html#bsl)
+- [Cockroach Community License (Free)](https://www.cockroachlabs.com/docs/stable/licensing.html#ccl-free)
+- [Cockroach Community License (Paid)](https://www.cockroachlabs.com/docs/stable/licensing.html#ccl-paid)
+
+Core features released up to and including version 19.1 are licensed under [Apache 2.0](https://www.cockroachlabs.com/docs/stable/licensing.html#apache). After version 19.1, core features are licensed under the BSL for three years before converting to the Apache 2.0 license.
+
+BSL features are free to use and the source code is available, but users may not use CockroachDB as a service without an agreement with Cockroach Labs. Outside of this usage, BSL features will continue to be free to use and source code will continue to be available.
+
+[Certain core features](https://www.cockroachlabs.com/docs/stable/licensing.html#core-feature-licensing) and all enterprise features are licensed under the Cockroach Community License (CCL).
+
+For more information, see [Licensing](https://www.cockroachlabs.com/docs/stable/licensing.html).
+
 ## Comparison with Other Databases
 
 To see how key features of CockroachDB stack up against other databases,
