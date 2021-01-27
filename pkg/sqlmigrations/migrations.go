@@ -1196,6 +1196,9 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	if err != nil {
 		return err
 	}
+	if row == nil {
+		return errors.New("failed to update system locations")
+	}
 	count := int(tree.MustBeDInt(row[0]))
 	if count != 0 {
 		return nil

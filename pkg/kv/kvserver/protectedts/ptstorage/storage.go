@@ -170,6 +170,9 @@ func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, 
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
 	}
+	if row == nil {
+		return ptpb.Metadata{}, errors.New("failed to read metadata")
+	}
 	return ptpb.Metadata{
 		Version:    uint64(*row[0].(*tree.DInt)),
 		NumRecords: uint64(*row[1].(*tree.DInt)),

@@ -169,5 +169,6 @@ RETURNING id`,
 		CreatedByScheduledJobs, scheduleID, status, payload,
 	)
 	require.NoError(t, err)
+	require.NotNil(t, datums)
 	return int64(tree.MustBeDInt(datums[0]))
 }
