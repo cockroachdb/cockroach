@@ -2358,9 +2358,14 @@ func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	crossReferences, err := schemaContainsTypesWithCrossSchemaReferences(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
 	codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == tree.PublicSchema},
+		{pgcode.FeatureNotSupported, crossReferences},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
