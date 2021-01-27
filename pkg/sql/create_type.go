@@ -349,7 +349,7 @@ func (p *planner) createEnumWithID(
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
 	if enumType == enumTypeMultiRegion {
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
-		primaryRegion, err := dbDesc.PrimaryRegion()
+		primaryRegion, err := dbDesc.PrimaryRegionName()
 		if err != nil {
 			return err
 		}

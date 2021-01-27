@@ -201,13 +201,29 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
-// PrimaryRegion returns the primary region for a multi-region type descriptor.
-func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
+// PrimaryRegionName returns the primary region for a multi-region enum.
+func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
-			"can not get primary region of a non multi-region type desc")
+			"can not get primary region of a non multi-region enum")
 	}
 	return desc.RegionConfig.PrimaryRegion, nil
+}
+
+// RegionNames returns all the regions on the multi-region enum.
+// This includes regions that are in `READ_ONLY` state as well, if they've just
+// been added or are in the process of being removed (pre-validation).
+func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
@@ -502,12 +518,12 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 			}
 			// Parent database must be a multi-region database if it includes a
-			// multi-region type enum.
+			// multi-region enum.
 
 			if !dbDesc.IsMultiRegion() {
 				return errors.AssertionFailedf("parent database is not a multi-region database")
 			}
-			dbRegions, err := dbDesc.Regions()
+			dbRegions, err := dbDesc.RegionNames()
 			if err != nil {
 				return err
 			}
@@ -540,11 +556,11 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 			if !isDB {
 				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 			}
-			dbPrimaryRegion, err := dbDesc.PrimaryRegion()
+			dbPrimaryRegion, err := dbDesc.PrimaryRegionName()
 			if err != nil {
 				return err
 			}
-			primaryRegion, err := desc.PrimaryRegion()
+			primaryRegion, err := desc.PrimaryRegionName()
 			if err != nil {
 				return err
 			}

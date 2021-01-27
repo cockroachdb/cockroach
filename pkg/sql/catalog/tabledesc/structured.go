@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
+	"google.golang.org/protobuf/proto"
 )
 
 // Mutable is a custom type for TableDescriptors
@@ -1368,16 +1369,14 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		if err != nil {
 			return err
 		}
-		db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+		_, isDB := dbDesc.(catalog.DatabaseDescriptor)
 
 		if !isDB {
 			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 		}
 
-		if desc.LocalityConfig != nil {
-			if err := ValidateTableLocalityConfig(desc.Name, desc.LocalityConfig, db); err != nil {
-				return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
-			}
+		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
+			return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
 		}
 	}
 
@@ -1697,19 +1696,38 @@ func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree
 	return nil
 }
 
-// ValidateTableLocalityConfig validates whether a given locality config is valid
-// under the given database.
-func ValidateTableLocalityConfig(
-	tblName string,
-	localityConfig *descpb.TableDescriptor_LocalityConfig,
-	db catalog.DatabaseDescriptor,
-) error {
+// ValidateTableLocalityConfig validates whether the descriptor's locality
+// config is valid under the given database.
+func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog.DescGetter) error {
+	dbDesc, err := dg.GetDesc(ctx, desc.ParentID)
+	if err != nil {
+		return err
+	}
+	db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+	if !isDB {
+		return errors.AssertionFailedf("database %q with ID %d does not exist",
+			dbDesc.GetName(), errors.Safe(desc.ParentID))
+	}
+
+	if desc.LocalityConfig == nil {
+		if db.IsMultiRegion() {
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"database %s is multi-region enabled, but table %s has no locality set",
+				db.DatabaseDesc().Name,
+				desc.Name,
+			)
+		}
+		// Nothing to validate for non-multi-region databases.
+		return nil
+	}
+
 	if !db.IsMultiRegion() {
 		s := tree.NewFmtCtx(tree.FmtSimple)
 		var locality string
-		// This should never happen; if so, the error message is more clear if we
-		// return a dummy locality here.
-		if err := FormatTableLocalityConfig(localityConfig, s); err != nil {
+		// Formatting the table locality config should never fail; if it does, the
+		// error message is more clear if we construct a dummy locality here.
+		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
 			locality = "INVALID LOCALITY"
 		}
 		locality = s.String()
@@ -1717,16 +1735,31 @@ func ValidateTableLocalityConfig(
 			pgcode.InvalidTableDefinition,
 			"database %s is not multi-region enabled, but table %s has locality %s set",
 			db.DatabaseDesc().Name,
-			tblName,
+			desc.Name,
 			locality,
 		)
 	}
-	switch lc := localityConfig.Locality.(type) {
+
+	regionsEnumID, err := db.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	regionsEnum, err := dg.GetDesc(ctx, regionsEnumID)
+	if err != nil {
+		return err
+	}
+	regionsEnumDesc, isTypeDesc := regionsEnum.(catalog.TypeDescriptor)
+	if !isTypeDesc {
+		return errors.AssertionFailedf("multi-region enum with ID %d does not exist",
+			errors.Safe(regionsEnumID))
+	}
+
+	switch lc := desc.LocalityConfig.Locality.(type) {
 	case *descpb.TableDescriptor_LocalityConfig_Global_, *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := db.Regions()
+			regions, err := regionsEnumDesc.RegionNames()
 			if err != nil {
 				return err
 			}
@@ -4150,19 +4183,58 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
-// IsLocalityRegionalByRow returns whether or not the table is REGIONAL BY ROW table
+// IsLocalityRegionalByRow returns whether or not the table is REGIONAL BY ROW
+// table.
 func (desc *wrapper) IsLocalityRegionalByRow() bool {
 	return desc.LocalityConfig.GetRegionalByRow() != nil
 }
 
-// IsLocalityRegionalByTable returns whether or not the table is REGIONAL BY TABLE table
-// TODO (arulajmani): We can pull out this first check once all multi-region tables contain a LocalityConfig.
+// IsLocalityRegionalByTable returns whether or not the table is REGIONAL BY
+// TABLE table.
 func (desc *wrapper) IsLocalityRegionalByTable() bool {
-	return desc.LocalityConfig == nil ||
-		desc.LocalityConfig.GetRegionalByTable() != nil
+	return desc.LocalityConfig.GetRegionalByTable() != nil
 }
 
-// IsLocalityGlobal returns whether or not the table is GLOBAL table
+// IsLocalityGlobal returns whether or not the table is GLOBAL table.
 func (desc *wrapper) IsLocalityGlobal() bool {
 	return desc.LocalityConfig.GetGlobal() != nil
+}
+
+// SetTableLocalityRegionalByTable sets the descriptor's locality config to
+// regional at the table level in the supplied region. An empty region name
+// (or its alias PrimaryRegionLocalityName) denotes that the table has affinity
+// to the primary region.
+func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
+	}
+	if region != tree.PrimaryRegionLocalityName {
+		regionName := descpb.RegionName(region)
+		l.RegionalByTable.Region = &regionName
+	}
+	desc.LocalityConfig.Locality = l
+}
+
+// SetTableLocalityRegionalByRow sets the descriptor's locality config to
+// regional at the row level. An empty regionColName denotes the default
+// crdb_region partitioning column.
+func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
+	if regionColName != "" {
+		rbr.As = proto.String(string(regionColName))
+	}
+	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+		RegionalByRow: rbr,
+	}
+}
+
+// SetTableLocalityGlobal sets the descriptor's locality config to a global
+// table.
+func (desc *Mutable) SetTableLocalityGlobal() {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
+		Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+	}
 }
