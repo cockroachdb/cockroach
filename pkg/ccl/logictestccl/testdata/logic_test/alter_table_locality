@@ -140,6 +140,7 @@ TABLE global  ALTER TABLE global CONFIGURE ZONE USING
               range_min_bytes = 134217728,
               range_max_bytes = 536870912,
               gc.ttlseconds = 90000,
+              global_reads = true,
               num_replicas = 3,
               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
               lease_preferences = '[[+region=ca-central-1]]'
@@ -219,6 +220,7 @@ TABLE global  ALTER TABLE global CONFIGURE ZONE USING
               range_min_bytes = 134217728,
               range_max_bytes = 536870912,
               gc.ttlseconds = 90000,
+              global_reads = true,
               num_replicas = 3,
               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
               lease_preferences = '[[+region=ca-central-1]]'
@@ -337,6 +339,7 @@ TABLE regional_by_table_in_primary_region  ALTER TABLE regional_by_table_in_prim
                                            range_min_bytes = 134217728,
                                            range_max_bytes = 536870912,
                                            gc.ttlseconds = 90000,
+                                           global_reads = true,
                                            num_replicas = 3,
                                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                            lease_preferences = '[[+region=ca-central-1]]'
@@ -450,6 +453,7 @@ TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFI
                                    range_min_bytes = 134217728,
                                    range_max_bytes = 536870912,
                                    gc.ttlseconds = 90000,
+                                   global_reads = true,
                                    num_replicas = 3,
                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                    lease_preferences = '[[+region=ca-central-1]]'
@@ -555,6 +559,7 @@ TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CON
                                     range_min_bytes = 134217728,
                                     range_max_bytes = 536870912,
                                     gc.ttlseconds = 90000,
+                                    global_reads = true,
                                     num_replicas = 3,
                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                     lease_preferences = '[[+region=ca-central-1]]'

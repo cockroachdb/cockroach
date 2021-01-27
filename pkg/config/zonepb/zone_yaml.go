@@ -202,6 +202,7 @@ type marshalableZoneConfig struct {
 	RangeMinBytes                *int64            `json:"range_min_bytes" yaml:"range_min_bytes"`
 	RangeMaxBytes                *int64            `json:"range_max_bytes" yaml:"range_max_bytes"`
 	GC                           *GCPolicy         `json:"gc"`
+	GlobalReads                  *bool             `json:"global_reads" yaml:"global_reads"`
 	NumReplicas                  *int32            `json:"num_replicas" yaml:"num_replicas"`
 	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
 	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
@@ -221,6 +222,9 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	if c.GC != nil {
 		tempGC := *c.GC
 		m.GC = &tempGC
+	}
+	if c.GlobalReads != nil {
+		m.GlobalReads = proto.Bool(*c.GlobalReads)
 	}
 	if c.NumReplicas != nil && *c.NumReplicas != 0 {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
@@ -249,6 +253,9 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 	if m.GC != nil {
 		tempGC := *m.GC
 		c.GC = &tempGC
+	}
+	if m.GlobalReads != nil {
+		c.GlobalReads = proto.Bool(*m.GlobalReads)
 	}
 	if m.NumReplicas != nil {
 		c.NumReplicas = proto.Int32(*m.NumReplicas)

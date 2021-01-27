@@ -205,6 +205,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
+				GlobalReads:               proto.Bool(true),
 				NumReplicas:               proto.Int32(4),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
@@ -228,6 +229,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
+				GlobalReads:               proto.Bool(true),
 				NumReplicas:               proto.Int32(4),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
@@ -434,7 +436,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 			},
 		},
 		{
-			desc: "4-region global table with region survivability",
+			desc: "4-region table with region survivability",
 			region: descpb.DatabaseDescriptor_RegionConfig_Region{
 				Name: "region_a",
 			},

@@ -678,6 +678,10 @@ func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
 
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
+
+		// TODO(nvanbenschoten): use the new zone.GlobalReads field to configure
+		// closed timestamp lead/lag, once we have per-range closed timestamp
+		// trackers.
 	}
 	r.mu.zone = zone
 }
