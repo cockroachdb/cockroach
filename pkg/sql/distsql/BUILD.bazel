@@ -13,6 +13,7 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/colexec",
         "//pkg/sql/colflow",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

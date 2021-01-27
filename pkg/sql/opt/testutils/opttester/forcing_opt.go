@@ -55,9 +55,10 @@ type forcingOptimizer struct {
 
 // newForcingOptimizer creates a forcing optimizer that stops applying any rules
 // after <steps> rules are matched. If ignoreNormRules is true, normalization
-// rules don't count against this limit.
+// rules don't count against this limit. If disableCheckExpr is true, expression
+// validation in CheckExpr will not run.
 func newForcingOptimizer(
-	tester *OptTester, steps int, ignoreNormRules bool,
+	tester *OptTester, steps int, ignoreNormRules bool, disableCheckExpr bool,
 ) (*forcingOptimizer, error) {
 	fo := &forcingOptimizer{
 		remaining:   steps,
@@ -99,6 +100,10 @@ func newForcingOptimizer(
 	fo.o.Memo().NotifyOnNewGroup(func(expr opt.Expr) {
 		fo.groups.AddGroup(expr)
 	})
+
+	if disableCheckExpr {
+		fo.o.Memo().DisableCheckExpr()
+	}
 
 	if err := tester.buildExpr(fo.o.Factory()); err != nil {
 		return nil, err

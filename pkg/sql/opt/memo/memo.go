@@ -147,6 +147,13 @@ type Memo struct {
 
 	newGroupFn func(opt.Expr)
 
+	// disableCheckExpr disables expression validation performed by CheckExpr,
+	// if the crdb_test build tag is set. If the crdb_test build tag is not set,
+	// CheckExpr is always a no-op, so disableCheckExpr has no effect. This is
+	// set to true for the optsteps test command to prevent CheckExpr from
+	// erring with partially normalized expressions.
+	disableCheckExpr bool
+
 	// WARNING: if you add more members, add initialization code in Init (if
 	// reusing allocated data structures is desired).
 }
@@ -407,4 +414,11 @@ func (m *Memo) Detach() {
 		}
 	}
 	clearColStats(m.RootExpr())
+}
+
+// DisableCheckExpr disables expression validation performed by CheckExpr,
+// if the crdb_test build tag is set. If the crdb_test build tag is not set,
+// CheckExpr is always a no-op, so DisableCheckExpr has no effect.
+func (m *Memo) DisableCheckExpr() {
+	m.disableCheckExpr = true
 }

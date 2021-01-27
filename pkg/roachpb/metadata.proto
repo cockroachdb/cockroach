@@ -43,8 +43,7 @@ message ReplicationTarget {
 // well to denote voters which are being downgraded to learners and newly added
 // by the change, respectively. A demoting voter is turning into a learner,
 // which we prefer over a direct removal, which was used prior to v20.1 and
-// uses the VOTER_OUTGOING type instead (see VersionChangeReplicasDemotion for
-// details on why we're not doing that any more).
+// uses the VOTER_OUTGOING type instead (see #42251).
 //
 // All voter types indicate a replica that participates in all raft activities,
 // including voting for leadership and committing entries. Typically, this
@@ -73,6 +72,9 @@ enum ReplicaType {
   // that is, it is in the process of being removed. In practice, a replica of
   // this type should be treated accordingly and no work should be assigned to
   // it.
+  //
+  // Note: We're not using VOTER_OUTGOING since 20.1. We're using VOTER_DEMOTING
+  // instead. See #42251.
   VOTER_OUTGOING = 3;
   // VOTER_DEMOTING indicates a voting replica that will become a learner once
   // the ongoing atomic replication change is finalized; that is, it is in the
