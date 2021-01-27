@@ -1663,7 +1663,7 @@ project
 # --------------------------------------------------
 
 # Query only the primary key with no remaining filter.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
 project
@@ -1676,7 +1676,7 @@ project
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
-memo
+memo expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
 memo (optimized, ~7KB, required=[presentation: k:1])
@@ -1703,7 +1703,7 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  └── G9: (const '{"a": "b"}')
 
 # Query requiring an index join with no remaining filter.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT u, k FROM b WHERE j @> '{"a": "b"}'
 ----
 project
@@ -1722,7 +1722,7 @@ project
            │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
            └── key: (1)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT j, k FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
@@ -1736,7 +1736,7 @@ index-join b
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
@@ -1750,7 +1750,7 @@ index-join b
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '2'
 ----
 index-join b
@@ -1767,7 +1767,7 @@ index-join b
       └── key: (1)
 
 # Disjunction.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '2' OR j @> '1'
 ----
 project
@@ -1796,7 +1796,7 @@ project
            └── fd: (1)-->(6)
 
 # Disjunction with non-tight predicate.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '[[1, 2]]' OR j @> '[[3, 4]]'
 ----
 select
@@ -1848,7 +1848,7 @@ select
  └── filters
       └── (j:4 @> '[[1, 2]]') OR (j:4 @> '[[3, 4]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '[{}]'
 ----
 index-join b
@@ -1873,7 +1873,7 @@ index-join b
            ├── key: (1)
            └── fd: (1)-->(6)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": {}}'
 ----
 index-join b
@@ -1898,7 +1898,7 @@ index-join b
            ├── key: (1)
            └── fd: (1)-->(6)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": []}'
 ----
 index-join b
@@ -1923,7 +1923,7 @@ index-join b
            ├── key: (1)
            └── fd: (1)-->(6)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
 ----
 index-join b
@@ -1937,8 +1937,164 @@ index-join b
       │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
       └── key: (1)
 
+# Query using the fetch val and equality operators.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      └── key: (1)
+
+# Do not generate an inverted scan when the index of the fetch val operator is
+# not a string.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->0) = '"b"' [outer=(4), immutable]
+
+# Do not generate an inverted scan when right side of the equality is an array.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '["b"]'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->'a') = '["b"]' [outer=(4), immutable]
+
+# Do not generate an inverted scan when right side of the equality is an object.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '{"b": "c"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->'a') = '{"b": "c"}' [outer=(4), immutable]
+
+# Query using the fetch val and equality operators in a conjunction.
+opt expect=GenerateInvertedIndexScans disable=GenerateInvertedIndexZigzagJoins
+SELECT k FROM b WHERE j->'a' = '"b"' AND j->'c' = '"d"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+# Query using the fetch val and equality operators in a disjunction.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"' OR j->'c' = '"d"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+# Query using the fetch val and equality operators in a disjunction with a
+# contains operator.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"' OR j @> '{"c": "d"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
 # GenerateInvertedIndexScans propagates row-level locking information.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
 ----
 project
@@ -1954,7 +2110,7 @@ project
       └── key: (1)
 
 # Tests for array inverted indexes.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[1]
 ----
 project
@@ -1968,7 +2124,7 @@ project
       └── key: (1)
 
 # Disjunction.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[1] OR a @> ARRAY[2]
 ----
 project
@@ -1988,7 +2144,7 @@ project
            ├── key: (1)
            └── fd: (1)-->(5)
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
 ----
 project
@@ -2008,7 +2164,7 @@ project
            ├── key: (1)
            └── fd: (1)-->(5)
 
-opt
+opt expect-not=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a IS NULL
 ----
 project
@@ -2121,7 +2277,7 @@ CREATE INVERTED INDEX a_inv_idx ON c (a)
 ----
 
 # Tests for geospatial constrained scans.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_Intersects('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 ----
 project
@@ -2161,7 +2317,7 @@ project
            └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Same test as above, but with commuted arguments.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_Intersects(geog, 'SRID=4326;POINT(-43.23456 72.4567772)'::geography)
 ----
 project
@@ -2200,7 +2356,7 @@ project
       └── filters
            └── st_intersects(geog:4, '0101000020E61000009279E40F069E45C0BEE36FD63B1D5240') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
 ----
 project
@@ -2240,7 +2396,7 @@ project
            └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Same test as above, but with commuted arguments.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_CoveredBy(geom, 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry)
 ----
 project
@@ -2273,7 +2429,7 @@ project
       └── filters
            └── st_coveredby(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000') [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
 ----
 project
@@ -2306,7 +2462,7 @@ project
       └── filters
            └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DFullyWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
 ----
 project
@@ -2339,7 +2495,7 @@ project
       └── filters
            └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000)
 ----
 project
@@ -2392,7 +2548,7 @@ project
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000, false)
 ----
 project
@@ -2446,7 +2602,7 @@ project
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Test for ST_DWithinExclusive
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DWithinExclusive('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
 ----
 project
@@ -2480,7 +2636,7 @@ project
            └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Commuted version of previous test.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DWithinExclusive(geom, 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, 2)
 ----
 project
@@ -2513,7 +2669,7 @@ project
       └── filters
            └── st_dwithinexclusive(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE ST_DFullyWithinExclusive('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
 ----
 project
@@ -2549,7 +2705,7 @@ project
 # Multiple geospatial functions.
 # NB: the union spans for the following query are a subset of the spans. This is a
 # consequence of how intersectSpanExpression does simplification.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 AND ST_CoveredBy('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)
@@ -2590,7 +2746,7 @@ project
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
            └── st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 OR ST_CoveredBy('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)
@@ -2627,7 +2783,7 @@ project
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 OR (ST_CoveredBy('SRID=4326;LINESTRING(-118.4079 33.9434, 2.5559 49.0083)'::geography, geog)
@@ -2695,7 +2851,7 @@ project
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_coveredby('0102000020E61000000200000075029A081B9A5DC0F085C954C1F840406DC5FEB27B720440454772F90F814840', geog:4) AND st_coveredby('0101000020E610000058569A94821E46C07BC7DFAC773A4E40', geog:4)) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Multiple geospatial functions on different indexes.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 AND ST_Overlaps('LINESTRING ( 0 0, 0 2 )'::geometry, geom)
@@ -2753,7 +2909,7 @@ project
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3,4), immutable]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 OR (ST_Intersects('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)
@@ -2792,7 +2948,7 @@ project
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_intersects('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) AND st_crosses('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)) [outer=(3,4), immutable, constraints=(/4: (/NULL - ])]
 
 # Filters on other columns.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
 AND v = 3 AND k > 100
@@ -2841,7 +2997,7 @@ project
            └── v:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 # Bounding box operations.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE 'BOX(1 2, 3 4)'::box2d ~ geom
 ----
 project
@@ -2878,7 +3034,7 @@ project
       └── filters
            └── 'BOX(1 2,3 4)' ~ geom:3 [outer=(3), immutable]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE geom ~ 'BOX(1 2, 3 4)'::box2d
 ----
 project
@@ -2915,7 +3071,7 @@ project
       └── filters
            └── geom:3 ~ 'BOX(1 2,3 4)' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM g WHERE geom ~ 'MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry
 ----
 project
@@ -2977,7 +3133,7 @@ exec-ddl
 CREATE INVERTED INDEX idx ON pi (j) WHERE s = 'foo'
 ----
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM pi WHERE j @> '{"a": "b"}' AND s = 'foo'
 ----
 project
@@ -3000,7 +3156,7 @@ exec-ddl
 CREATE INVERTED INDEX idx ON pi (j) WHERE j @> '{"group": 1}'
 ----
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM pi WHERE j @> '{"a": "b"}' AND j @> '{"group": 1}'
 ----
 project
@@ -3023,7 +3179,7 @@ exec-ddl
 CREATE INVERTED INDEX idx ON pi (j) WHERE s = 'foo'
 ----
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'foo'
 ----
 index-join pi
@@ -3047,7 +3203,7 @@ exec-ddl
 CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
 ----
 
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND j @> '{"group": 1}' AND s = 'foo'
 ----
 select
@@ -3098,7 +3254,7 @@ exec-ddl
 CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 ----
 
-memo
+memo expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
 memo (optimized, ~10KB, required=[presentation: k:1,s:2,j:3])
@@ -3172,7 +3328,7 @@ DROP INDEX idx
 
 # Check that we can generate constraints by recognizing computed column
 # expressions.
-opt
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM computed WHERE (j->'foo') @> '{"a": "b"}'
 ----
 project
@@ -3181,7 +3337,21 @@ project
  ├── key: (1)
  └── scan computed@field_inv_idx
       ├── columns: k:1!null
-      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /8/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      └── key: (1)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM computed WHERE (j->'foo')->'a' = '1'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan computed@field_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /8/1
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
       └── key: (1)
 
 # Tests for multi-column inverted indexes.
@@ -3685,6 +3855,44 @@ select
  │              └── fd: (1)-->(9)
  └── filters
       ├── a:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+
+# Constrain a prefix computed column when the computed expression matches a
+# filter expression.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM mc WHERE upper(a) = 'FOO' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null c:4 geom:5!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join mc
+ │    ├── columns: k:1!null a:2!null b:3!null c:4 geom:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /9
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
+ │         ├── key: (1)
+ │         └── scan mc@mc_idx
+ │              ├── columns: k:1!null geom_inverted_key:9!null
+ │              ├── constraint: /4: [/'FOO' - /'FOO']
+ │              ├── inverted constraint: /9/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(9)
+ └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 exec-ddl
@@ -4783,7 +4991,8 @@ SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
 ----
 project
  └── scan inv_zz_partial@zz_idx,partial
-      └── constraint: /2/1: [/'{"b": 2}' - /'{"b": 2}']
+      └── inverted constraint: /7/1
+           └── spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
 
 # --------------------------------------------------
 # SplitDisjunction

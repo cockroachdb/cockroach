@@ -297,7 +297,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			append(optionalFilters, partitionFilters...),
 			scanPrivate.Table,
 			index.Ordinal(),
-			false, /* isInverted */
 		)
 		if !ok {
 			return
@@ -309,7 +308,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 				append(optionalFilters, inBetweenFilters...),
 				scanPrivate.Table,
 				index.Ordinal(),
-				false, /* isInverted */
 			)
 			if !ok {
 				panic(errors.AssertionFailedf("in-between filters didn't yield a constraint"))
@@ -720,6 +718,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 ) {
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
@@ -731,50 +730,35 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
-		var spanExpr *invertedexpr.SpanExpression
-		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
-		var spansToRead invertedexpr.InvertedSpans
-		var constraint *constraint.Constraint
-		var filterOk, constraintOk bool
-
 		// Check whether the filter can constrain the index.
-		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, constraint, remainingFilters, pfState, filterOk := invertedidx.TryFilterInvertedIndex(
-			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index,
+		spanExpr, constraint, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
+			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 		)
-		if filterOk {
-			spansToRead = spanExpr.SpansToRead
-			// Override the filters with remainingFilters. If the index is a
-			// multi-column inverted index, the non-inverted prefix columns are
-			// constrained by the constraint. It may be possible to reduce the
-			// filters if the constraint fully describes some of
-			// sub-expressions. The remainingFilters are the filters that are
-			// not fully expressed by the constraint.
-			//
-			// Consider the example:
-			//
-			//   CREATE TABLE t (a INT, b INT, g GEOMETRY, INVERTED INDEX (b, g))
-			//
-			//   SELECT * FROM t WHERE a = 1 AND b = 2 AND ST_Intersects(.., g)
-			//
-			// The constraint would constrain b to [/2 - /2], guaranteeing that
-			// the inverted index scan would only produce rows where (b = 2).
-			// Reapplying the (b = 2) filter after the scan would be
-			// unnecessary, so the remainingFilters in this case would be
-			// (a = 1 AND ST_Intersects(.., g)).
-			filters = remainingFilters
-		} else {
-			constraint, filters, constraintOk = c.tryConstrainIndex(
-				filters,
-				nil, /* optionalFilters */
-				scanPrivate.Table,
-				index.Ordinal(),
-				true, /* isInverted */
-			)
-			if !constraintOk {
-				return
-			}
+		if !ok {
+			// A span expression to constrain the inverted index could not be
+			// generated.
+			return
 		}
+		spansToRead := spanExpr.SpansToRead
+		// Override the filters with remainingFilters. If the index is a
+		// multi-column inverted index, the non-inverted prefix columns are
+		// constrained by the constraint. In this case, it may be possible to
+		// reduce the filters if the constraint fully describes some of
+		// sub-expressions. The remainingFilters are the filters that are not
+		// fully expressed by the constraint.
+		//
+		// Consider the example:
+		//
+		//   CREATE TABLE t (a INT, b INT, g GEOMETRY, INVERTED INDEX (b, g))
+		//
+		//   SELECT * FROM t WHERE a = 1 AND b = 2 AND ST_Intersects(.., g)
+		//
+		// The constraint would constrain b to [/2 - /2], guaranteeing that
+		// the inverted index scan would only produce rows where (b = 2).
+		// Reapplying the (b = 2) filter after the scan would be
+		// unnecessary, so the remainingFilters in this case would be
+		// (a = 1 AND ST_Intersects(.., g)).
+		filters = remainingFilters
 
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
@@ -786,8 +770,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
-		needInvertedFilter := spanExpr != nil &&
-			(!spanExpr.Unique || spanExpr.Operator != invertedexpr.None)
+		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != invertedexpr.None
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID
@@ -825,19 +808,15 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr,
-	tabID opt.TableID,
-	indexOrd int,
-	isInverted bool,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
-	if !isInverted &&
-		!c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
+	if !c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
 		!c.canMaybeConstrainNonInvertedIndex(optionalFilters, tabID, indexOrd) {
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, isInverted)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, false /* isInverted */)
 	constraint = ic.Constraint()
 	if constraint.IsUnconstrained() {
 		return nil, nil, false

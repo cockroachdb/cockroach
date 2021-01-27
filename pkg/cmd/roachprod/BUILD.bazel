@@ -23,8 +23,8 @@ go_library(
         "//pkg/util/flagutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
-        "@org_golang_x_crypto//ssh/terminal",
         "@org_golang_x_sys//unix",
+        "@org_golang_x_term//:term",
     ],
 )
 

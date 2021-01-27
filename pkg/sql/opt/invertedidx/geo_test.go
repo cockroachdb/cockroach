@@ -491,7 +491,13 @@ func TestTryFilterGeoIndex(t *testing.T) {
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
 		spanExpr, _, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+			evalCtx,
+			&f,
+			filters,
+			nil, /* optionalFilters */
+			tab,
+			md.Table(tab).Index(tc.indexOrd),
+			nil, /* computedColumns */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
