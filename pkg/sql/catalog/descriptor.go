@@ -87,10 +87,11 @@ type DatabaseDescriptor interface {
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
-	Regions() (descpb.RegionNames, error)
+	RegionNames() (descpb.RegionNames, error)
 	IsMultiRegion() bool
-	PrimaryRegion() (descpb.RegionName, error)
+	PrimaryRegionName() (descpb.RegionName, error)
 	Validate() error
+	MultiRegionEnumID() (descpb.ID, error)
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -363,7 +364,8 @@ type TypeDescriptor interface {
 	HasPendingSchemaChanges() bool
 	GetIDClosure() map[descpb.ID]struct{}
 
-	PrimaryRegion() (descpb.RegionName, error)
+	PrimaryRegionName() (descpb.RegionName, error)
+	RegionNames() (descpb.RegionNames, error)
 	Validate(ctx context.Context, dg DescGetter) error
 }
 

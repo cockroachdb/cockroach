@@ -36,6 +36,11 @@ const (
 	RegionalByRowRegionDefaultCol string = "crdb_region"
 	// RegionalByRowRegionDefaultColName is the same, typed as Name.
 	RegionalByRowRegionDefaultColName Name = Name(RegionalByRowRegionDefaultCol)
+	// PrimaryRegionLocalityName is the string denoting the primary region in the
+	// locality config.
+	// TODO(#multiregion): clean this up to use something nicer,
+	// see https://github.com/cockroachdb/cockroach/issues/59455.
+	PrimaryRegionLocalityName Name = ""
 )
 
 // Locality defines the locality for a given table.
@@ -43,8 +48,15 @@ type Locality struct {
 	LocalityLevel LocalityLevel
 	// TableRegion is set if is LocalityLevelTable and a non-primary region is set.
 	TableRegion Name
-	// RegionalByRowColumn is set if col_name on REGIONAL BY ROW ON <col_name> is set.
+	// RegionalByRowColumn is set if col_name on REGIONAL BY ROW ON <col_name> is
+	// set.
 	RegionalByRowColumn Name
+}
+
+// InPrimaryRegion returns true if the table is REGIONAL BY TABLE and the table
+// region is unset (representing the primary region).
+func (node *Locality) InPrimaryRegion() bool {
+	return node.LocalityLevel == LocalityLevelTable && node.TableRegion == ""
 }
 
 // Format implements the NodeFormatter interface.

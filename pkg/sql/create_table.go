@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"google.golang.org/protobuf/proto"
 )
 
 type createTableNode struct {
@@ -1311,6 +1310,7 @@ func NewTableDesc(
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
+	regionEnumID descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -2158,44 +2158,23 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	if n.Locality != nil {
-		db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
-		if err != nil {
-			return nil, errors.Wrap(err, "error fetching database descriptor for locality checks")
-		}
-
-		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
-		switch n.Locality.LocalityLevel {
-		case tree.LocalityLevelGlobal:
-			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
-				Global: &descpb.TableDescriptor_LocalityConfig_Global{},
-			}
-		case tree.LocalityLevelTable:
-			l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-				RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
-			}
-			if n.Locality.TableRegion != "" {
-				region := descpb.RegionName(n.Locality.TableRegion)
-				l.RegionalByTable.Region = &region
-			}
-			desc.LocalityConfig.Locality = l
-		case tree.LocalityLevelRow:
-			rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
-			if n.Locality.RegionalByRowColumn != "" {
-				rbr.As = proto.String(string(n.Locality.RegionalByRowColumn))
-			}
-			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-				RegionalByRow: rbr,
-			}
-		default:
+	if regionEnumID != descpb.InvalidID || n.Locality != nil {
+		if n.Locality == nil {
+			// The absence of a locality on the AST node indicates that the table must
+			// be homed in the primary region.
+			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
+			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
+		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {
+			desc.SetTableLocalityGlobal()
+		} else if n.Locality.LocalityLevel == tree.LocalityLevelRow {
+			desc.SetTableLocalityRegionalByRow(n.Locality.RegionalByRowColumn)
+		} else {
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
 		}
 
-		if err := tabledesc.ValidateTableLocalityConfig(
-			n.Table.Table(),
-			desc.LocalityConfig,
-			db,
-		); err != nil {
+		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
+		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
 			return nil, err
 		}
 	}
@@ -2264,6 +2243,20 @@ func newTableDesc(
 		}
 	}
 
+	regionEnumID := descpb.InvalidID
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if dbDesc.IsMultiRegion() {
+		regionEnumID, err = dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// We need to run NewTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
@@ -2278,6 +2271,7 @@ func newTableDesc(
 			parentID,
 			parentSchemaID,
 			id,
+			regionEnumID,
 			creationTime,
 			privileges,
 			affected,
