@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,7 +53,7 @@ func (s *sorterBase) init(
 	opts execinfra.ProcStateOpts,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		input = newInputStatCollector(input)
 		s.ExecStatsForTrace = s.execStatsForTrace
 	}

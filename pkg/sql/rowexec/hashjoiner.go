@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -142,7 +141,7 @@ func newHashJoiner(
 	)
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
 		h.ExecStatsForTrace = h.execStatsForTrace

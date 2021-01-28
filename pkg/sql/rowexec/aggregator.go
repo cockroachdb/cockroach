@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -94,7 +93,7 @@ func (ag *aggregatorBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}

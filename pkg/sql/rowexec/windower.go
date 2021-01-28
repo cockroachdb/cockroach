@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -201,7 +200,7 @@ func newWindower(
 	// them to reuse the same shared memory account with the windower.
 	evalCtx.SingleDatumAggMemAccount = &w.acc
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		w.input = newInputStatCollector(w.input)
 		w.ExecStatsForTrace = w.execStatsForTrace
 	}

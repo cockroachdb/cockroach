@@ -975,6 +975,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
 	var evalCtxFactory func() *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||

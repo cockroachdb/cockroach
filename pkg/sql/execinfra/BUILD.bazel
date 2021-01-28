@@ -15,6 +15,7 @@ go_library(
         "readerbase.go",
         "scanbase.go",
         "server_config.go",
+        "stats.go",
         "testutils.go",
         "version.go",
         ":gen-consumerstatus-stringer",  # keep
