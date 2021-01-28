@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -200,8 +201,10 @@ func constraintsConjunctionForRegionalLocality(
 
 // zoneConfigFromTableLocalityConfig generates a desired ZoneConfig based
 // on the locality config for the database.
+// These fields should be "merged" by the calling function into an existing ZoneConfig
+// using mergeZoneConfigsForMultiRegion.
 // This function can return a nil zonepb.ZoneConfig, meaning no table level zone
-// configuration is required.
+// configurations for multi-region fields are required.
 // TODO(#multiregion,aayushshah15): properly configure this for region survivability and leaseholder
 // preferences when new zone configuration parameters merge.
 func zoneConfigFromTableLocalityConfig(
@@ -240,6 +243,31 @@ func zoneConfigFromTableLocalityConfig(
 	return &ret, nil
 }
 
+// mergeZoneConfigsForMultiRegion reassigns fields in `base` with the fields
+// that are multi-region related in `from`.
+func mergeZoneConfigsForMultiRegion(
+	base zonepb.ZoneConfig, from *zonepb.ZoneConfig,
+) zonepb.ZoneConfig {
+	if from != nil {
+		// Overwrite zone configuration fields used by multi-region.
+		base.NumReplicas = from.NumReplicas
+		base.InheritedConstraints = from.InheritedConstraints
+		base.Constraints = from.Constraints
+		base.InheritedLeasePreferences = from.InheritedLeasePreferences
+		base.LeasePreferences = from.LeasePreferences
+		base.GlobalReads = from.GlobalReads
+	} else {
+		// Clear existing zone configuration fields used by multi-region.
+		base.NumReplicas = nil
+		base.InheritedConstraints = true
+		base.Constraints = nil
+		base.InheritedLeasePreferences = true
+		base.LeasePreferences = nil
+		base.GlobalReads = nil
+	}
+	return base
+}
+
 // TODO(#multiregion): everything using this should instead use getZoneConfigRaw
 // and writeZoneConfig instead of calling SQL for each query.
 // This removes the requirement to only call this function after writeSchemaChange
@@ -273,130 +301,146 @@ func (p *planner) applyZoneConfigForMultiRegion(
 	return nil
 }
 
-func (p *planner) applyZoneConfigFromTableLocalityConfig(
-	ctx context.Context,
-	tblName tree.TableName,
-	desc *descpb.TableDescriptor,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
-) error {
-	localityConfig := *desc.LocalityConfig
-
-	// Construct an explicit name so that CONFIGURE ZONE has the fully qualified name.
-	// Without this, the table may fail to resolve.
-	explicitTblName := tree.MakeTableNameWithSchema(
-		tblName.CatalogName,
-		tblName.SchemaName,
-		tblName.ObjectName,
-	)
-
-	// Apply zone configs for each index partition.
-	// TODO(otan): depending on what we decide for cascading zone configs, some of this
-	// code will have to change.
-	switch localityConfig.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-		for _, region := range regionConfig.Regions {
-			zc, err := zoneConfigFromRegionConfigForPartition(region, regionConfig)
-			if err != nil {
-				return err
-			}
-
-			for _, idx := range desc.Indexes {
-				if err := p.applyZoneConfigForMultiRegion(
-					ctx,
-					tree.ZoneSpecifier{
-						TableOrIndex: tree.TableIndexName{
-							Table: explicitTblName,
-							Index: tree.UnrestrictedName(idx.Name),
-						},
-						Partition: tree.Name(region.Name),
-					},
-					&zc,
-					"index-multiregion-set-zone-config",
-				); err != nil {
-					return err
-				}
-			}
-
-			if err := p.applyZoneConfigForMultiRegion(
-				ctx,
-				tree.ZoneSpecifier{
-					TableOrIndex: tree.TableIndexName{
-						Table: explicitTblName,
-						Index: tree.UnrestrictedName(desc.PrimaryIndex.Name),
-					},
-					Partition: tree.Name(region.Name),
-				},
-				&zc,
-				"primary-index-multiregion-set-zone-config",
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	localityZoneConfig, err := zoneConfigFromTableLocalityConfig(
-		localityConfig,
-		regionConfig,
-	)
-	if err != nil {
-		return err
-	}
-
-	// This means that the table doesn't need an explicit zone configuration. Drop
-	// one if it already exists and return.
-	if localityZoneConfig == nil {
-		return p.dropZoneConfigForTable(ctx, explicitTblName)
-	}
-
-	return p.applyZoneConfigForMultiRegion(
-		ctx,
-		tree.ZoneSpecifier{TableOrIndex: tree.TableIndexName{Table: explicitTblName}},
-		localityZoneConfig,
-		"table-multiregion-set-zone-config",
-	)
+// applyZoneConfigForMultiRegionTableOption is an option that can be passed into
+// applyZoneConfigForMultiRegionTable.
+type applyZoneConfigForMultiRegionTableOption struct {
+	apply func(
+		zoneConfig zonepb.ZoneConfig,
+		regionConfig descpb.DatabaseDescriptor_RegionConfig,
+		table catalog.TableDescriptor,
+	) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error)
 }
 
-// addNewZoneConfigSubzonesForIndex updates the ZoneConfig for the given index,
-// assuming a zone config already exists for the given table and that the index
-// has previously not had a subzone defined.
-func (p *planner) addNewZoneConfigSubzonesForIndex(
-	ctx context.Context,
-	table catalog.TableDescriptor,
+// applyZoneConfigForMultiRegionTableOptionNewIndex applies table zone configs
+// for a newly added index  which requires partitioning of individual indexes.
+func applyZoneConfigForMultiRegionTableOptionNewIndex(
 	indexID descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return applyZoneConfigForMultiRegionTableOption{
+		apply: func(
+			zoneConfig zonepb.ZoneConfig,
+			regionConfig descpb.DatabaseDescriptor_RegionConfig,
+			table catalog.TableDescriptor,
+		) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error) {
+			for _, region := range regionConfig.Regions {
+				zc, err := zoneConfigFromRegionConfigForPartition(region, regionConfig)
+				if err != nil {
+					return false, zoneConfig, err
+				}
+				zoneConfig.SetSubzone(zonepb.Subzone{
+					IndexID:       uint32(indexID),
+					PartitionName: string(region.Name),
+					Config:        zc,
+				})
+			}
+			return true, zoneConfig, nil
+		},
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOptionTableAndIndexes applies table zone configs
+// on the entire table as well as its indexes, replacing multi-region related zone
+// configuration fields.
+var applyZoneConfigForMultiRegionTableOptionTableAndIndexes = applyZoneConfigForMultiRegionTableOption{
+	apply: func(
+		zc zonepb.ZoneConfig,
+		regionConfig descpb.DatabaseDescriptor_RegionConfig,
+		table catalog.TableDescriptor,
+	) (bool, zonepb.ZoneConfig, error) {
+		localityConfig := *table.GetLocalityConfig()
+
+		if localityZoneConfig, err := zoneConfigFromTableLocalityConfig(
+			localityConfig,
+			regionConfig,
+		); err != nil {
+			return false, zonepb.ZoneConfig{}, err
+		} else {
+			zc = mergeZoneConfigsForMultiRegion(zc, localityZoneConfig)
+		}
+
+		var hasNewSubzones bool
+		if table.IsLocalityRegionalByRow() {
+			hasNewSubzones = true
+			// Mark the zone config as a placeholder zone config if it is currently empty and we are
+			// adding subzones.
+			// See zonepb.IsSubzonePlaceholder for why this is necessary.
+			if zc.Equal(zonepb.NewZoneConfig()) {
+				zc.NumReplicas = proto.Int32(0)
+			}
+
+			for _, region := range regionConfig.Regions {
+				subzoneConfig, err := zoneConfigFromRegionConfigForPartition(region, regionConfig)
+				if err != nil {
+					return false, zc, err
+				}
+				for _, idx := range table.NonDropIndexes() {
+					zc.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(idx.GetID()),
+						PartitionName: string(region.Name),
+						Config:        subzoneConfig,
+					})
+				}
+			}
+		}
+		return hasNewSubzones, zc, nil
+	},
+}
+
+// applyZoneConfigForMultiRegionTable applies zone config settings based
+// on the options provided.
+func applyZoneConfigForMultiRegionTable(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	table catalog.TableDescriptor,
+	opt applyZoneConfigForMultiRegionTableOption,
 ) error {
 	tableID := table.GetID()
-	zone, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, tableID)
+	zoneRaw, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
 		return err
 	}
-	if zone == nil {
-		return errors.AssertionFailedf("expected zone config for table %d", tableID)
-	}
-	for _, region := range regionConfig.Regions {
-		zc, err := zoneConfigFromRegionConfigForPartition(region, regionConfig)
-		if err != nil {
-			return err
-		}
-		zone.SetSubzone(zonepb.Subzone{
-			IndexID:       uint32(indexID),
-			PartitionName: string(region.Name),
-			Config:        zc,
-		})
+	var zoneConfig zonepb.ZoneConfig
+	if zoneRaw != nil {
+		zoneConfig = *zoneRaw
 	}
 
-	if _, err = writeZoneConfig(
-		ctx,
-		p.txn,
-		tableID,
+	var hasNewSubzones bool
+	if hasNewSubzones, zoneConfig, err = opt.apply(
+		zoneConfig,
+		regionConfig,
 		table,
-		zone,
-		p.ExecCfg(),
-		true, /* hasNewSubzones */
 	); err != nil {
 		return err
 	}
 
+	if !zoneConfig.Equal(zonepb.NewZoneConfig()) {
+		// If we have fields that are not the default value, write in a new zone configuration
+		// value.
+		if _, err = writeZoneConfig(
+			ctx,
+			txn,
+			tableID,
+			table,
+			&zoneConfig,
+			execCfg,
+			hasNewSubzones,
+		); err != nil {
+			return err
+		}
+	} else if zoneRaw != nil {
+		// Delete the zone configuration if it exists but the new zone config is blank.
+		if _, err = execCfg.InternalExecutor.Exec(
+			ctx,
+			"delete-zone",
+			txn,
+			"DELETE FROM system.zones WHERE id = $1",
+			tableID,
+		); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -501,11 +545,13 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 		ctx,
 		desc,
 		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
-			return p.applyZoneConfigFromTableLocalityConfig(
+			return applyZoneConfigForMultiRegionTable(
 				ctx,
-				tbName,
-				tbDesc.TableDesc(),
+				p.txn,
+				p.ExecCfg(),
 				*desc.RegionConfig,
+				tbDesc,
+				applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 			)
 		},
 	)
