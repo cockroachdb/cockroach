@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/google/btree"
 	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
@@ -292,27 +291,6 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	}
 
 	return nil
-}
-
-// rangeKeyItem is a common interface for roachpb.Key and Range.
-type rangeKeyItem interface {
-	startKey() roachpb.RKey
-}
-
-// rangeBTreeKey is a type alias of roachpb.RKey that implements the
-// rangeKeyItem interface and the btree.Item interface.
-type rangeBTreeKey roachpb.RKey
-
-var _ rangeKeyItem = rangeBTreeKey{}
-
-func (k rangeBTreeKey) startKey() roachpb.RKey {
-	return (roachpb.RKey)(k)
-}
-
-var _ btree.Item = rangeBTreeKey{}
-
-func (k rangeBTreeKey) Less(i btree.Item) bool {
-	return k.startKey().Less(i.(rangeKeyItem).startKey())
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -588,7 +566,7 @@ type Store struct {
 		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
 		// Both types have an associated key range; the btree is keyed on their
 		// start keys.
-		replicasByKey  *btree.BTree
+		replicasByKey  *storeReplicaBTree
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
 		// be directly accessed and cleared after stepping all raft groups. This
@@ -845,7 +823,7 @@ func NewStore(
 
 	s.mu.Lock()
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
-	s.mu.replicasByKey = btree.New(64 /* degree */)
+	s.mu.replicasByKey = newStoreReplicaBTree()
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
@@ -2008,65 +1986,26 @@ func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 	v.Visit(visitor)
 }
 
-// IterationOrder specifies the order in which replicas will be iterated through
-// by VisitReplicasByKey.
-type IterationOrder int
-
-// Ordering options for VisitReplicasByKey.
-const (
-	AscendingKeyOrder  = IterationOrder(-1)
-	DescendingKeyOrder = IterationOrder(1)
-)
-
-// VisitReplicasByKey invokes the visitor on all the replicas for ranges that
+// visitReplicasByKey invokes the visitor on all the replicas for ranges that
 // overlap [startKey, endKey), or until the visitor returns false. Replicas are
-// visited in key order. store.mu is held during the visiting.
+// visited in key order, with `s.mu` held. Placeholders are not visited.
 //
-// The argument to the visitor is either a *Replica or *ReplicaPlaceholder.
-// Returned replicas might be IsDestroyed(); if the visitor cares, it needs to
+// Visited replicas might be IsDestroyed(); if the visitor cares, it needs to
 // protect against it itself.
-func (s *Store) VisitReplicasByKey(
+func (s *Store) visitReplicasByKey(
 	ctx context.Context,
 	startKey, endKey roachpb.RKey,
 	order IterationOrder,
-	visitor func(context.Context, KeyRange) (wantMore bool),
-) {
+	visitor func(context.Context, *Replica) error, // can return iterutil.StopIteration()
+) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if endKey.Less(startKey) {
-		log.Fatalf(ctx, "endKey < startKey (%s < %s)", endKey, startKey)
-	}
-	// Align startKey on a range start. Otherwise the AscendRange below would skip
-	// startKey's range.
-	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(startKey), func(item btree.Item) bool {
-		// No-op if startKey is the start of a range.
-		startKey = item.(KeyRange).startKey()
-		return false
+	return s.mu.replicasByKey.VisitKeyRange(ctx, startKey, endKey, order, func(ctx context.Context, it replicaOrPlaceholder) error {
+		if it.repl != nil {
+			return visitor(ctx, it.repl)
+		}
+		return nil
 	})
-
-	// Iterate though overlapping replicas.
-	if order == AscendingKeyOrder {
-		s.mu.replicasByKey.AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey),
-			func(item btree.Item) bool {
-				return visitor(ctx, item.(KeyRange))
-			})
-	} else {
-		// Note that we can't use DescendRange() because it treats the lower end as
-		// exclusive and the high end as inclusive.
-		s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(endKey),
-			func(item btree.Item) bool {
-				kr := item.(KeyRange)
-				if kr.startKey().Equal(endKey) {
-					// Skip the range starting at endKey.
-					return true
-				}
-				if kr.Desc().EndKey.Compare(startKey) <= 0 {
-					// Stop when we hit a range below startKey.
-					return false
-				}
-				return visitor(ctx, item.(KeyRange))
-			})
-	}
 }
 
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
@@ -2234,17 +2173,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var repl *Replica
-	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		repl, _ = item.(*Replica)
-		// Stop iterating immediately. The first item we see is the only one that
-		// can possibly contain key.
-		return false
-	})
-	if repl == nil || !repl.Desc().ContainsKey(key) {
-		return nil
-	}
-	return repl
+	return s.mu.replicasByKey.LookupReplica(context.Background(), key)
 }
 
 // lookupPrecedingReplica finds the replica in this store that immediately
@@ -2257,33 +2186,25 @@ func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var repl *Replica
-	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		if r, ok := item.(*Replica); ok && !r.ContainsKey(key.AsRawKey()) {
-			repl = r
-			return false // stop iterating
-		}
-		return true // keep iterating
-	})
-	return repl
+	return s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), key)
 }
 
-// getOverlappingKeyRangeLocked returns a KeyRange from the Store overlapping the given
-// descriptor (or nil if no such KeyRange exists).
-func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) KeyRange {
-	var kr KeyRange
-	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(rngDesc.EndKey),
-		func(item btree.Item) bool {
-			if kr0 := item.(KeyRange); kr0.startKey().Less(rngDesc.EndKey) {
-				kr = kr0
-				return false // stop iterating
-			}
-			return true // keep iterating
-		})
-	if kr != nil && rngDesc.StartKey.Less(kr.Desc().EndKey) {
-		return kr
+// getOverlappingKeyRangeLocked returns an replicaOrPlaceholder from Store.mu.replicasByKey
+// overlapping the given descriptor (or nil if no such replicaOrPlaceholder exists).
+func (s *Store) getOverlappingKeyRangeLocked(
+	rngDesc *roachpb.RangeDescriptor,
+) replicaOrPlaceholder {
+	var it replicaOrPlaceholder
+	if err := s.mu.replicasByKey.VisitKeyRange(
+		context.Background(), rngDesc.StartKey, rngDesc.EndKey, AscendingKeyOrder,
+		func(ctx context.Context, iit replicaOrPlaceholder) error {
+			it = iit
+			return iterutil.StopIteration()
+		}); err != nil {
+		log.Fatalf(context.Background(), "%v", err)
 	}
-	return nil
+
+	return it
 }
 
 // RaftStatus returns the current raft status of the local replica of

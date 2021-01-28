@@ -252,6 +252,55 @@ func createPartitioningImpl(
 	return partDesc, nil
 }
 
+// detectImplicitPartitionColumns detects implicit partitioning columns
+// and returns a new index descriptor with the implicit columns modified
+// on the index descriptor and the number of implicit columns prepended.
+func detectImplicitPartitionColumns(
+	evalCtx *tree.EvalContext,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	partBy *tree.PartitionBy,
+) (descpb.IndexDescriptor, int, error) {
+	if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+		return indexDesc, 0, nil
+	}
+	seenImplicitColumnNames := map[string]struct{}{}
+	var implicitColumnIDs []descpb.ColumnID
+	var implicitColumns []string
+	var implicitColumnDirections []descpb.IndexDescriptor_Direction
+	// Iterate over each field in the PARTITION BY until it matches the start
+	// of the actual explicitly indexed columns.
+	for _, field := range partBy.Fields {
+		// As soon as the fields match, we have no implicit columns to add.
+		if string(field) == indexDesc.ColumnNames[0] {
+			break
+		}
+
+		col, err := tableDesc.FindActiveColumnByName(string(field))
+		if err != nil {
+			return indexDesc, 0, err
+		}
+		if _, ok := seenImplicitColumnNames[col.Name]; ok {
+			return indexDesc, 0, pgerror.Newf(
+				pgcode.InvalidObjectDefinition,
+				`found multiple definitions in partition using column "%s"`,
+				col.Name,
+			)
+		}
+		seenImplicitColumnNames[col.Name] = struct{}{}
+		implicitColumns = append(implicitColumns, col.Name)
+		implicitColumnIDs = append(implicitColumnIDs, col.ID)
+		implicitColumnDirections = append(implicitColumnDirections, descpb.IndexDescriptor_ASC)
+	}
+
+	if len(implicitColumns) > 0 {
+		indexDesc.ColumnNames = append(implicitColumns, indexDesc.ColumnNames...)
+		indexDesc.ColumnIDs = append(implicitColumnIDs, indexDesc.ColumnIDs...)
+		indexDesc.ColumnDirections = append(implicitColumnDirections, indexDesc.ColumnDirections...)
+	}
+	return indexDesc, len(implicitColumns), nil
+}
+
 // createPartitioning constructs the partitioning descriptor for an index that
 // is partitioned into ranges, each addressable by zone configs.
 func createPartitioning(
@@ -259,17 +308,35 @@ func createPartitioning(
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
-	numImplicitColumns int,
+	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
-) (descpb.PartitioningDescriptor, error) {
+) (descpb.IndexDescriptor, error) {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
-		return descpb.PartitioningDescriptor{}, err
+		return indexDesc, err
 	}
 
-	return createPartitioningImpl(
-		ctx, evalCtx, tableDesc, indexDesc, partBy, numImplicitColumns, 0 /* colOffset */)
+	var numImplicitColumns int
+	var err error
+	indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(evalCtx, tableDesc, indexDesc, partBy)
+	if err != nil {
+		return indexDesc, err
+	}
+
+	partitioning, err := createPartitioningImpl(
+		ctx,
+		evalCtx,
+		tableDesc,
+		&indexDesc,
+		partBy,
+		numImplicitColumns,
+		0, /* colOffset */
+	)
+	if err != nil {
+		return indexDesc, err
+	}
+	indexDesc.Partitioning = partitioning
+	return indexDesc, err
 }
 
 // selectPartitionExprs constructs an expression for selecting all rows in the
