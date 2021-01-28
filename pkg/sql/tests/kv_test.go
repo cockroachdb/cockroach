@@ -370,7 +370,7 @@ func BenchmarkKV(b *testing.B) {
 //   Note that in this case the Distinct batch optimization is not being used.
 //   Even the experimental approach in
 //   https://github.com/sumeerbhola/cockroach/commit/eeeec51bd40ef47e743dc0c9ca47cf15710bae09
-//   indicates that we cannot use an un-indexed Pebble batch (which would have
+//   indicates that we cannot use an unindexed Pebble batch (which would have
 //   been an optimization).
 // This workload has keys that are clustered in the storage key space. Also,
 // the volume of data is small, so the Pebble iterator stack is not deep. Both

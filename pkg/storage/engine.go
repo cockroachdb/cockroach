@@ -610,24 +610,24 @@ type Engine interface {
 	// and can guarantee that all iterators created from a read-only engine are
 	// consistent. To do this, we will want to add an MVCCIterator.Clone method.
 	NewReadOnly() ReadWriter
-	// NewUnIndexedBatch returns a new instance of a batched engine which wraps
-	// this engine. It is un-indexed, in that writes to the batch are not
+	// NewUnindexedBatch returns a new instance of a batched engine which wraps
+	// this engine. It is unindexed, in that writes to the batch are not
 	// visible to reads until after it commits. The batch accumulates all
 	// mutations and applies them atomically on a call to Commit(). Read
-	// operations return an error, unless supportReader is set to true.
+	// operations return an error, unless writeOnly is set to false.
 	//
-	// When supportReader is true, reads will be satisfied by reading from the
+	// When writeOnly is false, reads will be satisfied by reading from the
 	// underlying engine, i.e., the caller does not see its own writes. This
 	// setting should be used only when the caller is certain that this
 	// optimization is correct, and beneficial. There are subtleties here -- see
 	// the discussion on https://github.com/cockroachdb/cockroach/pull/57661 for
 	// more details.
 	//
-	// TODO(sumeer): We should separate the supportReader=false case into a
+	// TODO(sumeer): We should separate the writeOnly=true case into a
 	// separate method, that returns a WriteBatch interface. Even better would
-	// be not having an option to pass supportReader=true, and have the caller
+	// be not having an option to pass writeOnly=false, and have the caller
 	// explicitly work with a separate WriteBatch and Reader.
-	NewUnIndexedBatch(supportReader bool) Batch
+	NewUnindexedBatch(writeOnly bool) Batch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released

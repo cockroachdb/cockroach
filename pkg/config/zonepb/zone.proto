@@ -105,21 +105,46 @@ message ZoneConfig {
   //   https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200811_non_blocking_txns.md
   optional bool global_reads = 12 [(gogoproto.moretags) = "yaml:\"global_reads\""];
 
-  // NumReplicas specifies the desired number of replicas.
+  // NumReplicas specifies the desired number of replicas. This includes voting
+  // and non-voting replicas.
   optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
+
+  // NumVoters specifies the desired number of voter replicas. If unspecified,
+  // there are no non-voting replicas and NumReplicas will represent the number
+  // of voters.
+  optional int32 num_voters = 13 [(gogoproto.moretags) = "yaml:\"num_voters\""];
 
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
   //
   // NOTE: The sum of the num_replicas fields of the Constraints must add up to
-  // ZoneConfig.num_replicas, or there must be no more than a single Constraints
-  // field with num_replicas set to 0.
+  // at most ZoneConfig.num_replicas, or there must be no more than a single
+  // Constraints field with num_replicas set to 0.
   repeated ConstraintsConjunction constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+
+  // VoterConstraints constrains which stores the voting replicas can be stored
+  // on. This field must be "compatible" with the `Constraints` field above, but
+  // not necessarily a subset. The `VoterConstraints` are said to be compatible
+  // with `Constraints` if none of the constraints in `Constraints` contradict
+  // any of the constraints in `VoterConstraints`. In other words, they are
+  // compatible if none of the "prohibitive" constraints in `Constraints` are
+  // "required" constraints in `VoterConstraints`.
+  repeated ConstraintsConjunction voter_constraints = 14 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"voter_constraints,flow\""];
 
   // InheritedContraints specifies if the value in the Constraints field was
   // inherited from the zone's parent or specified explicitly by the user.
+  //
+  // NB: We need this extra field (and the `inherited_voter_constraints` below)
+  // because the non-nullable nature of `constraints` and `voter_constraints`
+  // means that there is no other way to disambiguate between an unset
+  // `constraints` attribute and an empty one.
   optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
+
+  // InheritedVoterConstraints indicates whether the value in the
+  // VoterConstraints field was inherited from the zone's parent or explicitly
+  // specified by the user.
+  optional bool inherited_voter_constraints = 15 [(gogoproto.nullable) = false];
 
   // LeasePreference stores information about where the user would prefer for
   // range leases to be placed. Leases are allowed to be placed elsewhere if
