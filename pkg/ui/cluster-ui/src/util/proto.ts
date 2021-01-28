@@ -7,25 +7,33 @@ const nodeStatus: INodeStatus = null;
 export type StatusMetrics = typeof nodeStatus.metrics;
 
 /**
- * rollupStoreMetrics extends and aggregates INodeStatus.metrics object
- * with metrics from `store_statuses.metrics` object.
+ * AccumulateMetrics is a convenience function which accumulates the values
+ * in multiple metrics collections. Values from all provided StatusMetrics
+ * collections are accumulated into the first StatusMetrics collection
+ * passed.
  */
-export function rollupStoreMetrics(ns: INodeStatus): StatusMetrics {
-  return ns.store_statuses
-    .map(ss => ss.metrics)
-    .reduce((acc, i) => {
-      for (const k in i) {
-        acc[k] = _.has(acc, k) ? acc[k] + i[k] : i[k];
+export function AccumulateMetrics(
+  dest: StatusMetrics,
+  ...srcs: StatusMetrics[]
+): void {
+  srcs.forEach((s: StatusMetrics) => {
+    _.forEach(s, (val: number, key: string) => {
+      if (_.has(dest, key)) {
+        dest[key] = dest[key] + val;
+      } else {
+        dest[key] = val;
       }
-      return acc;
-    }, ns.metrics);
+    });
+  });
 }
 
-export function accumulateMetrics(nodeStatuses: INodeStatus[]): INodeStatus[] {
-  return nodeStatuses.map(ns => ({
-    ...ns,
-    metrics: rollupStoreMetrics(ns),
-  }));
+/**
+ * RollupStoreMetrics accumulates all store-level metrics into the top level
+ * metrics collection of the supplied NodeStatus object. This is convenient
+ * for all current usages of NodeStatus in the UI.
+ */
+export function RollupStoreMetrics(ns: INodeStatus): void {
+  AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, ss => ss.metrics));
 }
 
 /**
