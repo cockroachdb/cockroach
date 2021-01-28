@@ -1862,18 +1862,22 @@ func (ds *DistSender) sendToReplicas(
 			}
 		}
 		prevReplica = curReplica
-		// Communicate to the server the information our cache has about the range.
-		// If it's stale, the serve will return an update.
+		// Communicate to the server the information our cache has about the
+		// range. If it's stale, the serve will return an update.
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
-			// Note that DescriptorGeneration will be 0 if the cached descriptor is
-			// "speculative" (see DescSpeculative()). Even if the speculation is
-			// correct, we want the serve to return an update, at which point the
-			// cached entry will no longer be "speculative".
+			// Note that DescriptorGeneration will be 0 if the cached descriptor
+			// is "speculative" (see DescSpeculative()). Even if the speculation
+			// is correct, we want the serve to return an update, at which point
+			// the cached entry will no longer be "speculative".
 			DescriptorGeneration: routing.Desc().Generation,
-			// The LeaseSequence will be 0 if the cache doen't have lease info, or has
-			// a speculative lease. Like above, this asks the server to return an
-			// update.
+			// The LeaseSequence will be 0 if the cache doen't have lease info,
+			// or has a speculative lease. Like above, this asks the server to
+			// return an update.
 			LeaseSequence: routing.LeaseSeq(),
+			// The ClosedTimestampPolicy will be the default if the cache
+			// doesn't have info. Like above, this asks the server to return an
+			// update.
+			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
 		}
 		br, err = transport.SendNext(ctx, ba)
 		ds.maybeIncrementErrCounters(br, err)

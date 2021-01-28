@@ -680,10 +680,6 @@ func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
 
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
-
-		// TODO(nvanbenschoten): use the new zone.GlobalReads field to configure
-		// closed timestamp lead/lag, once we have per-range closed timestamp
-		// trackers.
 	}
 	r.mu.zone = zone
 }
@@ -724,6 +720,13 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	r.mu.AssertRHeld()
 	return r.mu.state.Desc
+}
+
+func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
+	if r.mu.zone.GlobalReads != nil && *r.mu.zone.GlobalReads {
+		return roachpb.LEAD_FOR_GLOBAL_READS
+	}
+	return roachpb.LAG_BY_CLUSTER_SETTING
 }
 
 // NodeID returns the ID of the node this replica belongs to.
@@ -809,6 +812,35 @@ func (r *Replica) Version() roachpb.Version {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.Version
+}
+
+// GetRangeInfo atomically reads the range's current range info.
+func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	desc := r.descRLocked()
+	l, _ /* nextLease */ := r.getLeaseRLocked()
+	closedts := r.closedTimestampPolicyRLocked()
+
+	// Sanity check the lease.
+	if !l.Empty() {
+		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
+			// I wish this could be a Fatal, but unfortunately it's possible for the
+			// lease to be incoherent with the descriptor after a leaseholder was
+			// brutally removed through `cockroach debug unsafe-remove-dead-replicas`.
+			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
+			// Let's not return an incoherent lease; for example if we end up
+			// returning it to a client through a br.RangeInfos, the client will freak
+			// out.
+			l = roachpb.Lease{}
+		}
+	}
+
+	return roachpb.RangeInfo{
+		Desc:                  *desc,
+		Lease:                 l,
+		ClosedTimestampPolicy: closedts,
+	}
 }
 
 // getImpliedGCThresholdRLocked returns the gc threshold of the replica which

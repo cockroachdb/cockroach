@@ -43,7 +43,6 @@ func RangeStats(
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.QueriesPerSecond = cArgs.EvalCtx.GetSplitQPS()
-	desc, lease := cArgs.EvalCtx.GetDescAndLease(ctx)
-	reply.RangeInfo = roachpb.RangeInfo{Desc: desc, Lease: lease}
+	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil
 }

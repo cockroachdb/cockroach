@@ -133,31 +133,28 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
-	cinfo := &ba.ClientRangeInfo
-	desc, lease := r.GetDescAndLease(ctx)
-	needInfo := (cinfo.LeaseSequence < lease.Sequence) || (cinfo.DescriptorGeneration < desc.Generation)
+	cri := &ba.ClientRangeInfo
+	ri := r.GetRangeInfo(ctx)
+	needInfo := (cri.DescriptorGeneration < ri.Desc.Generation) ||
+		(cri.LeaseSequence < ri.Lease.Sequence) ||
+		(cri.ClosedTimestampPolicy != ri.ClosedTimestampPolicy)
 	if !needInfo {
 		return
 	}
 	log.VEventf(ctx, 3, "client had stale range info; returning an update")
-	br.RangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  desc,
-			Lease: lease,
-		},
-	}
+	br.RangeInfos = []roachpb.RangeInfo{ri}
 
 	// We're going to sometimes return info on the ranges coming right before or
 	// right after r, if it looks like r came from a range that has recently split
 	// and the client doesn't know about it. After a split, the client benefits
 	// from learning about both resulting ranges.
 
-	if cinfo.DescriptorGeneration >= desc.Generation {
+	if cri.DescriptorGeneration >= ri.Desc.Generation {
 		return
 	}
 
 	maybeAddRange := func(repl *Replica) {
-		if repl.Desc().Generation != desc.Generation {
+		if repl.Desc().Generation != ri.Desc.Generation {
 			// The next range does not look like it came from a split that produced
 			// both r and this next range. Of course, this has false negatives (e.g.
 			// if either the LHS or the RHS split multiple times since the client's
@@ -168,17 +165,15 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 			return
 		}
 
-		var rangeInfo roachpb.RangeInfo
 		// Note that we return the lease even if it's expired. The kvclient can
 		// use it as it sees fit.
-		rangeInfo.Desc, rangeInfo.Lease = repl.GetDescAndLease(ctx)
-		br.RangeInfos = append(br.RangeInfos, rangeInfo)
+		br.RangeInfos = append(br.RangeInfos, repl.GetRangeInfo(ctx))
 	}
 
-	if repl := r.store.lookupPrecedingReplica(desc.StartKey); repl != nil {
+	if repl := r.store.lookupPrecedingReplica(ri.Desc.StartKey); repl != nil {
 		maybeAddRange(repl)
 	}
-	if repl := r.store.LookupReplica(desc.EndKey); repl != nil {
+	if repl := r.store.LookupReplica(ri.Desc.EndKey); repl != nil {
 		maybeAddRange(repl)
 	}
 }

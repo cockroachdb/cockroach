@@ -942,6 +942,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 		case 1:
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
 			assert.Equal(t, lease1.Sequence, ba.ClientRangeInfo.LeaseSequence)
+			assert.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ba.ClientRangeInfo.ClosedTimestampPolicy)
 			contacted1 = true
 			return nil, errors.New("mock RPC error")
 		case 2:
@@ -949,12 +950,16 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 			// first RPC.
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
 			assert.Equal(t, roachpb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
+			assert.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ba.ClientRangeInfo.ClosedTimestampPolicy)
 			contacted2 = true
 			br := ba.CreateReply()
-			// Simulate the leaseholder returning updated lease info to the client.
+			// Simulate the leaseholder returning updated lease info to the
+			// client. Also simulate a downgrade away from a global reads closed
+			// ts policy.
 			br.RangeInfos = append(br.RangeInfos, roachpb.RangeInfo{
-				Desc:  desc,
-				Lease: lease2,
+				Desc:                  desc,
+				Lease:                 lease2,
+				ClosedTimestampPolicy: roachpb.LAG_BY_CLUSTER_SETTING,
 			})
 			return br, nil
 		default:
@@ -977,8 +982,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc,
-		Lease: lease1,
+		Desc:                  desc,
+		Lease:                 lease1,
+		ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 	})
 
 	var ba roachpb.BatchRequest
@@ -996,7 +1002,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	}
 
 	rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+	require.Equal(t, desc, *rng.Desc())
 	require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, rng.ClosedTimestampPolicy())
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
@@ -1725,6 +1733,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 				Replica:  roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2},
 				Sequence: 1,
 			},
+			ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 		}},
 		{{
 			Desc: descSplit1,
@@ -1782,9 +1791,11 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 				require.Equal(t, &ri.Desc, entry.Desc())
 				if ri.Lease.Empty() {
 					require.Nil(t, entry.Leaseholder())
+					require.Nil(t, entry.Lease())
 				} else {
 					require.Equal(t, &ri.Lease, entry.Lease())
 				}
+				require.Equal(t, ri.ClosedTimestampPolicy, entry.ClosedTimestampPolicy())
 			}
 		})
 	}
@@ -3421,6 +3432,8 @@ func TestErrorIndexAlignment(t *testing.T) {
 
 // TestCanSendToFollower tests that the DistSender abides by the result it
 // get from CanSendToFollower.
+// TODO(nvanbenschoten): update this test once ClosedTimestampPolicy begins
+// dictating the decision of CanSendToFollower.
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -13001,10 +13001,12 @@ func TestRangeInfoReturned(t *testing.T) {
 	key := roachpb.Key("a")
 	gArgs := getArgs(key)
 
-	desc, lease := tc.repl.GetDescAndLease(ctx)
-	ri := &roachpb.RangeInfo{Desc: desc, Lease: lease}
-	staleDescGen := desc.Generation - 1
-	staleLeaseSeq := lease.Sequence - 1
+	ri := tc.repl.GetRangeInfo(ctx)
+	require.False(t, ri.Lease.Empty())
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, ri.ClosedTimestampPolicy)
+	staleDescGen := ri.Desc.Generation - 1
+	staleLeaseSeq := ri.Lease.Sequence - 1
+	wrongCTPolicy := roachpb.LEAD_FOR_GLOBAL_READS
 
 	for _, test := range []struct {
 		req roachpb.ClientRangeInfo
@@ -13013,53 +13015,69 @@ func TestRangeInfoReturned(t *testing.T) {
 		{
 			// Empty client info. This case shouldn't happen.
 			req: roachpb.ClientRangeInfo{},
-			exp: ri,
+			exp: &ri,
 		},
 		{
-			// Correct descriptor, missing lease.
+			// Correct descriptor, missing lease, correct closedts policy.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: ri.Desc.Generation,
+				DescriptorGeneration:  ri.Desc.Generation,
+				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
-			exp: ri,
+			exp: &ri,
 		},
 		{
-			// Correct descriptor, stale lease.
+			// Correct descriptor, stale lease, correct closedts policy.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: ri.Desc.Generation,
-				LeaseSequence:        staleLeaseSeq,
+				DescriptorGeneration:  ri.Desc.Generation,
+				LeaseSequence:         staleLeaseSeq,
+				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
-			exp: ri,
+			exp: &ri,
 		},
 		{
-			// Correct descriptor, correct lease.
+			// Correct descriptor, correct lease, incorrect closedts policy.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: ri.Desc.Generation,
-				LeaseSequence:        ri.Lease.Sequence,
+				DescriptorGeneration:  ri.Desc.Generation,
+				LeaseSequence:         ri.Lease.Sequence,
+				ClosedTimestampPolicy: wrongCTPolicy,
+			},
+			exp: &ri,
+		},
+		{
+			// Correct descriptor, correct lease, correct closedts policy.
+			req: roachpb.ClientRangeInfo{
+				DescriptorGeneration:  ri.Desc.Generation,
+				LeaseSequence:         ri.Lease.Sequence,
+				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
 			exp: nil, // No update should be returned.
 		},
 		{
-			// Stale descriptor, no lease.
+			// Stale descriptor, no lease, correct closedts policy.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: staleDescGen,
+				DescriptorGeneration:  staleDescGen,
+				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
-			exp: ri,
+			exp: &ri,
 		},
 		{
-			// Stale descriptor, stale lease.
+			// Stale descriptor, stale lease, incorrect closedts policy.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: staleDescGen,
-				LeaseSequence:        staleLeaseSeq,
+				DescriptorGeneration:  staleDescGen,
+				LeaseSequence:         staleLeaseSeq,
+				ClosedTimestampPolicy: wrongCTPolicy,
 			},
-			exp: ri,
+			exp: &ri,
 		},
 		{
-			// Stale desc, good lease. This case shouldn't happen.
+			// Stale desc, good lease, correct closedts policy. This case
+			// shouldn't happen.
 			req: roachpb.ClientRangeInfo{
-				DescriptorGeneration: staleDescGen,
-				LeaseSequence:        staleLeaseSeq,
+				DescriptorGeneration:  staleDescGen,
+				LeaseSequence:         staleLeaseSeq,
+				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
-			exp: ri,
+			exp: &ri,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
