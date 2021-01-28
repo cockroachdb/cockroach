@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -421,6 +422,15 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
 	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
 		return err
+	}
+
+	// Block adding a primary region to the system database. This ensures that the system
+	// database can never be made into a multi-region database.
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"adding a primary region to the system database is not supported",
+		)
 	}
 
 	// There are two paths to consider here: either this is the first setting of the
