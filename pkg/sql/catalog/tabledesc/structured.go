@@ -3810,9 +3810,25 @@ func (desc *wrapper) MakeFirstMutationPublic(includeConstraints bool) (*Mutable,
 	return table, nil
 }
 
-// ColumnNeedsBackfill returns true if adding the given column requires a
-// backfill (dropping a column always requires a backfill).
-func ColumnNeedsBackfill(desc *descpb.ColumnDescriptor) bool {
+// ColumnNeedsBackfill returns true if adding or dropping (according to
+// the direction) the given column requires backfill.
+func ColumnNeedsBackfill(
+	direction descpb.DescriptorMutation_Direction, desc *descpb.ColumnDescriptor,
+) bool {
+	if desc.Virtual {
+		// Virtual columns are not stored in the primary index, so they do not need
+		// backfill.
+		return false
+	}
+	if direction == descpb.DescriptorMutation_DROP {
+		// In all other cases, DROP requires backfill.
+		return true
+	}
+	// ADD requires backfill for:
+	//  - columns with non-NULL default value
+	//  - computed columns
+	//  - non-nullable columns (note: if a non-nullable column doesn't have a
+	//    default value, the backfill will fail unless the table is empty).
 	if desc.HasNullDefault() {
 		return false
 	}
@@ -3833,10 +3849,7 @@ func (desc *wrapper) HasColumnBackfillMutation() bool {
 			// Index backfills don't affect changefeeds.
 			continue
 		}
-		// It's unfortunate that there's no one method we can call to check if a
-		// mutation will be a backfill or not, but this logic was extracted from
-		// backfill.go.
-		if m.Direction == descpb.DescriptorMutation_DROP || ColumnNeedsBackfill(col) {
+		if ColumnNeedsBackfill(m.Direction, col) {
 			return true
 		}
 	}

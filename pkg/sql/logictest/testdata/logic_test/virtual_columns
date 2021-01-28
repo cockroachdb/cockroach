@@ -247,3 +247,79 @@ UPDATE t_idx SET b=b+1 RETURNING w
 ----
 3
 7
+
+# Test schema changes with virtual columns.
+
+statement ok
+CREATE TABLE sc (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO sc VALUES (1, 10), (2, 20), (3, 30);
+
+statement ok
+ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
+
+query III rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v
+1  10  11
+2  20  22
+3  30  33
+
+statement ok
+ALTER TABLE sc ADD COLUMN x INT AS (a+1) VIRTUAL, ADD COLUMN y INT AS (b+1) VIRTUAL, ADD COLUMN z INT AS (a+b) VIRTUAL
+
+query IIIIII rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v   x  y   z
+1  10  11  2  11  11
+2  20  22  3  21  22
+3  30  33  4  31  33
+
+statement error computed columns cannot reference other computed columns
+ALTER TABLE sc ADD COLUMN u INT AS (a+v) VIRTUAL
+
+statement ok
+ALTER TABLE sc DROP COLUMN z
+
+query IIIII rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v   x  y
+1  10  11  2  11
+2  20  22  3  21
+3  30  33  4  31
+
+statement ok
+ALTER TABLE sc DROP COLUMN x, DROP COLUMN y
+
+query III rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v
+1  10  11
+2  20  22
+3  30  33
+
+# Add virtual columns inside an explicit transactions.
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE sc ADD COLUMN w1 INT AS (a*b) VIRTUAL
+
+statement ok
+ALTER TABLE sc ADD COLUMN w2 INT AS (b*2) VIRTUAL
+
+statement ok
+COMMIT
+
+query IIIII rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v   w1  w2
+1  10  11  10  20
+2  20  22  40  40
+3  30  33  90  60
