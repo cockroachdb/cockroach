@@ -479,9 +479,16 @@ func (d *diskQueue) resetWriters(f fs.File) error {
 	return d.serializer.Reset(d.writer)
 }
 
-func (d *diskQueue) writeFooterAndFlush(ctx context.Context) error {
-	err := d.serializer.Finish()
-	if err != nil {
+func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			// If an error occurs, set the serializer to nil to avoid any future
+			// attempts to call writeFooterAndFlush during valid operation (e.g.
+			// calling Close after an error).
+			d.serializer = nil
+		}
+	}()
+	if err := d.serializer.Finish(); err != nil {
 		return err
 	}
 	written, err := d.writer.compressAndFlush()
