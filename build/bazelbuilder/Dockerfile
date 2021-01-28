@@ -1,29 +1,24 @@
-FROM ubuntu:xenial-20170915
+FROM ubuntu:focal-20210119
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     apt-transport-https \
     autoconf \
     bison \
     ca-certificates \
+    clang-10 \
+    cmake \
     curl \
     flex \
     git \
+    gnupg2 \
     libncurses-dev \
     make \
+ && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
  && apt-get clean
 
-# clang-3.9 - msan, libtapi needs 3.9+
-# cmake - msan / c-deps: libroach, protobuf, et al.
-# python - msan
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    clang-3.9 \
-    cmake \
-  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-3.9 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-3.9
-
-# xenial installs cmake 3.5.1. We need a newer version. Run this step
-# after the llvm/cross-compile step which is exceedingly slow.
+# We need a newer version of cmake.
 #
 # NOTE: When upgrading cmake, bump the rebuild counters in
 # c-deps/*-rebuild to force recreating the makefiles. This prevents
@@ -37,11 +32,11 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 RUN echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
  && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
  && apt-get update \
- && apt-get install -y --no-install-recommends \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bazel-3.6.0
 
 # git - Upgrade to a more modern version
-RUN apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
+RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \
