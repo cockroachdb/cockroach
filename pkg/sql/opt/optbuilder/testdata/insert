@@ -1302,6 +1302,40 @@ insert t
       └── projections
            └── column1:4 > 0 [as=partial_index_put1:6]
 
+# Test partial indexes with virtual columns in the predicate.
+exec-ddl
+CREATE TABLE partial_index_virtual (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    d STRING AS (lower(c)) VIRTUAL,
+    INDEX (b) WHERE d = 'foo'
+)
+----
+
+build
+INSERT INTO partial_index_virtual (a, b, c) VALUES (2, 1, 'Foo')
+----
+insert partial_index_virtual
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column9:9 => d:4
+ ├── partial index put columns: partial_index_put1:10
+ └── project
+      ├── columns: partial_index_put1:10 column1:6!null column2:7!null column3:8!null column9:9
+      ├── project
+      │    ├── columns: column9:9 column1:6!null column2:7!null column3:8!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    └── (2, 1, 'Foo')
+      │    └── projections
+      │         └── lower(column3:8) [as=column9:9]
+      └── projections
+           └── column9:9 = 'foo' [as=partial_index_put1:10]
+
 # Regression test for issue #52546. Building partial index predicate expressions
 # that are only a single column reference should not panic.
 
