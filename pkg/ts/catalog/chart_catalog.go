@@ -1860,6 +1860,14 @@ var charts = []sectionDescription{
 				AxisLabel: "Transactions",
 			},
 			{
+				Title: "Full Table Index Scans",
+				Metrics: []string{
+					"sql.full.scan.count",
+					"sql.full.scan.count.internal",
+				},
+				AxisLabel: "SQL Statements",
+			},
+			{
 				Title: "Byte I/O",
 				Metrics: []string{
 					"sql.bytesin",
