@@ -627,6 +627,9 @@ type PlanningCtx struct {
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
 	traceMetadata execNodeTraceMetadata
+
+	// If set, statement execution stats should be collected.
+	collectExecStats bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}

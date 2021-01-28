@@ -63,6 +63,10 @@ type instrumentationHelper struct {
 	// statement; it triggers saving of extra information like the plan string.
 	collectBundle bool
 
+	// collectExecStats is set when we are collecting execution statistics for a
+	// statement.
+	collectExecStats bool
+
 	// discardRows is set if we want to discard any results rather than sending
 	// them back to the client. Used for testing/benchmarking. Note that the
 	// resulting schema or the plan are not affected.
@@ -145,9 +149,11 @@ func (ih *instrumentationHelper) Setup(
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
+		// TODO(asubiotto): Create a span for stat collection in future commit.
 		return ctx, false
 	}
 
+	ih.collectExecStats = true
 	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
@@ -264,7 +270,7 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 // ShouldSaveFlows is true if we should save the flow specifications (to be able
 // to generate diagrams).
 func (ih *instrumentationHelper) ShouldSaveFlows() bool {
-	return ih.collectBundle || ih.outputMode == explainAnalyzeDistSQLOutput
+	return ih.collectBundle || ih.outputMode == explainAnalyzeDistSQLOutput || ih.collectExecStats
 }
 
 // ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
@@ -280,6 +286,12 @@ func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
 	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput ||
 		ih.outputMode == explainAnalyzeDistSQLOutput
+}
+
+// ShouldCollectExecStats returns true if we should collect statement execution
+// statistics.
+func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
+	return ih.collectExecStats
 }
 
 // RecordExplainPlan records the explain.Plan for this query.
