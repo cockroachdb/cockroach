@@ -490,6 +490,9 @@ function makeStats() {
     sensitive_info: makeEmptySensitiveInfo(),
     rows_read: makeStat(),
     bytes_read: makeStat(),
+    bytes_sent_over_network: makeStat(),
+    max_mem_usage: makeStat(),
+    exec_stat_collection_count: Long.fromNumber(10),
   };
 }
 

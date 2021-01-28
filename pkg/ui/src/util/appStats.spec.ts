@@ -160,6 +160,7 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
   const count = randomInt(1000);
   const first_attempt_count = randomInt(count);
   const max_retries = randomInt(count - first_attempt_count);
+  const exec_stat_collection_count = randomInt(count);
 
   return {
     count: Long.fromNumber(count),
@@ -174,6 +175,7 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
     bytes_read: randomStat(),
     rows_read: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
+    exec_stat_collection_count: Long.fromNumber(exec_stat_collection_count),
   };
 }
 
@@ -225,6 +227,14 @@ describe("combineStatementStats", () => {
 
     assert.equal(ab_c.count.toString(), ac_b.count.toString());
     assert.equal(ab_c.count.toString(), bc_a.count.toString());
+    assert.equal(
+      ab_c.exec_stat_collection_count.toString(),
+      ac_b.exec_stat_collection_count.toString(),
+    );
+    assert.equal(
+      ab_c.exec_stat_collection_count.toString(),
+      bc_a.exec_stat_collection_count.toString(),
+    );
 
     assert.equal(
       ab_c.first_attempt_count.toString(),
