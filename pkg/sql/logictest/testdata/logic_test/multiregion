@@ -330,6 +330,10 @@ USE new_db
 statement error database new_db is not multi-region enabled, but table cannot_create_table_no_multiregion has locality GLOBAL set
 CREATE TABLE cannot_create_table_no_multiregion (a int) LOCALITY GLOBAL
 
+# Test adding a primary region to the system database.
+statement error adding a primary region to the system database is not supported
+ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
+
 statement ok
 CREATE DATABASE alter_test_db primary region "ca-central-1"
 
