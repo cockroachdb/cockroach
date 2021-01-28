@@ -1,6 +1,6 @@
 # LogicTest: local
 
-statement error  declared partition columns \(partition_by\) do not match first 1 columns in index being partitioned \(a\)
+statement error declared partition columns \(partition_by\) do not match first 1 columns in index being partitioned \(a\)
 CREATE TABLE t (
   pk INT PRIMARY KEY,
   partition_by int,
