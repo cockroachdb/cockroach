@@ -411,7 +411,6 @@ func writeFile(
 		exportStore = localitySpecificStore
 	}
 
-	log.Infof(ctx, "delme writing file %s", file.Path)
 	if err := exportStore.WriteFile(ctx, file.Path, bytes.NewReader(data)); err != nil {
 		log.VEventf(ctx, 1, "failed to put file: %+v", err)
 		return errors.Wrap(err, "writing SST")
