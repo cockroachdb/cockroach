@@ -117,12 +117,16 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	conn, msg, err := frontendAdmitter(proxyConn)
 	if err != nil {
 		var codeErr *CodeError
-		if errors.As(err, &codeErr) && codeErr.code == CodeUnexpectedInsecureStartupMessage {
+		if ok := errors.As(err, &codeErr); ok && codeErr.code == CodeUnexpectedInsecureStartupMessage {
 			sendErrToClient(
 				proxyConn, // Do this on the TCP connection as it means denying SSL
 				CodeUnexpectedInsecureStartupMessage,
 				"server requires encryption",
 			)
+		} else if ok {
+			sendErrToClient(proxyConn, codeErr.code, codeErr.Error())
+		} else {
+			sendErrToClient(proxyConn, CodeClientDisconnected, err.Error())
 		}
 		return err
 	}
@@ -148,6 +152,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 					err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
 				}
 			}
+			sendErrToClient(conn, codeErr.code, codeErr.Error())
 			return codeErr
 		}
 	}
@@ -164,6 +169,11 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 			crdbConn, err := BackendDial(msg, backendConfig.OutgoingAddress, backendConfig.TLSConf)
 			if err != nil {
+				if codeErr := (*CodeError)(nil); errors.As(err, &codeErr) {
+					sendErrToClient(conn, codeErr.code, codeErr.Error())
+				} else {
+					sendErrToClient(conn, CodeBackendDisconnected, err.Error())
+				}
 				return nil, err
 			}
 
@@ -193,11 +203,15 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 	if err := authenticate(conn, crdbConn); err != nil {
 		s.metrics.AuthFailedCount.Inc(1)
-		if codeErr := (*CodeError)(nil); errors.As(err, &codeErr) {
-			sendErrToClient(conn, codeErr.code, codeErr.Error())
-			return err
+		var codeErr *CodeError
+		if !errors.As(err, &codeErr) {
+			codeErr = &CodeError{
+				code: CodeParamsRoutingFailed,
+				err:  errors.Errorf("unrecognized auth failure"),
+			}
 		}
-		return errors.AssertionFailedf("unrecognized auth failure")
+		sendErrToClient(conn, codeErr.code, codeErr.Error())
+		return codeErr
 	}
 
 	s.metrics.SuccessfulConnCount.Inc(1)
@@ -250,6 +264,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 			return NewErrorf(CodeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
 		} else {
 			s.metrics.BackendDisconnectCount.Inc(1)
+			sendErrToClient(conn, CodeBackendDisconnected, "copying from target server to client")
 			return NewErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
 		}
 	case err := <-errOutgoing:

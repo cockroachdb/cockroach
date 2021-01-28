@@ -221,8 +221,9 @@ func (p *planner) AlterPrimaryKey(
 			return err
 		}
 		if partitionBy != nil {
-			var numImplicitColumns int
-			*newPrimaryIndexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
+			*newPrimaryIndexDesc, err = CreatePartitioning(
+				ctx,
+				p.ExecCfg().Settings,
 				p.EvalContext(),
 				tableDesc,
 				*newPrimaryIndexDesc,
@@ -231,19 +232,6 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			partitioning, err := CreatePartitioning(
-				ctx,
-				p.ExecCfg().Settings,
-				p.EvalContext(),
-				tableDesc,
-				newPrimaryIndexDesc,
-				numImplicitColumns,
-				partitionBy,
-			)
-			if err != nil {
-				return err
-			}
-			newPrimaryIndexDesc.Partitioning = partitioning
 		}
 	}
 

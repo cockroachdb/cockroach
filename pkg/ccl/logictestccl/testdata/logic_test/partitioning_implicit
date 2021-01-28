@@ -47,6 +47,18 @@ CREATE TABLE t (
 )
 
 statement ok
+CREATE TABLE t (a INT, b INT, INDEX(a))
+
+statement error cannot ALTER INDEX and change the partitioning to contain implicit columns
+ALTER INDEX t@t_a_idx PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement error cannot ALTER TABLE and change the partitioning to contain implicit columns
+ALTER TABLE t PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement ok
+DROP TABLE t
+
+statement ok
 CREATE TABLE t (
   pk INT PRIMARY KEY,
   a INT,
@@ -125,6 +137,22 @@ CREATE TABLE public.t (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY NOTHING
+
+statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY NOTHING
+
 query TTTTTT colnames
 SELECT
   indexrelid, indrelid, indkey, indclass, indoption, indcollation
@@ -133,11 +161,11 @@ WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 't')
 ORDER BY 1,2,3
 ----
 indexrelid  indrelid  indkey  indclass  indoption  indcollation
-969972496   57        2 3 4   0 0 0     2 2 2      0 0 0
-969972497   57        5       0         2          0
-969972501   57        1       0         2          0
-969972502   57        3       0         2          0
-969972503   57        4       0         2          0
+710236226   58        5       0         2          0
+710236227   58        2 3 4   0 0 0     2 2 2      0 0 0
+710236228   58        4       0         2          0
+710236229   58        3       0         2          0
+710236230   58        1       0         2          0
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns

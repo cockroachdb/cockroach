@@ -232,22 +232,21 @@ func (s *Store) Send(
 			endKey = rSpan.EndKey
 		}
 		var ris []roachpb.RangeInfo
-		s.VisitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, r KeyRange) bool {
-			var l roachpb.Lease
-			var desc roachpb.RangeDescriptor
-			if rep, ok := r.(*Replica); ok {
-				// Note that we return the lease even if it's expired. The kvclient can
-				// use it as it sees fit.
-				desc, l = rep.GetDescAndLease(ctx)
-			} else {
-				desc = *r.Desc()
-			}
+		if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
+			// Note that we return the lease even if it's expired. The kvclient can
+			// use it as it sees fit.
+			desc, l := repl.GetDescAndLease(ctx)
 			if desc.RangeID == skipRID {
-				return true // continue visiting
+				return nil
 			}
 			ris = append(ris, roachpb.RangeInfo{Desc: desc, Lease: l})
-			return true // continue visiting
-		})
+			return nil
+		}); err != nil {
+			// Errors here should not be possible, but if there is one, it is ignored
+			// as attaching RangeInfo is optional.
+			log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+			ris = nil // just to be safe
+		}
 		for _, ri := range ris {
 			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
 		}

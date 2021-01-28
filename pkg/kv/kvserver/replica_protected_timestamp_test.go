@@ -122,8 +122,8 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 						Timestamp: ts,
 						Spans: []roachpb.Span{
 							{
-								Key:    roachpb.Key(r.startKey()),
-								EndKey: roachpb.Key(r.startKey().Next()),
+								Key:    roachpb.Key(r.Desc().StartKey),
+								EndKey: roachpb.Key(r.Desc().StartKey.Next()),
 							},
 						},
 					})
