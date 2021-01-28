@@ -1041,7 +1041,9 @@ func (p *planner) ResolveMutableTypeDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+	if tn != nil {
+		name.SetAnnotation(&p.semaCtx.Annotations, tn)
+	}
 
 	if desc != nil {
 		// Ensure that the user can access the target schema.
