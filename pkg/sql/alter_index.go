@@ -78,29 +78,36 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning",
 				)
 			}
-			partitioning, err := CreatePartitioning(
+			newIndexDesc, err := CreatePartitioning(
 				params.ctx,
 				params.extendedEvalCtx.Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				n.indexDesc,
-				0, /* numImplicitColumns */
+				*n.indexDesc,
 				t.PartitionBy,
 			)
 			if err != nil {
 				return err
 			}
-			descriptorChanged = !n.indexDesc.Partitioning.Equal(&partitioning)
-			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx, params.p.txn,
-				n.tableDesc, n.indexDesc,
-				&n.indexDesc.Partitioning, &partitioning,
+			if newIndexDesc.Partitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER INDEX PARTITION BY",
+					"cannot ALTER INDEX and change the partitioning to contain implicit columns",
+				)
+			}
+			descriptorChanged = !n.indexDesc.Equal(&newIndexDesc)
+			if err = deleteRemovedPartitionZoneConfigs(
+				params.ctx,
+				params.p.txn,
+				n.tableDesc,
+				n.indexDesc,
+				&n.indexDesc.Partitioning,
+				&newIndexDesc.Partitioning,
 				params.extendedEvalCtx.ExecCfg,
-			)
-			if err != nil {
+			); err != nil {
 				return err
 			}
-			n.indexDesc.Partitioning = partitioning
+			*n.indexDesc = newIndexDesc
 		default:
 			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)

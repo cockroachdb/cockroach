@@ -544,23 +544,12 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 		}
 
 		if partitionBy != nil {
-			var numImplicitColumns int
-			indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
-				p.EvalContext(),
-				tableDesc,
-				indexDesc,
-				partitionBy,
-			)
-			if err != nil {
-				return indexDesc, err
-			}
-			if indexDesc.Partitioning, err = CreatePartitioning(
+			if indexDesc, err = CreatePartitioning(
 				ctx,
 				p.ExecCfg().Settings,
 				p.EvalContext(),
 				tableDesc,
-				&indexDesc,
-				numImplicitColumns,
+				indexDesc,
 				partitionBy,
 			); err != nil {
 				return indexDesc, err
