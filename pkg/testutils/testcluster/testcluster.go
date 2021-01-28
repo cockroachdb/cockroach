@@ -1128,6 +1128,15 @@ func (tc *TestCluster) Restart() error {
 // RestartServer uses the cached ServerArgs to restart a Server specified by
 // the passed index.
 func (tc *TestCluster) RestartServer(idx int) error {
+	return tc.RestartServerWithInspect(idx, nil)
+}
+
+// RestartServerWithInspect uses the cached ServerArgs to restart a Server
+// specified by the passed index. We allow an optional inspect function to be
+// passed in that can observe the server once its been re-created but before it's
+// bean started. This is useful for tests that want to capture that the startup
+// sequence performs the correct actions i.e. that on startup liveness is gossiped.
+func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.TestServer)) error {
 	if !tc.ServerStopped(idx) {
 		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
 	}
@@ -1167,6 +1176,10 @@ func (tc *TestCluster) RestartServer(idx int) error {
 	defer tc.mu.Unlock()
 	tc.Servers[idx] = s
 	tc.mu.serverStoppers[idx] = s.Stopper()
+
+	if inspect != nil {
+		inspect(s)
+	}
 
 	if err := srv.Start(); err != nil {
 		return err

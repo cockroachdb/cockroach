@@ -1152,7 +1152,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 
 	// Stop the heartbeats so that n1's lease can expire.
 	log.Infof(ctx, "test: suspending heartbeats for n1")
-	resumeN1Heartbeats := partitionStore.NodeLiveness().PauseAllHeartbeatsForTest()
+	resumeN1Heartbeats := partitionStore.GetStoreConfig().NodeLiveness.PauseAllHeartbeatsForTest()
 
 	// Wait until another replica campaigns and becomes leader, replacing the
 	// partitioned one.
@@ -2456,7 +2456,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, int(leaderRepl.StoreID()-1))
 
 	// Wait for several ticks to elapse.
-	ticksToWait := 2 * store.RaftElectionTimeoutTicks()
+	ticksToWait := 2 * store.GetStoreConfig().RaftElectionTimeoutTicks
 	ticks := store.Metrics().RaftTicks.Count
 	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
@@ -2509,7 +2509,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ticksToWait := 2 * leaderStore.RaftElectionTimeoutTicks()
+	ticksToWait := 2 * leaderStore.GetStoreConfig().RaftElectionTimeoutTicks
 	ticks := leaderStore.Metrics().RaftTicks.Count
 	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
@@ -2564,7 +2564,7 @@ outer:
 					tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
 					cb := tc.Servers[replicaIdx].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
 					cb.Break()
-					time.Sleep(tc.GetFirstStoreFromServer(t, replicaIdx).CoalescedHeartbeatsInterval())
+					time.Sleep(tc.GetFirstStoreFromServer(t, replicaIdx).GetStoreConfig().CoalescedHeartbeatsInterval)
 					cb.Reset()
 					tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
 					continue outer
@@ -4034,7 +4034,7 @@ func TestRangeQuiescence(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	pauseNodeLivenessHeartbeatLoopsTC(tc)
+	pauseNodeLivenessHeartbeatLoops(tc)
 	key := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
@@ -4065,7 +4065,7 @@ func TestRangeQuiescence(t *testing.T) {
 	// Wait for a bunch of ticks to occur which will allow the follower time to
 	// campaign.
 	ticks := tc.GetFirstStoreFromServer(t, followerIdx).Metrics().RaftTicks.Count
-	for targetTicks := ticks() + int64(2*tc.GetFirstStoreFromServer(t, followerIdx).RaftElectionTimeoutTicks()); ticks() < targetTicks; {
+	for targetTicks := ticks() + int64(2*tc.GetFirstStoreFromServer(t, followerIdx).GetStoreConfig().RaftElectionTimeoutTicks); ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 

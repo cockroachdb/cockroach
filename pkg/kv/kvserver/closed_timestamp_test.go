@@ -692,10 +692,10 @@ func forceLeaseTransferOnSubsumedRange(
 		}
 		return nil
 	})
-	restartHeartbeats := oldLeaseholderStore.NodeLiveness().PauseAllHeartbeatsForTest()
+	restartHeartbeats := oldLeaseholderStore.GetStoreConfig().NodeLiveness.PauseAllHeartbeatsForTest()
 	defer restartHeartbeats()
 	log.Infof(ctx, "test: paused RHS rightLeaseholder's liveness heartbeats")
-	time.Sleep(oldLeaseholderStore.NodeLiveness().GetLivenessThreshold())
+	time.Sleep(oldLeaseholderStore.GetStoreConfig().NodeLiveness.GetLivenessThreshold())
 
 	// Send a read request from one of the followers of RHS so that it notices
 	// that the current rightLeaseholder has stopped heartbeating. This will prompt
@@ -955,7 +955,7 @@ func getCurrentMaxClosed(
 	attempts := 0
 	for attempts == 0 || timeutil.Now().Before(deadline) {
 		attempts++
-		store.ClosedTimestamp().Storage.VisitDescending(target.NodeID, func(entry ctpb.Entry) (done bool) {
+		store.GetStoreConfig().ClosedTimestamp.Storage.VisitDescending(target.NodeID, func(entry ctpb.Entry) (done bool) {
 			if _, ok := entry.MLAI[desc.RangeID]; ok {
 				maxClosed = entry
 				return true
