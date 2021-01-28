@@ -106,21 +106,13 @@ type NewSpillingQueueArgs struct {
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
-	// Reduce the memory limit by what the DiskQueue may need to buffer
-	// writes/reads.
-	// TODO(yuzefovich): the memory limit should only be reduced by the buffer
-	// size if/when the spilling to disk occurs. Until that point the spilling
-	// queue should be free to use the whole limit for the in-memory batch
-	// buffer.
-	memoryLimit := args.MemoryLimit
-	memoryLimit -= int64(args.DiskQueueCfg.BufferSizeBytes)
 	var items []coldata.Batch
-	if memoryLimit > 0 {
+	if args.MemoryLimit > 0 {
 		items = make([]coldata.Batch, spillingQueueInitialItemsLen)
 	}
 	return &spillingQueue{
 		unlimitedAllocator: args.UnlimitedAllocator,
-		maxMemoryLimit:     memoryLimit,
+		maxMemoryLimit:     args.MemoryLimit,
 		typs:               args.Types,
 		items:              items,
 		diskQueueCfg:       args.DiskQueueCfg,
@@ -445,6 +437,47 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	// Only assign q.diskQueue if there was no error, otherwise the returned value
 	// may be non-nil but invalid.
 	q.diskQueue = diskQueue
+	// Decrease the memory limit by the amount the disk queue will use to buffer
+	// writes/reads.
+	q.maxMemoryLimit -= int64(q.diskQueueCfg.BufferSizeBytes)
+	// We are definitely exceeding the memory limit now, so we will move as many
+	// batches from the tail of the in-memory buffer onto the disk queue as
+	// needed to satisfy the limit again.
+	//
+	// queueTailToMove will contain the batches from the tail of the queue to
+	// move to disk. The batches are in the reversed order (i.e the last, second
+	// to last, third to last, etc).
+	//
+	// Note that if the queue is rewindable, then dequeue() hasn't been called
+	// yet (otherwise, an assertion in enqueue() would have fired), so we don't
+	// need to concern ourselves with the rewindable state.
+	var queueTailToMove []coldata.Batch
+	for q.numInMemoryItems > 0 && q.unlimitedAllocator.Used() > q.maxMemoryLimit {
+		tailBatchIdx := q.curTailIdx - 1
+		if tailBatchIdx < 0 {
+			tailBatchIdx = len(q.items) - 1
+		}
+		tailBatch := q.items[tailBatchIdx]
+		queueTailToMove = append(queueTailToMove, tailBatch)
+		q.items[tailBatchIdx] = nil
+		// We will release the memory a bit early (before enqueueing to the disk
+		// queue) since it simplifies the calculation of how many batches should
+		// be moved.
+		q.unlimitedAllocator.ReleaseMemory(colmem.GetBatchMemSize(tailBatch))
+		q.numInMemoryItems--
+		q.curTailIdx--
+		if q.curTailIdx < 0 {
+			q.curTailIdx = len(q.items) - 1
+		}
+	}
+	for i := len(queueTailToMove) - 1; i >= 0; i-- {
+		// Note that these batches definitely do not have selection vectors
+		// since the deselection is performed during the copying in enqueue().
+		if err := q.diskQueue.Enqueue(ctx, queueTailToMove[i]); err != nil {
+			return err
+		}
+		q.numOnDiskItems++
+	}
 	return nil
 }
 
@@ -471,6 +504,7 @@ func (q *spillingQueue) close(ctx context.Context) error {
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
+		q.maxMemoryLimit += int64(q.diskQueueCfg.BufferSizeBytes)
 		q.closed = true
 		return nil
 	}
