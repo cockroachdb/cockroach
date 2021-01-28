@@ -3,12 +3,18 @@ import _ from "lodash";
 import { AppState } from "../reducers";
 import { getDisplayName } from "../../nodes";
 import { livenessStatusByNodeIDSelector } from "../liveness";
+import { accumulateMetrics } from "../../util";
 
 export const nodeStatusesSelector = (state: AppState) =>
   state.adminUI.nodes.data;
 
-export const nodeDisplayNameByIDSelector = createSelector(
+export const nodesSelector = createSelector(
   nodeStatusesSelector,
+  accumulateMetrics,
+);
+
+export const nodeDisplayNameByIDSelector = createSelector(
+  nodesSelector,
   livenessStatusByNodeIDSelector,
   (nodeStatuses, livenessStatusByNodeID) => {
     const result: { [key: string]: string } = {};
