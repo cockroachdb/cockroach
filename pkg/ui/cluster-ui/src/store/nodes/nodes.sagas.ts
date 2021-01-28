@@ -4,7 +4,6 @@ import { actions } from "./nodes.reducer";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { accumulateMetrics } from "../../util";
 
 export function* refreshNodesSaga() {
   yield put(actions.request());
@@ -15,10 +14,7 @@ export function* requestNodesSaga() {
     const result: cockroach.server.serverpb.NodesResponse = yield call(
       getNodes,
     );
-    // TODO (koorosh): Would it be safe to move node transformation to selectors and
-    // preserve node response "as is" in store?
-    const nodes = accumulateMetrics(result.nodes);
-    yield put(actions.received(nodes));
+    yield put(actions.received(result.nodes));
   } catch (e) {
     yield put(actions.failed(e));
   }
