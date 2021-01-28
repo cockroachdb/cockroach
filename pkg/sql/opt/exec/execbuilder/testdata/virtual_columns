@@ -706,3 +706,694 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│
+└── • project
+    │ columns: (column1, column2, column8, column2, column8)
+    │
+    └── • render
+        │ columns: (column8, column1, column2)
+        │ estimated row count: 4
+        │ render column8: column1 + column2
+        │ render column1: column1
+        │ render column2: column2
+        │
+        └── • values
+              columns: (column1, column2)
+              size: 2 columns, 4 rows
+              row 0, expr 0: 1
+              row 0, expr 1: 10
+              row 1, expr 0: 2
+              row 1, expr 1: 20
+              row 2, expr 0: 3
+              row 2, expr 1: 30
+              row 3, expr 0: 4
+              row 3, expr 1: 40
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (5, 51), (6, 60) ON CONFLICT DO NOTHING RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 0 (missing stats)
+│
+└── • insert
+    │ columns: (a, v)
+    │ estimated row count: 0 (missing stats)
+    │ into: t(a, b, v)
+    │ auto commit
+    │ arbiter indexes: primary
+    │
+    └── • lookup join (anti)
+        │ columns: (column1, column2, column8)
+        │ estimated row count: 0 (missing stats)
+        │ table: t@primary
+        │ equality: (column1) = (a)
+        │ equality cols are key
+        │
+        └── • render
+            │ columns: (column8, column1, column2)
+            │ estimated row count: 2
+            │ render column8: column1 + column2
+            │ render column1: column1
+            │ render column2: column2
+            │
+            └── • values
+                  columns: (column1, column2)
+                  size: 2 columns, 2 rows
+                  row 0, expr 0: 5
+                  row 0, expr 1: 51
+                  row 1, expr 0: 6
+                  row 1, expr 1: 60
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column8, a, b, v, upsert_b, upsert_v, a)
+    │
+    └── • render
+        │ columns: (upsert_b, upsert_v, column1, column2, column8, a, b, v)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v END
+        │ render upsert_v: CASE WHEN a IS NULL THEN column8 ELSE a + v END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column8: column8
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │
+        └── • merge join (right outer)
+            │ columns: (v, a, b, column8, column1, column2)
+            │ estimated row count: 3 (missing stats)
+            │ equality: (a) = (column1)
+            │ left cols are key
+            │ merge ordering: +"(a=column1)"
+            │
+            ├── • render
+            │   │ columns: (v, a, b)
+            │   │ ordering: +a
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render a: a
+            │   │ render b: b
+            │   │
+            │   └── • scan
+            │         columns: (a, b)
+            │         ordering: +a
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t@primary
+            │         spans: FULL SCAN
+            │
+            └── • sort
+                │ columns: (column8, column1, column2)
+                │ ordering: +column1
+                │ estimated row count: 3
+                │ order: +column1
+                │
+                └── • render
+                    │ columns: (column8, column1, column2)
+                    │ estimated row count: 3
+                    │ render column8: column1 + column2
+                    │ render column1: column1
+                    │ render column2: column2
+                    │
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 100
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column8, a, b, v, upsert_b, upsert_v, a)
+    │
+    └── • render
+        │ columns: (upsert_b, upsert_v, column1, column2, column8, a, b, v)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE column8 END
+        │ render upsert_v: CASE WHEN a IS NULL THEN column8 ELSE a + column8 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column8: column8
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │
+        └── • merge join (right outer)
+            │ columns: (v, a, b, column8, column1, column2)
+            │ estimated row count: 3 (missing stats)
+            │ equality: (a) = (column1)
+            │ left cols are key
+            │ merge ordering: +"(a=column1)"
+            │
+            ├── • render
+            │   │ columns: (v, a, b)
+            │   │ ordering: +a
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render a: a
+            │   │ render b: b
+            │   │
+            │   └── • scan
+            │         columns: (a, b)
+            │         ordering: +a
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t@primary
+            │         spans: FULL SCAN
+            │
+            └── • sort
+                │ columns: (column8, column1, column2)
+                │ ordering: +column1
+                │ estimated row count: 3
+                │ order: +column1
+                │
+                └── • render
+                    │ columns: (column8, column1, column2)
+                    │ estimated row count: 3
+                    │ render column8: column1 + column2
+                    │ render column1: column1
+                    │ render column2: column2
+                    │
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 3 rows
+                          row 0, expr 0: 2
+                          row 0, expr 1: 100
+                          row 1, expr 0: 5
+                          row 1, expr 1: 100
+                          row 2, expr 0: 8
+                          row 2, expr 1: 100
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column2, column3, column11, column12, a)
+    │
+    └── • merge join (right outer)
+        │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+        │ estimated row count: 4 (missing stats)
+        │ equality: (a) = (column1)
+        │ left cols are key
+        │ merge ordering: +"(a=column1)"
+        │
+        ├── • render
+        │   │ columns: (v, w, a, b, c)
+        │   │ ordering: +a
+        │   │ estimated row count: 1,000 (missing stats)
+        │   │ render v: a + b
+        │   │ render w: c + 1
+        │   │ render a: a
+        │   │ render b: b
+        │   │ render c: c
+        │   │
+        │   └── • scan
+        │         columns: (a, b, c)
+        │         ordering: +a
+        │         estimated row count: 1,000 (missing stats)
+        │         table: t_idx@primary
+        │         spans: FULL SCAN
+        │
+        └── • sort
+            │ columns: (column11, column12, column1, column2, column3)
+            │ ordering: +column1
+            │ estimated row count: 4
+            │ order: +column1
+            │
+            └── • render
+                │ columns: (column11, column12, column1, column2, column3)
+                │ estimated row count: 4
+                │ render column11: column1 + column2
+                │ render column12: column3 + 1
+                │ render column1: column1
+                │ render column2: column2
+                │ render column3: column3
+                │
+                └── • values
+                      columns: (column1, column2, column3)
+                      size: 3 columns, 4 rows
+                      row 0, expr 0: 1
+                      row 0, expr 1: 10
+                      row 0, expr 2: 100
+                      row 1, expr 0: 2
+                      row 1, expr 1: 20
+                      row 1, expr 2: 200
+                      row 2, expr 0: 3
+                      row 2, expr 1: 30
+                      row 2, expr 2: 300
+                      row 3, expr 0: 4
+                      row 3, expr 1: 40
+                      row 3, expr 2: 400
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (a, v, w)
+│ estimated row count: 2 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column2, column3, column11, column12, a)
+    │
+    └── • render
+        │ columns: (upsert_a, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ estimated row count: 2 (missing stats)
+        │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column11: column11
+        │ render column12: column12
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • merge join (right outer)
+            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+            │ estimated row count: 2 (missing stats)
+            │ equality: (a) = (column1)
+            │ left cols are key
+            │ merge ordering: +"(a=column1)"
+            │
+            ├── • render
+            │   │ columns: (v, w, a, b, c)
+            │   │ ordering: +a
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render w: c + 1
+            │   │ render a: a
+            │   │ render b: b
+            │   │ render c: c
+            │   │
+            │   └── • scan
+            │         columns: (a, b, c)
+            │         ordering: +a
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t_idx@primary
+            │         spans: FULL SCAN
+            │
+            └── • sort
+                │ columns: (column11, column12, column1, column2, column3)
+                │ ordering: +column1
+                │ estimated row count: 2
+                │ order: +column1
+                │
+                └── • render
+                    │ columns: (column11, column12, column1, column2, column3)
+                    │ estimated row count: 2
+                    │ render column11: column1 + column2
+                    │ render column12: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 2 rows
+                          row 0, expr 0: 3
+                          row 0, expr 1: 31
+                          row 0, expr 2: 301
+                          row 1, expr 0: 5
+                          row 1, expr 1: 50
+                          row 1, expr 2: 500
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (w)
+│ estimated row count: 0 (missing stats)
+│
+└── • insert
+    │ columns: (a, w)
+    │ estimated row count: 0 (missing stats)
+    │ into: t_idx(a, b, c, v, w)
+    │ auto commit
+    │ arbiter indexes: primary, t_idx_w_key
+    │
+    └── • distinct
+        │ columns: (column1, column2, column3, column11, column12)
+        │ estimated row count: 0 (missing stats)
+        │ distinct on: column12
+        │ nulls are distinct
+        │
+        └── • lookup join (anti)
+            │ columns: (column11, column12, column1, column2, column3)
+            │ estimated row count: 0 (missing stats)
+            │ table: t_idx@primary
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │
+            └── • hash join (right anti)
+                │ columns: (column11, column12, column1, column2, column3)
+                │ estimated row count: 0 (missing stats)
+                │ equality: (w) = (column12)
+                │
+                ├── • render
+                │   │ columns: (w)
+                │   │ estimated row count: 1,000 (missing stats)
+                │   │ render w: c + 1
+                │   │
+                │   └── • scan
+                │         columns: (c)
+                │         estimated row count: 1,000 (missing stats)
+                │         table: t_idx@primary
+                │         spans: FULL SCAN
+                │
+                └── • render
+                    │ columns: (column11, column12, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render column11: column1 + column2
+                    │ render column12: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 41
+                          row 0, expr 2: 301
+                          row 1, expr 0: 6
+                          row 1, expr 1: 60
+                          row 1, expr 2: 600
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 100
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, column11, column12, a, c, w, upsert_c, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_c, upsert_w, column1, column2, column3, column11, column12, a, c, w)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 0 END
+        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column11: column11
+        │ render column12: column12
+        │ render a: a
+        │ render c: c
+        │ render w: w
+        │
+        └── • merge join (right outer)
+            │ columns: (w, a, c, column11, column12, column1, column2, column3)
+            │ estimated row count: 3 (missing stats)
+            │ equality: (a) = (column1)
+            │ left cols are key
+            │ merge ordering: +"(a=column1)"
+            │
+            ├── • render
+            │   │ columns: (w, a, c)
+            │   │ ordering: +a
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render w: c + 1
+            │   │ render a: a
+            │   │ render c: c
+            │   │
+            │   └── • scan
+            │         columns: (a, c)
+            │         ordering: +a
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t_idx@primary
+            │         spans: FULL SCAN
+            │
+            └── • sort
+                │ columns: (column11, column12, column1, column2, column3)
+                │ ordering: +column1
+                │ estimated row count: 3
+                │ order: +column1
+                │
+                └── • render
+                    │ columns: (column11, column12, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render column11: column1 + column2
+                    │ render column12: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 10
+                          row 0, expr 2: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 10
+                          row 1, expr 2: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 700
+
+# TODO(radu): this should use a lookup join instead of a merge join.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (a, b, c, v, w)
+│ estimated row count: 3 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, upsert_c, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_a, upsert_b, upsert_c, upsert_v, upsert_w, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE b END
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE w END
+        │ render upsert_v: CASE WHEN a IS NULL THEN column11 ELSE v END
+        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE w + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column11: column11
+        │ render column12: column12
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • merge join (right outer)
+            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+            │ estimated row count: 3 (missing stats)
+            │ equality: (a) = (column1)
+            │ left cols are key
+            │ merge ordering: +"(a=column1)"
+            │
+            ├── • render
+            │   │ columns: (v, w, a, b, c)
+            │   │ ordering: +a
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render w: c + 1
+            │   │ render a: a
+            │   │ render b: b
+            │   │ render c: c
+            │   │
+            │   └── • scan
+            │         columns: (a, b, c)
+            │         ordering: +a
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t_idx@primary
+            │         spans: FULL SCAN
+            │
+            └── • sort
+                │ columns: (column11, column12, column1, column2, column3)
+                │ ordering: +column1
+                │ estimated row count: 3
+                │ order: +column1
+                │
+                └── • render
+                    │ columns: (column11, column12, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render column11: column1 + column2
+                    │ render column12: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 10
+                          row 0, expr 2: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 10
+                          row 1, expr 2: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 700
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: t_idx_w_key
+│
+└── • project
+    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column1, upsert_c, upsert_v, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_c, upsert_v, upsert_w, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ estimated row count: 20 (missing stats)
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE column11 END
+        │ render upsert_v: CASE WHEN a IS NULL THEN column11 ELSE column1 + b END
+        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE column11 + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column11: column11
+        │ render column12: column12
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • hash join (right outer)
+            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+            │ estimated row count: 20 (missing stats)
+            │ equality: (w) = (column12)
+            │ right cols are key
+            │
+            ├── • render
+            │   │ columns: (v, w, a, b, c)
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render w: c + 1
+            │   │ render a: a
+            │   │ render b: b
+            │   │ render c: c
+            │   │
+            │   └── • scan
+            │         columns: (a, b, c)
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t_idx@primary
+            │         spans: FULL SCAN
+            │
+            └── • distinct
+                │ columns: (column11, column12, column1, column2, column3)
+                │ estimated row count: 2
+                │ distinct on: column12
+                │ nulls are distinct
+                │ error on duplicate
+                │
+                └── • render
+                    │ columns: (column11, column12, column1, column2, column3)
+                    │ estimated row count: 2
+                    │ render column11: column1 + column2
+                    │ render column12: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 2 rows
+                          row 0, expr 0: 8
+                          row 0, expr 1: 80
+                          row 0, expr 2: 800
+                          row 1, expr 0: 10
+                          row 1, expr 1: 100
+                          row 1, expr 2: 700

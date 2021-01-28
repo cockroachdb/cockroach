@@ -616,3 +616,526 @@ project
            └── projections
                 ├── a:7 + b_new:13 [as=column14:14]
                 └── c:9 + 1 [as=column15:15]
+
+# -- UPSERT / INSERT ON CONFLICT tests --
+
+build
+UPSERT INTO t VALUES (1, 1)
+----
+upsert t
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => v:3
+ └── project
+      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    └── (1, 1)
+      └── projections
+           └── column1:5 + column2:6 [as=column7:7]
+
+build
+UPSERT INTO t(a) VALUES (1)
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:8
+ ├── fetch columns: a:8 b:9 v:10
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column6:6 => b:2
+ │    └── column7:7 => v:3
+ └── project
+      ├── columns: upsert_a:13 upsert_b:14 upsert_v:15 column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 column12:12
+      ├── project
+      │    ├── columns: column12:12 column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:5!null column6:6 column7:7
+      │    │    │    ├── grouping columns: column1:5!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column7:7 column1:5!null column6:6
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column6:6 column1:5!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5!null
+      │    │    │    │    │    │    └── (1,)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=column6:6]
+      │    │    │    │    └── projections
+      │    │    │    │         └── column1:5 + column6:6 [as=column7:7]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column6:6]
+      │    │    │         │    └── column6:6
+      │    │    │         └── first-agg [as=column7:7]
+      │    │    │              └── column7:7
+      │    │    ├── project
+      │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── scan t
+      │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── v:10
+      │    │    │    │              └── a:8 + b:9
+      │    │    │    └── projections
+      │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    └── filters
+      │    │         └── column1:5 = a:8
+      │    └── projections
+      │         └── a:8 + b:9 [as=column12:12]
+      └── projections
+           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a:8 END [as=upsert_a:13]
+           ├── CASE WHEN a:8 IS NULL THEN column6:6 ELSE b:9 END [as=upsert_b:14]
+           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE v:10 END [as=upsert_v:15]
+
+build
+UPSERT INTO t(a, b, v) VALUES (1)
+----
+error (55000): cannot write directly to computed column "v"
+
+build
+UPSERT INTO t VALUES (1, 1) RETURNING v
+----
+project
+ ├── columns: v:3!null
+ └── upsert t
+      ├── columns: a:1!null b:2!null v:3!null
+      ├── upsert-mapping:
+      │    ├── column1:5 => a:1
+      │    ├── column2:6 => b:2
+      │    └── column7:7 => v:3
+      └── project
+           ├── columns: column7:7!null column1:5!null column2:6!null
+           ├── values
+           │    ├── columns: column1:5!null column2:6!null
+           │    └── (1, 1)
+           └── projections
+                └── column1:5 + column2:6 [as=column7:7]
+
+build
+INSERT INTO t VALUES (1, 1) ON CONFLICT DO NOTHING RETURNING v
+----
+project
+ ├── columns: v:3!null
+ └── insert t
+      ├── columns: a:1!null b:2!null v:3!null
+      ├── arbiter indexes: primary
+      ├── insert-mapping:
+      │    ├── column1:5 => a:1
+      │    ├── column2:6 => b:2
+      │    └── column7:7 => v:3
+      └── upsert-distinct-on
+           ├── columns: column1:5!null column2:6!null column7:7!null
+           ├── grouping columns: column1:5!null
+           ├── anti-join (hash)
+           │    ├── columns: column1:5!null column2:6!null column7:7!null
+           │    ├── project
+           │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+           │    │    ├── values
+           │    │    │    ├── columns: column1:5!null column2:6!null
+           │    │    │    └── (1, 1)
+           │    │    └── projections
+           │    │         └── column1:5 + column2:6 [as=column7:7]
+           │    ├── project
+           │    │    ├── columns: v:10 a:8!null b:9
+           │    │    ├── scan t
+           │    │    │    ├── columns: a:8!null b:9
+           │    │    │    └── computed column expressions
+           │    │    │         └── v:10
+           │    │    │              └── a:8 + b:9
+           │    │    └── projections
+           │    │         └── a:8 + b:9 [as=v:10]
+           │    └── filters
+           │         └── column1:5 = a:8
+           └── aggregations
+                ├── first-agg [as=column2:6]
+                │    └── column2:6
+                └── first-agg [as=column7:7]
+                     └── column7:7
+
+build
+INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
+----
+insert t_idx2
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    ├── column10:10 => v:4
+ │    └── column11:11 => w:5
+ └── upsert-distinct-on
+      ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      ├── grouping columns: column11:11!null
+      ├── anti-join (hash)
+      │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    ├── project
+      │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    └── (1, 1, 1)
+      │    │    └── projections
+      │    │         ├── column1:7 + column2:8 [as=column10:10]
+      │    │         └── column3:9 + 1 [as=column11:11]
+      │    ├── project
+      │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14
+      │    │    ├── scan t_idx2
+      │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    └── computed column expressions
+      │    │    │         ├── v:15
+      │    │    │         │    └── a:12 + b:13
+      │    │    │         └── w:16
+      │    │    │              └── c:14 + 1
+      │    │    └── projections
+      │    │         ├── a:12 + b:13 [as=v:15]
+      │    │         └── c:14 + 1 [as=w:16]
+      │    └── filters
+      │         └── column11:11 = w:16
+      └── aggregations
+           ├── first-agg [as=column1:7]
+           │    └── column1:7
+           ├── first-agg [as=column2:8]
+           │    └── column2:8
+           ├── first-agg [as=column3:9]
+           │    └── column3:9
+           └── first-agg [as=column10:10]
+                └── column10:10
+
+build
+INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT DO NOTHING
+----
+insert t_idx2
+ ├── columns: <none>
+ ├── arbiter indexes: primary secondary
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    ├── column10:10 => v:4
+ │    └── column11:11 => w:5
+ └── upsert-distinct-on
+      ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      ├── grouping columns: column11:11!null
+      ├── upsert-distinct-on
+      │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    ├── grouping columns: column1:7!null
+      │    ├── anti-join (hash)
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    ├── anti-join (hash)
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    └── (1, 1, 1)
+      │    │    │    │    └── projections
+      │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
+      │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14
+      │    │    │    │    ├── scan t_idx2
+      │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         ├── v:15
+      │    │    │    │    │         │    └── a:12 + b:13
+      │    │    │    │    │         └── w:16
+      │    │    │    │    │              └── c:14 + 1
+      │    │    │    │    └── projections
+      │    │    │    │         ├── a:12 + b:13 [as=v:15]
+      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    └── filters
+      │    │    │         └── column1:7 = a:12
+      │    │    ├── project
+      │    │    │    ├── columns: v:21 w:22 a:18!null b:19 c:20
+      │    │    │    ├── scan t_idx2
+      │    │    │    │    ├── columns: a:18!null b:19 c:20
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         ├── v:21
+      │    │    │    │         │    └── a:18 + b:19
+      │    │    │    │         └── w:22
+      │    │    │    │              └── c:20 + 1
+      │    │    │    └── projections
+      │    │    │         ├── a:18 + b:19 [as=v:21]
+      │    │    │         └── c:20 + 1 [as=w:22]
+      │    │    └── filters
+      │    │         └── column11:11 = w:22
+      │    └── aggregations
+      │         ├── first-agg [as=column2:8]
+      │         │    └── column2:8
+      │         ├── first-agg [as=column3:9]
+      │         │    └── column3:9
+      │         ├── first-agg [as=column10:10]
+      │         │    └── column10:10
+      │         └── first-agg [as=column11:11]
+      │              └── column11:11
+      └── aggregations
+           ├── first-agg [as=column1:7]
+           │    └── column1:7
+           ├── first-agg [as=column2:8]
+           │    └── column2:8
+           ├── first-agg [as=column3:9]
+           │    └── column3:9
+           └── first-agg [as=column10:10]
+                └── column10:10
+
+build
+INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=t.v+1
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:8
+ ├── fetch columns: a:8 b:9 v:10
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => v:3
+ ├── update-mapping:
+ │    ├── upsert_a:14 => a:1
+ │    └── upsert_v:16 => v:3
+ └── project
+      ├── columns: upsert_a:14 upsert_b:15 upsert_v:16 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12 column13:13
+      ├── project
+      │    ├── columns: column13:13 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12
+      │    ├── project
+      │    │    ├── columns: a_new:12 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null
+      │    │    │    │    ├── grouping columns: column1:5!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    └── (1, 1)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── column1:5 + column2:6 [as=column7:7]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         └── first-agg [as=column7:7]
+      │    │    │    │              └── column7:7
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    ├── scan t
+      │    │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── v:10
+      │    │    │    │    │              └── a:8 + b:9
+      │    │    │    │    └── projections
+      │    │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    │    └── filters
+      │    │    │         └── column1:5 = a:8
+      │    │    └── projections
+      │    │         └── v:10 + 1 [as=a_new:12]
+      │    └── projections
+      │         └── a_new:12 + b:9 [as=column13:13]
+      └── projections
+           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a_new:12 END [as=upsert_a:14]
+           ├── CASE WHEN a:8 IS NULL THEN column2:6 ELSE b:9 END [as=upsert_b:15]
+           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE column13:13 END [as=upsert_v:16]
+
+build
+INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=excluded.v+1
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:8
+ ├── fetch columns: a:8 b:9 v:10
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => v:3
+ ├── update-mapping:
+ │    ├── upsert_a:14 => a:1
+ │    └── upsert_v:16 => v:3
+ └── project
+      ├── columns: upsert_a:14!null upsert_b:15 upsert_v:16 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12!null column13:13
+      ├── project
+      │    ├── columns: column13:13 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12!null
+      │    ├── project
+      │    │    ├── columns: a_new:12!null column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null
+      │    │    │    │    ├── grouping columns: column1:5!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    └── (1, 1)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── column1:5 + column2:6 [as=column7:7]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         └── first-agg [as=column7:7]
+      │    │    │    │              └── column7:7
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    ├── scan t
+      │    │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── v:10
+      │    │    │    │    │              └── a:8 + b:9
+      │    │    │    │    └── projections
+      │    │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    │    └── filters
+      │    │    │         └── column1:5 = a:8
+      │    │    └── projections
+      │    │         └── column7:7 + 1 [as=a_new:12]
+      │    └── projections
+      │         └── a_new:12 + b:9 [as=column13:13]
+      └── projections
+           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a_new:12 END [as=upsert_a:14]
+           ├── CASE WHEN a:8 IS NULL THEN column2:6 ELSE b:9 END [as=upsert_b:15]
+           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE column13:13 END [as=upsert_v:16]
+
+build
+INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=10
+----
+upsert t_idx2
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── canary column: a:12
+ ├── fetch columns: a:12 b:13 c:14 v:15 w:16
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    ├── column10:10 => v:4
+ │    └── column11:11 => w:5
+ ├── update-mapping:
+ │    ├── upsert_c:23 => c:3
+ │    └── upsert_w:25 => w:5
+ └── project
+      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23!null upsert_v:24 upsert_w:25!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18!null column19:19 column20:20!null
+      ├── project
+      │    ├── columns: column19:19 column20:20!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18!null
+      │    ├── project
+      │    │    ├── columns: c_new:18!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    │    │    ├── grouping columns: column11:11!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    │    └── (1, 1, 1)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
+      │    │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column1:7]
+      │    │    │    │         │    └── column1:7
+      │    │    │    │         ├── first-agg [as=column2:8]
+      │    │    │    │         │    └── column2:8
+      │    │    │    │         ├── first-agg [as=column3:9]
+      │    │    │    │         │    └── column3:9
+      │    │    │    │         └── first-agg [as=column10:10]
+      │    │    │    │              └── column10:10
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    ├── scan t_idx2
+      │    │    │    │    │    ├── columns: a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         ├── v:15
+      │    │    │    │    │         │    └── a:12 + b:13
+      │    │    │    │    │         └── w:16
+      │    │    │    │    │              └── c:14 + 1
+      │    │    │    │    └── projections
+      │    │    │    │         ├── a:12 + b:13 [as=v:15]
+      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    └── filters
+      │    │    │         └── column11:11 = w:16
+      │    │    └── projections
+      │    │         └── 10 [as=c_new:18]
+      │    └── projections
+      │         ├── a:12 + b:13 [as=column19:19]
+      │         └── c_new:18 + 1 [as=column20:20]
+      └── projections
+           ├── CASE WHEN a:12 IS NULL THEN column1:7 ELSE a:12 END [as=upsert_a:21]
+           ├── CASE WHEN a:12 IS NULL THEN column2:8 ELSE b:13 END [as=upsert_b:22]
+           ├── CASE WHEN a:12 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:23]
+           ├── CASE WHEN a:12 IS NULL THEN column10:10 ELSE v:15 END [as=upsert_v:24]
+           └── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column20:20 END [as=upsert_w:25]
+
+build
+INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=t_idx2.v+1
+----
+upsert t_idx2
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── canary column: a:12
+ ├── fetch columns: a:12 b:13 c:14 v:15 w:16
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    ├── column10:10 => v:4
+ │    └── column11:11 => w:5
+ ├── update-mapping:
+ │    ├── upsert_c:23 => c:3
+ │    └── upsert_w:25 => w:5
+ └── project
+      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23 upsert_v:24 upsert_w:25 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18 column19:19 column20:20
+      ├── project
+      │    ├── columns: column19:19 column20:20 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18
+      │    ├── project
+      │    │    ├── columns: c_new:18 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    │    │    ├── grouping columns: column11:11!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    │    └── (1, 1, 1)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
+      │    │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column1:7]
+      │    │    │    │         │    └── column1:7
+      │    │    │    │         ├── first-agg [as=column2:8]
+      │    │    │    │         │    └── column2:8
+      │    │    │    │         ├── first-agg [as=column3:9]
+      │    │    │    │         │    └── column3:9
+      │    │    │    │         └── first-agg [as=column10:10]
+      │    │    │    │              └── column10:10
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    ├── scan t_idx2
+      │    │    │    │    │    ├── columns: a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         ├── v:15
+      │    │    │    │    │         │    └── a:12 + b:13
+      │    │    │    │    │         └── w:16
+      │    │    │    │    │              └── c:14 + 1
+      │    │    │    │    └── projections
+      │    │    │    │         ├── a:12 + b:13 [as=v:15]
+      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    └── filters
+      │    │    │         └── column11:11 = w:16
+      │    │    └── projections
+      │    │         └── v:15 + 1 [as=c_new:18]
+      │    └── projections
+      │         ├── a:12 + b:13 [as=column19:19]
+      │         └── c_new:18 + 1 [as=column20:20]
+      └── projections
+           ├── CASE WHEN a:12 IS NULL THEN column1:7 ELSE a:12 END [as=upsert_a:21]
+           ├── CASE WHEN a:12 IS NULL THEN column2:8 ELSE b:13 END [as=upsert_b:22]
+           ├── CASE WHEN a:12 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:23]
+           ├── CASE WHEN a:12 IS NULL THEN column10:10 ELSE v:15 END [as=upsert_v:24]
+           └── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column20:20 END [as=upsert_w:25]
