@@ -1403,14 +1403,26 @@ func maybeUpdateZoneConfigsForPKChange(
 
 	// For each rewritten index, point its subzones for the old index at the
 	// new index.
+	oldIdxToNewIdx := make(map[descpb.IndexID]descpb.IndexID)
 	for i, oldID := range swapInfo.OldIndexes {
-		for j := range zone.Subzones {
-			subzone := &zone.Subzones[j]
-			if subzone.IndexID == uint32(oldID) {
+		oldIdxToNewIdx[oldID] = swapInfo.NewIndexes[i]
+	}
+
+	// It is safe to copy the zone config off a primary index of a REGIONAL BY ROW table.
+	// This is because the prefix of the PK we used to partition by will stay the same,
+	// so a direct copy will always work.
+	if table.IsLocalityRegionalByRow() {
+		oldIdxToNewIdx[swapInfo.OldPrimaryIndexId] = swapInfo.NewPrimaryIndexId
+	}
+
+	for oldIdx, newIdx := range oldIdxToNewIdx {
+		for i := range zone.Subzones {
+			subzone := &zone.Subzones[i]
+			if subzone.IndexID == uint32(oldIdx) {
 				// If we find a subzone matching an old index, copy its subzone
 				// into a new subzone with the new index's ID.
 				subzoneCopy := *subzone
-				subzoneCopy.IndexID = uint32(swapInfo.NewIndexes[i])
+				subzoneCopy.IndexID = uint32(newIdx)
 				zone.SetSubzone(subzoneCopy)
 			}
 		}
