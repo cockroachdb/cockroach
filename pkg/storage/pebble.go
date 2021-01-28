@@ -821,7 +821,7 @@ func (p *Pebble) clearRange(start, end MVCCKey) error {
 // ClearIterRange implements the Engine interface.
 func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
-	batch := p.NewUnIndexedBatch(false /* supportReader */)
+	batch := p.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 
 	if err := batch.ClearIterRange(iter, start, end); err != nil {
@@ -1037,7 +1037,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* unIndexedReadFromDB */)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1047,9 +1047,9 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 	}
 }
 
-// NewUnIndexedBatch implements the Engine interface.
-func (p *Pebble) NewUnIndexedBatch(supportReader bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), supportReader)
+// NewUnindexedBatch implements the Engine interface.
+func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly)
 }
 
 // NewSnapshot implements the Engine interface.

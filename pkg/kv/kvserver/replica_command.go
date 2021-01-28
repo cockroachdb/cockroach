@@ -2106,11 +2106,11 @@ func (r *Replica) sendSnapshot(
 		Strategy:   SnapshotRequest_KV_BATCH,
 		Type:       snapType,
 	}
+	newBatchFn := func() storage.Batch {
+		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
+	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
-	}
-	newBatchFn := func() storage.Batch {
-		return r.store.Engine().NewUnIndexedBatch(false /* supportReader */)
 	}
 	if err := r.store.cfg.Transport.SendSnapshot(
 		ctx,
