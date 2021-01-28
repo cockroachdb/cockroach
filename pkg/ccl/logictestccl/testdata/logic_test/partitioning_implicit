@@ -408,3 +408,63 @@ CREATE TABLE public.t (
   PARTITION two VALUES FROM (2) TO (MAXVALUE)
 )
 -- Warning: Partitioned table with no zone configurations.
+
+subtest unique-checks
+
+# We should plan uniqueness checks for all implicitly partitioned unique indexes.
+query T
+EXPLAIN INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 7 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (pk) = (column1)
+│           │ right cols are key
+│           │ pred: column3 != partition_by
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_a_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (column5)
+            │ right cols are key
+            │ pred: (column1 != pk) OR (column3 != partition_by)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t@t_b_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPDATE t SET b = 1 WHERE pk = 2
