@@ -140,6 +140,9 @@ type EngineMetrics struct {
 
 	// FailureCount counts non-retriable errors in open transactions.
 	FailureCount *metric.Counter
+
+	// FullTableOrIndexScanCount counts the number of full table or index scans.
+	FullTableOrIndexScanCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface
