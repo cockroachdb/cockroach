@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,7 +55,7 @@ func newNoopProcessor(
 		return nil, err
 	}
 	ctx := flowCtx.EvalCtx.Ctx()
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		n.input = newInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace
 	}

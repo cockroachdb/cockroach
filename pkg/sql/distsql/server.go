@@ -314,7 +314,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.NewFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
+		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -400,6 +400,7 @@ func (ds *ServerImpl) NewFlowContext(
 	id execinfrapb.FlowID,
 	evalCtx *tree.EvalContext,
 	traceKV bool,
+	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
 ) execinfra.FlowCtx {
@@ -411,6 +412,7 @@ func (ds *ServerImpl) NewFlowContext(
 		EvalCtx:        evalCtx,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
+		CollectStats:   collectStats,
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
 	}

@@ -383,7 +383,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(),
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.rng,
 	)
 	if needFinish {
 		sql := stmt.SQL
@@ -975,6 +975,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
 	var evalCtxFactory func() *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||

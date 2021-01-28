@@ -33,6 +33,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ = types.BoolFamily
 )
 
 // buildFromLeftInput builds part of the output of a cross join that comes from
