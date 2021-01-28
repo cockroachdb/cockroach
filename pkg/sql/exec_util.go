@@ -310,15 +310,6 @@ var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
-// TODO(mgartner): remove this once multi-column inverted indexes are fully
-// supported.
-var experimentalMultiColumnInvertedIndexesMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_multi_column_inverted_indexes.enabled",
-	"default value for experimental_enable_multi_column_inverted_indexes session setting;"+
-		"disables multi column inverted indexes by default",
-	false,
-)
-
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
@@ -2231,12 +2222,6 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
-}
-
-// TODO(mgartner): remove this once multi-column inverted indexes are fully
-// supported.
-func (m *sessionDataMutator) SetMutliColumnInvertedIndexes(val bool) {
-	m.data.EnableMultiColumnInvertedIndexes = val
 }
 
 // TODO(radu): remove this once the feature is stable.

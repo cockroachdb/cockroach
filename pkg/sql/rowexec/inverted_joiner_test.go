@@ -200,11 +200,6 @@ func TestInvertedJoiner(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec("SET experimental_enable_multi_column_inverted_indexes=true")
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row))
 	}
