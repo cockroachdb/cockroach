@@ -86,7 +86,7 @@ FROM [
 	WHERE dbs.name = %s
 ] r
 LEFT JOIN zones_table ON (r.region = zones_table.region)
-ORDER BY region`,
+ORDER BY "primary" DESC, "region"`,
 			zonesClause,
 			lex.EscapeSQLString(dbName),
 		)

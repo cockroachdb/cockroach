@@ -655,7 +655,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
-	batch := r.store.Engine().NewUnIndexedBatch(true /* supportReader */)
+	batch := r.store.Engine().NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
 	prevLastIndex := lastIndex

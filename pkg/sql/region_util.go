@@ -49,20 +49,6 @@ func (s *liveClusterRegions) toStrings() []string {
 	return ret
 }
 
-// assertIsMultiRegionDatabase ensures that we're in a multi-region database, and
-// if not, returns an assertion error. Takes an "operation" string which describes
-// the operation in progress which requires database to be multi-region.
-func assertIsMultiRegionDatabase(desc *dbdesc.Immutable, operation string) error {
-	if !desc.IsMultiRegion() {
-		return errors.AssertionFailedf(
-			"invalid call to %q on a non-multi-region database. %v",
-			operation,
-			desc,
-		)
-	}
-	return nil
-}
-
 // getLiveClusterRegions returns a set of live region names in the cluster.
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.

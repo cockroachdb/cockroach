@@ -79,7 +79,7 @@ func (sc *AbortSpan) ClearData(e storage.Engine) error {
 	// NB: The abort span is a Range-ID local key which has no versions or intents.
 	iter := e.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: sc.max()})
 	defer iter.Close()
-	b := e.NewUnIndexedBatch(false /* supportReader */)
+	b := e.NewUnindexedBatch(true /* writeOnly */)
 	defer b.Close()
 	err := b.ClearIterRange(iter, sc.min(), sc.max())
 	if err != nil {

@@ -2651,7 +2651,7 @@ NULL
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x280550015801
+\x2805500158017801
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2701,7 +2701,7 @@ SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_te
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x280550015801
+\x2805500158017801
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
