@@ -328,9 +328,11 @@ func assignSequenceOptions(
 				}
 				if tableDesc.ParentID != sequenceParentID &&
 					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
-						allowCrossDatabaseSeqOwnerSetting,
+					return errors.WithHintf(
+						pgerror.Newf(pgcode.FeatureNotSupported,
+							"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
+							allowCrossDatabaseSeqOwnerSetting),
+						crossDBReferenceDeprecationHint(),
 					)
 				}
 				// We only want to trigger schema changes if the owner is not what we
