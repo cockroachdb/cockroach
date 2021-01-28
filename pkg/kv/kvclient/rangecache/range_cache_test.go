@@ -1432,6 +1432,112 @@ func TestRangeCacheGeneration(t *testing.T) {
 	}
 }
 
+func TestRangeCacheEvictAndReplace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	rep1 := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+	rep2 := roachpb.ReplicaDescriptor{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	rep3 := roachpb.ReplicaDescriptor{
+		NodeID:    3,
+		StoreID:   3,
+		ReplicaID: 3,
+	}
+	desc1 := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep2,
+		},
+		Generation: 0,
+	}
+	desc2 := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep2, rep3,
+		},
+		Generation: 1,
+	}
+	desc3 := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep2,
+		},
+		Generation: 2,
+	}
+	startKey := desc1.StartKey
+
+	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+
+	ri := roachpb.RangeInfo{Desc: desc1}
+	cache.Insert(ctx, ri)
+
+	// Check that initially the cache has an empty lease and a default
+	// closed timestamp policy.
+	tok, err := cache.LookupWithEvictionToken(ctx, startKey, EvictionToken{}, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.Equal(t, desc1, *tok.Desc())
+	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, tok.ClosedTimestampPolicy())
+
+	// EvictAndReplace() with a new descriptor.
+	ri.Desc = desc2
+	tok.EvictAndReplace(ctx, ri)
+	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.Equal(t, desc2, *tok.Desc())
+	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, tok.ClosedTimestampPolicy())
+
+	// EvictAndReplace() with a new lease.
+	ri.Lease = roachpb.Lease{
+		Replica:  rep1,
+		Sequence: 1,
+	}
+	tok.EvictAndReplace(ctx, ri)
+	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.Equal(t, desc2, *tok.Desc())
+	require.NotNil(t, tok.Leaseholder())
+	require.Equal(t, rep1, *tok.Leaseholder())
+	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, tok.ClosedTimestampPolicy())
+
+	// EvictAndReplace() with a new closed timestamp policy.
+	ri.ClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
+	tok.EvictAndReplace(ctx, ri)
+	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.Equal(t, desc2, *tok.Desc())
+	require.NotNil(t, tok.Leaseholder())
+	require.Equal(t, rep1, *tok.Leaseholder())
+	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+
+	// EvictAndReplace() with a speculative descriptor. Should update decriptor,
+	// remove lease, and retain closed timestamp policy.
+	tok.speculativeDesc = &desc3
+	tok.EvictAndReplace(ctx)
+	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.Equal(t, desc3, *tok.Desc())
+	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+}
+
 func TestRangeCacheUpdateLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1488,15 +1594,18 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 
 	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc1,
-		Lease: roachpb.Lease{},
+		Desc:                  desc1,
+		Lease:                 roachpb.Lease{},
+		ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 	})
 
 	// Check that initially the cache has an empty lease. Then, we'll UpdateLease().
 	tok, err := cache.LookupWithEvictionToken(
 		ctx, desc1.StartKey, EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
+	require.Equal(t, desc1, *tok.Desc())
 	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
 
 	l := &roachpb.Lease{
 		Replica:  rep1,
@@ -1507,15 +1616,23 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, oldTok.Desc(), tok.Desc())
 	require.Equal(t, &l.Replica, tok.Leaseholder())
+	require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
 	ri := cache.GetCached(ctx, startKey, false /* inverted */)
 	require.NotNil(t, ri)
+	require.Equal(t, desc1, *ri.Desc())
 	require.Equal(t, rep1, ri.Lease().Replica)
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
 
+	oldTok = tok
 	tok.EvictLease(ctx)
+	require.Equal(t, oldTok.Desc(), tok.Desc())
+	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
 	require.NotNil(t, ri)
+	require.Equal(t, desc1, *ri.Desc())
 	require.True(t, ri.lease.Empty())
-	require.NotNil(t, tok)
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
 
 	// Check that trying to update the lease to a non-member replica results
 	// in the entry's eviction and the token's invalidation.
@@ -1533,8 +1650,9 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	// updates the token to the newer descriptor.
 
 	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc1,
-		Lease: roachpb.Lease{},
+		Desc:                  desc1,
+		Lease:                 roachpb.Lease{},
+		ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 	})
 	tok, err = cache.LookupWithEvictionToken(
 		ctx, desc1.StartKey, EvictionToken{}, false /* useReverseScan */)
@@ -1554,6 +1672,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	require.Equal(t, &desc2, tok.Desc())
 	require.Equal(t, &rep2, tok.Leaseholder())
 	require.Equal(t, tok.lease.Replica, rep2)
+	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
 
 	// Update the cache again.
 	cache.Insert(ctx, roachpb.RangeInfo{
@@ -1754,6 +1873,34 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 			b: CacheEntry{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 1},
+			},
+		},
+		{
+			name: "different closed timestamp policy #1",
+			exp:  true,
+			a: CacheEntry{
+				desc:     desc(5),
+				lease:    roachpb.Lease{Sequence: 1},
+				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
+			},
+			b: CacheEntry{
+				desc:     desc(5),
+				lease:    roachpb.Lease{Sequence: 1},
+				closedts: roachpb.LEAD_FOR_GLOBAL_READS,
+			},
+		},
+		{
+			name: "different closed timestamp policy #2",
+			exp:  true,
+			a: CacheEntry{
+				desc:     desc(5),
+				lease:    roachpb.Lease{Sequence: 1},
+				closedts: roachpb.LEAD_FOR_GLOBAL_READS,
+			},
+			b: CacheEntry{
+				desc:     desc(5),
+				lease:    roachpb.Lease{Sequence: 1},
+				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
 			},
 		},
 		{
