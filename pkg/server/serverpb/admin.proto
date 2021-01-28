@@ -174,6 +174,10 @@ message TableDetailsResponse {
   // It can be used to find events pertaining to this table by filtering on
   // the 'target_id' field of events.
   int64 descriptor_id = 8 [(gogoproto.customname) = "DescriptorID"];
+  // configure_zone_statement is the output of "SHOW ZONE CONFIGURATION FOR TABLE"
+  // for this table. It is a SQL statement that would re-configure the table's current
+  // zone if executed.
+  string configure_zone_statement = 9;
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive

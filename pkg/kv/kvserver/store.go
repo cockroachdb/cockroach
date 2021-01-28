@@ -806,16 +806,6 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 
-// RaftElectionTimeoutTicks exposed for testing.
-func (s *Store) RaftElectionTimeoutTicks() int {
-	return s.cfg.RaftElectionTimeoutTicks
-}
-
-// CoalescedHeartbeatsInterval exposed for testing.
-func (s *Store) CoalescedHeartbeatsInterval() time.Duration {
-	return s.cfg.CoalescedHeartbeatsInterval
-}
-
 // NewStore returns a new instance of a store.
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
@@ -2331,16 +2321,6 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
-
-// ClosedTimestamp accessor.
-func (s *Store) ClosedTimestamp() *container.Container {
-	return s.cfg.ClosedTimestamp
-}
-
-// NodeLiveness accessor.
-func (s *Store) NodeLiveness() *liveness.NodeLiveness {
-	return s.cfg.NodeLiveness
-}
 
 // IsDraining accessor.
 func (s *Store) IsDraining() bool {
