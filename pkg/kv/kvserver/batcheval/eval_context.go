@@ -95,7 +95,7 @@ type EvalContext interface {
 	GetGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
-	GetDescAndLease(context.Context) (roachpb.RangeDescriptor, roachpb.Lease)
+	GetRangeInfo(context.Context) roachpb.RangeInfo
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
@@ -210,10 +210,8 @@ func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timest
 func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return m.Lease, roachpb.Lease{}
 }
-func (m *mockEvalCtxImpl) GetDescAndLease(
-	ctx context.Context,
-) (roachpb.RangeDescriptor, roachpb.Lease) {
-	return *m.Desc(), m.Lease
+func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
+	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}
 }
 
 func (m *mockEvalCtxImpl) GetExternalStorage(

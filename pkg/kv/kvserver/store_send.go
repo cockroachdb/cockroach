@@ -235,11 +235,11 @@ func (s *Store) Send(
 		if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
 			// Note that we return the lease even if it's expired. The kvclient can
 			// use it as it sees fit.
-			desc, l := repl.GetDescAndLease(ctx)
-			if desc.RangeID == skipRID {
+			ri := repl.GetRangeInfo(ctx)
+			if ri.Desc.RangeID == skipRID {
 				return nil
 			}
-			ris = append(ris, roachpb.RangeInfo{Desc: desc, Lease: l})
+			ris = append(ris, ri)
 			return nil
 		}); err != nil {
 			// Errors here should not be possible, but if there is one, it is ignored

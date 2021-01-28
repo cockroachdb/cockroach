@@ -2388,5 +2388,6 @@ func init() {
 func (ReplicaChangeType) SafeValue() {}
 
 func (ri RangeInfo) String() string {
-	return fmt.Sprintf("desc: %s lease: %s", ri.Desc, ri.Lease)
+	return fmt.Sprintf("desc: %s, lease: %s, closed_timestamp_policy: %s",
+		ri.Desc, ri.Lease, ri.ClosedTimestampPolicy)
 }
