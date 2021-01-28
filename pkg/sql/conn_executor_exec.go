@@ -383,7 +383,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(),
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.rng,
 	)
 	if needFinish {
 		sql := stmt.SQL

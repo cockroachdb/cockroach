@@ -14,10 +14,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -30,6 +32,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
+)
+
+var collectStmtStatsSampleRate = settings.RegisterFloatSetting(
+	"sql.statement_stats.sample_rate",
+	"the probability that a given statement will collect execution statistics (displayed in the DB Console)",
+	0,
+	func(f float64) error {
+		if f < 0 || f > 1 {
+			return errors.New("value must be between 0 and 1 inclusive")
+		}
+		return nil
+	},
 )
 
 // instrumentationHelper encapsulates the logic around extracting information
@@ -122,6 +137,7 @@ func (ih *instrumentationHelper) Setup(
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
 	implicitTxn bool,
+	rng *rand.Rand,
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
@@ -148,8 +164,26 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+		// If verbose tracing was enabled at a higher level, stats collection is
+		// enabled so that stats are shown in the traces, but no extra work is
+		// needed by the instrumentationHelper.
+		ih.collectExecStats = true
+		return ctx, false
+	}
+
+	if statsSampleRate := collectStmtStatsSampleRate.Get(&cfg.Settings.SV); statsSampleRate > 0 {
+		ih.collectExecStats = statsSampleRate > rng.Float64()
+	}
+
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
-		// TODO(asubiotto): Create a span for stat collection in future commit.
+		if ih.collectExecStats {
+			// If we need to collect stats, create a non-verbose child span. Stats
+			// will be added as structured metadata and processed in Finish.
+			ih.origCtx = ctx
+			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+			return newCtx, true
+		}
 		return ctx, false
 	}
 
@@ -197,18 +231,21 @@ func (ih *instrumentationHelper) Finish(
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
 			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
 		}
-		queryLevelStats, error := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
-		if error != nil {
-			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, error)
+		queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		if err != nil {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, err)
+		} else {
+			stmtStats.mu.Lock()
+			stmtStats.mu.data.ExecStatCollectionCount++
+			// Record trace-related statistics.
+			stmtStats.mu.data.BytesSentOverNetwork.Record(
+				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.NetworkBytesSent),
+			)
+			stmtStats.mu.data.MaxMemUsage.Record(
+				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.MaxMemUsage),
+			)
+			stmtStats.mu.Unlock()
 		}
-
-		stmtStats.mu.Lock()
-		// Record trace-related statistics. A count of 1 is passed given that this
-		// statistic is only recorded when statement diagnostics are enabled.
-		// TODO(asubiotto): NumericStat properties will be properly calculated
-		//  once this statistic is always collected.
-		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(queryLevelStats.NetworkBytesSent))
-		stmtStats.mu.Unlock()
 	}
 
 	var bundle diagnosticsBundle
