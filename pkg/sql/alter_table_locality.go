@@ -95,20 +95,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
 		return err
 	}
-	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx,
-		params.p.txn,
-		n.tableDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
-
-	tableName := tree.MakeTableNameWithSchema(
-		tree.Name(desc.Name),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(n.tableDesc.GetName()),
-	)
 
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
@@ -121,11 +107,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 	}
 
 	// Update the zone configuration.
-	if err := params.p.applyZoneConfigFromTableLocalityConfig(
+	if err := applyZoneConfigForMultiRegionTable(
 		params.ctx,
-		tableName,
-		n.tableDesc.TableDesc(),
+		params.p.txn,
+		params.p.ExecCfg(),
 		*desc.RegionConfig,
+		n.tableDesc,
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}
@@ -169,28 +157,14 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		return err
 	}
 
-	// Validate the new locality before updating the table descriptor.
-	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
+	// Update the table's zone configuration.
+	if err := applyZoneConfigForMultiRegionTable(
 		params.ctx,
 		params.p.txn,
-		n.tableDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
-
-	tableName := tree.MakeTableNameWithSchema(
-		tree.Name(desc.Name),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(n.tableDesc.GetName()),
-	)
-
-	// Update the table's zone configuration.
-	if err := params.p.applyZoneConfigFromTableLocalityConfig(
-		params.ctx,
-		tableName,
-		n.tableDesc.TableDesc(),
+		params.p.ExecCfg(),
 		*desc.RegionConfig,
+		n.tableDesc,
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}
