@@ -872,30 +872,6 @@ func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return r.getLeaseRLocked()
 }
 
-// GetDescAndLease atomically reads the range's current descriptor and lease.
-func (r *Replica) GetDescAndLease(ctx context.Context) (roachpb.RangeDescriptor, roachpb.Lease) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	l, _ /* nextLease */ := r.getLeaseRLocked()
-	desc := r.descRLocked()
-
-	// Sanity check the lease.
-	if !l.Empty() {
-		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			// I wish this could be a Fatal, but unfortunately it's possible for the
-			// lease to be incoherent with the descriptor after a leaseholder was
-			// brutally removed through `cockroach debug unsafe-remove-dead-replicas`.
-			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
-			// Let's not return an incoherent lease; for example if we end up
-			// returning it to a client through a br.RangeInfos, the client will freak
-			// out.
-			l = roachpb.Lease{}
-		}
-	}
-
-	return *desc, l
-}
-
 func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return *r.mu.state.Lease, nextLease

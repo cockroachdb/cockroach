@@ -630,11 +630,43 @@ message LeafTxnFinalState {
   reserved 8;
 }
 
-// RangeInfo describes a range which executed a request. It contains
-// the range descriptor and lease information at the time of execution.
+// RangeClosedTimestampPolicy represents the policy used by the leaseholder of a
+// range to establish and publish closed timestamps. The policy dictates how far
+// in the past (lag) or in the future (lead) MVCC history is closed off.
+enum RangeClosedTimestampPolicy {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
+  // configured to lag behind present time by the value configured for the
+  // `kv.closed_timestamp.target_duration` cluster setting.
+  LAG_BY_CLUSTER_SETTING = 0;
+  // LEAD_FOR_GLOBAL_READS indicates that the range's closed timestamp is
+  // configured to lead present time such that all followers of the range are
+  // able to serve consistent, present time reads. Because the policy describes
+  // a goal and not the lead time itself, the lead time is allowed vary as a
+  // function of maximum clock uncertainty and closed timestamp propagation time
+  // (which itself is a function of leaseholder -> follower network latency and
+  // closed timestamp update periodicity).
+  LEAD_FOR_GLOBAL_READS = 1;
+}
+
+// ClientRangeInfo represents the kvclient's knowledge about the state of the
+// range (i.e. of the range descriptor, lease, and closed timestamp policy). The
+// kvserver checks whether the client's info is up to date and, if it isn't, it
+// will return a RangeInfo with up-to-date information.
+message ClientRangeInfo {
+  int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
+  int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
+  RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+}
+
+// RangeInfo describes a range which executed a request. It contains the range
+// descriptor, lease information, and closed timestamp policy at the time of
+// execution.
 message RangeInfo {
   option (gogoproto.goproto_stringer) = false;
 
   RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
   Lease lease = 2 [(gogoproto.nullable) = false];
+  RangeClosedTimestampPolicy closed_timestamp_policy = 3;
 }

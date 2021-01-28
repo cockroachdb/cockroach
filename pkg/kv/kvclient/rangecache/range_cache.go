@@ -206,12 +206,14 @@ type EvictionToken struct {
 	// Evict().
 	rdc *RangeCache
 
-	// desc and lease represent the information retrieved from the cache. This can
-	// advance throughout the life of the token, as various methods re-synchronize
-	// with the cache. However, it it changes, the descriptor only changes to
-	// other "compatible" descriptors (same range id and key bounds).
-	desc  roachpb.RangeDescriptor
-	lease roachpb.Lease
+	// desc, lease, and closedts represent the information retrieved from the
+	// cache. This can advance throughout the life of the token, as various
+	// methods re-synchronize with the cache. However, it it changes, the
+	// descriptor only changes to other "compatible" descriptors (same range id
+	// and key bounds).
+	desc     roachpb.RangeDescriptor
+	lease    roachpb.Lease
+	closedts roachpb.RangeClosedTimestampPolicy
 
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
 	// desc proves to be stale - i.e. speculativeDesc is inserted in the cache
@@ -250,6 +252,7 @@ func (rc *RangeCache) makeEvictionToken(
 		rdc:             rc,
 		desc:            entry.desc,
 		lease:           entry.lease,
+		closedts:        entry.closedts,
 		speculativeDesc: speculativeDesc,
 	}
 }
@@ -307,6 +310,16 @@ func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
 		panic("invalid LeaseSeq() call on empty EvictionToken")
 	}
 	return et.lease.Sequence
+}
+
+// ClosedTimestampPolicy returns the cache's current understanding of the
+// range's closed timestamp policy. If no policy is known, the default policy of
+// LAG_BY_CLUSTER_SETTING is returned.
+func (et EvictionToken) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	if !et.Valid() {
+		panic("invalid ClosedTimestampPolicy() call on empty EvictionToken")
+	}
+	return et.closedts
 }
 
 // syncRLocked syncs the token with the cache. If the cache has a newer, but
@@ -466,6 +479,8 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 			Desc: *et.speculativeDesc,
 			// We don't know anything about the new lease.
 			Lease: roachpb.Lease{},
+			// The closed timestamp policy likely hasn't changed.
+			ClosedTimestampPolicy: et.closedts,
 		})
 	} else {
 		log.Eventf(ctx, "evicting cached range descriptor")
@@ -509,7 +524,7 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (CacheEntry,
 	if err != nil {
 		return CacheEntry{}, err
 	}
-	return CacheEntry{tok.desc, tok.lease}, nil
+	return CacheEntry{tok.desc, tok.lease, tok.closedts}, nil
 }
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
@@ -661,6 +676,8 @@ func (rc *RangeCache) tryLookup(
 				desc: rs[0],
 				// We don't have any lease information.
 				lease: roachpb.Lease{},
+				// We don't know the closed timestamp policy.
+				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
 			}
 			for i, preR := range preRs {
 				newEntries[i+1] = &CacheEntry{desc: preR}
@@ -686,8 +703,9 @@ func (rc *RangeCache) tryLookup(
 			// TODO(andrei): It'd be better to retry the cache/database lookup in case 3.
 			if entry == nil {
 				entry = &CacheEntry{
-					desc:  rs[0],
-					lease: roachpb.Lease{},
+					desc:     rs[0],
+					lease:    roachpb.Lease{},
+					closedts: roachpb.LAG_BY_CLUSTER_SETTING,
 				}
 			}
 			if len(rs) == 1 {
@@ -910,8 +928,9 @@ func (rc *RangeCache) insertLocked(ctx context.Context, rs ...roachpb.RangeInfo)
 	entries := make([]*CacheEntry, len(rs))
 	for i, r := range rs {
 		entries[i] = &CacheEntry{
-			desc:  r.Desc,
-			lease: r.Lease,
+			desc:     r.Desc,
+			lease:    r.Lease,
+			closedts: r.ClosedTimestampPolicy,
 		}
 	}
 	return rc.insertLockedInner(ctx, entries)
@@ -1062,6 +1081,8 @@ type CacheEntry struct {
 	// range in here). This allows UpdateLease() to use Lease.Sequence to compare
 	// leases. Moreover, the lease will correspond to one of the replicas in Desc.
 	lease roachpb.Lease
+	// closedts indicates the range's closed timestamp policy.
+	closedts roachpb.RangeClosedTimestampPolicy
 }
 
 func (e CacheEntry) String() string {
@@ -1097,6 +1118,12 @@ func (e *CacheEntry) Lease() *roachpb.Lease {
 	return &e.lease
 }
 
+// ClosedTimestampPolicy returns the cached understanding of the range's closed
+// timestamp policy. If no policy is known, LAG_BY_CLUSTER_SETTING is returned.
+func (e *CacheEntry) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	return e.closedts
+}
+
 // DescSpeculative returns true if the descriptor in the entry is "speculative"
 // - i.e. it doesn't correspond to a committed value. Such descriptors have been
 // inserted in the cache with Generation=0.
@@ -1120,7 +1147,7 @@ func (e *CacheEntry) LeaseSpeculative() bool {
 // e's and o'd descriptors overlap (and so they can't co-exist in the cache). A
 // newer entry overrides an older entry. What entry is newer is decided based
 // the descriptor's generation and, for equal generations, by the lease's
-// sequence.
+// sequence and, for equal lease sequences, by the closed timestamp policy.
 //
 // In situations where it can't be determined which entry represents newer
 // information, e wins - the assumption is that o is already in the cache and we
@@ -1150,7 +1177,17 @@ func (e *CacheEntry) overrides(o *CacheEntry) bool {
 			e.Desc(), o.Desc()))
 	}
 
-	return compareEntryLeases(o, e) < 0
+	if res := compareEntryLeases(o, e); res != 0 {
+		return res < 0
+	}
+
+	// Equal lease sequences. Let's look at the closed timestamp policy. We
+	// don't assign sequence numbers to closed timestamp policy changes, so in
+	// cases where the two policies differ, we can't tell which one is old and
+	// which is new. So we conservatively say that if the policy changes, we
+	// will replace e with o. Closed timestamp policy changes are very rare, so
+	// minor thrashing in the cache is ok, as long as it eventually converges.
+	return o.closedts != e.closedts
 }
 
 // compareEntryDescs returns -1, 0 or 1 depending on whether a's descriptor is
@@ -1265,8 +1302,9 @@ func (e *CacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry *Cach
 	// what to do about it, though.
 
 	return true, &CacheEntry{
-		desc:  e.desc,
-		lease: *l,
+		desc:     e.desc,
+		lease:    *l,
+		closedts: e.closedts,
 	}
 }
 
@@ -1277,7 +1315,8 @@ func (e *CacheEntry) evictLeaseholder(
 		return false, e
 	}
 	return true, &CacheEntry{
-		desc: e.desc,
+		desc:     e.desc,
+		closedts: e.closedts,
 	}
 }
 
