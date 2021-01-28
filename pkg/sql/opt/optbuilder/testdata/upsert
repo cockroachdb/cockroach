@@ -2166,14 +2166,18 @@ insert partial_index_virtual
       │    │    │    │    └── (2, 1, 'Foo')
       │    │    │    └── projections
       │    │    │         └── lower(column3:8) [as=column9:9]
-      │    │    ├── scan partial_index_virtual
-      │    │    │    ├── columns: a:10!null b:11 c:12
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d:13
-      │    │    │    │         └── lower(c:12)
-      │    │    │    └── partial index predicates
-      │    │    │         └── secondary: filters
-      │    │    │              └── d:13 = 'foo'
+      │    │    ├── project
+      │    │    │    ├── columns: d:13 a:10!null b:11 c:12
+      │    │    │    ├── scan partial_index_virtual
+      │    │    │    │    ├── columns: a:10!null b:11 c:12
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── d:13
+      │    │    │    │    │         └── lower(c:12)
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         └── secondary: filters
+      │    │    │    │              └── d:13 = 'foo'
+      │    │    │    └── projections
+      │    │    │         └── lower(c:12) [as=d:13]
       │    │    └── filters
       │    │         └── column1:6 = a:10
       │    └── aggregations
@@ -2186,19 +2190,141 @@ insert partial_index_virtual
       └── projections
            └── column9:9 = 'foo' [as=partial_index_put1:15]
 
-# TODO(mgartner): This should be successful once UPSERTs with virtual columns
-# are supported.
 build
 INSERT INTO partial_index_virtual VALUES (2, 1, 'Foo') ON CONFLICT (a) DO UPDATE SET b = partial_index_virtual.b + 1, c = 'Bar'
 ----
-error (42703): column "d" does not exist
+upsert partial_index_virtual
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column9:9 => d:4
+ ├── update-mapping:
+ │    ├── upsert_b:19 => b:2
+ │    ├── upsert_c:20 => c:3
+ │    └── upsert_d:21 => d:4
+ ├── partial index put columns: partial_index_put1:22
+ ├── partial index del columns: partial_index_del1:23
+ └── project
+      ├── columns: partial_index_put1:22 partial_index_del1:23 column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null column17:17 upsert_a:18 upsert_b:19 upsert_c:20!null upsert_d:21
+      ├── project
+      │    ├── columns: upsert_a:18 upsert_b:19 upsert_c:20!null upsert_d:21 column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null column17:17
+      │    ├── project
+      │    │    ├── columns: column17:17 column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
+      │    │    ├── project
+      │    │    │    ├── columns: b_new:15 c_new:16!null column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9
+      │    │    │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column9:9 column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    │    └── (2, 1, 'Foo')
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── lower(column3:8) [as=column9:9]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │    │         │    └── column2:7
+      │    │    │    │    │         ├── first-agg [as=column3:8]
+      │    │    │    │    │         │    └── column3:8
+      │    │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │    │              └── column9:9
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: d:13 a:10!null b:11 c:12 crdb_internal_mvcc_timestamp:14
+      │    │    │    │    │    ├── scan partial_index_virtual
+      │    │    │    │    │    │    ├── columns: a:10!null b:11 c:12 crdb_internal_mvcc_timestamp:14
+      │    │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    │    └── d:13
+      │    │    │    │    │    │    │         └── lower(c:12)
+      │    │    │    │    │    │    └── partial index predicates
+      │    │    │    │    │    │         └── secondary: filters
+      │    │    │    │    │    │              └── d:13 = 'foo'
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── lower(c:12) [as=d:13]
+      │    │    │    │    └── filters
+      │    │    │    │         └── column1:6 = a:10
+      │    │    │    └── projections
+      │    │    │         ├── b:11 + 1 [as=b_new:15]
+      │    │    │         └── 'Bar' [as=c_new:16]
+      │    │    └── projections
+      │    │         └── lower(c_new:16) [as=column17:17]
+      │    └── projections
+      │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:18]
+      │         ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:19]
+      │         ├── CASE WHEN a:10 IS NULL THEN column3:8 ELSE c_new:16 END [as=upsert_c:20]
+      │         └── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column17:17 END [as=upsert_d:21]
+      └── projections
+           ├── upsert_d:21 = 'foo' [as=partial_index_put1:22]
+           └── d:13 = 'foo' [as=partial_index_del1:23]
 
-# TODO(mgartner): This should be successful once UPSERTs with virtual columns
-# are supported.
 build
 UPSERT INTO partial_index_virtual VALUES (2, 1, 'Foo')
 ----
-error (42703): column "d" does not exist
+upsert partial_index_virtual
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column9:9 => d:4
+ ├── update-mapping:
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column9:9 => d:4
+ ├── partial index put columns: partial_index_put1:16
+ ├── partial index del columns: partial_index_del1:17
+ └── project
+      ├── columns: partial_index_put1:16 partial_index_del1:17 column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 upsert_a:15
+      ├── project
+      │    ├── columns: upsert_a:15 column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column9:9 column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    └── (2, 1, 'Foo')
+      │    │    │    │    └── projections
+      │    │    │    │         └── lower(column3:8) [as=column9:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         ├── first-agg [as=column3:8]
+      │    │    │         │    └── column3:8
+      │    │    │         └── first-agg [as=column9:9]
+      │    │    │              └── column9:9
+      │    │    ├── project
+      │    │    │    ├── columns: d:13 a:10!null b:11 c:12 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── scan partial_index_virtual
+      │    │    │    │    ├── columns: a:10!null b:11 c:12 crdb_internal_mvcc_timestamp:14
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── d:13
+      │    │    │    │    │         └── lower(c:12)
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         └── secondary: filters
+      │    │    │    │              └── d:13 = 'foo'
+      │    │    │    └── projections
+      │    │    │         └── lower(c:12) [as=d:13]
+      │    │    └── filters
+      │    │         └── column1:6 = a:10
+      │    └── projections
+      │         └── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:15]
+      └── projections
+           ├── column9:9 = 'foo' [as=partial_index_put1:16]
+           └── d:13 = 'foo' [as=partial_index_del1:17]
 
 # ------------------------------------------------------------------------------
 # Test unique partial indexes.

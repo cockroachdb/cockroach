@@ -707,7 +707,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 				includeMutations:       false,
 				includeSystem:          false,
 				includeVirtualInverted: false,
-				includeVirtualComputed: false,
+				includeVirtualComputed: true,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -735,11 +735,14 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 		var on memo.FiltersExpr
 		for i := 0; i < colCount; i++ {
 			ord := colOrdinal(i)
-			scanColID := fetchScope.cols[ord].id
+			fetchCol := fetchScope.getColumnForTableOrdinal(ord)
+			if fetchCol == nil {
+				panic(errors.AssertionFailedf("missing column in fetchScope"))
+			}
 
 			condition := mb.b.factory.ConstructEq(
 				mb.b.factory.ConstructVariable(mb.insertColIDs[ord]),
-				mb.b.factory.ConstructVariable(scanColID),
+				mb.b.factory.ConstructVariable(fetchCol.id),
 			)
 			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 		}
@@ -939,7 +942,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 				includeMutations:       true,
 				includeSystem:          true,
 				includeVirtualInverted: false,
-				includeVirtualComputed: false,
+				includeVirtualComputed: true,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -1335,7 +1338,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 					includeMutations:       false,
 					includeSystem:          false,
 					includeVirtualInverted: false,
-					includeVirtualComputed: false,
+					includeVirtualComputed: true,
 				}),
 				nil, /* indexFlags */
 				noRowLocking,
