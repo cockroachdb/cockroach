@@ -38,6 +38,8 @@ go_test(
         "//pkg/sql/colexecbase",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/types",
         "//pkg/storage/fs",
         "//pkg/testutils/colcontainerutils",
