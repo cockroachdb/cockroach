@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -827,54 +828,25 @@ func EncodeInvertedIndexTableKeys(
 // x @> y, this function should use the value of y to find the spans to scan
 // in an inverted index on x.
 //
-// The spans returned by EncodeContainingInvertedIndexSpans represent the
-// intersection of unions. For example, if the returned results are:
-//
-//   { {["a", "b"), ["c", "d")}, {["e", "f")} }
-//
-// the expression should be evaluated as:
-//
-//             INTERSECTION
-//              /        \
-//           UNION    ["e", "f")
-//          /     \
-//   ["a", "b") ["c", "d")
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. See
+// comments in the SpanExpression definition for details.
 //
 // The input inKey is prefixed to the keys in all returned spans.
-//
-// Returns tight=true if the returned spans are tight and cannot produce false
-// positives. Otherwise, returns tight=false.
-//
-// Returns unique=true if the spans are guaranteed not to produce duplicate
-// primary keys. Otherwise, returns unique=false. This distinction is important
-// for the case where the length of spans is 1, and the single element has
-// length greater than 0. Per the above description, this would represent a
-// UNION over the returned spans, with no INTERSECTION. If unique is true, that
-// allows the optimizer to remove the UNION altogether (implemented
-// with the invertedFilterer), and simply return the results of the constrained
-// scan. unique is always false if the length of spans is greater than 1.
-//
-// The spans are not guaranteed to be sorted, so the caller must sort them if
-// needed.
 func EncodeContainingInvertedIndexSpans(
 	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, tight, unique bool, err error) {
+) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
-		return nil, false, false, nil
+		return nil, nil
 	}
 	datum := tree.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		spans, unique, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
-		if err != nil {
-			return nil, false, false, err
-		}
-		// Spans for array inverted indexes are always tight.
-		return spans, true /* tight */, unique, err
+		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
 	}
-	return nil, false, false, errors.AssertionFailedf(
+	return nil, errors.AssertionFailedf(
 		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
 	)
 }
@@ -923,32 +895,38 @@ func encodeArrayInvertedIndexTableKeys(
 // duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, unique bool, err error) {
+) (invertedExpr inverted.Expression, err error) {
 	if val.Array.Len() == 0 {
-		// All arrays contain the empty array.
-		endKey := roachpb.Key(inKey).PrefixEnd()
-		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, false, nil
+		// All arrays contain the empty array. Return a SpanExpression that
+		// requires a full scan of the inverted index.
+		invertedExpr = inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(inKey), true, /* tight */
+		)
+		return invertedExpr, nil
 	}
 
 	if val.HasNulls {
 		// If there are any nulls, return empty spans. This is needed to ensure
 		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
-		return nil, true, nil
+		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	spans = make([]roachpb.Spans, len(keys))
-	for i, key := range keys {
-		endKey := roachpb.Key(key).PrefixEnd()
-		spans[i] = roachpb.Spans{{Key: key, EndKey: endKey}}
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(key), true, /* tight */
+		)
+		spanExpr.Unique = true
+		if invertedExpr == nil {
+			invertedExpr = spanExpr
+		} else {
+			invertedExpr = inverted.And(invertedExpr, spanExpr)
+		}
 	}
-	// More than 1 key means that there could be duplicate primary keys in an
-	// inverted index.
-	unique = len(keys) == 1
-	return spans, unique, nil
+	return invertedExpr, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys

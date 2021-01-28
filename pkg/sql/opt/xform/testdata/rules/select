@@ -1815,24 +1815,24 @@ select
  │         │    ├── union spans: empty
  │         │    └── UNION
  │         │         ├── span expression
- │         │         │    ├── tight: false, unique: false
+ │         │         │    ├── tight: false, unique: true
  │         │         │    ├── union spans: empty
  │         │         │    └── INTERSECTION
  │         │         │         ├── span expression
- │         │         │         │    ├── tight: false, unique: false
+ │         │         │         │    ├── tight: true, unique: true
  │         │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
  │         │         │         └── span expression
- │         │         │              ├── tight: false, unique: false
+ │         │         │              ├── tight: true, unique: true
  │         │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
  │         │         └── span expression
- │         │              ├── tight: false, unique: false
+ │         │              ├── tight: false, unique: true
  │         │              ├── union spans: empty
  │         │              └── INTERSECTION
  │         │                   ├── span expression
- │         │                   │    ├── tight: false, unique: false
+ │         │                   │    ├── tight: true, unique: true
  │         │                   │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
  │         │                   └── span expression
- │         │                        ├── tight: false, unique: false
+ │         │                        ├── tight: true, unique: true
  │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx
@@ -2023,7 +2023,7 @@ project
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /6
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
@@ -3218,7 +3218,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /8
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: empty
  │         │    └── INTERSECTION
  │         │         ├── span expression
@@ -4873,14 +4873,14 @@ index-join b
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /8
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
-      │         │    ├── tight: true, unique: false
+      │         │    ├── tight: true, unique: true
       │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
       │         └── span expression
-      │              ├── tight: true, unique: false
+      │              ├── tight: true, unique: true
       │              └── union spans: ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
       ├── volatile
       ├── key: (1)
@@ -4919,14 +4919,14 @@ project
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /6
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
-      │         │    ├── tight: true, unique: false
+      │         │    ├── tight: true, unique: true
       │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
       │         └── span expression
-      │              ├── tight: true, unique: false
+      │              ├── tight: true, unique: true
       │              └── union spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
       ├── key: (1)
       └── scan inv_zz_partial@zz_idx,partial

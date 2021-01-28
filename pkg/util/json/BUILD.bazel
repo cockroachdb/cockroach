@@ -19,6 +19,7 @@ go_library(
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/roachpb",
+        "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
@@ -38,6 +39,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":json"],
     deps = [
+        "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
         "//pkg/util/randutil",

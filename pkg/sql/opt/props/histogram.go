@@ -18,10 +18,10 @@ import (
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -355,7 +355,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 
 // InvertedFilter filters the histogram according to the given inverted
 // constraint, and returns a new histogram with the results.
-func (h *Histogram) InvertedFilter(spans invertedexpr.InvertedSpans) *Histogram {
+func (h *Histogram) InvertedFilter(spans inverted.Spans) *Histogram {
 	var columns constraint.Columns
 	columns.InitSingle(opt.MakeOrderingColumn(h.col, false /* desc */))
 	return h.filter(
@@ -371,7 +371,7 @@ func (h *Histogram) InvertedFilter(spans invertedexpr.InvertedSpans) *Histogram 
 	)
 }
 
-func makeSpanFromInvertedSpan(invSpan invertedexpr.InvertedSpan) *constraint.Span {
+func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
 	var span constraint.Span
 	span.Init(
 		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),

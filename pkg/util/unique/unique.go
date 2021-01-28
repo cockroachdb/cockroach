@@ -14,8 +14,6 @@ import (
 	"bytes"
 	"reflect"
 	"sort"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // UniquifyByteSlices takes as input a slice of slices of bytes, and
@@ -33,47 +31,6 @@ func UniquifyByteSlices(slices [][]byte) [][]byte {
 	lastUniqueIdx := 0
 	for i := 1; i < len(slices); i++ {
 		if !bytes.Equal(slices[i], slices[lastUniqueIdx]) {
-			// We found a unique entry, at index i. The last unique entry in the array
-			// was at lastUniqueIdx, so set the entry after that one to our new unique
-			// entry, and bump lastUniqueIdx for the next loop iteration.
-			lastUniqueIdx++
-			slices[lastUniqueIdx] = slices[i]
-		}
-	}
-	slices = slices[:lastUniqueIdx+1]
-	return slices
-}
-
-// SortAndUniquifySpanSets takes as input a slice of Spans, and deduplicates
-// them using a sort and unique. It modifies the input slice in place and
-// returns it. The result will not contain any duplicates but it will be sorted
-// according to the following logic:
-// - Span set a (which has type roachpb.Spans) will be ordered before span set
-//   b if the first span in a that is not equal to the corresponding span in b
-//   (i.e., at the same position) is less than it (according to Span.Compare)
-//   or all corresponding spans are equal but there are fewer spans in a.
-// - Each span set will itself be sorted using Span.Compare.
-func SortAndUniquifySpanSets(slices []roachpb.Spans) []roachpb.Spans {
-	if len(slices) == 0 {
-		return slices
-	}
-
-	// First sort each slice individually.
-	for _, slice := range slices {
-		sort.Slice(slice, func(i int, j int) bool {
-			return slice[i].Compare(slice[j]) < 0
-		})
-	}
-
-	// Then sort all slices.
-	sort.Slice(slices, func(i int, j int) bool {
-		return compare(slices[i], slices[j]) < 0
-	})
-
-	// Then distinct.
-	lastUniqueIdx := 0
-	for i := 1; i < len(slices); i++ {
-		if compare(slices[i], slices[lastUniqueIdx]) != 0 {
 			// We found a unique entry, at index i. The last unique entry in the array
 			// was at lastUniqueIdx, so set the entry after that one to our new unique
 			// entry, and bump lastUniqueIdx for the next loop iteration.
@@ -150,28 +107,4 @@ func UniquifyAcrossSlices(
 		}
 	}
 	return lOut, rOut
-}
-
-// compare returns an integer comparing two Spans lexicographically.
-// - The result will be 0 if a==b.
-// - The result will be -1 if the first span in a that is not equal to the
-//   corresponding span in b (i.e., at the same position) is less than it
-//   (according to Span.Compare) or all corresponding spans are equal but
-//   there are fewer spans in a.
-// - The result will be +1 otherwise.
-// Assumes that each of the Spans are already sorted using Span.Compare.
-func compare(a, b roachpb.Spans) int {
-	for i := 0; i < len(a) && i < len(b); i++ {
-		cmp := a[i].Compare(b[i])
-		if cmp != 0 {
-			return cmp
-		}
-	}
-	if len(a) < len(b) {
-		return -1
-	}
-	if len(b) < len(a) {
-		return 1
-	}
-	return 0
 }

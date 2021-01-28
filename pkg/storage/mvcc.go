@@ -3144,6 +3144,9 @@ func MVCCGarbageCollect(
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
 	// collecting.
+	// TODO(sumeer): this can span from local to global keys. Fix in cmd_gc.go
+	// which is already examining all the keys and can separate out the local
+	// keys to call MVCCGarbageCollect separately.
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,14 +85,14 @@ func decodeInvertedValToInt(b []byte) int64 {
 
 func (a arrayIntersectionExpr) Convert(
 	_ context.Context, datums rowenc.EncDatumRow,
-) (*invertedexpr.SpanExpressionProto, interface{}, error) {
+) (*inverted.SpanExpressionProto, interface{}, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
-	d1Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d / 10))
-	d2Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d % 10))
+	d1Span := inverted.MakeSingleValSpan(intToEncodedInvertedVal(d / 10))
+	d2Span := inverted.MakeSingleValSpan(intToEncodedInvertedVal(d % 10))
 	// The tightness only affects the optimizer, so arbitrarily use true.
-	expr := invertedexpr.And(invertedexpr.ExprForInvertedSpan(d1Span, true),
-		invertedexpr.ExprForInvertedSpan(d2Span, true))
-	return expr.(*invertedexpr.SpanExpression).ToProto(), d, nil
+	expr := inverted.And(inverted.ExprForSpan(d1Span, true),
+		inverted.ExprForSpan(d2Span, true))
+	return expr.(*inverted.SpanExpression).ToProto(), d, nil
 }
 
 func (a arrayIntersectionExpr) CanPreFilter() bool {
@@ -99,7 +100,7 @@ func (a arrayIntersectionExpr) CanPreFilter() bool {
 }
 
 func (a arrayIntersectionExpr) PreFilter(
-	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+	enc inverted.EncVal, preFilters []interface{}, result []bool,
 ) (bool, error) {
 	require.True(a.t, a.CanPreFilter())
 	right := decodeInvertedValToInt(enc)
@@ -122,7 +123,7 @@ var _ invertedexpr.DatumsToInvertedExpr = &jsonIntersectionExpr{}
 
 func (jsonIntersectionExpr) Convert(
 	_ context.Context, datums rowenc.EncDatumRow,
-) (*invertedexpr.SpanExpressionProto, interface{}, error) {
+) (*inverted.SpanExpressionProto, interface{}, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
 	d2 := d % 10
@@ -137,20 +138,18 @@ func (jsonIntersectionExpr) Convert(
 	if len(keys) != 2 {
 		panic(errors.AssertionFailedf("unexpected length: %d", len(keys)))
 	}
-	d1Span := invertedexpr.MakeSingleInvertedValSpan(keys[0])
-	d2Span := invertedexpr.MakeSingleInvertedValSpan(keys[1])
+	d1Span := inverted.MakeSingleValSpan(keys[0])
+	d2Span := inverted.MakeSingleValSpan(keys[1])
 	// The tightness only affects the optimizer, so arbitrarily use false.
-	expr := invertedexpr.And(invertedexpr.ExprForInvertedSpan(d1Span, false),
-		invertedexpr.ExprForInvertedSpan(d2Span, false))
-	return expr.(*invertedexpr.SpanExpression).ToProto(), nil, nil
+	expr := inverted.And(inverted.ExprForSpan(d1Span, false),
+		inverted.ExprForSpan(d2Span, false))
+	return expr.(*inverted.SpanExpression).ToProto(), nil, nil
 }
 
 func (jsonIntersectionExpr) CanPreFilter() bool {
 	return false
 }
-func (jsonIntersectionExpr) PreFilter(
-	_ invertedexpr.EncInvertedVal, _ []interface{}, _ []bool,
-) (bool, error) {
+func (jsonIntersectionExpr) PreFilter(_ inverted.EncVal, _ []interface{}, _ []bool) (bool, error) {
 	return false, errors.Errorf("unsupported")
 }
 
@@ -164,7 +163,7 @@ var _ invertedexpr.DatumsToInvertedExpr = &jsonUnionExpr{}
 
 func (jsonUnionExpr) Convert(
 	_ context.Context, datums rowenc.EncDatumRow,
-) (*invertedexpr.SpanExpressionProto, interface{}, error) {
+) (*inverted.SpanExpressionProto, interface{}, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
 	d2 := d % 10
@@ -179,20 +178,18 @@ func (jsonUnionExpr) Convert(
 	if len(keys) != 2 {
 		panic(errors.AssertionFailedf("unexpected length: %d", len(keys)))
 	}
-	d1Span := invertedexpr.MakeSingleInvertedValSpan(keys[0])
-	d2Span := invertedexpr.MakeSingleInvertedValSpan(keys[1])
+	d1Span := inverted.MakeSingleValSpan(keys[0])
+	d2Span := inverted.MakeSingleValSpan(keys[1])
 	// The tightness only affects the optimizer, so arbitrarily use true.
-	expr := invertedexpr.Or(invertedexpr.ExprForInvertedSpan(d1Span, true),
-		invertedexpr.ExprForInvertedSpan(d2Span, true))
-	return expr.(*invertedexpr.SpanExpression).ToProto(), nil, nil
+	expr := inverted.Or(inverted.ExprForSpan(d1Span, true),
+		inverted.ExprForSpan(d2Span, true))
+	return expr.(*inverted.SpanExpression).ToProto(), nil, nil
 }
 
 func (jsonUnionExpr) CanPreFilter() bool {
 	return false
 }
-func (jsonUnionExpr) PreFilter(
-	_ invertedexpr.EncInvertedVal, _ []interface{}, _ []bool,
-) (bool, error) {
+func (jsonUnionExpr) PreFilter(_ inverted.EncVal, _ []interface{}, _ []bool) (bool, error) {
 	return false, errors.Errorf("unsupported")
 }
 

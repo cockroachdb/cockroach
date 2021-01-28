@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -422,13 +423,13 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		{`{}`, `{1}`, false, true},
 		{`{1}`, `{}`, true, false},
 		{`{1}`, `{1}`, true, true},
-		{`{1}`, `{1, 2}`, false, false},
+		{`{1}`, `{1, 2}`, false, true},
 		{`{1, 2}`, `{1}`, true, true},
 		{`{1, 2}`, `{2}`, true, true},
-		{`{1, 2}`, `{1, 2}`, true, false},
-		{`{1, 2}`, `{1, 2, 1}`, true, false},
+		{`{1, 2}`, `{1, 2}`, true, true},
+		{`{1, 2}`, `{1, 2, 1}`, true, true},
 		{`{1, 2}`, `{1, 1}`, true, true},
-		{`{1, 2, 3}`, `{1, 2, 4}`, false, false},
+		{`{1, 2, 3}`, `{1, 2, 4}`, false, true},
 		{`{1, 2, 3}`, `{}`, true, false},
 		{`{}`, `{NULL}`, false, true},
 		{`{NULL}`, `{}`, true, false},
@@ -454,39 +455,25 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(left, nil, version)
 		require.NoError(t, err)
 
-		spansSlice, tight, unique, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
 		require.NoError(t, err)
 
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
 		// Array spans are always tight.
-		if tight != true {
-			t.Errorf("For %s, expected tight=%v, but got %v", right, true, tight)
+		if spanExpr.Tight != true {
+			t.Errorf("For %s, expected tight=%v, but got %v", right, true, spanExpr.Tight)
 		}
 
-		if unique != expectUnique {
-			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, unique)
+		if spanExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, spanExpr.Unique)
 		}
 
-		// The spans returned by EncodeContainingInvertedIndexSpans represent the
-		// intersection of unions. So the below logic is performing a union on the
-		// inner loop (any span in the slice can contain any of the keys), and an
-		// intersection on the outer loop (all of the span slices must contain at
-		// least one key).
-		actual := len(spansSlice) > 0
-		for _, spans := range spansSlice {
-			found := false
-			for _, span := range spans {
-				for _, key := range keys {
-					if span.ContainsKey(key) {
-						found = true
-						break
-					}
-				}
-				if found == true {
-					break
-				}
-			}
-			actual = actual && found
-		}
+		actual, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
 
 		if actual != expected {
 			if expected {
@@ -528,16 +515,10 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		res, err := tree.ArrayContains(&evalCtx, left.(*tree.DArray), right.(*tree.DArray))
 		require.NoError(t, err)
 
-		// The spans should not have duplicate values if there is exactly one
-		// element after de-duplication.
+		// The spans should not have duplicate values if there is at least one
+		// element.
 		arr := right.(*tree.DArray).Array
 		expectUnique := len(arr) > 0
-		for i := range arr {
-			if i > 0 && arr[i].Compare(&evalCtx, arr[0]) != 0 {
-				expectUnique = false
-				break
-			}
-		}
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(left, right, bool(*res), expectUnique)
