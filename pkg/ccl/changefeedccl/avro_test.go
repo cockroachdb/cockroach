@@ -466,6 +466,56 @@ func TestAvroSchema(t *testing.T) {
 			require.Equal(t, test.avro, value)
 		}
 	})
+
+	// These are values stored with less precision than the column definition allows,
+	// which is still roundtrippable
+	t.Run("lossless_truncations", func(t *testing.T) {
+		truncs := []struct {
+			sqlType string
+			sql     string
+			avro    string
+		}{
+
+			{sqlType: `DECIMAL(4,2)`,
+				sql:  `1.2`,
+				avro: `{"bytes.decimal":"x"}`},
+
+			{sqlType: `DECIMAL(12,2)`,
+				sql:  `1e2`,
+				avro: `{"bytes.decimal":"'\u0010"}`},
+
+			{sqlType: `DECIMAL(4,2)`,
+				sql:  `12e-1`,
+				avro: `{"bytes.decimal":"x"}`},
+
+			{sqlType: `DECIMAL(4,2)`,
+				sql:  `12e-2`,
+				avro: `{"bytes.decimal":"\f"}`},
+		}
+
+		for _, test := range truncs {
+			tableDesc, err := parseTableDesc(
+				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
+			require.NoError(t, err)
+			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			require.NoError(t, err)
+
+			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
+			require.NoError(t, err)
+			textual, err := schema.textualFromRow(rows[0])
+			require.NoError(t, err)
+			// Trim the outermost {}.
+			value := string(textual[1 : len(textual)-1])
+			// Strip out the pk field.
+			value = strings.Replace(value, `"pk":{"long":1}`, ``, -1)
+			// Trim the `,`, which could be on either side because of the avro library
+			// doesn't deterministically order the fields.
+			value = strings.Trim(value, `,`)
+			// Strip out the field name.
+			value = strings.Replace(value, `"a":`, ``, -1)
+			require.Equal(t, test.avro, value)
+		}
+	})
 }
 
 func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
