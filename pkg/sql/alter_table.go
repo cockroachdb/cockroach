@@ -782,29 +782,36 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
 				)
 			}
-			newPartitioning, err := CreatePartitioning(
+			newPrimaryIndex, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				n.tableDesc.GetPrimaryIndex().IndexDesc(),
-				0, /* numImplicitColumns */
+				*n.tableDesc.GetPrimaryIndex().IndexDesc(),
 				t.PartitionBy,
 			)
 			if err != nil {
 				return err
 			}
-			descriptorChanged = descriptorChanged || !oldPartitioning.Equal(&newPartitioning)
+			if newPrimaryIndex.Partitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER TABLE PARTITION BY",
+					"cannot ALTER TABLE and change the partitioning to contain implicit columns",
+				)
+			}
+			descriptorChanged = descriptorChanged || !n.tableDesc.GetPrimaryIndex().IndexDesc().Equal(&newPrimaryIndex)
 			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx, params.p.txn,
-				n.tableDesc, n.tableDesc.GetPrimaryIndex().IndexDesc(), &oldPartitioning,
-				&newPartitioning, params.extendedEvalCtx.ExecCfg,
+				params.ctx,
+				params.p.txn,
+				n.tableDesc,
+				n.tableDesc.GetPrimaryIndex().IndexDesc(),
+				&oldPartitioning,
+				&newPrimaryIndex.Partitioning,
+				params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
 				return err
 			}
 			{
-				newPrimaryIndex := *n.tableDesc.GetPrimaryIndex().IndexDesc()
-				newPrimaryIndex.Partitioning = newPartitioning
 				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
 			}
 
