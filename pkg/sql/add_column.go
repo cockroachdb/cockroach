@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"go/constant"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -54,7 +57,7 @@ func (p *planner) addColumnImpl(
 		return err
 	}
 	if seqName != nil {
-		if err := doCreateSequence(
+		id, err := doCreateSequence(
 			params,
 			n.n.String(),
 			seqDbDesc,
@@ -63,9 +66,28 @@ func (p *planner) addColumnImpl(
 			n.tableDesc.Persistence(),
 			seqOpts,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
+
+		// Replace the default expression's nextval param with a ID::regclass instead of a string.
+		// TODO: Wrap this in some version checks.
+		defaultExpr := &tree.FuncExpr{
+			Func: tree.WrapFunction("nextval"),
+			Exprs: tree.Exprs{
+				&tree.AnnotateTypeExpr{
+					Type:       types.RegClass,
+					SyntaxMode: tree.AnnotateShort,
+					Expr: &tree.CastExpr{
+						Expr:       tree.NewNumVal(constant.MakeInt64(int64(id)), "", false),
+						Type:       types.RegClass,
+						SyntaxMode: tree.CastShort,
+					},
+				},
+			},
+		}
+		newDef.DefaultExpr.Expr = defaultExpr
 	}
 	d = newDef
 

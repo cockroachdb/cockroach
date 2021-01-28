@@ -124,7 +124,7 @@ query TT
 SHOW CREATE TABLE i4_sql_sequence
 ----
 i4_sql_sequence  CREATE TABLE public.i4_sql_sequence (
-                 a INT4 NOT NULL DEFAULT nextval('i4_sql_sequence_a_seq':::STRING),
+                 a INT4 NOT NULL DEFAULT nextval('test.public.i4_sql_sequence_a_seq':::STRING),
                  FAMILY "primary" (a, rowid)
 )
 
@@ -138,7 +138,7 @@ query TT
 SHOW CREATE TABLE i8_sql_sequence
 ----
 i8_sql_sequence  CREATE TABLE public.i8_sql_sequence (
-                 a INT8 NOT NULL DEFAULT nextval('i8_sql_sequence_a_seq':::STRING),
+                 a INT8 NOT NULL DEFAULT nextval('test.public.i8_sql_sequence_a_seq':::STRING),
                  FAMILY "primary" (a, rowid)
 )
 
@@ -156,7 +156,7 @@ query TT
 SHOW CREATE TABLE i4_virtual_sequence
 ----
 i4_virtual_sequence  CREATE TABLE public.i4_virtual_sequence (
-                     a INT8 NOT NULL DEFAULT nextval('i4_virtual_sequence_a_seq':::STRING),
+                     a INT8 NOT NULL DEFAULT nextval('test.public.i4_virtual_sequence_a_seq':::STRING),
                      FAMILY "primary" (a, rowid)
 )
 
@@ -170,6 +170,6 @@ query TT
 SHOW CREATE TABLE i8_virtual_sequence
 ----
 i8_virtual_sequence  CREATE TABLE public.i8_virtual_sequence (
-                     a INT8 NOT NULL DEFAULT nextval('i8_virtual_sequence_a_seq':::STRING),
+                     a INT8 NOT NULL DEFAULT nextval('test.public.i8_virtual_sequence_a_seq':::STRING),
                      FAMILY "primary" (a, rowid)
 )

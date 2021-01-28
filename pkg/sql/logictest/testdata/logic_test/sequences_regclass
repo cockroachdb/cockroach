@@ -1,0 +1,79 @@
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE test_seq
+
+let $test_seq_id
+SELECT id FROM system.namespace WHERE name='test_seq'
+
+statement ok
+CREATE TABLE test_table (a INT PRIMARY KEY, b INT NOT NULL DEFAULT nextval($test_seq_id::regclass), FAMILY (b, a))
+
+query TT
+SHOW CREATE TABLE test_table
+----
+test_table  CREATE TABLE public.test_table (
+            a INT8 NOT NULL,
+            b INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING::REGCLASS),
+            CONSTRAINT "primary" PRIMARY KEY (a ASC),
+            FAMILY fam_0_b_a (b, a)
+)
+
+statement ok
+INSERT INTO test_table values (0)
+
+statement ok
+INSERT INTO test_table values (88)
+
+query II
+SELECT a, b FROM test_table
+ORDER BY a ASC
+----
+0  1
+88 2
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE TABLE foo (i SERIAL2 PRIMARY KEY)
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT2 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i)
+)
+
+statement ok
+ALTER TABLE foo ADD COLUMN bar SERIAL4
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT2 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING),
+     bar INT4 NOT NULL DEFAULT nextval('test.public.foo_bar_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i, bar)
+)
+
+statement ok
+SET serial_normalization = 'virtual_sequence'
+
+statement ok
+ALTER TABLE foo add COLUMN baz SERIAL
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT2 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING),
+     bar INT4 NOT NULL DEFAULT nextval('test.public.foo_bar_seq':::STRING),
+     baz INT8 NOT NULL DEFAULT nextval('test.public.foo_baz_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i, bar, baz)
+)

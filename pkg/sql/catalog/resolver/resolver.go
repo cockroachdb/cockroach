@@ -39,6 +39,7 @@ import (
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
 	tree.ObjectNameExistingResolver
+	tree.QualifiedNameResolver
 	tree.ObjectNameTargetResolver
 
 	Txn() *kv.Txn
