@@ -5,15 +5,11 @@ import {
   StatementDiagnosticsState,
   reducer as statementDiagnostics,
 } from "./statementDiagnostics";
-import { NodesState, reducer as nodes } from "./nodes";
-import { LivenessState, reducer as liveness } from "./liveness";
 
 export type AdminUiState = {
   statements: StatementsState;
   statementDiagnostics: StatementDiagnosticsState;
   localStorage: LocalStorageState;
-  nodes: NodesState;
-  liveness: LivenessState;
 };
 
 export type AppState = {
@@ -24,6 +20,4 @@ export const rootReducer = combineReducers<AdminUiState>({
   localStorage,
   statementDiagnostics,
   statements,
-  nodes,
-  liveness,
 });
