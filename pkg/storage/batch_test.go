@@ -68,7 +68,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 
 			var b Batch
 			if writeOnly {
-				b = e.NewUnIndexedBatch(false /* supportReader */)
+				b = e.NewUnIndexedBatch(true /* writeOnly */)
 			} else {
 				b = e.NewBatch()
 			}
@@ -863,7 +863,7 @@ func TestUnIndexedBatchThatSupportsReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			b := e.NewUnIndexedBatch(true /* supportReader */)
+			b := e.NewUnIndexedBatch(false /* writeOnly */)
 			defer b.Close()
 			if err := b.PutUnversioned(mvccKey("b").Key, []byte("c")); err != nil {
 				t.Fatal(err)
@@ -907,7 +907,7 @@ func TestUnIndexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			batch := e.NewUnIndexedBatch(false)
+			batch := e.NewUnIndexedBatch(true /* writeOnly */)
 			defer batch.Close()
 
 			// The various Reader methods on the batch should panic.
@@ -1064,7 +1064,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 						k := fmt.Sprint(v)
 
-						b := e.NewUnIndexedBatch(false /* supportReader */)
+						b := e.NewUnIndexedBatch(true /* writeOnly */)
 						if err := b.PutUnversioned(mvccKey(k).Key, []byte(k)); err != nil {
 							errs <- errors.Wrap(err, "put failed")
 							return
