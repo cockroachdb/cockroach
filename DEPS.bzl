@@ -406,8 +406,8 @@ def go_deps():
         name = "com_github_cockroachdb_crlfmt",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/crlfmt",
-        sum = "h1:O4yb+RtkmDaXFlHSBpZodXaghfTd3Prdea0nk0eZCT4=",
-        version = "v0.0.0-20200116191136-a78e1c207bc0",
+        sum = "h1:4s0GWs4NXFK4JEeUc0Q1pRbL4oMbqh1DK70qeQ+viOA=",
+        version = "v0.0.0-20210128092314-b3eff0b87c79",
     )
     go_repository(
         name = "com_github_cockroachdb_datadriven",
@@ -2990,20 +2990,12 @@ def go_deps():
         version = "v0.0.0-20201020160332-67f06af15bc9",
     )
     go_repository(
-        name = "org_golang_x_sys",
-        build_file_proto_mode = "disable_global",
-        importpath = "golang.org/x/sys",
-        sum = "h1:VwygUrnw9jn88c4u8GD3rZQbqrP/tgas88tPUbBxQrk=",
-        version = "v0.0.0-20210124154548-22da62e12c0c",
-    )
-    go_repository(
         name = "org_golang_x_term",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/term",
         sum = "h1:/ZHdbVpdR/jk3g30/d4yUL0JU9kksj8+F/bnQUVLGDM=",
         version = "v0.0.0-20201117132131-f5c789dd3221",
     )
-
     go_repository(
         name = "org_golang_x_text",
         build_file_proto_mode = "disable_global",
