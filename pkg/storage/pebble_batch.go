@@ -39,13 +39,13 @@ type pebbleBatch struct {
 	// the fact that all pebbleIterators created here are marked as reusable,
 	// which causes pebbleIterator.Close to not close iter. iter will be closed
 	// when pebbleBatch.Close is called.
-	prefixIter          pebbleIterator
-	normalIter          pebbleIterator
-	prefixEngineIter    pebbleIterator
-	normalEngineIter    pebbleIterator
-	iter                cloneableIter
-	unIndexedReadFromDB bool
-	closed              bool
+	prefixIter       pebbleIterator
+	normalIter       pebbleIterator
+	prefixEngineIter pebbleIterator
+	normalEngineIter pebbleIterator
+	iter             cloneableIter
+	writeOnly        bool
+	closed           bool
 
 	useWrappedIntentWriter bool
 	wrappedIntentWriter    intentDemuxWriter
@@ -62,7 +62,7 @@ var pebbleBatchPool = sync.Pool{
 }
 
 // Instantiates a new pebbleBatch.
-func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, unIndexedReadFromDB bool) *pebbleBatch {
+func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
 		db:    db,
@@ -88,7 +88,7 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, unIndexedReadFromDB bool
 			upperBoundBuf: pb.normalEngineIter.upperBoundBuf,
 			reusable:      true,
 		},
-		unIndexedReadFromDB: unIndexedReadFromDB,
+		writeOnly: writeOnly,
 	}
 	pb.wrappedIntentWriter, pb.useWrappedIntentWriter = tryWrapIntentWriter(pb)
 	return pb
@@ -146,11 +146,10 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 
 func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
 	r := pebble.Reader(p.batch)
-	indexed := p.batch.Indexed()
-	if !indexed && !p.unIndexedReadFromDB {
+	if p.writeOnly {
 		panic("write-only batch")
 	}
-	if !indexed {
+	if !p.batch.Indexed() {
 		r = p.db
 	}
 
@@ -188,8 +187,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
-	indexed := p.batch.Indexed()
-	if !indexed && !p.unIndexedReadFromDB {
+	if p.writeOnly {
 		panic("write-only batch")
 	}
 
@@ -215,7 +213,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.iter != nil {
 		iter.setOptions(opts)
 	} else {
-		if indexed {
+		if p.batch.Indexed() {
 			iter.init(p.batch, p.iter, opts)
 		} else {
 			iter.init(p.db, p.iter, opts)
@@ -238,8 +236,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
-	indexed := p.batch.Indexed()
-	if !indexed && !p.unIndexedReadFromDB {
+	if p.writeOnly {
 		panic("write-only batch")
 	}
 
@@ -254,7 +251,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setOptions(opts)
 	} else {
-		if indexed {
+		if p.batch.Indexed() {
 			iter.init(p.batch, p.iter, opts)
 		} else {
 			iter.init(p.db, p.iter, opts)

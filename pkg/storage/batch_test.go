@@ -68,7 +68,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 
 			var b Batch
 			if writeOnly {
-				b = e.NewUnIndexedBatch(false /* supportReader */)
+				b = e.NewUnindexedBatch(true /* writeOnly */)
 			} else {
 				b = e.NewBatch()
 			}
@@ -850,7 +850,7 @@ func TestBatchVisibleAfterApplyBatchRepr(t *testing.T) {
 	}
 }
 
-func TestUnIndexedBatchThatSupportsReader(t *testing.T) {
+func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -863,14 +863,14 @@ func TestUnIndexedBatchThatSupportsReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			b := e.NewUnIndexedBatch(true /* supportReader */)
+			b := e.NewUnindexedBatch(false /* writeOnly */)
 			defer b.Close()
 			if err := b.PutUnversioned(mvccKey("b").Key, []byte("c")); err != nil {
 				t.Fatal(err)
 			}
 
 			// Verify that reads on the distinct batch go to the underlying engine, not
-			// to the un-indexed batch.
+			// to the unindexed batch.
 			iter := b.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
@@ -898,7 +898,7 @@ func TestUnIndexedBatchThatSupportsReader(t *testing.T) {
 	}
 }
 
-func TestUnIndexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
+func TestUnindexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -907,7 +907,7 @@ func TestUnIndexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			batch := e.NewUnIndexedBatch(false)
+			batch := e.NewUnindexedBatch(true /* writeOnly */)
 			defer batch.Close()
 
 			// The various Reader methods on the batch should panic.
@@ -1064,7 +1064,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 						k := fmt.Sprint(v)
 
-						b := e.NewUnIndexedBatch(false /* supportReader */)
+						b := e.NewUnindexedBatch(true /* writeOnly */)
 						if err := b.PutUnversioned(mvccKey(k).Key, []byte(k)); err != nil {
 							errs <- errors.Wrap(err, "put failed")
 							return

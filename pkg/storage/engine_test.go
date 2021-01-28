@@ -967,12 +967,12 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		batch := engine.NewUnIndexedBatch(false /* supportReader */)
+		batch := engine.NewUnindexedBatch(true /* writeOnly */)
 		defer batch.Close()
 		if err := batch.ClearMVCCRange(start, end); err != nil {
 			return err
 		}
-		batch2 := engine.NewUnIndexedBatch(false /* supportReader */)
+		batch2 := engine.NewUnindexedBatch(true /* writeOnly */)
 		defer batch2.Close()
 		if err := batch2.ApplyBatchRepr(batch.Repr(), false); err != nil {
 			return err
