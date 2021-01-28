@@ -1,9 +1,6 @@
 # LogicTest: 5node
 
 statement ok
-SET experimental_enable_multi_column_inverted_indexes=true
-
-statement ok
 CREATE TABLE json_tab (
   a INT PRIMARY KEY,
   b JSONB,

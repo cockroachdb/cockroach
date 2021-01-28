@@ -1,5 +1,4 @@
-statement ok
-SET experimental_enable_multi_column_inverted_indexes=true
+# Tests for inverted joins with multi-column inverted indexes.
 
 statement ok
 CREATE TABLE j1 (

@@ -222,11 +222,6 @@ type LocalOnlySessionData struct {
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
-	// EnableMultiColumnInvertedIndexes indicates whether creating multi-column
-	// inverted indexes is allowed.
-	// TODO(mgartner): remove this once multi-column inverted indexes are fully
-	// supported.
-	EnableMultiColumnInvertedIndexes bool
 
 	// VirtualColumnsEnabled indicates whether we allow virtual (non-stored)
 	// computed columns.

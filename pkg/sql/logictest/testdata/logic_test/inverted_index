@@ -52,7 +52,9 @@ c  CREATE TABLE public.c (
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error indexing more than one column with an inverted index is not supported
+# TODO(mgartner): This error message is unclear. It should explain that only the
+# last indexed column can be inverted.
+statement error column foo is of type jsonb and thus is not indexable with an inverted index
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo JSONB,
