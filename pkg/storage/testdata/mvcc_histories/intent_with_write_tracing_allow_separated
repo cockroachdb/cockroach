@@ -4,11 +4,11 @@ with t=A
   put k=k1 v=v1
 ----
 >> txn_begin ts=2 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false max=0,0
 >> put k=k1 v=v1 t=A
 called PutIntent("k1", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=0} ts=0.000000002,0 del=false klen=12 vlen=7
-data: "k1"/0.000000002,0 -> /BYTES/v1
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7
+data: "k1"/2.000000000,0 -> /BYTES/v1
 
 run trace ok
 with t=A
@@ -18,29 +18,29 @@ with t=A
   put k=k2 v=v2
 ----
 >> txn_advance ts=3 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false max=0,0
 >> txn_step t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false max=0,0
 >> put k=k1 v=v1 t=A
 called PutIntent("k1", _, ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
-data: "k1"/0.000000003,0 -> /BYTES/v1
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
+data: "k1"/3.000000000,0 -> /BYTES/v1
 >> put k=k2 v=v2 t=A
 called PutIntent("k2", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
-data: "k1"/0.000000003,0 -> /BYTES/v1
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7
-data: "k2"/0.000000003,0 -> /BYTES/v2
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
+data: "k1"/3.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7
+data: "k2"/3.000000000,0 -> /BYTES/v2
 
 run trace ok
 put k=k3 v=v3 ts=1
 ----
 >> put k=k3 v=v3 ts=1
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
-data: "k1"/0.000000003,0 -> /BYTES/v1
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7
-data: "k2"/0.000000003,0 -> /BYTES/v2
-data: "k3"/0.000000001,0 -> /BYTES/v3
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
+data: "k1"/3.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7
+data: "k2"/3.000000000,0 -> /BYTES/v2
+data: "k3"/1.000000000,0 -> /BYTES/v3
 
 run trace ok
 with t=A
@@ -48,13 +48,13 @@ with t=A
 ----
 >> put k=k3 v=v33 t=A
 called PutIntent("k3", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
-data: "k1"/0.000000003,0 -> /BYTES/v1
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7
-data: "k2"/0.000000003,0 -> /BYTES/v2
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=8
-data: "k3"/0.000000003,0 -> /BYTES/v33
-data: "k3"/0.000000001,0 -> /BYTES/v3
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}}
+data: "k1"/3.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7
+data: "k2"/3.000000000,0 -> /BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8
+data: "k3"/3.000000000,0 -> /BYTES/v33
+data: "k3"/1.000000000,0 -> /BYTES/v3
 
 # transactionDidNotUpdateMeta (TDNUM) is false below for k2 and k3 since
 # disallowSeparatedIntents=true causes mvcc.go to always set it to false to maintain
@@ -68,20 +68,20 @@ with t=A
 ----
 >> resolve_intent k=k1 t=A
 called ClearIntent("k1", ExistingIntentInterleaved, TDNUM(false), 00000000-0000-0000-0000-000000000001)
-data: "k1"/0.000000003,0 -> /BYTES/v1
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=7
-data: "k2"/0.000000003,0 -> /BYTES/v2
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=8
-data: "k3"/0.000000003,0 -> /BYTES/v33
-data: "k3"/0.000000001,0 -> /BYTES/v3
+data: "k1"/3.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7
+data: "k2"/3.000000000,0 -> /BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8
+data: "k3"/3.000000000,0 -> /BYTES/v33
+data: "k3"/1.000000000,0 -> /BYTES/v3
 >> resolve_intent k=k2 status=ABORTED t=A
 called ClearIntent("k2", ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-data: "k1"/0.000000003,0 -> /BYTES/v1
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=8
-data: "k3"/0.000000003,0 -> /BYTES/v33
-data: "k3"/0.000000001,0 -> /BYTES/v3
+data: "k1"/3.000000000,0 -> /BYTES/v1
+meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8
+data: "k3"/3.000000000,0 -> /BYTES/v33
+data: "k3"/1.000000000,0 -> /BYTES/v3
 >> resolve_intent k=k3 status=ABORTED t=A
 called ClearIntent("k3", ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-data: "k1"/0.000000003,0 -> /BYTES/v1
-data: "k3"/0.000000001,0 -> /BYTES/v3
+data: "k1"/3.000000000,0 -> /BYTES/v1
+data: "k3"/1.000000000,0 -> /BYTES/v3
 >> txn_remove t=A

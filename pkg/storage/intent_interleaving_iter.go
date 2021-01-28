@@ -11,7 +11,9 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -123,6 +125,12 @@ type intentInterleavingIter struct {
 
 var _ MVCCIterator = &intentInterleavingIter{}
 
+var intentInterleavingIterPool = sync.Pool{
+	New: func() interface{} {
+		return &intentInterleavingIter{}
+	},
+}
+
 func isLocal(k roachpb.Key) bool {
 	return len(k) == 0 || keys.IsLocal(k)
 }
@@ -133,11 +141,11 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	}
 	if opts.LowerBound != nil && opts.UpperBound != nil {
 		lowerIsLocal := isLocal(opts.LowerBound)
-		upperIsLocal := isLocal(opts.UpperBound)
+		upperIsLocal := isLocal(opts.UpperBound) || bytes.Equal(opts.UpperBound, keys.LocalMax)
 		if lowerIsLocal != upperIsLocal {
 			panic(fmt.Sprintf(
-				"intentInterleavingIter cannot span from lowerIsLocal %t to upperIsLocal %t",
-				lowerIsLocal, upperIsLocal))
+				"intentInterleavingIter cannot span from lowerIsLocal %t, %s to upperIsLocal %t, %s",
+				lowerIsLocal, opts.LowerBound.String(), upperIsLocal, opts.UpperBound.String()))
 		}
 	}
 	intentOpts := opts
@@ -170,15 +178,22 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure
 	// consistency (certain Reader implementations already ensure consistency,
-	// but we want consistency for all Readers).
-	iter := newMVCCIteratorByCloningEngineIter(intentIter, opts)
-	return &intentInterleavingIter{
+	// and we use that when possible to save allocations).
+	var iter MVCCIterator
+	if reader.ConsistentIterators() {
+		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+	} else {
+		iter = newMVCCIteratorByCloningEngineIter(intentIter, opts)
+	}
+	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
+	*iiIter = intentInterleavingIter{
 		prefix:        opts.Prefix,
 		iter:          iter,
 		intentIter:    intentIter,
 		hasUpperBound: opts.UpperBound != nil,
 		intentKeyBuf:  intentKeyBuf,
 	}
+	return iiIter
 }
 
 func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
@@ -522,6 +537,8 @@ func (i *intentInterleavingIter) Value() []byte {
 func (i *intentInterleavingIter) Close() {
 	i.iter.Close()
 	i.intentIter.Close()
+	*i = intentInterleavingIter{}
+	intentInterleavingIterPool.Put(i)
 }
 
 func (i *intentInterleavingIter) SeekLT(key MVCCKey) {

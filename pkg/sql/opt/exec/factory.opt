@@ -23,7 +23,7 @@ define Filter {
 # node.
 define InvertedFilter {
     Input exec.Node
-    InvFilter *invertedexpr.SpanExpression
+    InvFilter *inverted.SpanExpression
     PreFiltererExpr tree.TypedExpr
     PreFiltererType *types.T
     InvColumn exec.NodeColumnOrdinal

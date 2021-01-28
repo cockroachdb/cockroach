@@ -25,6 +25,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",

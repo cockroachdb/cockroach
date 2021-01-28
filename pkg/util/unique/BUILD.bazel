@@ -5,12 +5,10 @@ go_library(
     srcs = ["unique.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/unique",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
 )
 
 go_test(
     name = "unique_test",
     srcs = ["unique_test.go"],
     embed = [":unique"],
-    deps = ["//pkg/roachpb"],
 )

@@ -12,15 +12,15 @@ put ts=0,1 k= v=a
 error: (*withstack.withStack:) attempted access to empty key
 
 run ok
-scan ts=0,1 k= end=a
+scan ts=0,1 k= end=%a
 ----
-scan: /Min-"a" -> <no data>
+scan: /Min-/Local/Range/"a" -> <no data>
 
 
 run error
-scan ts=0,1 k=a end=
+scan ts=0,1 k=%a end=
 ----
-scan: "a"-/Min -> <no data>
+scan: /Local/Range/"a"-/Min -> <no data>
 error: (*withstack.withStack:) attempted access to empty key
 
 run error
