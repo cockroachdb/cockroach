@@ -205,8 +205,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error paths below
-	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
-	if p.Request.Timestamp.Less(minTS) {
+	if p.Request.WriteTimestamp().Less(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
