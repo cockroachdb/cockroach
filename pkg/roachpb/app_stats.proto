@@ -15,6 +15,9 @@ option go_package = "roachpb";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+// StatementStatistics represent the statement statistics sent to the DB
+// Console for a given statement fingerprint. Note that these stats are cleared
+// ever diagnostics.sql_stat_reset_interval.
 // N.B. When fields are added to this struct, make sure to update
 // (*StatementStatistics).Add and (*StatementStatistics).AlmostEqual
 // in app_stats.go.
@@ -89,7 +92,19 @@ message StatementStatistics {
   // BytesSentOverNetwork collects the number of bytes sent over the network.
   optional NumericStat bytes_sent_over_network = 17 [(gogoproto.nullable) = false];
 
-  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  optional NumericStat max_mem_usage = 18 [(gogoproto.nullable) = false];
+
+  // ExecStatCollectionCount keeps track of how many times execution stats were
+  // recorded for this statement. Since this collection follows a sampling
+  // approach, this number is not necessarily equal to Count. Used to calculate
+  // the mean of the following NumericStat values:
+  //  bytes_sent_over_network
+  //  max_mem_usage
+  optional int64 exec_stat_collection_count = 19 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` and the comment above
+  // exec_stat_collection_count when adding/removing fields here!
 }
 
 message TransactionStatistics {

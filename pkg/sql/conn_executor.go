@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -595,6 +596,7 @@ func (s *Server) newConnExecutor(
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx},
+		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
@@ -1076,6 +1078,10 @@ type connExecutor struct {
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
 	statsCollector *sqlStatsCollector
+
+	// rng is used to generate random numbers. An example usage is to determine
+	// whether to sample execution stats.
+	rng *rand.Rand
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.

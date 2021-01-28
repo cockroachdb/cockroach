@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ordinalityProcessor is the processor of the WITH ORDINALITY operator, which
@@ -67,7 +66,7 @@ func newOrdinalityProcessor(
 		return nil, err
 	}
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		o.input = newInputStatCollector(o.input)
 		o.ExecStatsForTrace = o.execStatsForTrace
 	}

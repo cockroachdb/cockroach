@@ -59,6 +59,9 @@ type FlowCtx struct {
 	// TraceKV is true if KV tracing was requested by the session.
 	TraceKV bool
 
+	// CollectStats is true if execution stats collection was requested.
+	CollectStats bool
+
 	// Local is true if this flow is being run as part of a local-only query.
 	Local bool
 

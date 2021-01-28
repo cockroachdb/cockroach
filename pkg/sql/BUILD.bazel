@@ -417,6 +417,7 @@ go_test(
         "explain_test.go",
         "explain_tree_test.go",
         "indexbackfiller_test.go",
+        "instrumentation_test.go",
         "internal_test.go",
         "main_test.go",
         "materialized_view_test.go",
