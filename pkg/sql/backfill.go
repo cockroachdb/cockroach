@@ -215,7 +215,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		case descpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *descpb.DescriptorMutation_Column:
-				if tabledesc.ColumnNeedsBackfill(m.GetColumn()) {
+				if tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
 					needColumnBackfill = true
 				}
 			case *descpb.DescriptorMutation_Index:
@@ -249,7 +249,9 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		case descpb.DescriptorMutation_DROP:
 			switch t := m.Descriptor_.(type) {
 			case *descpb.DescriptorMutation_Column:
-				needColumnBackfill = true
+				if tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
+					needColumnBackfill = true
+				}
 			case *descpb.DescriptorMutation_Index:
 				if !canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
@@ -1812,7 +1814,7 @@ func runSchemaChangesInTxn(
 			case *descpb.DescriptorMutation_ComputedColumnSwap:
 				return AlterColTypeInTxnNotSupportedErr
 			case *descpb.DescriptorMutation_Column:
-				if doneColumnBackfill || !tabledesc.ColumnNeedsBackfill(m.GetColumn()) {
+				if doneColumnBackfill || !tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
 					break
 				}
 				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
@@ -1839,7 +1841,7 @@ func runSchemaChangesInTxn(
 			// Drop the name and drop the associated data later.
 			switch t := m.Descriptor_.(type) {
 			case *descpb.DescriptorMutation_Column:
-				if doneColumnBackfill {
+				if doneColumnBackfill || !tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
 					break
 				}
 				if err := columnBackfillInTxn(
