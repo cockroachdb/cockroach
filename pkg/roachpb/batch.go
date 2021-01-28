@@ -74,6 +74,33 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 	return ts
 }
 
+// WriteTimestamp returns the timestamps at which this request is writing. For
+// non-transactional requests, this is the same as the read timestamp. For
+// transactional requests, the write timestamp can be higher until commit time.
+//
+// This should only be called after SetActiveTimestamp().
+func (ba *BatchRequest) WriteTimestamp() hlc.Timestamp {
+	ts := ba.Timestamp
+	if ba.Txn != nil {
+		ts.Forward(ba.Txn.WriteTimestamp)
+	}
+	return ts
+}
+
+// ConsultsTimestampCache returns whether the request must consult
+// the timestamp cache to determine whether a mutation is safe at
+// a proposed timestamp or needs to move to a higher timestamp to
+// avoid re-writing history.
+func (ba *BatchRequest) ConsultsTimestampCache() bool {
+	for _, union := range ba.Requests {
+		args := union.GetInner()
+		if ConsultsTimestampCache(args) {
+			return true
+		}
+	}
+	return false
+}
+
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.
