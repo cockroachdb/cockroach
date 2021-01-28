@@ -45,11 +45,19 @@ git_repository(
 load("@bazel_gazelle//:deps.bzl", "go_repository")
 
 go_repository(
+    name = "org_golang_x_sys",
+    build_file_proto_mode = "disable_global",
+    importpath = "golang.org/x/sys",
+    sum = "h1:VwygUrnw9jn88c4u8GD3rZQbqrP/tgas88tPUbBxQrk=",
+    version = "v0.0.0-20210124154548-22da62e12c0c",
+)
+
+go_repository(
     name = "org_golang_x_tools",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/tools",
-    sum = "h1:5xKxdl/RhlelmSPaxyVeq5PYSmJ4H14yeQT58qP1F6o=",
-    version = "v0.0.0-20210104081019-d8d6ddbec6ee",
+    sum = "h1:po9/4sTYwZU9lPhi1tOrb4hCv3qrhiQ77LZfGa2OjwY=",
+    version = "v0.1.0",
 )
 
 go_repository(
