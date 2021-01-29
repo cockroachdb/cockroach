@@ -954,6 +954,7 @@ func pgDumpFormat() roachpb.IOFileFormat {
 		Format: roachpb.IOFileFormat_PgDump,
 		PgDump: roachpb.PgDumpOptions{
 			MaxRowSize: 64 * 1024,
+			//IgnoreUnsupported: true,
 		},
 	}
 }
