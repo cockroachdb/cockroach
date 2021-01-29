@@ -13,7 +13,6 @@ package cloudimpltests
 import (
 	"context"
 	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,12 +24,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func requireImplicitGoogleCredentials(t *testing.T) {
+	t.Helper()
+	// TODO(yevgeniy): Fix default credentials check.
+	skip.IgnoreLint(t, "implicit credentials not configured")
+}
+
 func TestAntagonisticGCSRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-		// This test requires valid GS credential file.
-		skip.IgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
-	}
+	requireImplicitGoogleCredentials(t)
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
 	conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, security.RootUserName())
@@ -44,10 +46,7 @@ func TestAntagonisticGCSRead(t *testing.T) {
 // exist.
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-		// This test requires valid GS credential file.
-		skip.IgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
-	}
+	requireImplicitGoogleCredentials(t)
 	user := security.RootUserName()
 
 	{
@@ -83,11 +82,7 @@ func TestFileDoesNotExist(t *testing.T) {
 
 func TestCompressedGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-		// This test requires valid GS credential file.
-		skip.IgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
-	}
+	requireImplicitGoogleCredentials(t)
 
 	user := security.RootUserName()
 	ctx := context.Background()

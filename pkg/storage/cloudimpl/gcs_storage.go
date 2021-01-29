@@ -171,19 +171,6 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 	return errors.Wrap(err, "write to google cloud")
 }
 
-func (g *gcsStorage) openStreamAt(
-	ctx context.Context, object string, pos int64,
-) (stream *gcs.Reader, err error) {
-	if err := delayedRetry(ctx, func() error {
-		var err error
-		stream, err = g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	return stream, nil
-}
-
 // ReadFile is shorthand for ReadFileAt with offset 0.
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	reader, _, err := g.ReadFileAt(ctx, basename, 0)
@@ -194,18 +181,25 @@ func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
 	object := path.Join(g.prefix, basename)
-	stream, err := g.openStreamAt(ctx, object, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	return &resumingReader{
+	r := &resumingReader{
 		ctx: ctx,
 		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
-			return g.openStreamAt(ctx, object, pos)
+			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
 		},
-		reader: stream,
-		pos:    offset,
-	}, stream.Attrs.Size, nil
+		pos: offset,
+	}
+
+	if err := r.openStream(); err != nil {
+		if errors.Is(err, gcs.ErrObjectNotExist) {
+			// Callers of this method sometimes look at the returned error to determine
+			// if file does not exist.  Regardless why we couldn't open the stream
+			// (whether its invalid bucket or file doesn't exist),
+			// return our internal ErrFileDoesNotExist.
+			err = errors.Wrapf(ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
+		}
+		return nil, 0, err
+	}
+	return r.reader, r.reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
