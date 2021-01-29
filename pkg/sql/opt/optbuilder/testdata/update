@@ -1808,7 +1808,7 @@ update partial_index_virtual
       │    │    │    │    │         └── lower(c:8)
       │    │    │    │    └── partial index predicates
       │    │    │    │         └── secondary: filters
-      │    │    │    │              └── d:9 = 'foo'
+      │    │    │    │              └── lower(c:8) = 'foo'
       │    │    │    └── projections
       │    │    │         └── lower(c:8) [as=d:9]
       │    │    └── projections
@@ -1844,7 +1844,7 @@ update partial_index_virtual
       │    │    │    │    │         └── lower(c:8)
       │    │    │    │    └── partial index predicates
       │    │    │    │         └── secondary: filters
-      │    │    │    │              └── d:9 = 'foo'
+      │    │    │    │              └── lower(c:8) = 'foo'
       │    │    │    └── projections
       │    │    │         └── lower(c:8) [as=d:9]
       │    │    └── projections

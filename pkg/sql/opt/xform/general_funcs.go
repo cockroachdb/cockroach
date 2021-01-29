@@ -153,10 +153,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 }
 
 func (c *CustomFuncs) initIdxConstraintForIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr,
-	tabID opt.TableID,
-	indexOrd int,
-	isInverted bool,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (ic *idxconstraint.Instance) {
 	ic = &idxconstraint.Instance{}
 
@@ -174,14 +171,6 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		col := index.Column(i)
 		ordinal := col.Ordinal()
 		nullable := col.IsNullable()
-		if isInverted && col == index.VirtualInvertedColumn() {
-			// We pass the real column to the index constraint generator (instead of
-			// the virtual column).
-			// TODO(radu): improve the inverted index constraint generator to handle
-			// this internally.
-			ordinal = col.InvertedSourceColumnOrdinal()
-			nullable = col.IsNullable()
-		}
 		colID := tabID.ColumnID(ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
 		if !nullable {
@@ -193,7 +182,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	ic.Init(
 		requiredFilters, optionalFilters,
 		columns, notNullCols, tabMeta.ComputedCols,
-		isInverted, true /* consolidate */, c.e.evalCtx, c.e.f,
+		true /* consolidate */, c.e.evalCtx, c.e.f,
 	)
 	return ic
 }

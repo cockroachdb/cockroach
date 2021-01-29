@@ -29,8 +29,3 @@ index-constraints vars=(j json, field int as ((j->'foo')::string::int) stored) i
 (j->'foo')::string::int = 10
 ----
 [/10 - /10]
-
-index-constraints vars=(j json, field int as (j->'foo') stored) inverted-index=(field)
-j->'foo' @> '{"a": 1}'
-----
-[/'{"a": 1}' - /'{"a": 1}']
