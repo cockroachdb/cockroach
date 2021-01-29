@@ -1,4 +1,4 @@
-@import 'src/core/index.module';
+@import "src/core/index.module";
 
 .statements-table__col-time {
   white-space: nowrap;
@@ -18,13 +18,16 @@
   }
 }
 
-.statements-table__col-rows, .statements-table__col-latency {
+.statements-table__col-rows,
+.statements-table__col-latency {
   &--bar-chart {
     min-width: 150px;
   }
 }
 
-.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows {
+.statements-table__col-count,
+.statements-table__col-retries,
+.statements-table__col-rows {
   &--bar-chart {
     margin-left: 0;
 
@@ -42,5 +45,6 @@
   width: 400px;
   div {
     font-size: $font-size--small;
+    @include line-clamp(2);
   }
 }

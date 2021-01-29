@@ -5,6 +5,8 @@ import moment from "moment";
 import Helmet from "react-helmet";
 import classNames from "classnames/bind";
 
+import { Text } from "@cockroachlabs/ui-components";
+
 import {
   Dropdown,
   Loading,
@@ -14,8 +16,6 @@ import {
   Search,
   Pagination,
   ResultsPerPageLabel,
-  Text,
-  TextTypes,
 } from "src/index";
 import { DATE_FORMAT, appAttr, getMatchParamByName } from "src/util";
 import {
@@ -253,8 +253,16 @@ export class StatementsPage extends React.Component<
             />
           </PageConfigItem>
           <PageConfigItem>
-            <Dropdown items={appOptions} onChange={this.selectApp}>
-              <Text textType={TextTypes.BodyStrong}>
+            <Dropdown
+              items={appOptions}
+              onChange={this.selectApp}
+              itemsClassname={cx("app-filter-dropdown-item")}
+            >
+              <Text
+                type="body-strong"
+                noWrap={true}
+                className={cx("app-filter-dropdown")}
+              >
                 {`App: ${decodeURIComponent(currentOption.name)}`}
               </Text>
             </Dropdown>
