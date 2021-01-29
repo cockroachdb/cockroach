@@ -128,7 +128,11 @@ var (
 // followerreadsccl code to inject logic to check if follower reads are enabled.
 // By default, without CCL code, this function returns false.
 var CanSendToFollower = func(
-	clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest,
+	_ uuid.UUID,
+	_ *cluster.Settings,
+	_ *hlc.Clock,
+	_ roachpb.RangeClosedTimestampPolicy,
+	_ roachpb.BatchRequest,
 ) bool {
 	return false
 }
@@ -1784,7 +1788,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Try the leaseholder first, if the request wants it.
 	{
-		canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
+		canFollowerRead := CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
 		sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
 		if sendToLeaseholder {
 			idx := replicas.Find(leaseholder.ReplicaID)

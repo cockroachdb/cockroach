@@ -3432,8 +3432,6 @@ func TestErrorIndexAlignment(t *testing.T) {
 
 // TestCanSendToFollower tests that the DistSender abides by the result it
 // get from CanSendToFollower.
-// TODO(nvanbenschoten): update this test once ClosedTimestampPolicy begins
-// dictating the decision of CanSendToFollower.
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3444,7 +3442,13 @@ func TestCanSendToFollower(t *testing.T) {
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
 	canSend := true
-	CanSendToFollower = func(_ uuid.UUID, _ *cluster.Settings, ba roachpb.BatchRequest) bool {
+	CanSendToFollower = func(
+		_ uuid.UUID,
+		_ *cluster.Settings,
+		_ *hlc.Clock,
+		_ roachpb.RangeClosedTimestampPolicy,
+		ba roachpb.BatchRequest,
+	) bool {
 		return !ba.IsLocking() && canSend
 	}
 

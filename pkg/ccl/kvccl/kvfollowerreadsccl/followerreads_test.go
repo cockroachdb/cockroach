@@ -10,7 +10,6 @@ package kvfollowerreadsccl
 
 import (
 	"context"
-	"reflect"
 	"testing"
 	"time"
 
@@ -20,24 +19,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,72 +69,171 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	disableEnterprise := utilccl.TestingEnableEnterprise()
-	defer disableEnterprise()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
+	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
+	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
+	current := clock.Now()
+	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
 
-	old := hlc.Timestamp{
-		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
+	txn := func(ts hlc.Timestamp) *roachpb.Transaction {
+		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
+		return &txn
 	}
-	oldHeader := roachpb.Header{Txn: &roachpb.Transaction{
-		ReadTimestamp: old,
-	}}
-	rw := roachpb.BatchRequest{Header: oldHeader}
-	rw.Add(&roachpb.PutRequest{})
-	if canSendToFollower(uuid.MakeV4(), st, rw) {
-		t.Fatalf("should not be able to send a rw request to a follower")
+	withWriteTimestamp := func(txn *roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction {
+		txn.WriteTimestamp = ts
+		return txn
 	}
-	roNonTxn := roachpb.BatchRequest{Header: oldHeader}
-	roNonTxn.Add(&roachpb.QueryTxnRequest{})
-	if canSendToFollower(uuid.MakeV4(), st, roNonTxn) {
-		t.Fatalf("should not be able to send a non-transactional ro request to a follower")
+	withUncertaintyLimit := func(txn *roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction {
+		txn.MaxTimestamp = ts
+		return txn
 	}
-	roNoTxn := roachpb.BatchRequest{}
-	roNoTxn.Add(&roachpb.GetRequest{})
-	if canSendToFollower(uuid.MakeV4(), st, roNoTxn) {
-		t.Fatalf("should not be able to send a batch with no txn to a follower")
+	batch := func(txn *roachpb.Transaction, req roachpb.Request) roachpb.BatchRequest {
+		var ba roachpb.BatchRequest
+		ba.Txn = txn
+		ba.Add(req)
+		return ba
 	}
-	roOld := roachpb.BatchRequest{Header: oldHeader}
-	roOld.Add(&roachpb.GetRequest{})
-	if !canSendToFollower(uuid.MakeV4(), st, roOld) {
-		t.Fatalf("should be able to send an old ro batch to a follower")
-	}
-	roRWTxnOld := roachpb.BatchRequest{Header: roachpb.Header{
-		Txn: &roachpb.Transaction{
-			TxnMeta:       enginepb.TxnMeta{Key: []byte("key")},
-			ReadTimestamp: old,
+
+	testCases := []struct {
+		name                  string
+		ba                    roachpb.BatchRequest
+		ctPolicy              roachpb.RangeClosedTimestampPolicy
+		disabledEnterprise    bool
+		disabledFollowerReads bool
+		exp                   bool
+	}{
+		{
+			name: "non-txn batch",
+			ba:   batch(nil, &roachpb.GetRequest{}),
+			exp:  false,
 		},
-	}}
-	roRWTxnOld.Add(&roachpb.GetRequest{})
-	if canSendToFollower(uuid.MakeV4(), st, roRWTxnOld) {
-		t.Fatalf("should not be able to send a ro request from a rw txn to a follower")
-	}
-	kvserver.FollowerReadsEnabled.Override(&st.SV, false)
-	if canSendToFollower(uuid.MakeV4(), st, roOld) {
-		t.Fatalf("should not be able to send an old ro batch to a follower when follower reads are disabled")
-	}
-	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
-	roNew := roachpb.BatchRequest{Header: roachpb.Header{
-		Txn: &roachpb.Transaction{
-			ReadTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		{
+			name: "stale read",
+			ba:   batch(txn(stale), &roachpb.GetRequest{}),
+			exp:  true,
 		},
-	}}
-	if canSendToFollower(uuid.MakeV4(), st, roNew) {
-		t.Fatalf("should not be able to send a new ro batch to a follower")
-	}
-	roOldWithNewMax := roachpb.BatchRequest{Header: roachpb.Header{
-		Txn: &roachpb.Transaction{
-			MaxTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		{
+			name: "stale locking read",
+			ba:   batch(txn(stale), &roachpb.ScanRequest{KeyLocking: lock.Exclusive}),
+			exp:  false,
 		},
-	}}
-	roOldWithNewMax.Add(&roachpb.GetRequest{})
-	if canSendToFollower(uuid.MakeV4(), st, roNew) {
-		t.Fatalf("should not be able to send a ro batch with new MaxTimestamp to a follower")
+		{
+			name: "stale write",
+			ba:   batch(txn(stale), &roachpb.PutRequest{}),
+			exp:  false,
+		},
+		{
+			name: "stale non-txn request",
+			ba:   batch(txn(stale), &roachpb.QueryTxnRequest{}),
+			exp:  false,
+		},
+		{
+			name: "stale read with current-time writes",
+			ba:   batch(withWriteTimestamp(txn(stale), current), &roachpb.GetRequest{}),
+			exp:  false,
+		},
+		{
+			name: "stale read with current-time uncertainty limit",
+			ba:   batch(withUncertaintyLimit(txn(stale), current), &roachpb.GetRequest{}),
+			exp:  false,
+		},
+		{
+			name: "current-time read",
+			ba:   batch(txn(current), &roachpb.GetRequest{}),
+			exp:  false,
+		},
+		{
+			name: "future read",
+			ba:   batch(txn(future), &roachpb.GetRequest{}),
+			exp:  false,
+		},
+		{
+			name:     "non-txn batch, global reads policy",
+			ba:       batch(nil, &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale read, global reads policy",
+			ba:       batch(txn(stale), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "stale locking read, global reads policy",
+			ba:       batch(txn(stale), &roachpb.ScanRequest{KeyLocking: lock.Exclusive}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale write, global reads policy",
+			ba:       batch(txn(stale), &roachpb.PutRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale non-txn request, global reads policy",
+			ba:       batch(txn(stale), &roachpb.QueryTxnRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale read with current-time writes, global reads policy",
+			ba:       batch(withWriteTimestamp(txn(stale), current), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "stale read with current-time uncertainty limit, global reads policy",
+			ba:       batch(withUncertaintyLimit(txn(stale), current), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time read, global reads policy",
+			ba:       batch(txn(current), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time read with future writes, global reads policy",
+			ba:       batch(withWriteTimestamp(txn(current), future), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "current-time read with future uncertainty limit, global reads policy",
+			ba:       batch(withUncertaintyLimit(txn(current), future), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "future read, global reads policy",
+			ba:       batch(txn(future), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:               "non-enterprise",
+			disabledEnterprise: true,
+			exp:                false,
+		},
+		{
+			name:                  "follower reads disabled",
+			disabledFollowerReads: true,
+			exp:                   false,
+		},
 	}
-	disableEnterprise()
-	if canSendToFollower(uuid.MakeV4(), st, roOld) {
-		t.Fatalf("should not be able to send an old ro batch to a follower without enterprise enabled")
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.disabledEnterprise {
+				defer utilccl.TestingEnableEnterprise()()
+			}
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.FollowerReadsEnabled.Override(&st.SV, !c.disabledFollowerReads)
+
+			can := canSendToFollower(uuid.MakeV4(), st, clock, c.ctPolicy, c.ba)
+			require.Equal(t, c.exp, can)
+		})
 	}
 }
 
@@ -149,43 +248,193 @@ func TestFollowerReadMultipleValidation(t *testing.T) {
 	followerReadMultiple.Override(&st.SV, .1)
 }
 
+// mockNodeStore implements the kvcoord.NodeDescStore interface.
+type mockNodeStore []roachpb.NodeDescriptor
+
+func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	for i := range s {
+		desc := &s[i]
+		if desc.NodeID == id {
+			return desc, nil
+		}
+	}
+	return nil, errors.Errorf("unable to look up descriptor for n%d", id)
+}
+
 // TestOracle tests the OracleFactory exposed by this package.
-// This test ends up being rather indirect but works by checking if the type
-// of the oracle returned from the factory differs between requests we'd
-// expect to support follower reads and that which we'd expect not to.
 func TestOracleFactory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	disableEnterprise := utilccl.TestingEnableEnterprise()
-	defer disableEnterprise()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
+	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
+	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
+	current := clock.Now()
+	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
+
+	c := kv.NewDB(log.AmbientContext{Tracer: tracing.NewTracer()}, kv.MockTxnSenderFactory{}, clock, stopper)
+	staleTxn := kv.NewTxn(ctx, c, 0)
+	staleTxn.SetFixedTimestamp(ctx, stale)
+	currentTxn := kv.NewTxn(ctx, c, 0)
+	currentTxn.SetFixedTimestamp(ctx, current)
+	futureTxn := kv.NewTxn(ctx, c, 0)
+	futureTxn.SetFixedTimestamp(ctx, future)
+
+	nodes := mockNodeStore{
+		{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1")},
+		{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2")},
+		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3")},
+	}
+	replicas := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1},
+		{NodeID: 2, StoreID: 2},
+		{NodeID: 3, StoreID: 3},
+	}
+	desc := &roachpb.RangeDescriptor{
+		InternalReplicas: replicas,
+	}
+	closestFollower := replicas[1]
+	leaseholder := replicas[2]
+
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	c := kv.NewDB(log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}, kv.MockTxnSenderFactory{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
-	txn := kv.NewTxn(context.Background(), c, 0)
-	of := replicaoracle.NewOracleFactory(followerReadAwareChoice, replicaoracle.Config{
-		Settings:   st,
-		RPCContext: rpcContext,
-	})
-	noFollowerReadOracle := of.Oracle(txn)
-	old := hlc.Timestamp{
-		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
+	setLatency := func(addr string, latency time.Duration) {
+		// All test cases have to have at least 11 measurement values in order for
+		// the exponentially-weighted moving average to work properly. See the
+		// comment on the WARMUP_SAMPLES const in the ewma package for details.
+		for i := 0; i < 11; i++ {
+			rpcContext.RemoteClocks.UpdateOffset(ctx, addr, rpc.RemoteOffset{}, latency)
+		}
 	}
-	txn.SetFixedTimestamp(context.Background(), old)
-	followerReadOracle := of.Oracle(txn)
-	if reflect.TypeOf(followerReadOracle) == reflect.TypeOf(noFollowerReadOracle) {
-		t.Fatalf("expected types of %T and %T to differ", followerReadOracle,
-			noFollowerReadOracle)
+	setLatency("1", 100*time.Millisecond)
+	setLatency("2", 2*time.Millisecond)
+	setLatency("3", 80*time.Millisecond)
+
+	testCases := []struct {
+		name                  string
+		txn                   *kv.Txn
+		lh                    *roachpb.ReplicaDescriptor
+		ctPolicy              roachpb.RangeClosedTimestampPolicy
+		disabledEnterprise    bool
+		disabledFollowerReads bool
+		exp                   roachpb.ReplicaDescriptor
+	}{
+		{
+			name: "non-txn, known leaseholder",
+			txn:  nil,
+			lh:   &leaseholder,
+			exp:  leaseholder,
+		},
+		{
+			name: "non-txn, unknown leaseholder",
+			txn:  nil,
+			exp:  closestFollower,
+		},
+		{
+			name: "stale txn, known leaseholder",
+			txn:  staleTxn,
+			lh:   &leaseholder,
+			exp:  closestFollower,
+		},
+		{
+			name: "stale txn, unknown leaseholder",
+			txn:  staleTxn,
+			exp:  closestFollower,
+		},
+		{
+			name: "current txn, known leaseholder",
+			txn:  currentTxn,
+			lh:   &leaseholder,
+			exp:  leaseholder,
+		},
+		{
+			name: "current txn, unknown leaseholder",
+			txn:  currentTxn,
+			exp:  closestFollower,
+		},
+		{
+			name: "future txn, known leaseholder",
+			txn:  futureTxn,
+			lh:   &leaseholder,
+			exp:  leaseholder,
+		},
+		{
+			name: "future txn, unknown leaseholder",
+			txn:  futureTxn,
+			exp:  closestFollower,
+		},
+		{
+			name:     "stale txn, known leaseholder, global reads policy",
+			txn:      staleTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			lh:       &leaseholder,
+			exp:      closestFollower,
+		},
+		{
+			name:     "stale txn, unknown leaseholder, global reads policy",
+			txn:      staleTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      closestFollower,
+		},
+		{
+			name:     "current txn, known leaseholder, global reads policy",
+			txn:      currentTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			lh:       &leaseholder,
+			exp:      closestFollower,
+		},
+		{
+			name:     "current txn, unknown leaseholder, global reads policy",
+			txn:      currentTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      closestFollower,
+		},
+		{
+			name:     "future txn, known leaseholder, global reads policy",
+			txn:      futureTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			lh:       &leaseholder,
+			exp:      leaseholder,
+		},
+		{
+			name:     "future txn, unknown leaseholder, global reads policy",
+			txn:      futureTxn,
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      closestFollower,
+		},
+		{
+			name:               "stale txn, non-enterprise",
+			txn:                staleTxn,
+			lh:                 &leaseholder,
+			disabledEnterprise: true,
+			exp:                leaseholder,
+		},
+		{
+			name:                  "stale txn, follower reads disabled",
+			txn:                   staleTxn,
+			lh:                    &leaseholder,
+			disabledFollowerReads: true,
+			exp:                   leaseholder,
+		},
 	}
-	disableEnterprise()
-	disabledFollowerReadOracle := of.Oracle(txn)
-	if reflect.TypeOf(disabledFollowerReadOracle) != reflect.TypeOf(noFollowerReadOracle) {
-		t.Fatalf("expected types of %T and %T not to differ", disabledFollowerReadOracle,
-			noFollowerReadOracle)
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.disabledEnterprise {
+				defer utilccl.TestingEnableEnterprise()()
+			}
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.FollowerReadsEnabled.Override(&st.SV, !c.disabledFollowerReads)
+
+			o := replicaoracle.NewOracle(followerReadOraclePolicy, replicaoracle.Config{
+				NodeDescs:  nodes,
+				Settings:   st,
+				RPCContext: rpcContext,
+			})
+
+			res, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
+			require.NoError(t, err)
+			require.Equal(t, c.exp, res)
+		})
 	}
 }
 

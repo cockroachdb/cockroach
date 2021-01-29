@@ -35,16 +35,15 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // canServeFollowerRead tests, when a range lease could not be acquired, whether
 // the batch can be served as a follower read despite the error. Only
 // non-locking, read-only requests can be served as follower reads. The batch
-// must be composed exclusively only this kind of request to be accepted as a
-// follower read.
+// must be transactional and composed exclusively of this kind of request to be
+// accepted as a follower read.
 func (r *Replica) canServeFollowerRead(
 	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 ) *roachpb.Error {
 	lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	eligible := ok &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
-		(!ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
-		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
+		(ba.Txn != nil && !ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 
 	if !eligible {
@@ -66,14 +65,10 @@ func (r *Replica) canServeFollowerRead(
 		return pErr
 	}
 
-	ts := ba.Timestamp
-	if ba.Txn != nil {
-		ts.Forward(ba.Txn.MaxTimestamp)
-	}
-
+	maxObservableTS := ba.Txn.MaxObservableTimestamp()
 	maxClosed, _ := r.maxClosed(ctx)
-	canServeFollowerRead := ts.LessEq(maxClosed)
-	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
+	canServeFollowerRead := maxObservableTS.LessEq(maxClosed)
+	tsDiff := maxObservableTS.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
 		maxTsStr := "n/a"
 		if ba.Txn != nil {
