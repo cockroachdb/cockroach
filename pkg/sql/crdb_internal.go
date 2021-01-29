@@ -2441,7 +2441,9 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	start_pretty,
 	end_key,
 	end_pretty,
+  table_id,
 	database_name,
+  schema_name,
 	table_name,
 	index_name,
 	replicas,
@@ -2459,7 +2461,9 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "start_pretty", Typ: types.String},
 		{Name: "end_key", Typ: types.Bytes},
 		{Name: "end_pretty", Typ: types.String},
+		{Name: "table_id", Typ: types.Int},
 		{Name: "database_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
@@ -2484,7 +2488,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   start_pretty         STRING NOT NULL,
   end_key              BYTES NOT NULL,
   end_pretty           STRING NOT NULL,
+  table_id             INT NOT NULL,
   database_name        STRING NOT NULL,
+  schema_name          STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
   replicas             INT[] NOT NULL,
@@ -2504,13 +2510,16 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint32]string)
 		tableNames := make(map[uint32]string)
+		schemaNames := make(map[uint32]string)
 		indexNames := make(map[uint32]map[uint32]string)
+		schemaParents := make(map[uint32]uint32)
 		parents := make(map[uint32]uint32)
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
 			switch desc := desc.(type) {
 			case *tabledesc.Immutable:
 				parents[id] = uint32(desc.ParentID)
+				schemaParents[id] = uint32(desc.GetParentSchemaID())
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
 				for _, idx := range desc.PublicNonPrimaryIndexes() {
@@ -2518,6 +2527,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			case *dbdesc.Immutable:
 				dbNames[id] = desc.GetName()
+			case *schemadesc.Immutable:
+				schemaNames[id] = desc.GetName()
 			}
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
@@ -2584,8 +2595,18 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
-			var dbName, tableName, indexName string
-			if _, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+			var dbName, schemaName, tableName, indexName string
+			var tableID uint32
+			if _, tableID, err = p.ExecCfg().Codec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+				schemaParent := schemaParents[tableID]
+				if schemaParent != 0 {
+					schemaName = schemaNames[schemaParent]
+				} else {
+					// This case shouldn't happen - all schema ids should be available in the
+					// schemaParents map. If it's not, just assume the name of the schema
+					// is public to avoid problems.
+					schemaName = "public"
+				}
 				parent := parents[tableID]
 				if parent != 0 {
 					tableName = tableNames[tableID]
@@ -2609,7 +2630,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
 				tree.NewDBytes(tree.DBytes(desc.EndKey)),
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.EndKey.AsRawKey())),
+				tree.NewDInt(tree.DInt(tableID)),
 				tree.NewDString(dbName),
+				tree.NewDString(schemaName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				votersArr,
