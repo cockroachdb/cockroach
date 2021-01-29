@@ -2567,7 +2567,7 @@ func (desc *wrapper) validatePartitioning() error {
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
 
-func notIndexableError(cols []descpb.ColumnDescriptor, inverted bool) error {
+func notIndexableError(cols []descpb.ColumnDescriptor) error {
 	if len(cols) == 0 {
 		return nil
 	}
@@ -2576,9 +2576,6 @@ func notIndexableError(cols []descpb.ColumnDescriptor, inverted bool) error {
 	if len(cols) == 1 {
 		col := &cols[0]
 		msg = "column %s is of type %s and thus is not indexable"
-		if inverted {
-			msg += " with an inverted index"
-		}
 		typInfo = col.Type.DebugString()
 		msg = fmt.Sprintf(msg, col.Name, col.Type.Name())
 	} else {
@@ -2608,26 +2605,44 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 		}
 	}
 	if len(invalidColumns) > 0 {
-		return notIndexableError(invalidColumns, false)
+		return notIndexableError(invalidColumns)
 	}
 	return nil
 }
 
 func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
-	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
+	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				lastCol := len(indexColNames) - 1
-				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.Type) ||
-					i < lastCol && !colinfo.ColumnTypeIsIndexable(col.Type) {
-					invalidColumns = append(invalidColumns, col)
+				// The last column indexed by an inverted index must be
+				// inverted indexable.
+				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.Type) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.FeatureNotSupported,
+							"column %s of type %s is not allowed as the last column in an inverted index",
+							col.Name,
+							col.Type.Name(),
+						),
+						"see the documentation for more information about inverted indexes",
+					)
+
+				}
+				// Any preceding columns must not be inverted indexable.
+				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.Type) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.FeatureNotSupported,
+							"column %s of type %s is only allowed as the last column in an inverted index",
+							col.Name,
+							col.Type.Name(),
+						),
+						"see the documentation for more information about inverted indexes",
+					)
 				}
 			}
 		}
-	}
-	if len(invalidColumns) > 0 {
-		return notIndexableError(invalidColumns, true)
 	}
 	return nil
 }
