@@ -50,6 +50,10 @@ func RequestLease(
 	// newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 
+	// NOTE: we use the range's current lease as prevLease instead of
+	// args.PrevLease so that we can detect lease requests that will
+	// inevitably fail early and reject them with a detailed
+	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  prevLease,
@@ -106,11 +110,11 @@ func RequestLease(
 		// The bug prevented with this is unlikely to occur in practice
 		// since earlier commands usually apply before this lease will.
 		if ts := args.MinProposedTS; isExtension && ts != nil {
-			effectiveStart.Forward(ts.ToTimestamp())
+			effectiveStart.Forward(*ts)
 		}
 
 	} else if prevLease.Type() == roachpb.LeaseExpiration {
-		effectiveStart.Backward(prevLease.Expiration.Next())
+		effectiveStart.BackwardWithTimestamp(prevLease.Expiration.Next())
 	}
 
 	if isExtension {
@@ -125,7 +129,7 @@ func RequestLease(
 			newLease.Expiration = &t
 			newLease.Expiration.Forward(prevLease.GetExpiration())
 		}
-	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
+	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.ToTimestamp().Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}

@@ -74,13 +74,13 @@ const (
 	// rangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
 	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
-	// eagerly renewed 2 seconds into each lease.
+	// eagerly renewed 8 seconds into each lease.
 	rangeLeaseRenewalFraction = 0.5
 
 	// livenessRenewalFraction specifies what fraction the node liveness
 	// renewal duration should be of the node liveness duration. For example,
 	// with a value of 0.2 and a liveness duration of 10 seconds, each node's
-	// liveness record would be eagerly renewed after 2 seconds.
+	// liveness record would be eagerly renewed after 8 seconds.
 	livenessRenewalFraction = 0.5
 
 	// DefaultDescriptorLeaseDuration is the default mean duration a

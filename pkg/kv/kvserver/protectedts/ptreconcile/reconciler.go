@@ -133,12 +133,12 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 	}
 }
 
-func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
+func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
 	return r.localStores.IsMeta1Leaseholder(ctx, now)
 }
 
 func (r *Reconciler) reconcile(ctx context.Context) {
-	now := r.db.Clock().Now()
+	now := r.db.Clock().NowAsClockTimestamp()
 	isLeaseholder, err := r.isMeta1Leaseholder(ctx, now)
 	if err != nil {
 		log.Errorf(ctx, "failed to determine whether the local store contains the meta1 lease: %v", err)
@@ -147,7 +147,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	if !isLeaseholder {
 		return
 	}
-	if err := r.cache.Refresh(ctx, now); err != nil {
+	if err := r.cache.Refresh(ctx, now.ToTimestamp()); err != nil {
 		log.Errorf(ctx, "failed to refresh the protected timestamp cache to %v: %v", now, err)
 		return
 	}

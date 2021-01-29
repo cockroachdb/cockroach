@@ -798,11 +798,11 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 // stamp taken off the queried node's clock.
 func (tc *TestCluster) FindRangeLease(
 	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
-) (_ roachpb.Lease, now hlc.Timestamp, _ error) {
+) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return roachpb.Lease{}, hlc.Timestamp{}, errors.Errorf(
+			return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
@@ -821,7 +821,7 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	}
 	if hintServer == nil {
-		return roachpb.Lease{}, hlc.Timestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
+		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
 	}
 
 	return hintServer.GetRangeLease(context.TODO(), rangeDesc.StartKey.AsRawKey())
@@ -844,7 +844,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return roachpb.ReplicationTarget{}, err
 	}
-	if !replica.IsLeaseValid(context.TODO(), lease, now) {
+	if !replica.LeaseStatusAt(context.TODO(), now).IsValid() {
 		return roachpb.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica

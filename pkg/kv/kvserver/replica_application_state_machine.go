@@ -262,7 +262,7 @@ func checkForcedErr(
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
 		nlhe := newNotLeaseHolderError(
-			replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
+			*replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
 					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))
@@ -891,13 +891,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
-		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 	if needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
-		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 	if needsTruncationByLogSize {
-		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
 	b.recordStatsOnCommit()

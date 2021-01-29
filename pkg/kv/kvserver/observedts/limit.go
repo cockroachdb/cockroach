@@ -58,12 +58,12 @@ func LimitTxnMaxTimestamp(
 	if !ok {
 		return txn
 	}
-	obsTS := obsClockTS.ToTimestamp()
 	// If the lease is valid, we use the greater of the observed timestamp and
 	// the lease start time, up to the max timestamp. This ensures we avoid
 	// incorrect assumptions about when data was written, in absolute time on a
 	// different node, which held the lease before this replica acquired it.
-	obsTS.Forward(status.Lease.Start)
+	obsClockTS.Forward(status.Lease.Start)
+	obsTS := obsClockTS.ToTimestamp()
 	// If the observed timestamp reduces the transaction's uncertainty interval,
 	// update the transacion proto.
 	if obsTS.Less(txn.MaxTimestamp) {

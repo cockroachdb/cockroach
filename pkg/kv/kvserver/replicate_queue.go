@@ -211,7 +211,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc, zone := repl.DescAndZone()
 	action, priority := rq.allocator.ComputeAction(ctx, zone, desc)
@@ -244,13 +244,13 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	if lease, _ := repl.GetLease(); repl.IsLeaseValid(ctx, lease, now) {
-		if rq.canTransferLease() &&
-			rq.allocator.ShouldTransferLease(
-				ctx, zone, voterReplicas, lease.Replica.StoreID, repl.leaseholderStats) {
-			log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
-			return true, 0
-		}
+	status := repl.LeaseStatusAt(ctx, now)
+	if status.IsValid() &&
+		rq.canTransferLease() &&
+		rq.allocator.ShouldTransferLease(ctx, zone, voterReplicas, status.Lease.Replica.StoreID, repl.leaseholderStats) {
+
+		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
+		return true, 0
 	}
 
 	return false, 0

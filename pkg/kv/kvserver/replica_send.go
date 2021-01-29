@@ -251,15 +251,15 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		var status kvserverpb.LeaseStatus
 		if !ba.ReadConsistency.RequiresReadLease() {
 			// Get a clock reading for checkExecutionCanProceed.
-			status.Timestamp = r.Clock().Now()
+			status.Now = r.Clock().NowAsClockTimestamp()
 		} else if ba.IsSingleSkipLeaseCheckRequest() {
 			// For lease commands, use the provided previous lease for verification.
 			status.Lease = ba.GetPrevLeaseForLeaseRequest()
-			status.Timestamp = r.Clock().Now()
+			status.Now = r.Clock().NowAsClockTimestamp()
 		} else {
 			// If the request is a write or a consistent read, it requires the
 			// range lease or permission to serve via follower reads.
-			if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			if status, pErr = r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp); pErr != nil {
 				if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
 					return nil, nErr
 				}

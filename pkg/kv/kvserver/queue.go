@@ -242,8 +242,7 @@ type replicaInQueue interface {
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
 	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *roachpb.Error)
-	IsLeaseValid(context.Context, roachpb.Lease, hlc.Timestamp) bool
-	GetLease() (roachpb.Lease, roachpb.Lease)
+	LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus
 }
 
 type queueImpl interface {
@@ -251,7 +250,7 @@ type queueImpl interface {
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
 	shouldQueue(
-		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
+		context.Context, hlc.ClockTimestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
@@ -543,7 +542,9 @@ type baseQueueHelper struct {
 	bq *baseQueue
 }
 
-func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
+func (h baseQueueHelper) MaybeAdd(
+	ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp,
+) {
 	h.bq.maybeAdd(ctx, repl, now)
 }
 
@@ -555,7 +556,7 @@ func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio floa
 }
 
 type queueHelper interface {
-	MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp)
+	MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp)
 	Add(ctx context.Context, repl replicaInQueue, prio float64)
 }
 
@@ -586,7 +587,9 @@ func (bq *baseQueue) Async(
 // MaybeAddAsync offers the replica to the queue. The queue will only process a
 // certain number of these operations concurrently, and will drop (i.e. treat as
 // a noop) any additional calls.
-func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
+func (bq *baseQueue) MaybeAddAsync(
+	ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp,
+) {
 	bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, repl, now)
 	})
@@ -601,7 +604,7 @@ func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio flo
 	})
 }
 
-func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
+func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp) {
 	ctx = repl.AnnotateCtx(ctx)
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
@@ -643,10 +646,10 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.GetLease(); repl.IsLeaseValid(ctx, lease, now) &&
-			!lease.OwnedBy(repl.StoreID()) {
+		st := repl.LeaseStatusAt(ctx, now)
+		if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
 			if log.V(1) {
-				log.Infof(ctx, "needs lease; not adding: %+v", lease)
+				log.Infof(ctx, "needs lease; not adding: %v", st.Lease)
 			}
 			return
 		}
@@ -1093,7 +1096,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Maybe add replica back into queue, if requested.
 	if requeue {
-		bq.maybeAdd(ctx, repl, bq.store.Clock().Now())
+		bq.maybeAdd(ctx, repl, bq.store.Clock().NowAsClockTimestamp())
 	}
 }
 

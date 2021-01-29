@@ -503,7 +503,7 @@ func (r *Replica) CanCreateTxnRecord(
 			lease, _ /* nextLease */ := r.GetLease()
 			// Recognize the case where a lease started recently. Lease transfers bump
 			// the ts cache low water mark.
-			if tombstoneTimestamp == lease.Start {
+			if tombstoneTimestamp == lease.Start.ToTimestamp() {
 				return false, hlc.Timestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
 			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED

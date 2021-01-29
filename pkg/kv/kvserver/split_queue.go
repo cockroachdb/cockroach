@@ -134,7 +134,7 @@ func shouldSplitRange(
 // prefix or if the range's size in bytes exceeds the limit for the zone,
 // or if the range has too much load on it.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), sysCfg)
@@ -168,7 +168,7 @@ func (sq *splitQueue) process(
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
 		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
-		sq.MaybeAddAsync(ctx, r, sq.store.Clock().Now())
+		sq.MaybeAddAsync(ctx, r, sq.store.Clock().NowAsClockTimestamp())
 		return false, nil
 	}
 

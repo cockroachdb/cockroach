@@ -85,7 +85,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 			txn:  txn,
 			lease: func() kvserverpb.LeaseStatus {
 				leaseClone := lease
-				leaseClone.Lease.Start = hlc.Timestamp{WallTime: 18}
+				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 18}
 				return leaseClone
 			}(),
 			expTxn: txnWithMaxTimestamp(hlc.Timestamp{WallTime: 18}),
@@ -95,7 +95,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 			txn:  txn,
 			lease: func() kvserverpb.LeaseStatus {
 				leaseClone := lease
-				leaseClone.Lease.Start = hlc.Timestamp{WallTime: 22}
+				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 22}
 				return leaseClone
 			}(),
 			expTxn: txn,

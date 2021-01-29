@@ -184,7 +184,7 @@ func splitPostApply(
 		}
 	}
 
-	now := r.store.Clock().Now()
+	now := r.store.Clock().NowAsClockTimestamp()
 
 	// While performing the split, zone config changes or a newly created table
 	// might require the range to be split again. Enqueue both the left and right

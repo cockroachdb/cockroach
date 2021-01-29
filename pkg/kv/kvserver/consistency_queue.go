@@ -97,7 +97,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 }
 
 func (q *consistencyQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
 	return consistencyQueueShouldQueueImpl(ctx, now,
 		consistencyShouldQueueData{
@@ -120,7 +120,7 @@ func (q *consistencyQueue) shouldQueue(
 // ConsistencyQueueShouldQueueImpl is exposed for testability without having
 // to setup a fully fledged replica.
 func consistencyQueueShouldQueueImpl(
-	ctx context.Context, now hlc.Timestamp, data consistencyShouldQueueData,
+	ctx context.Context, now hlc.ClockTimestamp, data consistencyShouldQueueData,
 ) (bool, float64) {
 	if data.interval <= 0 {
 		return false, 0
@@ -132,7 +132,7 @@ func consistencyQueueShouldQueueImpl(
 		if err != nil {
 			return false, 0
 		}
-		if shouldQ, priority = shouldQueueAgain(now, lpTS, data.interval); !shouldQ {
+		if shouldQ, priority = shouldQueueAgain(now.ToTimestamp(), lpTS, data.interval); !shouldQ {
 			return false, 0
 		}
 	}

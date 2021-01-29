@@ -381,7 +381,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// requests, this is kosher). This means that we don't use the old
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
-		setTimestampCacheLowWaterMark(r.store.tsCache, r.Desc(), newLease.Start)
+		setTimestampCacheLowWaterMark(r.store.tsCache, r.Desc(), newLease.Start.ToTimestamp())
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
@@ -406,14 +406,15 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
+	now := r.store.Clock().NowAsClockTimestamp()
+	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.OwnsValidLease(ctx, now) {
 		r.gossipFirstRange(ctx)
 	}
 
 	// Whenever we first acquire an expiration-based lease, notify the lease
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
+	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.OwnsValidLease(ctx, now) {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:
@@ -620,7 +621,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.MaybeAddToSplitQueue {
-		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 		lResult.MaybeAddToSplitQueue = false
 	}
 

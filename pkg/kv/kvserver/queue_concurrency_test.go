@@ -132,7 +132,7 @@ type fakeQueueImpl struct {
 }
 
 func (fakeQueueImpl) shouldQueue(
-	context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
+	context.Context, hlc.ClockTimestamp, *Replica, *config.SystemConfig,
 ) (shouldQueue bool, priority float64) {
 	return rand.Intn(5) != 0, 1.0
 }
@@ -174,7 +174,6 @@ func (fr *fakeReplica) redirectOnOrAcquireLease(
 	// baseQueue only checks that the returned error is nil.
 	return kvserverpb.LeaseStatus{}, nil
 }
-func (fr *fakeReplica) IsLeaseValid(context.Context, roachpb.Lease, hlc.Timestamp) bool { return true }
-func (fr *fakeReplica) GetLease() (roachpb.Lease, roachpb.Lease) {
-	return roachpb.Lease{}, roachpb.Lease{}
+func (fr *fakeReplica) LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus {
+	return kvserverpb.LeaseStatus{}
 }
