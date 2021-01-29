@@ -428,9 +428,10 @@ func NewDatumRowConverter(
 	// Here, computeExprs will be nil if there's no computed column, or
 	// the list of computed expressions (including nil, for those columns
 	// that are not computed) otherwise, according to colsOrdered.
-	c.computedExprs, err = schemaexpr.MakeComputedExprs(
+	c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
 		ctx,
 		colsOrdered,
+		c.tableDesc.GetPublicColumns(),
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
 		c.EvalCtx,

@@ -302,7 +302,6 @@ func makeMetrics(internal bool) Metrics {
 			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
 			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
 			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
-
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewLatency(getMetricMeta(MetaDistSQLExecLatency, internal),
 				6*metricsSampleInterval),
@@ -316,8 +315,9 @@ func makeMetrics(internal bool) Metrics {
 				6*metricsSampleInterval),
 			SQLTxnsOpen: metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 
-			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
-			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+			TxnAbortCount:             metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
+			FailureCount:              metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+			FullTableOrIndexScanCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
@@ -567,7 +567,6 @@ func (s *Server) newConnExecutor(
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
 	sdMutator := new(sessionDataMutator)
 	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
-
 	ex := &connExecutor{
 		server:      s,
 		metrics:     srvMetrics,
