@@ -104,10 +104,8 @@ func (p *postgreStream) Next() (interface{}, error) {
 			// explicitly marked as "to be skipped" during a PGDUMP import.
 			// TODO(adityamaru): Write these to a shunt file to see what has been
 			// skipped.
-			if errors.HasType(err, (*tree.Unsupported)(nil)) {
-				if p.ignoreUnsupportedStmts {
-					continue
-				}
+			if p.ignoreUnsupportedStmts && errors.HasType(err, (*tree.UnsupportedError)(nil)) {
+				continue
 			}
 			return nil, err
 		}
@@ -394,6 +392,10 @@ func readPostgresStmt(
 				}
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
+					if ignoreUnsupportedStmts {
+						// Write to shunt.
+						continue
+					}
 					return errors.Errorf("unsupported statement: %s", stmt)
 				}
 				create.Defs = append(create.Defs, cmd.ColumnDef)
@@ -414,9 +416,11 @@ func readPostgresStmt(
 				if !found {
 					return colinfo.NewUndefinedColumnError(cmd.Column.String())
 				}
-			case *tree.AlterTableValidateConstraint:
-				// ignore
 			default:
+				if ignoreUnsupportedStmts {
+					// Write to shunt.
+					continue
+				}
 				return errors.Errorf("unsupported statement: %s", stmt)
 			}
 		}
@@ -431,10 +435,11 @@ func readPostgresStmt(
 			createSeq[name] = stmt
 		}
 	case *tree.AlterSequence:
-		if len(stmt.Options) != 1 || stmt.Options[0].Name != tree.SeqOptOwnedBy ||
-			!ignoreUnsupportedStmts {
-			return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		if ignoreUnsupportedStmts {
+			// Write to shunt file.
+			return nil
 		}
+		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	// Some SELECT statements mutate schema. Search for those here.
 	case *tree.Select:
 		switch sel := stmt.Select.(type) {
@@ -458,12 +463,11 @@ func readPostgresStmt(
 					// Search for a SQLFn, which returns a SQL string to execute.
 					fn := ov.SQLFn
 					if fn == nil {
-						switch f := expr.Func.String(); f {
-						case "set_config", "setval":
+						if ignoreUnsupportedStmts {
+							// Write to shunt file.
 							continue
-						default:
-							return errors.Errorf("unsupported function call: %s", expr.Func.String())
 						}
+						return errors.Errorf("unsupported function call: %s", expr.Func.String())
 					}
 					// Attempt to convert all func exprs to datums.
 					datums := make(tree.Datums, len(expr.Exprs))
@@ -500,10 +504,18 @@ func readPostgresStmt(
 						}
 					}
 				default:
+					if ignoreUnsupportedStmts {
+						// Write unsupported select expressions to the SHUNT file.
+						continue
+					}
 					return errors.Errorf("unsupported %T SELECT expr: %s", expr, expr)
 				}
 			}
 		default:
+			if ignoreUnsupportedStmts {
+				// Write to shunt file.
+				return nil
+			}
 			return errors.Errorf("unsupported %T SELECT: %s", sel, sel)
 		}
 	case *tree.DropTable:
@@ -532,21 +544,34 @@ func readPostgresStmt(
 				return err
 			}
 		}
-	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
-		*tree.CommentOnIndex, *tree.CommentOnColumn:
-		// ignore parsed by unsupported stmts.
 	case *tree.BeginTransaction, *tree.CommitTransaction:
-		// ignore txns.
-	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData, *tree.Delete:
-		// ignore SETs and DMLs.
-	case *tree.Analyze:
-	// ANALYZE is syntactic sugar for CreateStatistics. It can be ignored because
-	// the auto stats stuff will pick up the changes and run if needed.
+		// Ignore transaction statements as they have no meaning during an IMPORT.
+		// TODO(during review): Should we guard these statements under the
+		// ignore_unsupported flag as well?
+	case *tree.Insert, *tree.CopyFrom, *tree.Delete, copyData:
+		// handled during the data ingestion pass.
+	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
+		*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.SetVar, *tree.Analyze:
+		// These are the statements that can be parsed by CRDB but are not
+		// supported, or are not required to be processed, during an IMPORT.
+		// - ignore txns.
+		// - ignore SETs and DMLs.
+		// - ANALYZE is syntactic sugar for CreateStatistics. It can be ignored
+		// because the auto stats stuff will pick up the changes and run if needed.
+		if ignoreUnsupportedStmts {
+			// Write to shunt if the user has asked us to skip.
+			return nil
+		}
+		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
 		}
 	default:
+		if ignoreUnsupportedStmts {
+			// Write to shunt file.
+			return nil
+		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	}
 	return nil
@@ -576,14 +601,15 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tableDescs map[string]catalog.TableDescriptor
-	tables     map[string]*row.DatumRowConverter
-	descs      map[string]*execinfrapb.ReadImportDataSpec_ImportTable
-	kvCh       chan row.KVBatch
-	opts       roachpb.PgDumpOptions
-	walltime   int64
-	colMap     map[*row.DatumRowConverter](map[string]int)
-	evalCtx    *tree.EvalContext
+	tableDescs             map[string]catalog.TableDescriptor
+	tables                 map[string]*row.DatumRowConverter
+	descs                  map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	kvCh                   chan row.KVBatch
+	opts                   roachpb.PgDumpOptions
+	walltime               int64
+	colMap                 map[*row.DatumRowConverter](map[string]int)
+	ignoreUnsupportedStmts bool
+	evalCtx                *tree.EvalContext
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -595,6 +621,7 @@ func newPgDumpReader(
 	opts roachpb.PgDumpOptions,
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	ignoreUnsupportedStmts bool,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
@@ -625,14 +652,15 @@ func newPgDumpReader(
 		}
 	}
 	return &pgDumpReader{
-		kvCh:       kvCh,
-		tableDescs: tableDescs,
-		tables:     converters,
-		descs:      descs,
-		opts:       opts,
-		walltime:   walltime,
-		colMap:     colMap,
-		evalCtx:    evalCtx,
+		kvCh:                   kvCh,
+		tableDescs:             tableDescs,
+		tables:                 converters,
+		descs:                  descs,
+		opts:                   opts,
+		walltime:               walltime,
+		colMap:                 colMap,
+		ignoreUnsupportedStmts: ignoreUnsupportedStmts,
+		evalCtx:                evalCtx,
 	}, nil
 }
 
@@ -701,6 +729,10 @@ func (m *pgDumpReader) readFile(
 			timestamp := timestampAfterEpoch(m.walltime)
 			values, ok := i.Rows.Select.(*tree.ValuesClause)
 			if !ok {
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt.
+					continue
+				}
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
 			}
 			inserts++
@@ -847,22 +879,41 @@ func (m *pgDumpReader) readFile(
 			// by pg_dump, and thus if it isn't, we don't try to figure out what to do.
 			sc, ok := i.Select.(*tree.SelectClause)
 			if !ok {
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt file.
+					continue
+				}
 				return errors.Errorf("unsupported %T Select: %v", i.Select, i.Select)
 			}
 			if len(sc.Exprs) != 1 {
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt file.
+					continue
+				}
 				return errors.Errorf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
 			}
 			fn, ok := sc.Exprs[0].Expr.(*tree.FuncExpr)
 			if !ok {
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt file.
+					continue
+				}
 				return errors.Errorf("unsupported select arg %T: %v", sc.Exprs[0].Expr, sc.Exprs[0].Expr)
 			}
 
 			switch funcName := strings.ToLower(fn.Func.String()); funcName {
 			case "search_path", "pg_catalog.set_config":
-
-				continue
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt file.
+					continue
+				}
+				return errors.Errorf("unsupported %d fn args: %v", len(fn.Exprs), fn.Exprs)
 			case "setval", "pg_catalog.setval":
 				if args := len(fn.Exprs); args < 2 || args > 3 {
+					if m.ignoreUnsupportedStmts {
+						// Write to shunt file.
+						continue
+					}
 					return errors.Errorf("unsupported %d fn args: %v", len(fn.Exprs), fn.Exprs)
 				}
 				seqname, ok := fn.Exprs[0].(*tree.StrVal)
@@ -879,6 +930,10 @@ func (m *pgDumpReader) readFile(
 				}
 				seqval, ok := fn.Exprs[1].(*tree.NumVal)
 				if !ok {
+					if m.ignoreUnsupportedStmts {
+						// Write to shunt file.
+						continue
+					}
 					return errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[1], fn.Exprs[1])
 				}
 				val, err := seqval.AsInt64()
@@ -889,6 +944,10 @@ func (m *pgDumpReader) readFile(
 				if len(fn.Exprs) == 3 {
 					called, ok := fn.Exprs[2].(*tree.DBool)
 					if !ok {
+						if m.ignoreUnsupportedStmts {
+							// Write to shunt file.
+							continue
+						}
 						return errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[2], fn.Exprs[2])
 					}
 					isCalled = bool(*called)
@@ -913,27 +972,31 @@ func (m *pgDumpReader) readFile(
 			case "addgeometrycolumn":
 				// handled during schema extraction.
 			default:
+				if m.ignoreUnsupportedStmts {
+					// Write to shunt file.
+					continue
+				}
 				return errors.Errorf("unsupported function: %s", funcName)
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence:
-			// parseable but ignored during schema extraction.
+			// handled during schema extraction.
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
-			// ignored.
-		case *tree.CreateTable, *tree.AlterTable, *tree.AlterTableOwner, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
+			// handled during schema extraction.
+		case *tree.CreateTable, *tree.AlterTable, *tree.AlterTableOwner, *tree.CreateIndex,
+			*tree.CreateSequence, *tree.DropTable:
 			// handled during schema extraction.
 		case *tree.Delete:
-			switch stmt := i.Table.(type) {
-			case *tree.AliasedTableExpr:
-				// ogr2ogr has `DELETE FROM geometry_columns / geography_columns ...` statements.
-				// We're not planning to support this functionality in CRDB, so it is safe to ignore it when countered in PGDUMP.
-				if tn, ok := stmt.Expr.(*tree.TableName); !(ok && (tn.Table() == "geometry_columns" || tn.Table() == "geography_columns")) {
-					return errors.Errorf("unsupported DELETE FROM %T statement: %s", stmt, stmt)
-				}
-			default:
-				return errors.Errorf("unsupported %T statement: %s", i, i)
+			if m.ignoreUnsupportedStmts {
+				// Write to shunt file.
+				continue
 			}
+			return errors.Errorf("unsupported DELETE FROM %T statement: %s", stmt, stmt)
 		default:
+			if m.ignoreUnsupportedStmts {
+				// Write to shunt file.
+				continue
+			}
 			return errors.Errorf("unsupported %T statement: %v", i, i)
 		}
 	}

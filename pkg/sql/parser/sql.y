@@ -2718,7 +2718,7 @@ import_format:
 alter_unsupported_stmt:
  ALTER FUNCTION error
   {
-    return unimplemented(sqllex, "ALTER FUNCTION")
+    return unimplemented(sqllex, "alter function")
   }
 
 
@@ -3879,7 +3879,7 @@ grant_stmt:
   }
 | GRANT privileges ON SEQUENCE error
   {
-    return unimplemented(sqllex, "GRANT ON SEQUENCE")
+    return unimplemented(sqllex, "grant privileges on sequence")
   }
 | GRANT error // SHOW HELP: GRANT
 
@@ -3930,7 +3930,7 @@ revoke_stmt:
   }
 | REVOKE privileges ON SEQUENCE error
   {
-    return unimplemented(sqllex, "REVOKE ON SEQUENCE")
+    return unimplemented(sqllex, "revoke privileges on sequence")
   }
 | REVOKE error // SHOW HELP: REVOKE
 

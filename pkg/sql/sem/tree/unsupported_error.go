@@ -10,22 +10,22 @@
 
 package tree
 
-var _ error = &Unsupported{}
+var _ error = &UnsupportedError{}
 
-// Unsupported is an error object which is returned by some unimplemented SQL
+// UnsupportedError is an error object which is returned by some unimplemented SQL
 // statements. It is currently only used to skip over PGDUMP statements during
 // an import.
-type Unsupported struct {
+type UnsupportedError struct {
 	Err         error
 	FeatureName string
 }
 
-func (u *Unsupported) Error() string {
+func (u *UnsupportedError) Error() string {
 	return u.Err.Error()
 }
 
 // Cause implements causer.
-func (u *Unsupported) Cause() error { return u.Err }
+func (u *UnsupportedError) Cause() error { return u.Err }
 
 // Unwrap implements wrapper.
-func (u *Unsupported) Unwrap() error { return u.Err }
+func (u *UnsupportedError) Unwrap() error { return u.Err }
