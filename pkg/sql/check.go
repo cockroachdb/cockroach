@@ -228,7 +228,7 @@ func nonMatchingRowQuery(
 // have a matching row in their referenced table.
 //
 // It operates entirely on the current goroutine and is thus able to
-// reuse an existing client.Txn safely.
+// reuse an existing kv.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
 	srcTable *tabledesc.Mutable,
@@ -301,6 +301,100 @@ func validateForeignKey(
 		return pgerror.WithConstraintName(pgerror.Newf(pgcode.ForeignKeyViolation,
 			"foreign key violation: %q row %s has no match in %q",
 			srcTable.Name, formatValues(colNames, values), targetTable.GetName()), fk.Name)
+	}
+	return nil
+}
+
+// duplicateRowQuery generates and returns a query for column values that
+// violate the specified unique constraint. Rows in the table with any null
+// values in the key are excluded from matching.
+//
+// For example, a unique constraint on columns (a, b) on the table "tbl" would
+// require the following query:
+//
+// SELECT a, b
+// FROM tbl
+// WHERE a IS NOT NULL AND b IS NOT NULL
+// GROUP BY a, b
+// HAVING count(*) > 1
+// LIMIT 1  -- if limitResults is set
+//
+func duplicateRowQuery(
+	srcTbl catalog.TableDescriptor, uc *descpb.UniqueWithoutIndexConstraint, limitResults bool,
+) (sql string, colNames []string, _ error) {
+	colNames, err := srcTbl.NamesForColumnIDs(uc.ColumnIDs)
+	if err != nil {
+		return "", nil, err
+	}
+
+	srcCols := make([]string, len(colNames))
+	for i, n := range colNames {
+		srcCols[i] = tree.NameString(n)
+	}
+
+	srcWhere := make([]string, len(uc.ColumnIDs))
+	for i := range srcWhere {
+		srcWhere[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
+	}
+
+	limit := ""
+	if limitResults {
+		limit = " LIMIT 1"
+	}
+	return fmt.Sprintf(
+		`SELECT %[1]s FROM [%[2]d AS tbl] WHERE %[3]s GROUP BY %[1]s HAVING count(*) > 1 %[4]s`,
+		strings.Join(srcCols, ", "),     // 1
+		srcTbl.GetID(),                  // 2
+		strings.Join(srcWhere, " AND "), // 3
+		limit,                           // 4
+	), colNames, nil
+}
+
+// validateUniqueConstraint verifies that all the rows in the srcTable
+// have unique values for the given unique constraint.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing kv.Txn safely.
+func validateUniqueConstraint(
+	ctx context.Context,
+	srcTable *tabledesc.Mutable,
+	uc *descpb.UniqueWithoutIndexConstraint,
+	ie *InternalExecutor,
+	txn *kv.Txn,
+) error {
+	query, colNames, err := duplicateRowQuery(
+		srcTable, uc, true, /* limitResults */
+	)
+	if err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
+		uc.Name,
+		srcTable.Name, colNames,
+		query,
+	)
+
+	values, err := ie.QueryRow(ctx, "validate unique constraint", txn, query)
+	if err != nil {
+		return err
+	}
+	if values.Len() > 0 {
+		valuesStr := make([]string, len(values))
+		for i := range values {
+			valuesStr[i] = values[i].String()
+		}
+		// Note: this error message mirrors the message produced by Postgres
+		// when it fails to add a unique index due to duplicated keys.
+		return errors.WithDetail(
+			pgerror.WithConstraintName(
+				pgerror.Newf(pgcode.UniqueViolation, "could not create unique constraint %q", uc.Name),
+				uc.Name,
+			),
+			fmt.Sprintf(
+				"Key (%s)=(%s) is duplicated.", strings.Join(colNames, ","), strings.Join(valuesStr, ","),
+			),
+		)
 	}
 	return nil
 }

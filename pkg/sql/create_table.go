@@ -596,6 +596,94 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	return nil
 }
 
+// addUniqueWithoutIndexColumnTableDef runs various checks on the given
+// ColumnTableDef before adding it as a UNIQUE WITHOUT INDEX constraint to the
+// given table descriptor.
+func addUniqueWithoutIndexColumnTableDef(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	sessionData *sessiondata.SessionData,
+	d *tree.ColumnTableDef,
+	desc *tabledesc.Mutable,
+	ts TableState,
+	validationBehavior tree.ValidationBehavior,
+) error {
+	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
+			clusterversion.UniqueWithoutIndexConstraints)
+	}
+	if !sessionData.EnableUniqueWithoutIndexConstraints {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index are not yet supported",
+		)
+	}
+	// Add a unique constraint.
+	if err := ResolveUniqueWithoutIndexConstraint(
+		ctx, desc, string(d.Unique.ConstraintName), []string{string(d.Name)}, ts, validationBehavior,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// addUniqueWithoutIndexTableDef runs various checks on the given
+// UniqueConstraintTableDef before adding it as a UNIQUE WITHOUT INDEX
+// constraint to the given table descriptor.
+func addUniqueWithoutIndexTableDef(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	sessionData *sessiondata.SessionData,
+	d *tree.UniqueConstraintTableDef,
+	desc *tabledesc.Mutable,
+	ts TableState,
+	validationBehavior tree.ValidationBehavior,
+) error {
+	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
+			clusterversion.UniqueWithoutIndexConstraints)
+	}
+	if !sessionData.EnableUniqueWithoutIndexConstraints {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index are not yet supported",
+		)
+	}
+	if len(d.Storing) > 0 {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index cannot store columns",
+		)
+	}
+	if d.Interleave != nil {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"interleaved unique constraints without an index are not supported",
+		)
+	}
+	if d.PartitionByIndex.ContainsPartitions() {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"partitioned unique constraints without an index are not supported",
+		)
+	}
+	if d.Predicate != nil {
+		// TODO(rytaft): It may be necessary to support predicates so that partial
+		// unique indexes will work correctly in multi-region deployments.
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints with a predicate but without an index are not supported",
+		)
+	}
+	// Add a unique constraint.
+	colNames := make([]string, len(d.Columns))
+	for i := range colNames {
+		colNames[i] = string(d.Columns[i].Column)
+	}
+	if err := ResolveUniqueWithoutIndexConstraint(
+		ctx, desc, string(d.Name), colNames, ts, validationBehavior,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ResolveUniqueWithoutIndexConstraint looks up the columns mentioned in a
 // UNIQUE WITHOUT INDEX constraint and adds metadata representing that
 // constraint to the descriptor.
@@ -670,11 +758,7 @@ func ResolveUniqueWithoutIndexConstraint(
 	if ts == NewTable {
 		tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, uc)
 	} else {
-		// TODO(rytaft): call AddUniqueConstraintMutation and remove the error
-		//  below.
-		return errors.AssertionFailedf(
-			"resolving unique constraints on existing tables not yet supported",
-		)
+		tbl.AddUniqueWithoutIndexMutation(&uc, descpb.DescriptorMutation_ADD)
 	}
 
 	return nil
@@ -1990,20 +2074,8 @@ func NewTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.Unique.WithoutIndex {
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-						clusterversion.UniqueWithoutIndexConstraints)
-				}
-				if !sessionData.EnableUniqueWithoutIndexConstraints {
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"unique constraints without an index are not yet supported",
-					)
-				}
-				// Add a unique constraint.
-				if err := ResolveUniqueWithoutIndexConstraint(
-					ctx, &desc, string(d.Unique.ConstraintName), []string{string(d.Name)}, NewTable,
-					tree.ValidationDefault,
+				if err := addUniqueWithoutIndexColumnTableDef(
+					ctx, evalCtx, sessionData, d, &desc, NewTable, tree.ValidationDefault,
 				); err != nil {
 					return nil, err
 				}
@@ -2011,45 +2083,8 @@ func NewTableDesc(
 
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-						clusterversion.UniqueWithoutIndexConstraints)
-				}
-				if !sessionData.EnableUniqueWithoutIndexConstraints {
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"unique constraints without an index are not yet supported",
-					)
-				}
-				if len(d.Storing) > 0 {
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"unique constraints without an index cannot store columns",
-					)
-				}
-				if d.Interleave != nil {
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"interleaved unique constraints without an index are not supported",
-					)
-				}
-				if d.PartitionByIndex.ContainsPartitions() {
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"partitioned unique constraints without an index are not supported",
-					)
-				}
-				if d.Predicate != nil {
-					// TODO(rytaft): It may be necessary to support predicates so that partial
-					// unique indexes will work correctly in multi-region deployments.
-					return nil, pgerror.New(pgcode.FeatureNotSupported,
-						"unique constraints with a predicate but without an index are not supported",
-					)
-				}
-				// Add a unique constraint.
-				colNames := make([]string, len(d.Columns))
-				for i := range colNames {
-					colNames[i] = string(d.Columns[i].Column)
-				}
-				if err := ResolveUniqueWithoutIndexConstraint(
-					ctx, &desc, string(d.Name), colNames, NewTable, tree.ValidationDefault,
+				if err := addUniqueWithoutIndexTableDef(
+					ctx, evalCtx, sessionData, d, &desc, NewTable, tree.ValidationDefault,
 				); err != nil {
 					return nil, err
 				}
