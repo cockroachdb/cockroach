@@ -2,3 +2,5 @@
 
 build --ui_event_filters=-DEBUG
 query --ui_event_filters=-DEBUG
+
+try-import %workspace%/.bazelrc.user
