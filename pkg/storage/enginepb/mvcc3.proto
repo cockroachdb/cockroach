@@ -151,6 +151,7 @@ message MVCCStatsDelta {
   sint64 val_count = 9;
   sint64 intent_bytes = 10;
   sint64 intent_count = 11;
+  sint64 separated_intent_count = 16;
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
   sint64 abort_span_bytes = 15;
@@ -179,6 +180,7 @@ message MVCCPersistentStats {
   int64 val_count = 9;
   int64 intent_bytes = 10;
   int64 intent_count = 11;
+  int64 separated_intent_count = 16;
   int64 sys_bytes = 12;
   int64 sys_count = 13;
   int64 abort_span_bytes = 15;

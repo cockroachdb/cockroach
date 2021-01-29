@@ -299,14 +299,15 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Batch interface.
 func (p *pebbleBatch) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	if p.useWrappedIntentWriter {
 		var err error
-		p.scratch, err =
+		var separatedIntentCountDelta int
+		p.scratch, separatedIntentCountDelta, err =
 			p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-		return err
+		return separatedIntentCountDelta, err
 	}
-	return p.clear(MVCCKey{Key: key})
+	return 0, p.clear(MVCCKey{Key: key})
 }
 
 // ClearEngineKey implements the Batch interface.
@@ -420,14 +421,15 @@ func (p *pebbleBatch) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	if p.useWrappedIntentWriter {
 		var err error
-		p.scratch, err =
+		var separatedIntentCountDelta int
+		p.scratch, separatedIntentCountDelta, err =
 			p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-		return err
+		return separatedIntentCountDelta, err
 	}
-	return p.put(MVCCKey{Key: key}, value)
+	return 0, p.put(MVCCKey{Key: key}, value)
 }
 
 // PutEngineKey implements the Batch interface.

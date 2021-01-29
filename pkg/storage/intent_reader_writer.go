@@ -45,7 +45,9 @@ import (
 // DisallowSeparatedIntents is true when separated intents have never been allowed.
 const DisallowSeparatedIntents = true
 
-const enabledSeparatedIntents = false
+// EnabledSeparatedIntents is true for enabling separated intents. It also
+// requires that DisallowSeparatedIntents is false.
+const EnabledSeparatedIntents = false
 
 // This file defines wrappers for Reader and Writer, and functions to do the
 // wrapping, which depend on the configuration settings above.
@@ -61,7 +63,7 @@ func tryWrapIntentWriter(w Writer) (idw intentDemuxWriter, wrapped bool) {
 	if DisallowSeparatedIntents {
 		return intentDemuxWriter{}, false
 	}
-	return intentDemuxWriter{w: w, enabledSeparatedIntents: enabledSeparatedIntents}, true
+	return intentDemuxWriter{w: w, enabledSeparatedIntents: EnabledSeparatedIntents}, true
 }
 
 // ClearIntent has the same behavior as Writer.ClearIntent. buf is used as
@@ -73,10 +75,10 @@ func (idw intentDemuxWriter) ClearIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	buf []byte,
-) ([]byte, error) {
+) (_ []byte, separatedIntentCountDelta int, _ error) {
 	switch state {
 	case ExistingIntentInterleaved:
-		return buf, idw.w.ClearUnversioned(key)
+		return buf, 0, idw.w.ClearUnversioned(key)
 	case ExistingIntentSeparated:
 		var engineKey EngineKey
 		engineKey, buf = LockTableKey{
@@ -85,11 +87,11 @@ func (idw intentDemuxWriter) ClearIntent(
 			TxnUUID:  txnUUID[:],
 		}.ToEngineKey(buf)
 		if txnDidNotUpdateMeta {
-			return buf, idw.w.SingleClearEngineKey(engineKey)
+			return buf, -1, idw.w.SingleClearEngineKey(engineKey)
 		}
-		return buf, idw.w.ClearEngineKey(engineKey)
+		return buf, -1, idw.w.ClearEngineKey(engineKey)
 	default:
-		return buf, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
+		return buf, 0, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
 	}
 }
 
@@ -103,7 +105,7 @@ func (idw intentDemuxWriter) PutIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	buf []byte,
-) ([]byte, error) {
+) (_ []byte, separatedIntentCountDelta int, _ error) {
 	var engineKey EngineKey
 	if state == ExistingIntentSeparated || idw.enabledSeparatedIntents {
 		engineKey, buf = LockTableKey{
@@ -116,27 +118,31 @@ func (idw intentDemuxWriter) PutIntent(
 		// Switching this intent from separated to interleaved.
 		if txnDidNotUpdateMeta {
 			if err := idw.w.SingleClearEngineKey(engineKey); err != nil {
-				return buf, err
+				return buf, 0, err
 			}
 		} else {
 			if err := idw.w.ClearEngineKey(engineKey); err != nil {
-				return buf, err
+				return buf, 0, err
 			}
 		}
 	} else if state == ExistingIntentInterleaved && idw.enabledSeparatedIntents {
 		// Switching this intent from interleaved to separated.
 		if err := idw.w.ClearUnversioned(key); err != nil {
-			return buf, err
+			return buf, 0, err
 		}
 	}
 	// Else, staying separated or staying interleaved or there was no preceding
 	// intent, so don't need to explicitly clear.
 
+	if state == ExistingIntentSeparated {
+		separatedIntentCountDelta = -1
+	}
 	// Write intent
 	if idw.enabledSeparatedIntents {
-		return buf, idw.w.PutEngineKey(engineKey, value)
+		separatedIntentCountDelta++
+		return buf, separatedIntentCountDelta, idw.w.PutEngineKey(engineKey, value)
 	}
-	return buf, idw.w.PutUnversioned(key, value)
+	return buf, separatedIntentCountDelta, idw.w.PutUnversioned(key, value)
 }
 
 // ClearMVCCRangeAndIntents has the same behavior as
