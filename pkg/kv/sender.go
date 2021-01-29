@@ -230,6 +230,10 @@ type TxnSender interface {
 	// field on TxnMeta.
 	ProvisionalCommitTimestamp() hlc.Timestamp
 
+	// MaxObservableTimestamp returns the largest timestamp at which the
+	// transaction may observe when performing a read-only operation.
+	MaxObservableTimestamp() hlc.Timestamp
+
 	// IsSerializablePushAndRefreshNotPossible returns true if the
 	// transaction is serializable, its timestamp has been pushed and
 	// there's no chance that refreshing the read spans will succeed
