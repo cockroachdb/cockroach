@@ -17,6 +17,7 @@ go_library(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/storageccl/engineccl",
+        "//pkg/ccl/streamingccl/streamingest",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
     ],
