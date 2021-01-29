@@ -10,7 +10,7 @@
 
 package catalog
 
-// chart_catalog.go represents a catalog of pre-defined Admin UI charts
+// chart_catalog.go represents a catalog of pre-defined DB Console charts
 // to aid users in debugging CockroachDB clusters. This file represents
 // a simplified structure of the catalog, meant to make it easier for
 // developers to add charts to the catalog. You can find more detail at
@@ -1526,6 +1526,17 @@ var charts = []sectionDescription{
 			{
 				Title:   "Total",
 				Metrics: []string{"sql.distsql.flows.total"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{SQLLayer, "SQL Catalog", "SQL Leases"}},
+		Charts: []chartDescription{
+			{
+				Title: "Outstanding SQL Leases",
+				Metrics: []string{
+					"sql.leases.active",
+				},
 			},
 		},
 	},

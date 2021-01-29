@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -172,6 +173,8 @@ type storage struct {
 	// acquisition to renew the lease begins.
 	leaseRenewalTimeout time.Duration
 
+	outstandingLeases *metric.Gauge
+
 	testingKnobs StorageTestingKnobs
 }
 
@@ -257,6 +260,7 @@ func (s storage) acquire(
 		if count != 1 {
 			return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
 		}
+		s.outstandingLeases.Inc(1)
 		return nil
 	})
 	if err == nil && s.testingKnobs.LeaseAcquiredEvent != nil {
@@ -301,6 +305,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 				"expected 1 result, found %d", lease, count)
 		}
 
+		s.outstandingLeases.Dec(1)
 		if s.testingKnobs.LeaseReleasedEvent != nil {
 			s.testingKnobs.LeaseReleasedEvent(
 				lease.id, descpb.DescriptorVersion(lease.version), err)
@@ -1324,6 +1329,12 @@ func NewLeaseManager(
 			leaseJitterFraction: cfg.DescriptorLeaseJitterFraction,
 			leaseRenewalTimeout: cfg.DescriptorLeaseRenewalTimeout,
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			outstandingLeases: metric.NewGauge(metric.Metadata{
+				Name:        "sql.leases.active",
+				Help:        "The number of outstanding SQL schema leases.",
+				Measurement: "Outstanding leases",
+				Unit:        metric.Unit_COUNT,
+			}),
 		},
 		testingKnobs: testingKnobs,
 		names: nameCache{
@@ -2143,6 +2154,19 @@ func (m *Manager) Codec() keys.SQLCodec {
 	return m.storage.codec
 }
 
+// Metrics contains a pointer to all relevant lease.Manager metrics, for
+// registration.
+type Metrics struct {
+	OutstandingLeases *metric.Gauge
+}
+
+// MetricsStruct returns a struct containing all of this Manager's metrics.
+func (m *Manager) MetricsStruct() Metrics {
+	return Metrics{
+		OutstandingLeases: m.storage.outstandingLeases,
+	}
+}
+
 // VisitLeases introspects the state of leases managed by the Manager.
 //
 // TODO(ajwerner): consider refactoring the function to take a struct, maybe
@@ -2198,4 +2222,10 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 		return nil, hlc.Timestamp{}, err
 	}
 	return desc.Descriptor, desc.expiration, nil
+}
+
+// TestingOutstandingLeasesGauge returns the outstanding leases gauge that is
+// used by this lease manager.
+func (m *Manager) TestingOutstandingLeasesGauge() *metric.Gauge {
+	return m.storage.outstandingLeases
 }

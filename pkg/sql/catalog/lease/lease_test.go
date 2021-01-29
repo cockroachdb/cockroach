@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -2483,4 +2484,46 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	// Do a no-op descriptor update, lease should still be present.
 	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_PUBLIC)
 	checkLeaseState(true /* shouldBePresent */)
+}
+
+// TestOutstandingLeasesMetric tests the gauge that keeps track of the number of
+// outstanding SQL leases on a node.
+//
+// N.B.: If this flakes, it's probably because there are internal processes
+// acquiring leases on things. If it starts to get flaky, it's probably easier
+// to just delete it than deflake it.
+func TestOutstandingLeasesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	_, err := tc.Conns[0].ExecContext(ctx, "CREATE TABLE a (a INT PRIMARY KEY)")
+	assert.NoError(t, err)
+	_, err = tc.Conns[0].ExecContext(ctx, "CREATE TABLE b (a INT PRIMARY KEY)")
+	assert.NoError(t, err)
+	gauge := tc.Servers[0].LeaseManager().(*lease.Manager).TestingOutstandingLeasesGauge()
+	outstandingLeases := gauge.Value()
+
+	_, err = tc.Conns[0].ExecContext(ctx, "SELECT * FROM a")
+	assert.NoError(t, err)
+
+	afterQuery := gauge.Value()
+	// Expect at least 2 leases: one for a, and one for the default database.
+	// The reason that this isn't precise is that there are internal queries that
+	// run in a server that might acquire leases. It's a pain to get these all
+	// removed in our test scenario.
+	actual := afterQuery - outstandingLeases
+	if actual < 2 {
+		t.Errorf("expected at least 2 outstanding leases, found %d", actual)
+	}
+
+	// Expect at least 3 leases: one for a, one for the default database, and one for b.
+	_, err = tc.Conns[0].ExecContext(ctx, "SELECT * FROM b")
+	assert.NoError(t, err)
+
+	afterQuery = gauge.Value()
+	actual = afterQuery - outstandingLeases
+	if actual < 3 {
+		t.Errorf("expected at least 3 outstanding leases, found %d", actual)
+	}
 }
