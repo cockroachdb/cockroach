@@ -417,7 +417,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
-	if n.n.PartitionByIndex == nil && n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+	if n.n.PartitionByIndex == nil &&
+		n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 &&
+		!n.tableDesc.IsPartitionAllBy() {
 		params.p.BufferClientNotice(
 			params.ctx,
 			errors.WithHint(

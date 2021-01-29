@@ -251,7 +251,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	if n.n.PartitionByTable.ContainsPartitions() {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
-				if d.PartitionByIndex == nil {
+				if d.PartitionByIndex == nil && !n.n.PartitionByTable.All {
 					params.p.BufferClientNotice(
 						params.ctx,
 						errors.WithHint(
