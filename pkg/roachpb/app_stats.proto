@@ -101,7 +101,11 @@ message StatementStatistics {
   // the mean of the following NumericStat values:
   //  bytes_sent_over_network
   //  max_mem_usage
+  //  contention_time
   optional int64 exec_stat_collection_count = 19 [(gogoproto.nullable) = false];
+
+  // ContentionTime collects the time this statement spent contending.
+  optional NumericStat contention_time = 20 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` and the comment above
   // exec_stat_collection_count when adding/removing fields here!

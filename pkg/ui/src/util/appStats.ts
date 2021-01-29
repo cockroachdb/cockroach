@@ -111,6 +111,15 @@ export function addStatementStats(
     exec_stat_collection_count: a.exec_stat_collection_count.add(
       b.exec_stat_collection_count,
     ),
+    contention_time:
+      a.contention_time && b.contention_time
+        ? addNumericStats(
+            a.contention_time,
+            b.contention_time,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
   };
 }
 
