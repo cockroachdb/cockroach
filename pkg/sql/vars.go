@@ -1234,7 +1234,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.DistSQLMode.String()
+			return evalCtx.SessionData.NewSchemaChangerMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
