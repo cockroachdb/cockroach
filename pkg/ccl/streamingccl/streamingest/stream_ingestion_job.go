@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,6 +49,10 @@ func ingest(
 	// KVs. We can skip to ingesting after this resolved ts. Plumb the
 	// initialHighwatermark to the ingestion processor spec based on what we read
 	// from the job progress.
+	var initialHighWater hlc.Timestamp
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		initialHighWater = *h
+	}
 
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
@@ -59,14 +64,12 @@ func ingest(
 
 	// Construct stream ingestion processor specs.
 	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, nodes, jobID)
+		streamAddress, topology, nodes, initialHighWater)
 	if err != nil {
 		return err
 	}
 
 	// Plan and run the DistSQL flow.
-	// TODO: Updates from this flow need to feed back into the job to update the
-	// progress.
 	err = distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
 		streamIngestionFrontierSpec)
 	if err != nil {
