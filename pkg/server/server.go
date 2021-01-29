@@ -486,7 +486,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
-
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
 		DB:               db,
 		InternalExecutor: internalExecutor,

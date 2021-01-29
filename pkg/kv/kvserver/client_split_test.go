@@ -1498,24 +1498,48 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 //
 // See https://github.com/cockroachdb/cockroach/issues/1644.
 func runSetupSplitSnapshotRace(
-	t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key),
+	t *testing.T,
+	stickyEnginesRegistry server.StickyInMemEnginesRegistry,
+	testFn func(*testcluster.TestCluster, roachpb.Key, roachpb.Key),
 ) {
-	sc := kvserver.TestStoreConfig(nil)
-	// We'll control replication by hand.
-	sc.TestingKnobs.DisableReplicateQueue = true
-	// Async intent resolution can sometimes lead to hangs when we stop
-	// most of the stores at the end of this function.
-	sc.TestingKnobs.IntentResolverKnobs.DisableAsyncIntentResolution = true
-	// Avoid fighting with the merge queue while trying to reproduce this race.
-	sc.TestingKnobs.DisableMergeQueue = true
-	sc.TestingKnobs.DisableGCQueue = true
-	// Disable the split delay mechanism, or it'll spend 10s going in circles.
-	// (We can't set it to zero as otherwise the default overrides us).
-	sc.RaftDelaySplitToSuppressSnapshotTicks = -1
-	sc.Clock = nil // manual clock
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 6)
+	const numServers int = 6
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEnginesRegistry,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					DisableGCQueue: true,
+					// Async intent resolution can sometimes lead to hangs when we stop
+					// most of the stores at the end of this function.
+					IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+						DisableAsyncIntentResolution: true,
+					},
+				},
+			},
+			RaftConfig: base.RaftConfig{
+				// Disable the split delay mechanism, or it'll spend 10s going in circles.
+				// (We can't set it to zero as otherwise the default overrides us).
+				RaftDelaySplitToSuppressSnapshotTicks: -1,
+			},
+		}
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numServers,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: stickyServerArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
 
 	leftKey := roachpb.Key("a")
 	rightKey := roachpb.Key("z")
@@ -1523,62 +1547,59 @@ func runSetupSplitSnapshotRace(
 	// First, do a couple of writes; we'll use these to determine when
 	// the dust has settled.
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), store.TestSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), store.TestSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Split the system range from the rest of the keyspace.
 	splitArgs := adminSplitArgs(keys.SystemMax)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), store.TestSender(), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// Get the left range's ID. This is currently 2, but using
-	// LookupReplica is more future-proof (and see below for
-	// rightRangeID).
-	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a")).RangeID
+	// Get the left range replica.
+	lhsRepl := store.LookupReplica(roachpb.RKey("a"))
 
 	// Replicate the left range onto nodes 1-3 and remove it from node 0. We have
-	// to transfer the lease before unreplicating from range 0 because it isn't
+	// to transfer the lease before unreplicating from store 0 because it isn't
 	// safe (or allowed) for a leaseholder to remove itself from a cluster
 	// without first giving up its lease.
-	mtc.replicateRange(leftRangeID, 1, 2, 3)
-	mtc.transferLease(context.Background(), leftRangeID, 0, 1)
-	mtc.unreplicateRange(leftRangeID, 0)
+	desc := tc.AddVotersOrFatal(t, lhsRepl.Desc().StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	tc.RemoveVotersOrFatal(t, lhsRepl.Desc().StartKey.AsRawKey(), tc.Target(0))
 
-	mtc.waitForValues(leftKey, []int64{0, 1, 1, 1, 0, 0})
-	mtc.waitForValues(rightKey, []int64{0, 2, 2, 2, 0, 0})
+	tc.WaitForValues(t, leftKey, []int64{0, 1, 1, 1, 0, 0})
+	tc.WaitForValues(t, rightKey, []int64{0, 2, 2, 2, 0, 0})
 
 	// Stop node 3 so it doesn't hear about the split.
-	mtc.stopStore(3)
-	mtc.advanceClock(context.Background())
+	tc.StopServer(3)
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(roachpb.Key("m"))
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Get the right range's ID. Since the split was performed on node
 	// 1, it is currently 11 and not 3 as might be expected.
-	var rightRangeID roachpb.RangeID
+	var rhsRepl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
-		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z")).RangeID
-		if rightRangeID == leftRangeID {
+		rhsRepl = tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey("z"))
+		if rhsRepl.RangeID == lhsRepl.RangeID {
 			return errors.Errorf("store 1 hasn't processed split yet")
 		}
 		return nil
 	})
 
 	// Relocate the right range onto nodes 3-5.
-	mtc.replicateRange(rightRangeID, 4, 5)
-	mtc.unreplicateRange(rightRangeID, 2)
-	mtc.transferLease(context.Background(), rightRangeID, 1, 4)
-	mtc.unreplicateRange(rightRangeID, 1)
+	tc.AddVotersOrFatal(t, rhsRepl.Desc().StartKey.AsRawKey(), tc.Targets(4, 5)...)
+	tc.RemoveVotersOrFatal(t, rhsRepl.Desc().StartKey.AsRawKey(), tc.Target(2))
+	tc.TransferRangeLeaseOrFatal(t, *rhsRepl.Desc(), tc.Target(4))
+	tc.RemoveVotersOrFatal(t, rhsRepl.Desc().StartKey.AsRawKey(), tc.Target(1))
 
 	// Perform another increment after all the replication changes. This
 	// lets us ensure that all the replication changes have been
@@ -1592,15 +1613,15 @@ func runSetupSplitSnapshotRace(
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
 	incArgs = incrementArgs(rightKey, 3)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Store 3 still has the old value, but 4 and 5 are up to date.
-	mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 5, 5})
+	tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 2, 5, 5})
 
 	// Scan the meta ranges to resolve all intents
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0],
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(),
 		&roachpb.ScanRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    keys.MetaMin,
@@ -1611,13 +1632,13 @@ func runSetupSplitSnapshotRace(
 	}
 
 	// Stop the remaining data stores.
-	mtc.stopStore(1)
-	mtc.stopStore(2)
+	tc.StopServer(1)
+	tc.StopServer(2)
 	// 3 is already stopped.
-	mtc.stopStore(4)
-	mtc.stopStore(5)
+	tc.StopServer(4)
+	tc.StopServer(5)
 
-	testFn(mtc, leftKey, rightKey)
+	testFn(tc, leftKey, rightKey)
 }
 
 // TestSplitSnapshotRace_SplitWins exercises one outcome of the
@@ -1627,29 +1648,33 @@ func runSetupSplitSnapshotRace(
 func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+
+	runSetupSplitSnapshotRace(t, stickyEngineRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
-			mtc.restartStore(i)
+			require.NoError(t, tc.RestartServer(i))
 		}
 
 		// Perform a write on the left range and wait for it to propagate.
 		incArgs := incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
+		tc.WaitForValues(t, leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 		// Now wake the other stores up.
-		mtc.restartStore(4)
-		mtc.restartStore(5)
+		require.NoError(t, tc.RestartServer(4))
+		require.NoError(t, tc.RestartServer(5))
 
 		// Write to the right range.
 		incArgs = incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
+		tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 25, 25, 25})
 	})
 }
 
@@ -1660,15 +1685,19 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+
+	runSetupSplitSnapshotRace(t, stickyEngineRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
-			mtc.restartStore(i)
+			require.NoError(t, tc.RestartServer(i))
 		}
 
 		// Perform a write on the right range.
 		incArgs := incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1681,27 +1710,27 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		// for. There is a high probability that the message will have been
 		// received by the time that nodes 4 and 5 have processed their
 		// update.
-		mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 25, 25})
+		tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 2, 25, 25})
 
 		// Wake up the left-hand range. This will allow the left-hand
 		// range's split to complete and unblock the right-hand range.
-		mtc.restartStore(1)
-		mtc.restartStore(2)
+		require.NoError(t, tc.RestartServer(1))
+		require.NoError(t, tc.RestartServer(2))
 
 		// Perform writes on both sides. This is not strictly necessary but
 		// it helps wake up dormant ranges that would otherwise have to wait
 		// for retry timeouts.
 		incArgs = incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
+		tc.WaitForValues(t, leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 		incArgs = incrementArgs(rightKey, 200)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
+		tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 225, 225, 225})
 	})
 }
 
@@ -2566,24 +2595,36 @@ func TestUnsplittableRange(t *testing.T) {
 	ctx := context.Background()
 	ttl := 1 * time.Hour
 	const maxBytes = 1 << 16
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	manual := hlc.NewManualClock(123)
+	manualClock := hlc.NewHybridManualClock()
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	zoneConfig.GC = &zonepb.GCPolicy{
+		TTLSeconds: int32(ttl.Seconds()),
+	}
+	zoneSystemConfig := zonepb.DefaultSystemZoneConfig()
+	zoneSystemConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	zoneSystemConfig.GC = &zonepb.GCPolicy{
+		TTLSeconds: int32(ttl.Seconds()),
+	}
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
-	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	cfg.DefaultZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultZoneConfig.GC = &zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}
-	cfg.DefaultSystemZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultSystemZoneConfig.GC = &zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}
-	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan
-	cfg.TestingKnobs.DisableMergeQueue = true
-	store := createTestStoreWithConfig(t, stopper, cfg)
+
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:       true,
+				SplitQueuePurgatoryChan: splitQueuePurgatoryChan,
+			},
+			Server: &server.TestingKnobs{
+				ClockSource:                     manualClock.UnixNano,
+				DefaultZoneConfigOverride:       &zoneConfig,
+				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
 
 	// Add a single large row to /Table/14.
 	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.UITableID))
@@ -2597,13 +2638,12 @@ func TestUnsplittableRange(t *testing.T) {
 
 	// Wait for half of the ttl and add another large value in the same row.
 	// Together, these two values bump the range over the max range size.
-	manual.Increment(ttl.Nanoseconds() / 2)
+	manualClock.Increment(ttl.Nanoseconds() / 2)
 	value2Len := 0.2 * maxBytes
 	value2 := bytes.Repeat([]byte("y"), int(value2Len))
 	if err := store.DB().Put(ctx, col1Key, value2); err != nil {
 		t.Fatal(err)
 	}
-
 	// Ensure that an attempt to split the range will hit an
 	// unsplittableRangeError and place the range in purgatory.
 	if err := store.ForceSplitScanAndProcess(); err != nil {
@@ -2621,10 +2661,12 @@ func TestUnsplittableRange(t *testing.T) {
 	}
 
 	// Wait for much longer than the ttl to accumulate GCByteAge.
-	manual.Increment(10 * ttl.Nanoseconds())
+	manualClock.Increment(10 * ttl.Nanoseconds())
 	// Trigger the GC queue, which should clean up the earlier version of the
 	// row. Once the first version of the row is cleaned up, the range should
-	// exit the split queue purgatory.
+	// exit the split queue purgatory. We need to tickle the protected timestamp
+	// subsystem to release a timestamp at which we get to actually remove the data.
+	require.NoError(t, store.GetStoreConfig().ProtectedTimestampCache.Refresh(ctx, s.Clock().Now()))
 	repl := store.LookupReplica(tableKey)
 	if err := store.ManualGC(repl); err != nil {
 		t.Fatal(err)
@@ -2770,20 +2812,37 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 func TestStoreCapacityAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	manualClock := hlc.NewManualClock(123)
-	cfg := kvserver.TestStoreConfig(hlc.NewClock(manualClock.UnixNano, time.Nanosecond))
-	cfg.TestingKnobs.DisableSplitQueue = true
-	cfg.TestingKnobs.DisableMergeQueue = true
-	s := createTestStoreWithOpts(
-		t,
-		testStoreOpts{
-			// This test was written before the test stores were able to start with
-			// more than one range and is not prepared to handle many ranges.
-			dontCreateSystemRanges: true,
-			cfg:                    &cfg},
-		stopper)
+
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ClockSource: manualClock.UnixNano,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	// We conduct the test on the second server, because we can keep it clean
+	// and control exactly which ranges end up on it.
+	s := tc.GetFirstStoreFromServer(t, 1)
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+		if err != nil {
+			return err
+		}
+		if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+			return errors.New("s2 does not own valid lease for this range")
+		}
+		return nil
+	})
 
 	cap, err := s.Capacity(context.Background(), false /* useCached */)
 	if err != nil {
@@ -2793,8 +2852,8 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Errorf("expected cap.RangeCount=%d, got %d", e, a)
 	}
 	bpr1 := cap.BytesPerReplica
-	if bpr1.P10 <= 0 {
-		t.Errorf("expected all bytes-per-replica to be positive, got %+v", bpr1)
+	if bpr1.P10 != 0 {
+		t.Errorf("expected all bytes-per-replica to be 0, got %+v", bpr1)
 	}
 	if bpr1.P10 != bpr1.P25 || bpr1.P10 != bpr1.P50 || bpr1.P10 != bpr1.P75 || bpr1.P10 != bpr1.P90 {
 		t.Errorf("expected all bytes-per-replica percentiles to be identical, got %+v", bpr1)
@@ -2806,11 +2865,11 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 
 	// Increment the manual clock and do a write to increase the qps above zero.
 	manualClock.Increment(int64(kvserver.MinStatsDuration))
-	key := roachpb.Key("a")
-	pArgs := putArgs(key, []byte("aaa"))
+	pArgs := incrementArgs(key, 10)
 	if _, pErr := kv.SendWrapped(context.Background(), s.TestSender(), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
+	tc.WaitForValues(t, key, []int64{10, 10})
 
 	cap, err = s.Capacity(context.Background(), false /* useCached */)
 	if err != nil {
@@ -2845,7 +2904,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	}
 
 	// Split the range to verify stats work properly with more than one range.
-	sArgs := adminSplitArgs(key)
+	sArgs := adminSplitArgs(key.Next().Next())
 	if _, pErr := kv.SendWrapped(context.Background(), s.TestSender(), sArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
