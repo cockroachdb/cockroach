@@ -52,6 +52,9 @@ INSERT INTO t(a,b) VALUES (2, 2)
 statement error cannot write directly to computed column
 INSERT INTO t(a,b,v) VALUES (2, 2, 0)
 
+statement error cannot write directly to computed column
+INSERT INTO t VALUES (2, 2, 0)
+
 # Ensure that the virtual column is produced.
 query III colnames,rowsort
 SELECT * FROM t
@@ -247,6 +250,180 @@ UPDATE t_idx SET b=b+1 RETURNING w
 ----
 3
 7
+
+# Upsert tests on t.
+
+statement ok
+TRUNCATE t
+
+statement error cannot write directly to computed column
+UPSERT INTO t(a,b,v) VALUES (1, 1, 1)
+
+statement error cannot write directly to computed column
+UPSERT INTO t VALUES (1, 1, 1)
+
+statement ok
+UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b   v
+1  10  11
+2  20  22
+3  30  33
+4  40  44
+
+query I colnames,rowsort
+UPSERT INTO t VALUES (3, 31), (5, 50) RETURNING v
+----
+v
+34
+55
+
+query I colnames,rowsort
+INSERT INTO t VALUES (5, 51), (6, 60) ON CONFLICT DO NOTHING RETURNING v
+----
+v
+66
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b   v
+1  10  11
+2  20  22
+3  31  34
+4  40  44
+5  50  55
+6  60  66
+
+statement ok
+INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b    v
+1  10   11
+2  20   22
+3  31   34
+4  44   48
+5  50   55
+6  66   72
+7  100  107
+
+statement ok
+INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b    v
+1  10   11
+2  102  104
+3  31   34
+4  44   48
+5  105  110
+6  66   72
+7  100  107
+8  100  108
+
+# Upsert tests on t_idx.
+
+statement ok
+TRUNCATE t_idx
+
+statement error cannot write directly to computed column
+UPSERT INTO t_idx(a,b,v) VALUES (1, 1, 1)
+
+statement error cannot write directly to computed column
+UPSERT INTO t_idx VALUES (1, 1, 1, 1)
+
+statement ok
+UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
+
+query IIIII colnames,rowsort
+SELECT * FROM t_idx
+----
+a  b   c    v   w
+1  10  100  11  101
+2  20  200  22  201
+3  30  300  33  301
+4  40  400  44  401
+
+query III colnames,rowsort
+UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
+----
+a  v   w
+3  34  302
+5  55  501
+
+# Some rows conflict on the PK, some on w.
+query I colnames,rowsort
+INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
+----
+w
+601
+
+query IIIII colnames,rowsort
+SELECT * FROM t_idx
+----
+a  b   c    v   w
+1  10  100  11  101
+2  20  200  22  201
+3  31  301  34  302
+4  40  400  44  401
+5  50  500  55  501
+6  60  600  66  601
+
+# Conflict on a.
+statement error violates unique constraint
+INSERT INTO t_idx VALUES (1, 80, 900) ON CONFLICT (w) DO NOTHING
+
+# Conflict on w.
+statement error violates unique constraint
+INSERT INTO t_idx VALUES (8, 80, 100) ON CONFLICT (a) DO NOTHING
+
+# Conflict on w.
+statement error violates unique constraint
+INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
+
+query IIIII colnames,rowsort
+INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
+----
+a  b   c    v   w
+4  40  401  44  402
+6  60  601  66  602
+7  70  700  77  701
+
+query IIIII colnames,rowsort
+SELECT * FROM t_idx
+----
+a  b   c    v   w
+1  10  100  11  101
+2  20  200  22  201
+3  31  301  34  302
+4  40  401  44  402
+5  50  500  55  501
+6  60  601  66  602
+7  70  700  77  701
+
+statement ok
+INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
+
+query IIIII colnames,rowsort
+SELECT * FROM t_idx
+----
+a   b   c    v   w
+1   10  100  11  101
+2   20  200  22  201
+3   31  301  34  302
+4   40  401  44  402
+5   50  500  55  501
+6   60  601  66  602
+8   80  800  88  801
+10  70  110  80  111
 
 # Test schema changes with virtual columns.
 
