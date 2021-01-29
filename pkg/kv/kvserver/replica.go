@@ -1577,22 +1577,22 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	return err
 }
 
-func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context) {
 	r.mu.Lock()
-	r.maybeTransferRaftLeadershipLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
 	r.mu.Unlock()
 }
 
-// maybeTransferRaftLeadershipLocked attempts to transfer the leadership away
-// from this node to the leaseholder, if this node is the current raft leader
-// but not the leaseholder. We don't attempt to transfer leadership if the
-// leaseholder is behind on applying the log.
+// maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
+// leadership away from this node to the leaseholder, if this node is the
+// current raft leader but not the leaseholder. We don't attempt to transfer
+// leadership if the leaseholder is behind on applying the log.
 //
 // We like it when leases and raft leadership are collocated because that
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
 // replicas).
-func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Context) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
