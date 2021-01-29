@@ -44,8 +44,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 	var lErr *roachpb.NotLeaseHolderError
 	eligible := errors.As(err, &lErr) &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
-		(!ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
-		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
+		(ba.Txn != nil && !ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 
 	if !eligible {
@@ -65,14 +64,10 @@ func (r *Replica) canServeFollowerReadRLocked(
 		return false
 	}
 
-	ts := ba.Timestamp
-	if ba.Txn != nil {
-		ts.Forward(ba.Txn.GlobalUncertaintyLimit)
-	}
-
+	maxObservableTS := ba.Txn.MaxObservableTimestamp()
 	maxClosed, _ := r.maxClosedRLocked(ctx)
-	canServeFollowerRead := ts.LessEq(maxClosed)
-	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
+	canServeFollowerRead := maxObservableTS.LessEq(maxClosed)
+	tsDiff := maxObservableTS.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
 		uncertaintyLimitStr := "n/a"
 		if ba.Txn != nil {
@@ -127,13 +122,19 @@ func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok boo
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
+	replicaStateClosed := r.mu.state.ClosedTimestamp
 
 	if lease.Expiration != nil {
 		return hlc.Timestamp{}, false
 	}
+	// Look at the legacy closed timestamp propagation mechanism.
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
 	maxClosed.Forward(lease.Start.ToTimestamp())
 	maxClosed.Forward(initialMaxClosed)
+
+	// Look at the "new" closed timestamp propagation mechanism.
+	maxClosed.Forward(replicaStateClosed)
+
 	return maxClosed, true
 }

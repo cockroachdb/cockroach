@@ -95,8 +95,9 @@ func newUnloadedReplica(
 	})
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
-	r.mu.proposalBuf.Init((*replicaProposer)(r))
+	r.mu.proposalBuf.Init((*replicaProposer)(r), r.Clock(), r.ClusterSettings())
 	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
+	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
 
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
