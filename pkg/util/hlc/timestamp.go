@@ -196,6 +196,10 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	// 	// Adding a positive value to a Timestamp adds the Synthetic flag.
 	// 	s.Synthetic = true
 	// }
+	//
+	// When addressing this TODO, remove the hack in
+	// propBuf.assignClosedTimestampToProposal that manually marks lease
+	// expirations as synthetic.
 	return s
 }
 
@@ -357,6 +361,15 @@ func (t Timestamp) TryToClockTimestamp() (ClockTimestamp, bool) {
 // method should only be used in tests.
 func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
 	t.Synthetic = false
+	return ClockTimestamp(t)
+}
+
+// MustToClockTimestamp casts a Timestamp to a ClockTimestamp. Panics if the
+// timestamp is synthetic. See TryToClockTimestamp if you don't want to panic.
+func (t Timestamp) MustToClockTimestamp() ClockTimestamp {
+	if t.Synthetic {
+		panic(fmt.Sprintf("can't convert synthetic timestamp to ClockTimestamp: %s", t))
+	}
 	return ClockTimestamp(t)
 }
 

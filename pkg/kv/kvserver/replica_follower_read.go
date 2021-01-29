@@ -141,13 +141,19 @@ func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok boo
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
+	replicaStateClosed := r.mu.state.ClosedTimestamp
 
 	if lease.Expiration != nil {
 		return hlc.Timestamp{}, false
 	}
+	// Look at the legacy closed timestamp propagation mechanism.
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
 	maxClosed.Forward(lease.Start.ToTimestamp())
 	maxClosed.Forward(initialMaxClosed)
+
+	// Look at the "new" closed timestamp propagation mechanism.
+	maxClosed.Forward(replicaStateClosed)
+
 	return maxClosed, true
 }
