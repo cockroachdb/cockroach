@@ -1100,6 +1100,34 @@ SELECT description
 		},
 	),
 
+	"pg_table_size": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := args[0]
+				n, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_table_size",
+					ctx.Txn,
+					`WITH s (stats, table_id) AS (
+                 SELECT crdb_internal.range_stats(start_key) AS stats, table_name
+                 FROM crdb_internal.ranges_no_leases
+               ) SELECT sum_int((stats->>'key_bytes')::INT8 + (stats->>'val_bytes')::INT8)
+                 FROM s WHERE table_id = $1`, oid)
+				if err != nil {
+					return nil, err
+				}
+				if n[0] == tree.DNull {
+					// We found no ranges for the table, so it must not exist.
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.MustBeDInt(n[0])), nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// pg_type_is_visible returns true if the input oid corresponds to a type
 	// that is part of the databases on the search path, or NULL if no such type
 	// exists. CockroachDB doesn't support the notion of type visibility, so we
