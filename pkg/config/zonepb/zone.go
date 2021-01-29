@@ -531,52 +531,45 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 // CopyFromZone copies over the specified fields from the other zone.
 func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 	for _, fieldName := range fieldList {
-		if fieldName == "num_replicas" {
+		switch fieldName {
+		case "num_replicas":
 			z.NumReplicas = nil
 			if other.NumReplicas != nil {
 				z.NumReplicas = proto.Int32(*other.NumReplicas)
 			}
-		}
-		if fieldName == "num_voters" {
+		case "num_voters":
 			z.NumVoters = nil
 			if other.NumVoters != nil {
 				z.NumVoters = proto.Int32(*other.NumVoters)
 			}
-		}
-		if fieldName == "range_min_bytes" {
+		case "range_min_bytes":
 			z.RangeMinBytes = nil
 			if other.RangeMinBytes != nil {
 				z.RangeMinBytes = proto.Int64(*other.RangeMinBytes)
 			}
-		}
-		if fieldName == "range_max_bytes" {
+		case "range_max_bytes":
 			z.RangeMaxBytes = nil
 			if other.RangeMaxBytes != nil {
 				z.RangeMaxBytes = proto.Int64(*other.RangeMaxBytes)
 			}
-		}
-		if fieldName == "global_reads" {
+		case "global_reads":
 			z.GlobalReads = nil
 			if other.GlobalReads != nil {
 				z.GlobalReads = proto.Bool(*other.GlobalReads)
 			}
-		}
-		if fieldName == "gc.ttlseconds" {
+		case "gc.ttlseconds":
 			z.GC = nil
 			if other.GC != nil {
 				tempGC := *other.GC
 				z.GC = &tempGC
 			}
-		}
-		if fieldName == "constraints" {
+		case "constraints":
 			z.Constraints = other.Constraints
 			z.InheritedConstraints = other.InheritedConstraints
-		}
-		if fieldName == "voter_constraints" {
+		case "voter_constraints":
 			z.VoterConstraints = other.VoterConstraints
 			z.InheritedVoterConstraints = other.InheritedVoterConstraints
-		}
-		if fieldName == "lease_preferences" {
+		case "lease_preferences":
 			z.LeasePreferences = other.LeasePreferences
 			z.InheritedLeasePreferences = other.InheritedLeasePreferences
 		}

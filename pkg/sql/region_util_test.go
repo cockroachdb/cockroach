@@ -185,7 +185,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 		desc           string
 		localityConfig descpb.TableDescriptor_LocalityConfig
 		regionConfig   descpb.DatabaseDescriptor_RegionConfig
-		expected       *zonepb.ZoneConfig
+		expected       zonepb.ZoneConfig
 	}{
 		{
 			desc: "4-region global table with zone survival",
@@ -204,11 +204,11 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
-				NumReplicas:               proto.Int32(4),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
+				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -228,11 +228,11 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
-				NumReplicas:               proto.Int32(4),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
+				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -252,7 +252,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: nil,
+			expected: *(zonepb.NewZoneConfig()),
 		},
 		{
 			desc: "4-region regional by row table with region survival",
@@ -271,7 +271,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: nil,
+			expected: *(zonepb.NewZoneConfig()),
 		},
 		{
 			desc: "4-region regional by table with zone survival on primary region",
@@ -292,7 +292,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: nil,
+			expected: *(zonepb.NewZoneConfig()),
 		},
 		{
 			desc: "4-region regional by table with regional survival on primary region",
@@ -313,7 +313,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
-			expected: nil,
+			expected: *(zonepb.NewZoneConfig()),
 		},
 		{
 			desc: "4-region regional by table with zone survival on non primary region",
@@ -334,7 +334,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				LeasePreferences: []zonepb.LeasePreference{
 					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
@@ -342,6 +342,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				Constraints: []zonepb.ConstraintsConjunction{
 					{NumReplicas: 4, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
 				},
+				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -363,7 +364,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				LeasePreferences: []zonepb.LeasePreference{
 					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
@@ -371,6 +372,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				Constraints: []zonepb.ConstraintsConjunction{
 					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
 				},
+				InheritedVoterConstraints: true,
 			},
 		},
 	}

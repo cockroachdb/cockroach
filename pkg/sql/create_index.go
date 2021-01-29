@@ -579,11 +579,13 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		if err != nil {
 			return err
 		}
-		if err := p.addNewZoneConfigSubzonesForIndex(
+		if err := applyZoneConfigForMultiRegionTable(
 			ctx,
-			tableDesc,
-			indexDesc.ID,
+			p.txn,
+			p.ExecCfg(),
 			*dbDesc.RegionConfig,
+			tableDesc,
+			applyZoneConfigForMultiRegionTableOptionNewIndex(indexDesc.ID),
 		); err != nil {
 			return err
 		}
