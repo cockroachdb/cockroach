@@ -1951,6 +1951,44 @@ project
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
+# Chained fetch val operators.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a'->'b' = '"c"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      └── key: (1)
+
+# Do not generate an inverted scan when the fetch val and equality operators are
+# wrapped in a NOT operator. The -> operator returns NULL if the key does not
+# exist in the JSON object, so (NOT j->'a' = '"b"') is not equivalent to the
+# inverse of the existence of the key/value pair {"a": "b"} in the inverted
+# index. See #49143 and #55316.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE NOT j->'a' = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->'a') != '"b"' [outer=(4), immutable]
+
 # Do not generate an inverted scan when the index of the fetch val operator is
 # not a string.
 opt expect-not=GenerateInvertedIndexScans
