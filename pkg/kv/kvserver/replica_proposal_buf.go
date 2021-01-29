@@ -15,7 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -763,7 +762,7 @@ func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLead
 			// lease again, and by then hopefully we will have caught up.
 			leaderEligibleForLease = true
 		} else {
-			err := batcheval.CheckCanReceiveLease(leaderRep, rangeDesc)
+			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc)
 			leaderEligibleForLease = err == nil
 		}
 	}

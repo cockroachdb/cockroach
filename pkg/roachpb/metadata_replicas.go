@@ -13,6 +13,7 @@ package roachpb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -115,6 +116,10 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFullOrIncoming(rDesc) || predNonVoter(rDesc)
+}
+
+func predVoterFullOrNonVoter(rDesc ReplicaDescriptor) bool {
 	return predVoterFull(rDesc) || predNonVoter(rDesc)
 }
 
@@ -259,10 +264,18 @@ func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predNonVoter)
 }
 
-// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
-// replicas in the set. This set will not contain learners or, during an atomic
-// replication change, incoming or outgoing voters. Notably, this set must
-// encapsulate all replicas of a range for a range merge to proceed.
+// VoterFullAndNonVoterDescriptors returns the descriptors of
+// VOTER_FULL/NON_VOTER replicas in the set. This set will not contain learners
+// or, during an atomic replication change, incoming or outgoing voters.
+// Notably, this set must encapsulate all replicas of a range for a range merge
+// to proceed.
+func (d ReplicaSet) VoterFullAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterFullOrNonVoter)
+}
+
+// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL,
+// VOTER_INCOMING and NON_VOTER replicas in the set. Notably, this is the set of
+// replicas the DistSender will consider routing follower read requests to.
 func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterOrNonVoter)
 }
@@ -479,4 +492,47 @@ func (c ReplicaChangeType) IsRemoval() bool {
 	default:
 		panic(fmt.Sprintf("unexpected ReplicaChangeType %s", c))
 	}
+}
+
+var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
+var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
+
+// CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
+// Returns an error if the respective replica is not eligible.
+//
+// An error is also returned is the replica is not part of `rngDesc`.
+//
+// For now, don't allow replicas of type LEARNER to be leaseholders. There's
+// no reason this wouldn't work in principle, but it seems inadvisable. In
+// particular, learners can't become raft leaders, so we wouldn't be able to
+// co-locate the leaseholder + raft leader, which is going to affect tail
+// latencies. Additionally, as of the time of writing, learner replicas are
+// only used for a short time in replica addition, so it's not worth working
+// out the edge cases.
+func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDescriptor) error {
+	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
+	if !ok {
+		return errReplicaNotFound
+	} else if t := repDesc.GetType(); t != VOTER_FULL {
+		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
+		// but we disallow it anyway. On the other hand, transferring to
+		// VOTER_OUTGOING would be a pretty bad idea since those voters are
+		// dropped when transitioning out of the joint config, which then
+		// amounts to removing the leaseholder without any safety precautions.
+		// This would either wedge the range or allow illegal reads to be
+		// served.
+		//
+		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
+		// also know that in any configuration there's at least one VOTER_FULL.
+		//
+		// TODO(tbg): if this code path is hit during a lease transfer (we check
+		// upstream of raft, but this check has false negatives) then we are in
+		// a situation where the leaseholder is a node that has set its
+		// minProposedTS and won't be using its lease any more. Either the setting
+		// of minProposedTS needs to be "reversible" (tricky) or we make the
+		// lease evaluation succeed, though with a lease that's "invalid" so that
+		// a new lease can be requested right after.
+		return errReplicaCannotHoldLease
+	}
+	return nil
 }

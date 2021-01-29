@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/errors"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -31,48 +30,6 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
-}
-
-// CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
-// Returns an error if the respective replica is not eligible.
-//
-// An error is also returned is the replica is not part of `rngDesc`.
-//
-// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-// no reason this wouldn't work in principle, but it seems inadvisable. In
-// particular, learners can't become raft leaders, so we wouldn't be able to
-// co-locate the leaseholder + raft leader, which is going to affect tail
-// latencies. Additionally, as of the time of writing, learner replicas are
-// only used for a short time in replica addition, so it's not worth working
-// out the edge cases.
-func CheckCanReceiveLease(
-	wouldbeLeaseholder roachpb.ReplicaDescriptor, rngDesc *roachpb.RangeDescriptor,
-) error {
-	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
-	if !ok {
-		return errors.Errorf(`replica %s not found in %s`, wouldbeLeaseholder, rngDesc)
-	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
-		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
-		// but we disallow it anyway. On the other hand, transferring to
-		// VOTER_OUTGOING would be a pretty bad idea since those voters are
-		// dropped when transitioning out of the joint config, which then
-		// amounts to removing the leaseholder without any safety precautions.
-		// This would either wedge the range or allow illegal reads to be
-		// served.
-		//
-		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
-		// also know that in any configuration there's at least one VOTER_FULL.
-		//
-		// TODO(tbg): if this code path is hit during a lease transfer (we check
-		// upstream of raft, but this check has false negatives) then we are in
-		// a situation where the leaseholder is a node that has set its
-		// minProposedTS and won't be using its lease any more. Either the setting
-		// of minProposedTS needs to be "reversible" (tricky) or we make the
-		// lease evaluation succeed, though with a lease that's "invalid" so that
-		// a new lease can be requested right after.
-		return errors.Errorf(`replica %s of type %s cannot hold lease`, repDesc, t)
-	}
-	return nil
 }
 
 // evalNewLease checks that the lease contains a valid interval and that

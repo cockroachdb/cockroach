@@ -628,11 +628,11 @@ func (r *Replica) AdminMerge(
 		// queues should fix things up quickly).
 		lReplicas, rReplicas := origLeftDesc.Replicas(), rightDesc.Replicas()
 
-		if len(lReplicas.VoterAndNonVoterDescriptors()) != len(lReplicas.Descriptors()) {
+		if len(lReplicas.VoterFullAndNonVoterDescriptors()) != len(lReplicas.Descriptors()) {
 			return errors.Errorf("cannot merge ranges when lhs is in a joint state or has learners: %s",
 				lReplicas)
 		}
-		if len(rReplicas.VoterAndNonVoterDescriptors()) != len(rReplicas.Descriptors()) {
+		if len(rReplicas.VoterFullAndNonVoterDescriptors()) != len(rReplicas.Descriptors()) {
 			return errors.Errorf("cannot merge ranges when rhs is in a joint state or has learners: %s",
 				rReplicas)
 		}
@@ -2472,7 +2472,7 @@ func (s *Store) relocateOne(
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
-	if repls := desc.Replicas(); len(repls.VoterAndNonVoterDescriptors()) != len(repls.Descriptors()) {
+	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
 		// shouldn't be anything but voters and non_voters.
 		return nil, nil, errors.AssertionFailedf(
