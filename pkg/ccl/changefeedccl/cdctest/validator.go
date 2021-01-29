@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,15 +37,17 @@ type Validator interface {
 // StreamClientValidatorWrapper wraps a Validator and exposes additional methods
 // used by stream ingestion to check for correctness.
 type StreamClientValidatorWrapper interface {
+	Validator
 	GetValuesForKeyBelowTimestamp(key string, timestamp hlc.Timestamp) ([]roachpb.KeyValue, error)
-	GetValidator() Validator
 }
 
 type streamValidator struct {
 	Validator
+	mu syncutil.Mutex
 }
 
 var _ StreamClientValidatorWrapper = &streamValidator{}
+var _ Validator = &streamValidator{}
 
 // NewStreamClientValidatorWrapper returns a wrapped Validator, that can be used
 // to validate the events emitted by the cluster to cluster streaming client.
@@ -55,13 +58,8 @@ var _ StreamClientValidatorWrapper = &streamValidator{}
 func NewStreamClientValidatorWrapper() StreamClientValidatorWrapper {
 	ov := NewOrderValidator("unusedC2C")
 	return &streamValidator{
-		ov,
+		Validator: ov,
 	}
-}
-
-// GetValidator implements the StreamClientValidatorWrapper interface.
-func (sv *streamValidator) GetValidator() Validator {
-	return sv.Validator
 }
 
 // GetValuesForKeyBelowTimestamp implements the StreamClientValidatorWrapper
@@ -71,9 +69,9 @@ func (sv *streamValidator) GetValidator() Validator {
 func (sv *streamValidator) GetValuesForKeyBelowTimestamp(
 	key string, timestamp hlc.Timestamp,
 ) ([]roachpb.KeyValue, error) {
-	orderValidator, ok := sv.GetValidator().(*orderValidator)
+	orderValidator, ok := sv.Validator.(*orderValidator)
 	if !ok {
-		return nil, errors.Newf("unknown validator %T: ", sv.GetValidator())
+		return nil, errors.Newf("unknown validator %T: ", sv.Validator)
 	}
 	timestampValueTuples := orderValidator.keyTimestampAndValues[key]
 	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
@@ -92,6 +90,27 @@ func (sv *streamValidator) GetValuesForKeyBelowTimestamp(
 	}
 
 	return kv, nil
+}
+
+// NoteRow implements the Validator interface.
+func (sv *streamValidator) NoteRow(
+	partition string, key, value string, updated hlc.Timestamp,
+) error {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.Validator.NoteRow(partition, key, value, updated)
+}
+
+// NoteResolved implements the Validator interface.
+func (sv *streamValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.Validator.NoteResolved(partition, resolved)
+}
+
+// Failures implements the Validator interface.
+func (sv *streamValidator) Failures() []string {
+	return sv.Validator.Failures()
 }
 
 type timestampValue struct {

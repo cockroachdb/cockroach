@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -94,19 +95,21 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
 	sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
-	unusedPartitionAddress := streamingccl.PartitionAddress("")
-	events := []streamingccl.Event{
-		streamingccl.MakeKVEvent(sampleKV, unusedPartitionAddress),
-		streamingccl.MakeKVEvent(sampleKV, unusedPartitionAddress),
-		streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, unusedPartitionAddress),
-		streamingccl.MakeKVEvent(sampleKV, unusedPartitionAddress),
-		streamingccl.MakeKVEvent(sampleKV, unusedPartitionAddress),
-		streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, unusedPartitionAddress),
+	getEvents := func(partition streamingccl.PartitionAddress) []streamingccl.Event {
+		return []streamingccl.Event{
+			streamingccl.MakeKVEvent(sampleKV, partition),
+			streamingccl.MakeKVEvent(sampleKV, partition),
+			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, partition),
+			streamingccl.MakeKVEvent(sampleKV, partition),
+			streamingccl.MakeKVEvent(sampleKV, partition),
+			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, partition),
+		}
 	}
 	pa1 := streamingccl.PartitionAddress("partition1")
 	pa2 := streamingccl.PartitionAddress("partition2")
 	mockClient := &mockStreamClient{
-		partitionEvents: map[streamingccl.PartitionAddress][]streamingccl.Event{pa1: events, pa2: events},
+		partitionEvents: map[streamingccl.PartitionAddress][]streamingccl.Event{pa1: getEvents(pa1),
+			pa2: getEvents(pa2)},
 	}
 
 	startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -225,6 +228,19 @@ func assertEqualKVs(
 	}
 }
 
+func makeTestStreamURI(
+	valueRange, kvsPerResolved, numPartitions, tenantID int,
+	kvFrequency time.Duration,
+	dupProbability float64,
+) string {
+	return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
+		"&KV_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
+		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
+		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
+		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32) +
+		"&TENANT_ID=" + strconv.Itoa(tenantID)
+}
+
 // TestRandomClientGeneration tests the ingestion processor against a random
 // stream workload.
 func TestRandomClientGeneration(t *testing.T) {
@@ -232,17 +248,6 @@ func TestRandomClientGeneration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	makeTestStreamURI := func(
-		valueRange, kvsPerResolved, numPartitions int,
-		kvFrequency time.Duration, dupProbability float64,
-	) string {
-		return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
-			"&KV_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
-			"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
-			"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
-			"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32)
-	}
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -256,8 +261,8 @@ func TestRandomClientGeneration(t *testing.T) {
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 4
 	dupProbability := 0.2
-	streamAddr := makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency,
-		dupProbability)
+	streamAddr := makeTestStreamURI(valueRange, kvsPerResolved, numPartitions,
+		int(roachpb.SystemTenantID.ToUint64()), kvFrequency, dupProbability)
 
 	// The random client returns system and table data partitions.
 	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
@@ -271,9 +276,10 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
-	cancelAfterCheckpoints := makeCheckpointEventCounter(1000, cancel)
+	mu := syncutil.Mutex{}
+	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
 	streamValidator := cdctest.NewStreamClientValidatorWrapper()
-	validator := registerValidator(streamValidator.GetValidator())
+	validator := registerValidatorWithClient(streamValidator)
 	out, err := runStreamIngestionProcessor(ctx, t, kvDB, streamAddr, topo.Partitions,
 		startTime, []func(streamingccl.Event){cancelAfterCheckpoints, validator}, nil /* mockClient */)
 	require.NoError(t, err)
@@ -317,7 +323,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	}
 
 	// Ensure that no errors were reported to the validator.
-	for _, failure := range streamValidator.GetValidator().Failures() {
+	for _, failure := range streamValidator.Failures() {
 		t.Error(failure)
 	}
 
@@ -391,7 +397,7 @@ func runStreamIngestionProcessor(
 	return out, err
 }
 
-func registerValidator(validator cdctest.Validator) func(event streamingccl.Event) {
+func registerValidatorWithClient(validator cdctest.Validator) func(event streamingccl.Event) {
 	return func(event streamingccl.Event) {
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
@@ -416,13 +422,19 @@ func registerValidator(validator cdctest.Validator) func(event streamingccl.Even
 
 // makeCheckpointEventCounter runs f after seeing `threshold` number of
 // checkpoint events.
-func makeCheckpointEventCounter(threshold int, f func()) func(streamingccl.Event) {
+func makeCheckpointEventCounter(
+	mu *syncutil.Mutex, threshold int, f func(),
+) func(streamingccl.Event) {
+	mu.Lock()
+	defer mu.Unlock()
 	numCheckpointEventsGenerated := 0
 	return func(event streamingccl.Event) {
+		mu.Lock()
+		defer mu.Unlock()
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
 			numCheckpointEventsGenerated++
-			if numCheckpointEventsGenerated > threshold {
+			if numCheckpointEventsGenerated == threshold {
 				f()
 			}
 		}
