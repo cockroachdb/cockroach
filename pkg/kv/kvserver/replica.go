@@ -198,9 +198,9 @@ type Replica struct {
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
 
-	// leaseholderStats tracks all incoming BatchRequests to the replica and which
+	// replicaStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
-	leaseholderStats *replicaStats
+	replicaStats *replicaStats
 	// writeStats tracks the number of keys written by applied raft commands
 	// in order to aid in replica rebalancing decisions.
 	writeStats *replicaStats

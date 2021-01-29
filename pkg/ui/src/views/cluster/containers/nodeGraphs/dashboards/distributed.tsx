@@ -21,10 +21,10 @@ import {
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources } = props;
+  const { nodeIDs, nodesSummary, nodeSources, storeSources } = props;
 
   return [
-    <LineGraph title="Batches" sources={nodeSources}>
+    <LineGraph title="Batches Sent" sources={nodeSources}>
       <Axis label="batches">
         <Metric
           name="cr.node.distsender.batches"
@@ -36,6 +36,13 @@ export default function (props: GraphDashboardProps) {
           title="Partial Batches"
           nonNegativeRate
         />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Successful Read-Only Batches" sources={storeSources}>
+      <Axis label="batches">
+        <Metric name="cr.store.requests.success.total_read_count" title="Total Reads" nonNegativeRate/>
+        <Metric name="cr.store.requests.success.follower_read_count" title="Follower Reads" nonNegativeRate/>
       </Axis>
     </LineGraph>,
 

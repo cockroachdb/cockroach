@@ -280,7 +280,7 @@ func verifySQLLatency(
 	}
 }
 
-const followerReadsMetric = "follower_reads_success_count"
+const followerReadsMetric = "requests_success_follower_read_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
