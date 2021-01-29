@@ -463,7 +463,8 @@ type Writer interface {
 	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
 	// ClearIntent by always doing single-clear.
 	ClearIntent(
-		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
+		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	) (separatedIntentCountDelta int, _ error)
 	// ClearEngineKey removes the item from the db with the given EngineKey.
 	// Note that clear actually removes entries from the storage engine. This is
 	// a general-purpose and low-level method that should be used sparingly,
@@ -558,7 +559,7 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(
 		key roachpb.Key, value []byte, state PrecedingIntentState, txnDidNotUpdateMeta bool,
-		txnUUID uuid.UUID) error
+		txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
