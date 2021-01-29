@@ -428,7 +428,8 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		return nil, makeNonDeterministicFailure("applied index jumped from %d to %d", applied, idx)
 	}
 	if log.V(4) {
-		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", cmd.idKey, cmd.raftCmd.MaxLeaseIndex)
+		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d closedts: %s idx: %d",
+			cmd.idKey, cmd.raftCmd.MaxLeaseIndex, cmd.raftCmd.ClosedTimestamp, cmd.ent.Index)
 	}
 
 	// Determine whether the command should be applied to the replicated state
@@ -436,13 +437,24 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
 	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+		log.VEventf(ctx, 1, "applying command %x with forced error: %s", cmd.raftCmd.ClosedTimestamp, cmd.forcedErr)
 
 		// Apply an empty command.
 		cmd.raftCmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
 		cmd.raftCmd.WriteBatch = nil
 		cmd.raftCmd.LogicalOpLog = nil
+		cmd.raftCmd.ClosedTimestamp.Reset()
 	} else {
+		// !!! Find a way to assert that this command is not writing below the replica's closed ts.
+		// Check that the closed timestamp doesn't regress.
+		// !!! I also assert the same in stateTrivialEvalResult. De-dup?
+		cts := cmd.raftCmd.ClosedTimestamp
+		if !cts.IsEmpty() && cts.Less(b.state.ClosedTimestamp) {
+			return nil, makeNonDeterministicFailure(
+				"closed timestamp regressing from %s to %s when applying command %x with MLAI %d:%d",
+				b.state.ClosedTimestamp, cts, cmd.idKey, cmd.raftCmd.ProposerLeaseSequence, cmd.raftCmd.MaxLeaseIndex)
+		}
+
 		log.Event(ctx, "applying command")
 	}
 
@@ -492,7 +504,9 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// non-trivial commands will be in their own batch, so delaying their
 	// non-trivial ReplicatedState updates until later (without ever staging
 	// them in the batch) is sufficient.
-	b.stageTrivialReplicatedEvalResult(ctx, cmd)
+	if err := b.stageTrivialReplicatedEvalResult(ctx, cmd); err != nil {
+		return nil, err
+	}
 	b.entries++
 	if len(cmd.ent.Data) == 0 {
 		b.emptyEntries++
@@ -623,7 +637,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r)
+		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r, cmd.raftCmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -800,13 +814,22 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 // inspect the command's ReplicatedEvalResult.
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
-) {
+) error {
 	if raftAppliedIndex := cmd.ent.Index; raftAppliedIndex != 0 {
 		b.state.RaftAppliedIndex = raftAppliedIndex
 	}
 	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
+	if cts := cmd.raftCmd.ClosedTimestamp; !cts.IsEmpty() {
+		if cts.Less(b.state.ClosedTimestamp) {
+			return wrapWithNonDeterministicFailure(errors.Errorf(
+				"regressing timestamp from %s to %s", b.state.ClosedTimestamp, cts),
+				"failed to stage trivial eval result")
+		}
+		b.state.ClosedTimestamp = cts
+	}
+
 	res := cmd.replicatedResult()
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats delta
@@ -818,6 +841,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	if res.State != nil && res.State.UsingAppliedStateKey && !b.state.UsingAppliedStateKey {
 		b.migrateToAppliedStateKey = true
 	}
+	return nil
 }
 
 // ApplyToStateMachine implements the apply.Batch interface. The method handles
@@ -860,10 +884,16 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	b.batch.Close()
 	b.batch = nil
 
-	// Update the replica's applied indexes and mvcc stats.
+	// Update the replica's applied indexes, mvcc stats and closed timestamp.
 	r.mu.Lock()
 	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
 	r.mu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
+	closedTimestampUpdated := !r.mu.state.ClosedTimestamp.Equal(b.state.ClosedTimestamp)
+	if closedTimestampUpdated {
+		// Overwrite the replica's closed timestamp. We've already asserted that the
+		// batch contains a higher timestamp than the existing one.
+		r.mu.state.ClosedTimestamp = b.state.ClosedTimestamp
+	}
 	prevStats := *r.mu.state.Stats
 	*r.mu.state.Stats = *b.state.Stats
 
@@ -879,6 +909,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
 	tenantID := r.mu.tenantID
 	r.mu.Unlock()
+	if closedTimestampUpdated {
+		// TODO(andrei): Pass in the new closed timestamp to r.handleClosedTimestampUpdateRaftMuLocked
+		// directly after the old closed ts tracked goes away. Until then we can't do it; we have to let
+		// the method consult r.maxClosed().
+		r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+	}
 
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
@@ -926,7 +962,9 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 		// Set the range applied state, which includes the last applied raft and
 		// lease index along with the mvcc stats, all in one key.
 		if err := loader.SetRangeAppliedState(
-			ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.Stats,
+			ctx, b.batch,
+			b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
+			b.state.ClosedTimestamp, b.state.Stats,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to set range applied state")
 		}

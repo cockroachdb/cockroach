@@ -156,6 +156,7 @@ func Subsume(
 		reply.ClosedTS = closedTS
 	}
 
+	// !!! FreezeStart should be bumped to the closed timestamp
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
 	}, nil

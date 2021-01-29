@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -54,6 +56,8 @@ type testProposer struct {
 	// is. Some types of replicas are not eligible to get a lease.
 	leaderReplicaType roachpb.ReplicaType
 }
+
+var _ proposer = &testProposer{}
 
 type testProposerRaft struct {
 	status raft.BasicStatus
@@ -97,6 +101,14 @@ func (t *testProposer) leaseAppliedIndex() uint64 {
 
 func (t *testProposer) enqueueUpdateCheck() {
 	t.enqueued++
+}
+
+func (t *testProposer) closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	return roachpb.LAG_BY_CLUSTER_SETTING
+}
+
+func (rp *testProposer) raftAppliedClosedTimestamp() hlc.Timestamp {
+	return hlc.MinTimestamp
 }
 
 func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
@@ -152,15 +164,20 @@ func (t *testProposer) rejectProposalWithRedirectLocked(
 
 func newPropData(leaseReq bool) (*ProposalData, []byte) {
 	var ba roachpb.BatchRequest
+	pd := &ProposalData{
+		command: &kvserverpb.RaftCommand{
+			ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+				State: &kvserverpb.ReplicaState{Lease: &roachpb.Lease{}},
+			},
+		},
+		Request: &ba,
+	}
 	if leaseReq {
 		ba.Add(&roachpb.RequestLeaseRequest{})
 	} else {
 		ba.Add(&roachpb.PutRequest{})
 	}
-	return &ProposalData{
-		command: &kvserverpb.RaftCommand{},
-		Request: &ba,
-	}, make([]byte, 0, kvserverpb.MaxRaftCommandFooterSize())
+	return pd, make([]byte, 0, kvserverpb.MaxRaftCommandFooterSize())
 }
 
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.
@@ -171,14 +188,16 @@ func TestProposalBuffer(t *testing.T) {
 
 	var p testProposer
 	var b propBuf
-	b.Init(&p)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	b.Init(&p, clock, cluster.MakeTestingClusterSettings())
 
 	// Insert propBufArrayMinSize proposals. The buffer should not be flushed.
 	num := propBufArrayMinSize
 	for i := 0; i < num; i++ {
 		leaseReq := i == 3
 		pd, data := newPropData(leaseReq)
-		mlai, err := b.Insert(ctx, pd, data)
+		_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+		mlai, err := b.Insert(ctx, pd, data, tok)
 		require.Nil(t, err)
 		if leaseReq {
 			expMlai := uint64(i)
@@ -195,12 +214,14 @@ func TestProposalBuffer(t *testing.T) {
 		require.Equal(t, 1, p.enqueued)
 		require.Equal(t, 0, p.registered)
 	}
+	require.Equal(t, num, b.evalTracker.Count())
 
 	// Insert another proposal. This causes the buffer to flush. Doing so
 	// results in a lease applied index being skipped, which is harmless.
 	// Remember that the lease request above did not receive a lease index.
 	pd, data := newPropData(false)
-	mlai, err := b.Insert(ctx, pd, data)
+	_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+	mlai, err := b.Insert(ctx, pd, data, tok)
 	require.Nil(t, err)
 	expMlai := uint64(num + 1)
 	require.Equal(t, expMlai, mlai)
@@ -211,6 +232,7 @@ func TestProposalBuffer(t *testing.T) {
 	require.Equal(t, num, p.registered)
 	require.Equal(t, uint64(num), b.liBase)
 	require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
+	require.Equal(t, 1, b.evalTracker.Count())
 
 	// Increase the proposer's applied lease index and flush. The buffer's
 	// lease index offset should jump up.
@@ -223,7 +245,8 @@ func TestProposalBuffer(t *testing.T) {
 
 	// Insert one more proposal. The lease applied index should adjust to
 	// the increase accordingly.
-	mlai, err = b.Insert(ctx, pd, data)
+	_, tok = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+	mlai, err = b.Insert(ctx, pd, data, tok)
 	require.Nil(t, err)
 	expMlai = p.lai + 1
 	require.Equal(t, expMlai, mlai)
@@ -251,7 +274,8 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 
 	var p testProposer
 	var b propBuf
-	b.Init(&p)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	b.Init(&p, clock, cluster.MakeTestingClusterSettings())
 
 	mlais := make(map[uint64]struct{})
 	dsErr := errors.New("destroyed")
@@ -263,7 +287,8 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 		g.Go(func() error {
 			for {
 				pd, data := newPropData(false)
-				mlai, err := b.Insert(ctx, pd, data)
+				_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+				mlai, err := b.Insert(ctx, pd, data, tok)
 				if err != nil {
 					if errors.Is(err, dsErr) {
 						return nil
@@ -322,12 +347,15 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 
 	var p testProposer
 	var b propBuf
-	b.Init(&p)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	b.Init(&p, clock, cluster.MakeTestingClusterSettings())
 
 	num := propBufArrayMinSize
+	toks := make([]TrackedRequestToken, num)
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(false)
-		_, err := b.Insert(ctx, pd, data)
+		_, toks[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+		_, err := b.Insert(ctx, pd, data, toks[i])
 		require.Nil(t, err)
 	}
 	require.Equal(t, num, b.Len())
@@ -345,6 +373,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	err := b.flushLocked(ctx)
 	require.Equal(t, propErr, err)
 	require.Equal(t, num, p.registered)
+	require.Zero(t, b.evalTracker.Count())
 }
 
 // TestProposalBufferRegistrationWithInsertionErrors tests that if during
@@ -357,12 +386,15 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 
 	var p testProposer
 	var b propBuf
-	b.Init(&p)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	b.Init(&p, clock, cluster.MakeTestingClusterSettings())
 
 	num := propBufArrayMinSize / 2
+	toks1 := make([]TrackedRequestToken, num)
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(i%2 == 0)
-		_, err := b.Insert(ctx, pd, data)
+		_, toks1[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+		_, err := b.Insert(ctx, pd, data, toks1[i])
 		require.Nil(t, err)
 	}
 
@@ -371,9 +403,11 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		return 0, insertErr
 	}
 
+	toks2 := make([]TrackedRequestToken, num)
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(i%2 == 0)
-		_, err := b.Insert(ctx, pd, data)
+		_, toks2[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+		_, err := b.Insert(ctx, pd, data, toks2[i])
 		require.Equal(t, insertErr, err)
 	}
 	require.Equal(t, 2*num, b.Len())
@@ -382,6 +416,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 
 	require.Equal(t, 0, b.Len())
 	require.Equal(t, num, p.registered)
+	require.Zero(t, b.evalTracker.Count())
 }
 
 // TestPropBufCnt tests the basic behavior of the counter maintained by the
@@ -526,10 +561,12 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.leaderReplicaType = tc.leaderRepType
 
 			var b propBuf
-			b.Init(&p)
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			b.Init(&p, clock, cluster.MakeTestingClusterSettings())
 
 			pd, data := newPropData(true /* leaseReq */)
-			_, err := b.Insert(ctx, pd, data)
+			_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
+			_, err := b.Insert(ctx, pd, data, tok)
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			if tc.expRejection {

@@ -114,6 +114,13 @@ type ProposalData struct {
 	// here; this could be replaced with isLease and isChangeReplicas
 	// booleans.
 	Request *roachpb.BatchRequest
+	// leaseStatus represents the lease under which the Request was evaluated and
+	// under which this proposal is being made.
+	leaseStatus kvserverpb.LeaseStatus
+
+	// tok identifies the request to the propBuf. Once the proposal is made, the
+	// token will be used to stop tracking this request.
+	tok TrackedRequestToken
 }
 
 // finishApplication is called when a command application has finished. The
@@ -159,6 +166,10 @@ func (proposal *ProposalData) releaseQuota() {
 		proposal.quotaAlloc.Release()
 		proposal.quotaAlloc = nil
 	}
+}
+
+func (proposal *ProposalData) alreadyP() {
+
 }
 
 // TODO(tschottdorf): we should find new homes for the checksum, lease
@@ -302,6 +313,11 @@ A file preventing this node from restarting was placed at:
 func (r *Replica) leasePostApplyLocked(
 	ctx context.Context, newLease roachpb.Lease, permitJump bool,
 ) {
+	ctx = r.AnnotateCtx(ctx)
+	// Note that we actually install the lease further down in this method.
+	// Everything we do before then doesn't need to worry about requests being
+	// evaluated under the new lease.
+
 	// Pull out the last lease known to this Replica. It's possible that this is
 	// not actually the last lease in the Range's lease sequence because the
 	// Replica may have missed the application of a lease between prevLease and
@@ -394,6 +410,8 @@ func (r *Replica) leasePostApplyLocked(
 	// enabled. (In practice, since both happen under `r.mu`, it is likely
 	// to not matter).
 	r.concMgr.OnRangeLeaseUpdated(newLease.Sequence, iAmTheLeaseHolder)
+
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.ClosedTimestamp)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
@@ -816,6 +834,7 @@ func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	st kvserverpb.LeaseStatus,
 	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
@@ -823,11 +842,12 @@ func (r *Replica) requestToProposal(
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
-		ctx:     ctx,
-		idKey:   idKey,
-		doneCh:  make(chan proposalResult, 1),
-		Local:   &res.Local,
-		Request: ba,
+		ctx:         ctx,
+		idKey:       idKey,
+		doneCh:      make(chan proposalResult, 1),
+		Local:       &res.Local,
+		Request:     ba,
+		leaseStatus: st,
 	}
 
 	if needConsensus {

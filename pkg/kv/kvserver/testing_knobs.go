@@ -239,6 +239,8 @@ type StoreTestingKnobs struct {
 	// heartbeats and then expect other replicas to take the lease without
 	// worrying about Raft).
 	AllowLeaseRequestProposalsWhenNotLeader bool
+	// DontCloseTimestamps inhibits the propBuf's closing of timestamps.
+	DontCloseTimestamps bool
 	// AllowDangerousReplicationChanges disables safeguards
 	// in execChangeReplicasTxn that prevent moving
 	// to a configuration that cannot make progress.
