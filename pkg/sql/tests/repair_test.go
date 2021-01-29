@@ -258,54 +258,47 @@ func TestDescriptorRepair(t *testing.T) {
 		after              []string
 	}{
 		{
-			op: `
-SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
-'{
-  "table": {
-    "columns": [ { "id": 1, "name": "i" } ],
-    "families": [
-      {
-        "columnIds": [ 1 ],
-        "columnNames": [ "i" ],
-        "defaultColumnId": 0,
-        "id": 0,
-        "name": "primary"
-      }
-    ],
-    "formatVersion": 3,
-    "id": 59,
-    "name": "foo",
-    "nextColumnId": 2,
-    "nextFamilyId": 1,
-    "nextIndexId": 2,
-    "nextMutationId": 1,
-    "parentId": 52,
-    "primaryIndex": {
-      "columnDirections": [ "ASC" ],
-      "columnIds": [ 1 ],
-      "columnNames": [ "i" ],
-      "id": 1,
-      "name": "primary",
-      "type": "FORWARD",
-      "unique": true,
-      "version": 1
-    },
-    "privileges": {
-      "owner_proto": "root",
-      "users": [ { "privileges": 2, "user_proto": "admin" }, { "privileges": 2, "user_proto": "root" } ],
-      "version": 1
-    },
-    "state": "PUBLIC",
-    "unexposedParentSchemaId": 29,
-    "version": 1
-  }
-}
-'))
-`,
+			op: upsertRepair,
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_upsert_descriptor",
 					info: `"DescriptorID":59`,
+				},
+				{
+					typ:  "alter_table_owner",
+					info: `"DescriptorID":59,"TableName":"foo","Owner":"root"`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"root","GrantedPrivileges":\["ALL"\]`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"admin","GrantedPrivileges":\["ALL"\]`,
+				},
+			},
+		},
+		{
+			before: []string{
+				upsertRepair,
+			},
+			op: upsertUpdatePrivileges,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  "alter_table_owner",
+					info: `"DescriptorID":59,"TableName":"foo","Owner":"admin"`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"root","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"newuser","GrantedPrivileges":\["CREATE"\]`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"admin","RevokedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -585,5 +578,100 @@ SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor)
 		updateInvalidateDuplicateColumnDescriptorCTEs + `
 SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor, true)
   FROM updated;
+`
+
+	// This is a statement to repair an invalid descriptor using
+	// crdb_internal.unsafe_upsert_descriptor.
+	upsertRepair = `
+SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
+'{
+  "table": {
+    "columns": [ { "id": 1, "name": "i" } ],
+    "families": [
+      {
+        "columnIds": [ 1 ],
+        "columnNames": [ "i" ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 59,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 1,
+    "parentId": 52,
+    "primaryIndex": {
+      "columnDirections": [ "ASC" ],
+      "columnIds": [ 1 ],
+      "columnNames": [ "i" ],
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 1
+    },
+    "privileges": {
+      "owner_proto": "root",
+      "users": [ { "privileges": 2, "user_proto": "admin" }, { "privileges": 2, "user_proto": "root" } ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}
+'))
+`
+
+	// This is a statement to update the above descriptor's privileges.
+	// It will change the table owner, add privileges for a new user,
+	// alter the privilege of an existing user, and revoke all privileges for an old user.
+	upsertUpdatePrivileges = `
+SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
+'{
+  "table": {
+    "columns": [ { "id": 1, "name": "i" } ],
+    "families": [
+      {
+        "columnIds": [ 1 ],
+        "columnNames": [ "i" ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 59,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 1,
+    "parentId": 52,
+    "primaryIndex": {
+      "columnDirections": [ "ASC" ],
+      "columnIds": [ 1 ],
+      "columnNames": [ "i" ],
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 1
+    },
+    "privileges": {
+      "owner_proto": "admin",
+      "users": [ { "privileges": 5, "user_proto": "newuser" }, { "privileges": 8, "user_proto": "root" } ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}
+'))
 `
 )

@@ -163,8 +163,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			if t.ColumnDef.Unique.WithoutIndex {
-				return pgerror.New(pgcode.FeatureNotSupported,
-					"unique constraints without an index are not yet supported",
+				// TODO(rytaft): add support for this in the future if we want to expose
+				// UNIQUE WITHOUT INDEX to users.
+				return errors.WithHint(
+					pgerror.New(
+						pgcode.FeatureNotSupported,
+						"adding a column marked as UNIQUE WITHOUT INDEX is unsupported",
+					),
+					"add the column first, then run ALTER TABLE ... ADD CONSTRAINT to add a "+
+						"UNIQUE WITHOUT INDEX constraint on the column",
 				)
 			}
 			var err error
@@ -178,10 +185,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.WithoutIndex {
-					return pgerror.New(pgcode.FeatureNotSupported,
-						"unique constraints without an index are not yet supported",
-					)
+					if err := addUniqueWithoutIndexTableDef(
+						params.ctx,
+						params.EvalContext(),
+						params.SessionData(),
+						d,
+						n.tableDesc,
+						NonEmptyTable,
+						t.ValidationBehavior,
+					); err != nil {
+						return err
+					}
+					continue
 				}
+
 				if d.PrimaryKey {
 					// We only support "adding" a primary key when we are using the
 					// default rowid primary index or if a DROP PRIMARY KEY statement
@@ -738,10 +755,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
-					// TODO(rytaft): Call validateUniqueConstraint once supported.
-					return pgerror.New(pgcode.FeatureNotSupported,
-						"validation of unique constraints without an index are not yet supported",
-					)
+					if err := validateUniqueConstraintInTxn(
+						params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
+					); err != nil {
+						return err
+					}
+					foundUnique.Validity = descpb.ConstraintValidity_Validated
+					break
 				}
 
 				// This unique constraint is enforced by an index, so fall through to

@@ -3083,11 +3083,9 @@ func (desc *Mutable) DropConstraint(
 					)
 					return nil
 				}
-				// TODO(rytaft): set validity to Dropping and call AddUniqueMutation
-				// once supported.
-				return pgerror.New(pgcode.FeatureNotSupported,
-					"dropping valid unique constraints without an index is not yet supported",
-				)
+				ref.Validity = descpb.ConstraintValidity_Dropping
+				desc.AddUniqueWithoutIndexMutation(ref, descpb.DescriptorMutation_DROP)
+				return nil
 			}
 		}
 		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
@@ -3334,7 +3332,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			case descpb.ConstraintToUpdate_CHECK:
 				switch t.Constraint.Check.Validity {
 				case descpb.ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
+					// Constraint already added, just mark it as Validated.
 					for _, c := range desc.Checks {
 						if c.Name == t.Constraint.Name {
 							c.Validity = descpb.ConstraintValidity_Validated
@@ -3343,7 +3341,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 					}
 				case descpb.ConstraintValidity_Unvalidated:
 					// add the constraint to the list of check constraints on the table
-					// descriptor
+					// descriptor.
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				default:
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
@@ -3351,7 +3349,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				switch t.Constraint.ForeignKey.Validity {
 				case descpb.ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
+					// Constraint already added, just mark it as Validated.
 					for i := range desc.OutboundFKs {
 						fk := &desc.OutboundFKs[i]
 						if fk.Name == t.Constraint.Name {
@@ -3366,8 +3364,31 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 					// TODO (tyler): Combine both of these tasks in the same place.
 					desc.OutboundFKs = append(desc.OutboundFKs, t.Constraint.ForeignKey)
 				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				switch t.Constraint.UniqueWithoutIndexConstraint.Validity {
+				case descpb.ConstraintValidity_Validating:
+					// Constraint already added, just mark it as Validated.
+					for i := range desc.UniqueWithoutIndexConstraints {
+						uc := &desc.UniqueWithoutIndexConstraints[i]
+						if uc.Name == t.Constraint.Name {
+							uc.Validity = descpb.ConstraintValidity_Validated
+							break
+						}
+					}
+				case descpb.ConstraintValidity_Unvalidated:
+					// add the constraint to the list of unique without index constraints
+					// on the table descriptor.
+					desc.UniqueWithoutIndexConstraints = append(
+						desc.UniqueWithoutIndexConstraints, t.Constraint.UniqueWithoutIndexConstraint,
+					)
+				default:
+					return errors.AssertionFailedf("invalid constraint validity state: %d",
+						t.Constraint.UniqueWithoutIndexConstraint.Validity,
+					)
+				}
 			case descpb.ConstraintToUpdate_NOT_NULL:
-				// Remove the dummy check constraint that was in place during validation
+				// Remove the dummy check constraint that was in place during
+				// validation.
 				for i, c := range desc.Checks {
 					if c.Name == t.Constraint.Check.Name {
 						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
@@ -3617,6 +3638,24 @@ func (desc *Mutable) AddForeignKeyMutation(
 				ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
 				Name:           fk.Name,
 				ForeignKey:     *fk,
+			},
+		},
+		Direction: direction,
+	}
+	desc.addMutation(m)
+}
+
+// AddUniqueWithoutIndexMutation adds a unqiue without index constraint mutation
+// to desc.Mutations.
+func (desc *Mutable) AddUniqueWithoutIndexMutation(
+	uc *descpb.UniqueWithoutIndexConstraint, direction descpb.DescriptorMutation_Direction,
+) {
+	m := descpb.DescriptorMutation{
+		Descriptor_: &descpb.DescriptorMutation_Constraint{
+			Constraint: &descpb.ConstraintToUpdate{
+				ConstraintType:               descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
+				Name:                         uc.Name,
+				UniqueWithoutIndexConstraint: *uc,
 			},
 		},
 		Direction: direction,

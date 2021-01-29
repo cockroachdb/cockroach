@@ -232,6 +232,11 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 					}
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+					if t.Constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
 				case descpb.ConstraintToUpdate_NOT_NULL:
 					// NOT NULL constraints are always validated before they can be added
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
@@ -421,6 +426,26 @@ func (sc *SchemaChanger) dropConstraints(
 						constraint,
 					)
 				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				found := false
+				for j, c := range scTable.UniqueWithoutIndexConstraints {
+					if c.Name == constraint.Name {
+						scTable.UniqueWithoutIndexConstraints = append(
+							scTable.UniqueWithoutIndexConstraints[:j],
+							scTable.UniqueWithoutIndexConstraints[j+1:]...,
+						)
+						found = true
+						break
+					}
+				}
+				if !found {
+					log.VEventf(
+						ctx, 2,
+						"backfiller tried to drop constraint %+v but it was not found, "+
+							"presumably due to a retry or rollback",
+						constraint,
+					)
+				}
 			}
 		}
 		if err := descsCol.WriteDescToBatch(
@@ -564,6 +589,28 @@ func (sc *SchemaChanger) addConstraints(
 						}
 					}
 				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				found := false
+				for _, c := range scTable.UniqueWithoutIndexConstraints {
+					if c.Name == constraint.Name {
+						log.VEventf(
+							ctx, 2,
+							"backfiller tried to add constraint %+v but found existing constraint %+v, "+
+								"presumably due to a retry or rollback",
+							constraint, c,
+						)
+						// Ensure the constraint on the descriptor is set to Validating, in
+						// case we're in the middle of rolling back DROP CONSTRAINT
+						c.Validity = descpb.ConstraintValidity_Validating
+						found = true
+						break
+					}
+				}
+				if !found {
+					scTable.UniqueWithoutIndexConstraints = append(
+						scTable.UniqueWithoutIndexConstraints, constraints[i].UniqueWithoutIndexConstraint,
+					)
+				}
 			}
 		}
 		if err := descsCol.WriteDescToBatch(
@@ -661,6 +708,10 @@ func (sc *SchemaChanger) validateConstraints(
 					}
 				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
+						return err
+					}
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+					if err := validateUniqueConstraintInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
 				case descpb.ConstraintToUpdate_NOT_NULL:
@@ -1878,6 +1929,16 @@ func runSchemaChangesInTxn(
 							break
 						}
 					}
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+					for i := range tableDesc.UniqueWithoutIndexConstraints {
+						if tableDesc.UniqueWithoutIndexConstraints[i].Name == t.Constraint.Name {
+							tableDesc.UniqueWithoutIndexConstraints = append(
+								tableDesc.UniqueWithoutIndexConstraints[:i],
+								tableDesc.UniqueWithoutIndexConstraints[i+1:]...,
+							)
+							break
+						}
+					}
 				default:
 					return errors.AssertionFailedf(
 						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
@@ -1975,6 +2036,15 @@ func runSchemaChangesInTxn(
 			//
 			// For now, just always add the FK as unvalidated.
 			constraint.ForeignKey.Validity = descpb.ConstraintValidity_Unvalidated
+		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+			if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
+				if err := validateUniqueConstraintInTxn(
+					ctx, planner.Descriptors().LeaseManager(), planner.EvalContext(), tableDesc, planner.txn, constraint.Name,
+				); err != nil {
+					return err
+				}
+				constraint.UniqueWithoutIndexConstraint.Validity = descpb.ConstraintValidity_Validated
+			}
 		default:
 			return errors.AssertionFailedf(
 				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
@@ -2017,6 +2087,10 @@ func runSchemaChangesInTxn(
 					return err
 				}
 			}
+		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+			tableDesc.UniqueWithoutIndexConstraints = append(
+				tableDesc.UniqueWithoutIndexConstraints, constraint.UniqueWithoutIndexConstraint,
+			)
 		default:
 			return errors.AssertionFailedf(
 				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
@@ -2110,6 +2184,55 @@ func validateFkInTxn(
 	}
 
 	return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
+}
+
+// validateUniqueConstraintInTxn validates a unique constraint within the
+// provided transaction. If the provided table descriptor version is newer than
+// the cluster version, it will be used in the InternalExecutor that performs
+// the validation query.
+//
+// TODO (lucy): The special case where the table descriptor version is the same
+// as the cluster version only happens because the query in VALIDATE CONSTRAINT
+// still runs in the user transaction instead of a step in the schema changer.
+// When that's no longer true, this function should be updated.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing kv.Txn safely.
+func validateUniqueConstraintInTxn(
+	ctx context.Context,
+	leaseMgr *lease.Manager,
+	evalCtx *tree.EvalContext,
+	tableDesc *tabledesc.Mutable,
+	txn *kv.Txn,
+	constraintName string,
+) error {
+	ie := evalCtx.InternalExecutor.(*InternalExecutor)
+	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
+		// pretend that the schema has been modified.
+		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
+			return err
+		}
+
+		ie.tcModifier = newTc
+		defer func() {
+			ie.tcModifier = nil
+		}()
+	}
+
+	var uc *descpb.UniqueWithoutIndexConstraint
+	for i := range tableDesc.UniqueWithoutIndexConstraints {
+		def := &tableDesc.UniqueWithoutIndexConstraints[i]
+		if def.Name == constraintName {
+			uc = def
+			break
+		}
+	}
+	if uc == nil {
+		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
+	}
+
+	return validateUniqueConstraint(ctx, tableDesc, uc, ie, txn)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in

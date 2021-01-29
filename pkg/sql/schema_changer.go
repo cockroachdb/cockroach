@@ -1707,13 +1707,11 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 				return nil
 			}
 		}
-		if log.V(2) {
-			log.Infof(
-				ctx,
-				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
-				constraint.Check.Name,
-			)
-		}
+		log.Infof(
+			ctx,
+			"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+			constraint.Check.Name,
+		)
 	case descpb.ConstraintToUpdate_FOREIGN_KEY:
 		for i, fk := range desc.OutboundFKs {
 			if fk.Name == constraint.ForeignKey.Name {
@@ -1721,13 +1719,28 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 				return nil
 			}
 		}
-		if log.V(2) {
-			log.Infof(
-				ctx,
-				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
-				constraint.ForeignKey.Name,
-			)
+		log.Infof(
+			ctx,
+			"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+			constraint.ForeignKey.Name,
+		)
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+			return nil
 		}
+		for j, c := range desc.UniqueWithoutIndexConstraints {
+			if c.Name == constraint.UniqueWithoutIndexConstraint.Name {
+				desc.UniqueWithoutIndexConstraints = append(
+					desc.UniqueWithoutIndexConstraints[:j], desc.UniqueWithoutIndexConstraints[j+1:]...,
+				)
+				return nil
+			}
+		}
+		log.Infof(
+			ctx,
+			"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+			constraint.UniqueWithoutIndexConstraint.Name,
+		)
 	default:
 		return errors.AssertionFailedf("unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 	}
