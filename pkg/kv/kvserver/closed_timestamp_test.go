@@ -65,53 +65,107 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	// drives up the test duration.
 	skip.UnderRace(t)
 
+	testutils.RunTrueAndFalse(t, "withNonVoters", func(t *testing.T, withNonVoters bool) {
+		ctx := context.Background()
+		dbName, tableName := "cttest", "kv"
+		clusterArgs := aggressiveResolvedTimestampClusterArgs
+		// Disable the replicateQueue so that it doesn't interfere with replica
+		// membership ranges.
+		clusterArgs.ReplicationMode = base.ReplicationManual
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+			testingCloseFraction, clusterArgs, dbName, tableName)
+		defer tc.Stopper().Stop(ctx)
+
+		if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+			t.Fatal(err)
+		}
+
+		if withNonVoters {
+			desc = tc.AddNonVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1),
+				tc.Target(2))
+		} else {
+			desc = tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1),
+				tc.Target(2))
+		}
+
+		repls := replsForRange(ctx, t, tc, desc, numNodes)
+		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		baRead := makeReadBatchRequestForDesc(desc, ts)
+		testutils.SucceedsSoon(t, func() error {
+			return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+		})
+
+		// We just served a follower read. As a sanity check, make sure that we can't write at
+		// that same timestamp.
+		{
+			var baWrite roachpb.BatchRequest
+			r := &roachpb.DeleteRequest{}
+			r.Key = desc.StartKey.AsRawKey()
+			txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100)
+			baWrite.Txn = &txn
+			baWrite.Add(r)
+			baWrite.RangeID = repls[0].RangeID
+			if err := baWrite.SetActiveTimestamp(tc.Server(0).Clock().Now); err != nil {
+				t.Fatal(err)
+			}
+
+			var found bool
+			for _, repl := range repls {
+				resp, pErr := repl.Send(ctx, baWrite)
+				if errors.HasType(pErr.GoError(), (*roachpb.NotLeaseHolderError)(nil)) {
+					continue
+				} else if pErr != nil {
+					t.Fatal(pErr)
+				}
+				found = true
+				if resp.Txn.WriteTimestamp.LessEq(ts) || resp.Txn.ReadTimestamp == resp.Txn.WriteTimestamp {
+					t.Fatal("timestamp did not get bumped")
+				}
+				break
+			}
+			if !found {
+				t.Fatal("unable to send to any replica")
+			}
+		}
+	})
+}
+
+func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Limiting how long transactions can run does not work well with race unless
+	// we're extremely lenient, which drives up the test duration.
+	skip.UnderRace(t)
+
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	dbName, tableName := "cttest", "kv"
+	clusterArgs := aggressiveResolvedTimestampClusterArgs
+	clusterArgs.ReplicationMode = base.ReplicationManual
+	knobs, ltk := makeReplicationTestKnobs()
+	clusterArgs.ServerArgs.Knobs = knobs
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction,
+		clusterArgs, dbName, tableName)
 	defer tc.Stopper().Stop(ctx)
-	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
 	}
+	// Add a new voting replica, which should get the range into a joint config.
+	// It will stay in that state because of the `ReplicaAddStopAfterJointConfig`
+	// testing knob `makeReplicationTestKnobs()`.
+	ltk.withStopAfterJointConfig(func() {
+		tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+	})
 
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	reqTS := tc.Server(0).Clock().Now()
+	// Sleep for a sufficiently long time so that reqTS can be closed.
+	time.Sleep(3 * testingTargetDuration)
+	baRead := makeReadBatchRequestForDesc(desc, reqTS)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
-
-	// We just served a follower read. As a sanity check, make sure that we can't write at
-	// that same timestamp.
-	{
-		var baWrite roachpb.BatchRequest
-		r := &roachpb.DeleteRequest{}
-		r.Key = desc.StartKey.AsRawKey()
-		txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100)
-		baWrite.Txn = &txn
-		baWrite.Add(r)
-		baWrite.RangeID = repls[0].RangeID
-		if err := baWrite.SetActiveTimestamp(tc.Server(0).Clock().Now); err != nil {
-			t.Fatal(err)
-		}
-
-		var found bool
-		for _, repl := range repls {
-			resp, pErr := repl.Send(ctx, baWrite)
-			if errors.HasType(pErr.GoError(), (*roachpb.NotLeaseHolderError)(nil)) {
-				continue
-			} else if pErr != nil {
-				t.Fatal(pErr)
-			}
-			found = true
-			if resp.Txn.WriteTimestamp.LessEq(ts) || resp.Txn.ReadTimestamp == resp.Txn.WriteTimestamp {
-				t.Fatal("timestamp did not get bumped")
-			}
-			break
-		}
-		if !found {
-			t.Fatal("unable to send to any replica")
-		}
-	}
 }
 
 // TestClosedTimestampCanServerThroughoutLeaseTransfer verifies that lease
@@ -892,6 +946,21 @@ func setupClusterForClosedTSTestingWithSplitRanges(
 	return tc, leftDesc, rightDesc
 }
 
+func getEncodedKeyForTable(
+	t *testing.T, db *gosql.DB, dbName, tableName string, val tree.Datum,
+) roachpb.Key {
+	tableID, err := getTableID(db, dbName, tableName)
+	if err != nil {
+		t.Fatalf("failed to lookup ids: %+v", err)
+	}
+	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
+	k, err := rowenc.EncodeTableKey(idxPrefix, val, encoding.Ascending)
+	if err != nil {
+		t.Fatalf("failed to encode split key: %+v", err)
+	}
+	return k
+}
+
 // splitDummyRangeInTestCluster is supposed to be used in conjunction with the
 // dummy table created in setupTestClusterWithDummyRange. It adds two rows to
 // the given table and performs splits on the table's range such that the 2
@@ -912,26 +981,14 @@ func splitDummyRangeInTestCluster(
 		t.Fatal(err)
 	}
 	// Manually split the table to have easier access to descriptors.
-	tableID, err := getTableID(db0, dbName, tableName)
-	if err != nil {
-		t.Fatalf("failed to lookup ids: %+v", err)
-	}
-
-	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(1), encoding.Ascending)
-	if err != nil {
-		t.Fatalf("failed to encode split key: %+v", err)
-	}
+	k := getEncodedKeyForTable(t, db0, dbName, tableName, tree.NewDInt(1))
 	tcImpl := tc.(*testcluster.TestCluster)
-	// Split at `k` so that the table has exactly two ranges: [1,2) and [2, Max).
-	// This split will never be merged by the merge queue so the expiration time
-	// doesn't matter here.
+	// Split at `1` and `2` so that the table has exactly two ranges: [1,2) and
+	// [2, Max). This first split will never be merged by the merge queue so the
+	// expiration time doesn't matter here.
 	tcImpl.SplitRangeOrFatal(t, k)
-	idxPrefix = keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err = rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
-	if err != nil {
-		t.Fatalf("failed to encode split key: %+v", err)
-	}
+
+	k = getEncodedKeyForTable(t, db0, dbName, tableName, tree.NewDInt(2))
 	leftDesc, rightDesc, err := tcImpl.SplitRangeWithExpiration(k, splitExpirationTime)
 	require.NoError(t, err)
 
@@ -1166,7 +1223,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 	return nil
 }
 
-// setupTestClusterWithDummyRange creates a TestCluster with an empty table and
+// setupTestClusterWithDummyRange creates a TestCluster with an empty table. It
 // returns a handle to the range descriptor corresponding to this table.
 func setupTestClusterWithDummyRange(
 	t *testing.T, clusterArgs base.TestClusterArgs, dbName, tableName string, numNodes int,
@@ -1180,36 +1237,37 @@ func setupTestClusterWithDummyRange(
 -- forever under high load (testrace under high concurrency).
 SET statement_timeout='30s';
 CREATE DATABASE %[1]s;
-CREATE TABLE %[1]s.%[2]s (id INT PRIMARY KEY, value STRING);
+CREATE TABLE %[1]s.%[2]s (id INT PRIMARY KEY CHECK (id >= 0), value STRING);
 -- Reset the timeout set above.
 RESET statement_timeout;
 `, dbName, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
-	var rangeID roachpb.RangeID
-	var startKey roachpb.Key
 	var numReplicas int
+	var err error
+	var desc roachpb.RangeDescriptor
 	// If replicate queue is not disabled, wait until the table's range is fully
 	// replicated.
 	if clusterArgs.ReplicationMode != base.ReplicationManual {
 		testutils.SucceedsSoon(t, func() error {
 			if err := db0.QueryRow(
 				fmt.Sprintf(
-					`SELECT range_id, start_key, array_length(replicas, 1) FROM crdb_internal.ranges WHERE table_name = '%s' AND database_name = '%s'`,
-					tableName, dbName),
-			).Scan(&rangeID, &startKey, &numReplicas); err != nil {
+					`SELECT array_length(replicas, 1) FROM crdb_internal.ranges
+WHERE table_name = '%s' AND database_name = '%s'`, tableName, dbName),
+			).Scan(&numReplicas); err != nil {
 				return err
 			}
 			if numReplicas != numNodes {
 				return errors.New("not fully replicated yet")
 			}
+			require.Nil(t, err)
 			return nil
 		})
 	}
-
-	desc, err := tc.LookupRange(startKey)
-	require.Nil(t, err)
+	startKey := getEncodedKeyForTable(t, tc.ServerConn(0), dbName, tableName, tree.NewDInt(0))
+	_, desc, err = tc.Server(0).SplitRange(startKey)
+	require.NoError(t, err)
 	return tc, desc
 }
 

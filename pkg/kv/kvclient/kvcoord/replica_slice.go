@@ -39,18 +39,32 @@ func (i ReplicaInfo) addr() string {
 // A ReplicaSlice is a slice of ReplicaInfo.
 type ReplicaSlice []ReplicaInfo
 
+// ReplicaSliceFilter controls which kinds of replicas are to be included in
+// the slice for routing BatchRequests to.
+type ReplicaSliceFilter int
+
+const (
+	// OnlyPotentialLeaseholders prescribes that the ReplicaSlice should include
+	// only replicas that are allowed to be leaseholders (i.e. replicas of type
+	// VOTER_FULL).
+	OnlyPotentialLeaseholders ReplicaSliceFilter = iota
+	// AllExtantReplicas prescribes that the ReplicaSlice should include all
+	// replicas that are not LEARNERs, VOTER_OUTGOING, or
+	// VOTER_DEMOTING_{LEARNER/NON_VOTER}.
+	AllExtantReplicas
+)
+
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
 //
-// Generally, only voting replicas are returned. However, if a non-nil
-// leaseholder is passed in, it will be included in the result even if the
-// descriptor has it as a learner (we assert that the leaseholder is part of the
-// descriptor). The idea is that the descriptor might be stale and list the
-// leaseholder as a learner erroneously, and lease info is a strong signal in
-// that direction. Note that the returned ReplicaSlice might still not include
-// the leaseholder if info for the respective node is missing from the
-// NodeDescStore.
+// Generally, learners are not returned. However, if a non-nil leaseholder is
+// passed in, it will be included in the result even if the descriptor has it as
+// a learner (we assert that the leaseholder is part of the descriptor). The
+// idea is that the descriptor might be stale and list the leaseholder as a
+// learner erroneously, and lease info is a strong signal in that direction.
+// Note that the returned ReplicaSlice might still not include the leaseholder
+// if info for the respective node is missing from the NodeDescStore.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
@@ -59,21 +73,36 @@ func NewReplicaSlice(
 	nodeDescs NodeDescStore,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
+	filter ReplicaSliceFilter,
 ) (ReplicaSlice, error) {
 	if leaseholder != nil {
 		if _, ok := desc.GetReplicaDescriptorByID(leaseholder.ReplicaID); !ok {
 			log.Fatalf(ctx, "leaseholder not in descriptor; leaseholder: %s, desc: %s", leaseholder, desc)
 		}
 	}
+	canReceiveLease := func(rDesc roachpb.ReplicaDescriptor) bool {
+		if err := roachpb.CheckCanReceiveLease(rDesc, desc); err != nil {
+			return false
+		}
+		return true
+	}
 
-	// Learner replicas won't serve reads/writes, so we'll send only to the
-	// `VoterDescriptors` replicas. This is just an optimization to save a network hop,
-	// everything would still work if we had `All` here.
-	voters := desc.Replicas().VoterDescriptors()
+	// Learner replicas won't serve reads/writes, so we'll send only to the voters
+	// and non-voting replicas. This is just an optimization to save a network
+	// hop, everything would still work if we had `All` here.
+	var replicas []roachpb.ReplicaDescriptor
+	switch filter {
+	case OnlyPotentialLeaseholders:
+		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
+	case AllExtantReplicas:
+		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
+	default:
+		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
+	}
 	// If we know a leaseholder, though, let's make sure we include it.
-	if leaseholder != nil && len(voters) < len(desc.Replicas().Descriptors()) {
+	if leaseholder != nil && len(replicas) < len(desc.Replicas().Descriptors()) {
 		found := false
-		for _, v := range voters {
+		for _, v := range replicas {
 			if v == *leaseholder {
 				found = true
 				break
@@ -81,11 +110,11 @@ func NewReplicaSlice(
 		}
 		if !found {
 			log.Eventf(ctx, "the descriptor has the leaseholder as a learner; including it anyway")
-			voters = append(voters, *leaseholder)
+			replicas = append(replicas, *leaseholder)
 		}
 	}
-	rs := make(ReplicaSlice, 0, len(voters))
-	for _, r := range voters {
+	rs := make(ReplicaSlice, 0, len(replicas))
+	for _, r := range replicas {
 		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {

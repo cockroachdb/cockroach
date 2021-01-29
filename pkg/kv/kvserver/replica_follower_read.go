@@ -52,16 +52,14 @@ func (r *Replica) canServeFollowerRead(
 		return pErr
 	}
 
-	// There's no known reason that a non-VOTER_FULL replica couldn't serve follower
-	// reads (or RangeFeed), but as of the time of writing, these are expected
-	// to be short-lived, so it's not worth working out the edge-cases. Revisit if
-	// we add long-lived learners or feel that incoming/outgoing voters also need
-	// to be able to serve follower reads.
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	if typ := repDesc.GetType(); typ != roachpb.VOTER_FULL {
+
+	switch typ := repDesc.GetType(); typ {
+	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
+	default:
 		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
 		return pErr
 	}

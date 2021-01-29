@@ -341,7 +341,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			require.Error(t, err)
 			require.Regexp(t,
 				// The error generated during evaluation.
-				"replica.*of type VOTER_DEMOTING cannot hold lease|"+
+				"replica cannot hold lease|"+
 					// If the lease transfer request has not yet made it to the latching
 					// phase by the time we close(ch) below, we can receive the following
 					// error due to the sanity checking which happens in

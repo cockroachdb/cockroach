@@ -47,9 +47,9 @@ func TestNewReplicaSlice(t *testing.T) {
 	ctx := context.Background()
 	rd := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1},
-			{NodeID: 2, StoreID: 2},
-			{NodeID: 3, StoreID: 3},
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
 		},
 	}
 	ns := &mockNodeStore{
@@ -68,21 +68,34 @@ func TestNewReplicaSlice(t *testing.T) {
 			},
 		},
 	}
-	rs, err := NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	rs, err := NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 
 	// Check that learners are not included.
 	typLearner := roachpb.LEARNER
 	rd.InternalReplicas[2].Type = &typLearner
-	rs, err = NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
+	require.NoError(t, err)
+	require.Equal(t, 2, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllExtantReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
 
-	// Check that, if the leasehoder points to a learner, that learner is
+	// Check that non-voters are included iff we ask for them to be.
+	typNonVoter := roachpb.NON_VOTER
+	rd.InternalReplicas[2].Type = &typNonVoter
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllExtantReplicas)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
+	require.NoError(t, err)
+	require.Equal(t, 2, rs.Len())
+
+	// Check that, if the leaseholder points to a learner, that learner is
 	// included.
-	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
-	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder)
+	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
+	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 }

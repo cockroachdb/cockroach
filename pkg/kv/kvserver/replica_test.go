@@ -1000,7 +1000,7 @@ func TestReplicaLease(t *testing.T) {
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
-			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "replica \\(n0,s0\\):\\? not found in r1") {
+			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "replica not found") {
 			t.Fatalf("unexpected error: %+v", err)
 		}
 	}
