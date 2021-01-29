@@ -816,7 +816,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, false /* isInverted */)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd)
 	constraint = ic.Constraint()
 	if constraint.IsUnconstrained() {
 		return nil, nil, false
