@@ -7,7 +7,8 @@
   margin-bottom: 7px;
 }
 
-.cl-count-title, .last-cleared-title {
+.cl-count-title,
+.last-cleared-title {
   font-family: $font-family--base;
   font-size: 14px;
   padding: 0px;
@@ -50,4 +51,21 @@ h2.base-heading {
 .root {
   flex-grow: 0;
   width: 100%;
+}
+
+.app-filter-dropdown {
+  /* 
+    we are truncating the text in the filter, 
+    but need to constrain to a width
+  */
+  max-width: 75ch;
+}
+
+.app-filter-dropdown-item {
+  /*
+    Truncating and constrainging the width of the 
+    items in the app filter dropdown
+  */
+  max-width: 80ch;
+  @include text-overflow;
 }

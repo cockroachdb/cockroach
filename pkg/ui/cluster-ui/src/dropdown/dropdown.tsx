@@ -14,6 +14,13 @@ export interface DropdownOption<T = string> {
   disabled?: boolean;
 }
 
+export interface DropdownItemProps<T> {
+  children: React.ReactNode;
+  value: T;
+  onClick: (value: T) => void;
+  disabled?: boolean;
+  className?: string;
+}
 export interface DropdownProps<T> {
   items: Array<DropdownOption<T>>;
   onChange: (item: DropdownOption<T>["value"]) => void;
@@ -22,6 +29,7 @@ export interface DropdownProps<T> {
   customToggleButtonOptions?: Partial<ButtonProps>;
   menuPosition?: "left" | "right";
   className?: string;
+  itemsClassname?: string;
 }
 
 interface DropdownState {
@@ -53,13 +61,17 @@ const DropdownButton: React.FC<DropdownButtonProps> = ({
 };
 
 function DropdownItem<T = string>(props: DropdownItemProps<T>) {
-  const { children, value, onClick, disabled } = props;
+  const { children, value, onClick, disabled, className } = props;
   return (
     <div
       onClick={() => onClick(value)}
-      className={cx("crl-dropdown__item", {
-        "crl-dropdown__item--disabled": disabled,
-      })}
+      className={cx(
+        "crl-dropdown__item",
+        {
+          "crl-dropdown__item--disabled": disabled,
+        },
+        className,
+      )}
     >
       {children}
     </div>
@@ -111,7 +123,12 @@ export class Dropdown<T = string> extends React.Component<
   };
 
   render() {
-    const { items, menuPosition = "left", className } = this.props;
+    const {
+      items,
+      menuPosition = "left",
+      className,
+      itemsClassname,
+    } = this.props;
     const { isOpen } = this.state;
 
     const menuStyles = cx(
@@ -128,6 +145,7 @@ export class Dropdown<T = string> extends React.Component<
         onClick={this.handleItemSelection}
         key={idx}
         disabled={menuItem.disabled}
+        className={itemsClassname}
       >
         {menuItem.name}
       </DropdownItem>
@@ -151,11 +169,4 @@ export class Dropdown<T = string> extends React.Component<
       </div>
     );
   }
-}
-
-export interface DropdownItemProps<T> {
-  children: React.ReactNode;
-  value: T;
-  onClick: (value: T) => void;
-  disabled?: boolean;
 }
