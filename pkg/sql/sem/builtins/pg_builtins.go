@@ -16,6 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -1097,6 +1100,63 @@ SELECT description
 			},
 			Info:       notUsableInfo,
 			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"pg_total_relation_size": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				descID := tree.MustBeDOid(args[0])
+				tablePrefix := ctx.Codec.TablePrefix(uint32(descID.DInt))
+
+				// Collect all range descriptors for the table.
+				ranges, err := kvclient.ScanMetaKVs(ctx.Context, ctx.Txn, roachpb.Span{
+					Key:    tablePrefix,
+					EndKey: tablePrefix.PrefixEnd(),
+				})
+				if err != nil {
+					return nil, err
+				}
+				if len(ranges) == 0 {
+					return tree.DNull, nil
+				}
+
+				b := &kv.Batch{}
+				var desc roachpb.RangeDescriptor
+				// Retrieve the RangeStats for each range descriptor.
+				for i := range ranges {
+					if err := ranges[i].ValueProto(&desc); err != nil {
+						return nil, err
+					}
+					startKey := desc.StartKey.AsRawKey()
+					if _, tableID, err := ctx.Codec.DecodeTablePrefix(startKey); err != nil || int(tableID) != int(descID.DInt) {
+						// This range either had non-table data or contains other tables.
+						// In either case, it means the table that was queried for does not
+						// exist, so return null.
+						return tree.DNull, nil
+					}
+					b.AddRawRequest(&roachpb.RangeStatsRequest{
+						RequestHeader: roachpb.RequestHeader{
+							Key: startKey,
+						},
+					})
+				}
+				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+					return nil, err
+				}
+				var nBytes int64
+				// Sum up the bytes in each RangeStats response.
+				for i := range b.RawResponse().Responses {
+					stats := b.RawResponse().Responses[i].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
+					nBytes += stats.KeyBytes + stats.ValBytes
+				}
+
+				return tree.NewDInt(tree.DInt(nBytes)), nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 

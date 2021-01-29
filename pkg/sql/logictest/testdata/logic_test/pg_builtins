@@ -80,3 +80,14 @@ query I
 SELECT pg_column_size(NULL::int)
 ----
 NULL
+
+statement ok
+CREATE TABLE size_tester (a PRIMARY KEY, b) AS SELECT g,g+1 FROM generate_series(1,100) g(g)
+
+# In tests, this returns NULL because ranges don't appear properly in
+# crdb_internal.ranges in the logic test context.
+# Make sure also that a non-existent table id returns null.
+query II
+SELECT pg_total_relation_size('size_tester'::regclass), pg_total_relation_size(387438)
+----
+NULL  NULL
