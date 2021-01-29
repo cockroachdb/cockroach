@@ -143,6 +143,9 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // nil, then the missing node ID is treated as live and will prevent the range
 // from quiescing.
 //
+// The current time is passed as a parameter in order to reduce HLC contention,
+// by obtaining a single timestamp and reusing it across operations.
+//
 // TODO(peter): There remains a scenario in which a follower is left unquiesced
 // while the leader is quiesced: the follower's receive queue is full and the
 // "quiesce" message is dropped. This seems very very unlikely because if the
@@ -150,8 +153,10 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap liveness.IsLiveMap) bool {
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), livenessMap)
+func (r *Replica) maybeQuiesceLocked(
+	ctx context.Context, livenessMap liveness.IsLiveMap, now hlc.Timestamp,
+) bool {
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap)
 	if !ok {
 		return false
 	}
