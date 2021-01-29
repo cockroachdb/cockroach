@@ -360,6 +360,10 @@ type Replica struct {
 		// consumed, commands are proposed through Raft and moved to the
 		// proposals map.
 		//
+		// The propBuf is the one closing timestamps, so evaluating writes must be
+		// registered with the propBuf through TrackEvaluatingRequest before their
+		// write timestamp is decided.
+		//
 		// Access to proposalBuf must occur *without* holding the mutex.
 		// Instead, the buffer internally holds a reference to mu and will use
 		// it appropriately.

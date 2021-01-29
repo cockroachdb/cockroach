@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -169,6 +170,9 @@ func (t *lockfreeTracker) Untrack(ctx context.Context, tok RemovalToken) {
 	b := tok.(lockfreeToken).b
 	// Note that atomic ops are not required here, as we hold the exclusive lock.
 	b.refcnt--
+	if b.refcnt < 0 {
+		log.Fatalf(ctx, "negative bucket refcount: %d", b.refcnt)
+	}
 	if b.refcnt == 0 {
 		// Reset the bucket, so that future Track() calls can create a new one.
 		b.ts = 0
@@ -196,6 +200,11 @@ func (t *lockfreeTracker) LowerBound(ctx context.Context) hlc.Timestamp {
 		Logical:   0,
 		Synthetic: t.b1.isSynthetic(),
 	}
+}
+
+// Count is part of the Tracker interface.
+func (t *lockfreeTracker) Count() int {
+	return int(t.b1.refcnt) + int(t.b2.refcnt)
 }
 
 // bucket represent a Tracker bucket: a data structure that coalesces a number

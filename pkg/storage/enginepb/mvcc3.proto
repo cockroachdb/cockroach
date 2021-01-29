@@ -203,6 +203,19 @@ message RangeAppliedState {
   // range_stats is the set of mvcc stats that accounts for the current value
   // of the Raft state machine.
   MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+
+  // closed_timestamp is the largest timestamp that is known to have been closed
+  // as of this lease applied index. This means that the current leaseholder (if
+  // any) and any future leaseholder will not evaluate writes at or below this
+  // timestamp, and also that any in-flight commands that can still apply are
+  // writing at higher timestamps. Non-leaseholder replicas are free to serve
+  // "follower reads" at or below this timestamp.
+  //
+  // TODO(andrei): Make this field not-nullable in 21.2, once all the ranges
+  // have a closed timestamp applied to their state (this might need a
+  // migration). In 21.1 we cannot write empty timestamp to disk because that
+  // looks like an inconsistency to the consistency-checker.
+  util.hlc.Timestamp closed_timestamp = 4;
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a

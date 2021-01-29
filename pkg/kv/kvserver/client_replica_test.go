@@ -3332,7 +3332,7 @@ func TestProposalOverhead(t *testing.T) {
 	// overhead is that users ranges do not have rangefeeds on by default whereas
 	// system ranges do.
 	const (
-		expectedUserOverhead uint32 = 42
+		expectedUserOverhead uint32 = 45
 	)
 	t.Run("user-key overhead", func(t *testing.T) {
 		userKey := tc.ScratchRange(t)

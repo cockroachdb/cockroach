@@ -124,3 +124,10 @@ func (h *heapTracker) LowerBound(ctx context.Context) hlc.Timestamp {
 	}
 	return h.mu.rs[0].ts
 }
+
+// Count is part of the Tracker interface.
+func (h *heapTracker) Count() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.rs.Len()
+}

@@ -88,6 +88,25 @@ func (r *Replica) executeWriteBatch(
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
+	// Start tracking this request. The act of tracking also gives us a closed
+	// timestamp, which we must ensure to evaluate above of. We're going to pass
+	// in minTS to applyTimestampCache(), which bumps us accordingly if necessary.
+	// We need to start tracking this request before we know the final write
+	// timestamp at which this request will evaluate because we need to atomically
+	// read the closed timestamp and start to be tracked.
+	// TODO(andrei): The timestamp cache might bump us above the timestamp at
+	// which we're registering with the proposalBuf. In that case, this request
+	// will be tracked at an unnecessarily low timestamp. We could invent an
+	// interface through which to communicate the updated timestamp to the
+	// proposalBuf.
+	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
+	defer tok.DoneIfNotMoved(ctx)
+	minTS.Forward(minTS2)
+
+	if !ba.IsSingleSkipLeaseCheckRequest() && st.Expiration().Less(minTS) {
+		log.Fatalf(ctx, "closed timestamp above lease expiration (%s vs %s): %s", minTS, st.Expiration(), ba)
+	}
+
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
 	// write, the txn timestamp and possible write-too-old bool.
@@ -120,7 +139,7 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit)
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
