@@ -115,10 +115,10 @@ type SpanResolverIterator interface {
 
 // spanResolver implements SpanResolver.
 type spanResolver struct {
-	st            *cluster.Settings
-	distSender    *kvcoord.DistSender
-	nodeDesc      roachpb.NodeDescriptor
-	oracleFactory replicaoracle.OracleFactory
+	st         *cluster.Settings
+	distSender *kvcoord.DistSender
+	nodeDesc   roachpb.NodeDescriptor
+	oracle     replicaoracle.Oracle
 }
 
 var _ SpanResolver = &spanResolver{}
@@ -135,7 +135,7 @@ func NewSpanResolver(
 	return &spanResolver{
 		st:       st,
 		nodeDesc: nodeDesc,
-		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
+		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
 			NodeDescs:  nodeDescs,
 			NodeDesc:   nodeDesc,
 			Settings:   st,
@@ -147,6 +147,8 @@ func NewSpanResolver(
 
 // spanResolverIterator implements the SpanResolverIterator interface.
 type spanResolverIterator struct {
+	// txn is the transaction using the iterator.
+	txn *kv.Txn
 	// it is a wrapped RangeIterator.
 	it *kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
@@ -167,8 +169,9 @@ var _ SpanResolverIterator = &spanResolverIterator{}
 // NewSpanResolverIterator creates a new SpanResolverIterator.
 func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
+		txn:        txn,
 		it:         kvcoord.NewRangeIterator(sr.distSender),
-		oracle:     sr.oracleFactory.Oracle(txn),
+		oracle:     sr.oracle,
 		queryState: replicaoracle.MakeQueryState(),
 	}
 }
@@ -260,7 +263,7 @@ func (it *spanResolverIterator) ReplicaInfo(
 	}
 
 	repl, err := it.oracle.ChoosePreferredReplica(
-		ctx, it.it.Desc(), it.it.Leaseholder(), it.queryState)
+		ctx, it.txn, it.it.Desc(), it.it.Leaseholder(), it.it.ClosedTimestampPolicy(), it.queryState)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
