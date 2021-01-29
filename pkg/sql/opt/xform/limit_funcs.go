@@ -431,7 +431,6 @@ func (c *CustomFuncs) getKnownScanConstraint(
 			filters,
 			sp.Table,
 			sp.Index,
-			false, /* isInverted */
 		)
 		cons = instance.Constraint()
 	}

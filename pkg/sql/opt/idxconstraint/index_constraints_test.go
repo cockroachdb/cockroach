@@ -46,12 +46,6 @@ import (
 //
 //       Information for the index (used by index-constraints).
 //
-//     - inverted-index=<column>
-//
-//       Information about an inverted index (used by index-constraints). The
-//       one column of the inverted index refers to the given column. Only one
-//       of "index" and "inverted-index" should be used.
-//
 //     - nonormalize
 //
 //       Disable the optimizer normalization rules.
@@ -70,7 +64,6 @@ func TestIndexConstraints(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var sv testutils.ScalarVars
 			var indexCols []opt.OrderingColumn
-			var invertedIndex bool
 			var err error
 
 			var f norm.Factory
@@ -86,17 +79,11 @@ func TestIndexConstraints(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-				case "index", "inverted-index":
+				case "index":
 					if sv.Cols().Empty() {
 						d.Fatalf(t, "vars must precede index")
 					}
 					indexCols = parseIndexColumns(t, md, vals)
-					if key == "inverted-index" {
-						if len(indexCols) > 1 {
-							d.Fatalf(t, "inverted index must be on a single column")
-						}
-						invertedIndex = true
-					}
 
 				case "nonormalize":
 					f.DisableOptimizations()
@@ -137,7 +124,7 @@ func TestIndexConstraints(t *testing.T) {
 				var ic idxconstraint.Instance
 				ic.Init(
 					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
-					invertedIndex, true /* consolidate */, &evalCtx, &f,
+					true /* consolidate */, &evalCtx, &f,
 				)
 				result := ic.Constraint()
 				var buf bytes.Buffer
@@ -250,7 +237,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				var ic idxconstraint.Instance
 				ic.Init(
 					filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
-					nil /* computedCols */, false /*isInverted */, true, /* consolidate */
+					nil /* computedCols */, true, /* consolidate */
 					&evalCtx, &f,
 				)
 				_ = ic.Constraint()

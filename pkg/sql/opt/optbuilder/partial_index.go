@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -85,7 +86,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 
 		// Build the partial index predicate as a memo.FiltersExpr and add it
 		// to the table metadata.
-		predExpr, err := b.buildPartialIndexPredicate(tableScope, expr, "index predicate")
+		predExpr, err := b.buildPartialIndexPredicate(tabMeta, tableScope, expr, "index predicate")
 		if err != nil {
 			panic(err)
 		}
@@ -94,8 +95,8 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 }
 
 // buildPartialIndexPredicate builds a memo.FiltersExpr from the given
-// tree.Expr. The expression must be of type Bool and it must be immutable.
-// Returns an error if any non-immutable operators are found.
+// tree.Expr. Virtual computed columns are inlined as their expressions in the
+// resulting filter. Returns an error if any non-immutable operators are found.
 //
 // Note: This function should only be used to build partial index or arbiter
 // predicate expressions that have only a table's ordinary columns in scope and
@@ -107,7 +108,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 // these synthesized columns are projected as part of the opt expression tree
 // and they can reference columns not part of a table's ordinary columns.
 func (b *Builder) buildPartialIndexPredicate(
-	tableScope *scope, expr tree.Expr, context string,
+	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
 	texpr := resolvePartialIndexPredicate(tableScope, expr)
 
@@ -115,6 +116,33 @@ func (b *Builder) buildPartialIndexPredicate(
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 		scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
 	})
+
+	// Inline virtual computed column expressions. This is required for
+	// partial index predicate implication with virtual columns. A virtual
+	// computed column is built as a Project on top of a Scan. The
+	// PushSelectIntoInlinableProject normalization rule will push a filter
+	// on a virtual computed column below the Project by inlining the
+	// virtual column expression. The pushed-down filter will only imply a
+	// partial index predicate if the virtual column expression is also
+	// inlined in the predicate.
+	//
+	// Stored computed column expressions do not need to be inlined because
+	// they are produced directly from a Scan, not a Project.
+	var replace norm.ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			ord := tabMeta.MetaID.ColumnOrdinal(t.Col)
+			col := tabMeta.Table.Column(ord)
+			if col.IsVirtualComputed() {
+				if expr, ok := tabMeta.ComputedCols[t.Col]; ok {
+					return expr
+				}
+			}
+		}
+		return b.factory.Replace(e, replace)
+	}
+	scalar = replace(scalar).(opt.ScalarExpr)
 
 	// Wrap the scalar in a FiltersItem.
 	filter := b.factory.ConstructFiltersItem(scalar)

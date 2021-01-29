@@ -1349,8 +1349,14 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// If the index is a pseudo-partial index, it can always be an arbiter.
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
+		// TODO(mgartner): Add UPSERT tests for partial index predicates with
+		// virtual computed columns once UPSERTs of virtual columns are
+		// supported. It's not necessary for virtual column expressions to be
+		// inlined, as long as virtual column expressions are also not inlined
+		// in arbiterFilters below, so we can consider passing a boolean to
+		// buildPartialIndexPredicate to prevent unnecessary inlining.
 		predFilter, err := mb.b.buildPartialIndexPredicate(
-			tableScope, mb.parsePartialIndexPredicateExpr(idx), "index predicate",
+			tabMeta, tableScope, mb.parsePartialIndexPredicateExpr(idx), "index predicate",
 		)
 		if err != nil {
 			panic(err)
@@ -1371,8 +1377,15 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 
 			// Build the arbiter filters once.
 			if arbiterFilters == nil {
+				// TODO(mgartner): Add UPSERT tests for arbiter predicates with
+				// virtual computed columns once UPSERTs of virtual columns are
+				// supported. It's not necessary for virtual column expressions
+				// to be inlined, as long as virtual column expressions are also
+				// not inlined in predFilter above, so we can consider passing a
+				// boolean to buildPartialIndexPredicate to prevent unnecessary
+				// inlining.
 				arbiterFilters, err = mb.b.buildPartialIndexPredicate(
-					tableScope, arbiterPredicate, "arbiter predicate",
+					tabMeta, tableScope, arbiterPredicate, "arbiter predicate",
 				)
 				if err != nil {
 					// The error is due to a non-immutable operator in the arbiter
