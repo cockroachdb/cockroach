@@ -5,6 +5,7 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
+    "@cockroachlabs/cluster-ui": "^0.1.46",
     "analytics-node": "^3.4.0-beta.1",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
