@@ -1,21 +1,15 @@
 # Tests for multi-column inverted indexes.
 
 # Err if the last column is not an invertable type.
-# TODO(mgartner): This error message should explain that it's not indexable as
-# the last column.
-statement error column b is of type int and thus is not indexable with an inverted index
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
 
 # Err if a non-last column is not a non-invertable type.
-# TODO(mgartner): This error message should explain that it's not indexable as
-# a non-last column.
-statement error column j is of type jsonb and thus is not indexable with an inverted index
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE m_err (k INT PRIMARY KEY, j JSON, geom GEOMETRY, INVERTED INDEX (j, geom))
 
 # Err if a non-last column is not a non-invertable type.
-# TODO(mgartner): This error message should explain that it's not indexable as
-# a non-last column.
-statement error column j is of type jsonb and thus is not indexable with an inverted index
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, j JSON, geom GEOMETRY, INVERTED INDEX (a, j, geom))
 
 statement ok
