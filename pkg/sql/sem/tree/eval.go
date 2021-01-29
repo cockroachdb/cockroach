@@ -3021,6 +3021,8 @@ type EvalDatabase interface {
 	// LookupSchema looks up the schema with the given name in the given
 	// database.
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
+
+	LookupTableNameByID(ctx context.Context, tableID ID) (*TableName, error)
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
@@ -3081,6 +3083,12 @@ type EvalPlanner interface {
 		ctx context.Context,
 		member security.SQLUsername,
 	) (map[security.SQLUsername]bool, error)
+
+	// AdminTableApproximateSize collects detailed, computationally expensive
+	// information about a table. Note: this fans out to other nodes in the
+	// database.
+	AdminTableApproximateSize(ctx context.Context, databaseName string, schemaQualifiedTable string,
+	) (uint64, error)
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.
