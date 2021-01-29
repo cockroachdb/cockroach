@@ -1007,6 +1007,14 @@ func (r *Replica) applySnapshot(
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.mu.state = s
+	// If we're the leaseholder, we might have learned that we got the lease
+	// through this snapshot (which is handled by the leasePostApplyLocked call
+	// above), but also we've found out about a closed timestamp than we need to
+	// communicate to the propBuf.
+	haveLease := r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID
+	if haveLease {
+		r.mu.proposalBuf.FwdClosedTimestampLocked(r.mu.state.ClosedTimestamp)
+	}
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.mu.raftLogSizeTrusted = false

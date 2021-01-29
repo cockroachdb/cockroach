@@ -196,6 +196,10 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	// 	// Adding a positive value to a Timestamp adds the Synthetic flag.
 	// 	s.Synthetic = true
 	// }
+	//
+	// When addressing this TODO, remove the hack in
+	// propBuf.assignClosedTimestampToProposal that manually marks lease
+	// expirations as synthetic.
 	return s
 }
 
