@@ -94,7 +94,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 // store's consistency queue.
 func ConsistencyQueueShouldQueue(
 	ctx context.Context,
-	now hlc.Timestamp,
+	now hlc.ClockTimestamp,
 	desc *roachpb.RangeDescriptor,
 	getQueueLastProcessed func(ctx context.Context) (hlc.Timestamp, error),
 	isNodeLive func(nodeID roachpb.NodeID) (bool, error),

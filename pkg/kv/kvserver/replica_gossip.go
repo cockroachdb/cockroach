@@ -56,7 +56,7 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // inherently inconsistent and asynchronous, we're using the lease as a way to
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip(ctx context.Context) bool {
-	return r.OwnsValidLease(ctx, r.store.Clock().Now())
+	return r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp())
 }
 
 // MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.

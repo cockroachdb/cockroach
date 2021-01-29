@@ -825,11 +825,11 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
+	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
 		return threshold
 	}
 
-	impliedThreshold := gc.CalculateThreshold(st.Timestamp, *r.mu.zone.GC)
+	impliedThreshold := gc.CalculateThreshold(st.Now.ToTimestamp(), *r.mu.zone.GC)
 	threshold.Forward(impliedThreshold)
 
 	// If we have a protected timestamp record which precedes the implied
@@ -1159,10 +1159,10 @@ func (r *Replica) checkExecutionCanProceed(
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
-	now := r.Clock().Now()
+	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	status := r.leaseStatusForRequestRLocked(ctx, now, ts)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
@@ -1597,15 +1597,15 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Con
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().Now()) {
+	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()
 	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 		return
 	}
-	lhReplicaID := uint64(lease.Replica.ReplicaID)
+	lhReplicaID := uint64(status.Lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
 	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)

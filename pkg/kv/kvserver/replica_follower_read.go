@@ -129,7 +129,7 @@ func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	}
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
-	maxClosed.Forward(lease.Start)
+	maxClosed.Forward(lease.Start.ToTimestamp())
 	maxClosed.Forward(initialMaxClosed)
 	return maxClosed, true
 }

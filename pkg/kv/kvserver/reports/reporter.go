@@ -265,7 +265,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 	if err != nil {
 		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
-	if repl.OwnsValidLease(ctx, store.Clock().Now()) {
+	if repl.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 		return store
 	}
 	return nil

@@ -67,6 +67,6 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 		return spans.BoundarySpan(spanset.SpanGlobal)
 	})
 	if shouldInitSplit {
-		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 }

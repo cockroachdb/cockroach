@@ -721,7 +721,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	st := &kvserverpb.LeaseStatus{Timestamp: repl1.Clock().Now()}
+	st := &kvserverpb.LeaseStatus{Now: repl1.Clock().NowAsClockTimestamp()}
 	if _, err = repl1.checkExecutionCanProceed(ctx, &roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
@@ -2441,7 +2441,7 @@ func (fq *fakeRangeQueue) Start(_ *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.ClockTimestamp) {
 	// Do nothing
 }
 

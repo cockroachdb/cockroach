@@ -694,6 +694,9 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 							TestingEvalFilter: testingEvalFilter,
 						},
 						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+						// TODO(andrei): remove this knob once #59179 is fixed. It should
+						// only be needed by TestLeaseExpirationBelowFutureTimeRequest.
+						AllowLeaseRequestProposalsWhenNotLeader: true,
 					},
 					Server: &server.TestingKnobs{
 						ClockSource: l.manualClock.UnixNano,
@@ -912,7 +915,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	// low water mark, we make sure that the high water mark is equal to or
 	// greater than the new lease start time, which is less than the
 	// previous lease's expiration time.
-	if highWater := l.replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start) {
+	if highWater := l.replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start.ToTimestamp()) {
 		t.Fatalf("expected timestamp cache high water %s, but found %s",
 			replica1Lease.Start, highWater)
 	}
@@ -1052,6 +1055,73 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	if err := <-renewalErrCh; err != nil {
 		t.Errorf("unexpected error from lease renewal: %+v", err)
 	}
+}
+
+// TestLeaseExpirationBelowFutureTimeRequest tests two cases where a
+// request is sent to a range with a future-time timestamp that is past
+// the current expiration time of the range's lease. In the first case,
+// the request timestamp is close enough to present time to be allowed
+// to evaluate on the range after a lease expiration. In the second
+// case, the request timestamp is too far in the future, so it is
+// rejected.
+func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "tooFarInFuture", func(t *testing.T, tooFarInFuture bool) {
+		ctx := context.Background()
+		l := setupLeaseTransferTest(t)
+		defer l.tc.Stopper().Stop(ctx)
+
+		// Ensure that replica1 has the lease.
+		require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID))
+		l.checkHasLease(t, 1)
+		preLease, _ := l.replica1.GetLease()
+
+		// Pause the cluster's clocks.
+		l.manualClock.Pause()
+		atPause := l.manualClock.UnixNano()
+
+		// Move the clock up near (but below) the lease expiration.
+		l.manualClock.Increment((preLease.Expiration.WallTime - 10) - atPause)
+		now := l.tc.Servers[1].Clock().Now()
+
+		// Construct a future-time request timestamp past the current lease's
+		// expiration. Remember to set the synthetic bit so that it is not used
+		// to update the store's clock. See Replica.checkRequestTimeRLocked for
+		// the exact determination of whether a request timestamp is too far in
+		// the future or not.
+		leaseRenewal := l.tc.Servers[1].Cfg.RangeLeaseRenewalDuration()
+		leaseRenewalMinusStasis := leaseRenewal - l.tc.Servers[1].Clock().MaxOffset()
+		reqTime := now.Add(leaseRenewalMinusStasis.Nanoseconds()-10, 0)
+		if tooFarInFuture {
+			reqTime = reqTime.Add(20, 0)
+		}
+		reqTime = reqTime.WithSynthetic(true)
+
+		// Issue a get with the request timestamp.
+		args := getArgs(l.leftKey)
+		_, pErr := kv.SendWrappedWith(ctx, l.tc.GetFirstStoreFromServer(t, 1).TestSender(), roachpb.Header{
+			RangeID: l.replica0.RangeID, Replica: l.replica1Desc, Timestamp: reqTime,
+		}, args)
+
+		if tooFarInFuture {
+			// The request should have been rejected.
+			require.NotNil(t, pErr)
+			require.Regexp(t, "request timestamp .* too far in future", pErr)
+
+			// Checking that the lease hasn't been extended is flaky, because it
+			// may end up being extended by some other request. That fact that
+			// our request was rejected is good enough.
+		} else {
+			// The request should have been rejected.
+			require.Nil(t, pErr)
+
+			// The lease should have been extended.
+			l.checkHasLease(t, 1)
+			postLease, _ := l.replica1.GetLease()
+			require.True(t, preLease.Expiration.Less(*postLease.Expiration), "expected extension")
+		}
+	})
 }
 
 // TestRangeLimitTxnMaxTimestamp verifies that on lease transfer, the
@@ -1420,7 +1490,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 			Lease: roachpb.Lease{
-				Start:      s.Clock().Now(),
+				Start:      s.Clock().NowAsClockTimestamp(),
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    replDesc,
 			},
@@ -1454,25 +1524,16 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	}
 }
 
-// LeaseInfo runs a LeaseInfoRequest using the specified server.
-func LeaseInfo(
-	t *testing.T,
-	db *kv.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	readConsistency roachpb.ReadConsistencyType,
-) roachpb.LeaseInfoResponse {
-	leaseInfoReq := &roachpb.LeaseInfoRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: rangeDesc.StartKey.AsRawKey(),
-		},
-	}
-	reply, pErr := kv.SendWrappedWith(context.Background(), db.NonTransactionalSender(), roachpb.Header{
-		ReadConsistency: readConsistency,
-	}, leaseInfoReq)
+func getLeaseInfo(
+	ctx context.Context, db *kv.DB, key roachpb.Key,
+) (*roachpb.LeaseInfoResponse, error) {
+	header := roachpb.Header{ReadConsistency: roachpb.INCONSISTENT}
+	leaseInfoReq := &roachpb.LeaseInfoRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
+	reply, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, leaseInfoReq)
 	if pErr != nil {
-		t.Fatal(pErr)
+		return nil, pErr.GoError()
 	}
-	return *(reply.(*roachpb.LeaseInfoResponse))
+	return reply.(*roachpb.LeaseInfoResponse), nil
 }
 
 func TestLeaseInfoRequest(t *testing.T) {
@@ -1497,6 +1558,13 @@ func TestLeaseInfoRequest(t *testing.T) {
 			t.Fatalf("expected to find replica in server %d", i)
 		}
 	}
+	mustGetLeaseInfo := func(db *kv.DB) *roachpb.LeaseInfoResponse {
+		resp, err := getLeaseInfo(context.Background(), db, rangeDesc.StartKey.AsRawKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
 
 	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
 	// there might be already a lease owned by a random node.
@@ -1508,7 +1576,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// Now test the LeaseInfo. We might need to loop until the node we query has
 	// applied the lease.
 	testutils.SucceedsSoon(t, func() error {
-		leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
 		if leaseHolderReplica != replicas[0] {
 			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[0], leaseHolderReplica)
@@ -1525,7 +1593,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
 	if !leaseHolderReplica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
@@ -1538,7 +1606,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// from the supposed lease holder, because this node might initially be
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
-		leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica = mustGetLeaseInfo(kvDB1).Lease.Replica
 		if !leaseHolderReplica.Equal(replicas[1]) {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
@@ -3135,7 +3203,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
-				require.NoError(t, ptp.Refresh(ctx, l.Start.Next()))
+				require.NoError(t, ptp.Refresh(ctx, l.Start.ToTimestamp().Next()))
 				r.ReadProtectedTimestamps(ctx)
 			}
 		}

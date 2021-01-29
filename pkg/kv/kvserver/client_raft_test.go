@@ -1196,7 +1196,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		}
 		// We need to wait for the stasis state to pass too; during stasis other
 		// replicas can't take the lease.
-		if status.State == kvserverpb.LeaseState_STASIS {
+		if status.State == kvserverpb.LeaseState_UNUSABLE {
 			return errors.New("lease still in stasis")
 		}
 		return nil
