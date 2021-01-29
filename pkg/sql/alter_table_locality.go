@@ -242,22 +242,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfig(
 	params runParams, dbDesc *dbdesc.Immutable,
 ) error {
-	// Get the fully resolved table name for use in the calls below.
-	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx,
-		params.p.txn,
-		n.tableDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
-
-	tableName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.Name),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(n.tableDesc.GetName()),
-	)
-
 	// Validate the new locality before updating the table descriptor.
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
 	if err := n.tableDesc.ValidateTableLocalityConfig(
@@ -278,11 +262,13 @@ func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfi
 	}
 
 	// Update the zone configuration.
-	if err := params.p.applyZoneConfigFromTableLocalityConfig(
+	if err := applyZoneConfigForMultiRegionTable(
 		params.ctx,
-		tableName,
-		n.tableDesc.TableDesc(),
+		params.p.txn,
+		params.p.ExecCfg(),
 		*dbDesc.RegionConfig,
+		n.tableDesc,
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}

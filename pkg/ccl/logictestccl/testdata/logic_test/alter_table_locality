@@ -237,7 +237,6 @@ TABLE global  ALTER TABLE global CONFIGURE ZONE USING
               range_min_bytes = 134217728,
               range_max_bytes = 536870912,
               gc.ttlseconds = 90000,
-              global_reads = true,
               num_replicas = 3,
               constraints = '{+region=ap-southeast-2: 3}',
               lease_preferences = '[[+region=ap-southeast-2]]'
@@ -644,3 +643,35 @@ CREATE TABLE regional_by_table_in_us_east (i int) LOCALITY REGIONAL BY TABLE IN 
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW
+
+# Set a table with a gc.ttlseconds to be a non-default value, and check this is
+# the same after a change to REGIONAL BY TABLE IN PRIMARY REGION, which truncates
+# other fields.
+statement ok
+CREATE TABLE rbt_table_gc_ttl () LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE rbt_table_gc_ttl
+----
+TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
+                        range_min_bytes = 134217728,
+                        range_max_bytes = 536870912,
+                        gc.ttlseconds = 90000,
+                        num_replicas = 3,
+                        constraints = '{+region=us-east-1: 3}',
+                        lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING gc.ttlseconds = 999;
+ALTER TABLE rbt_table_gc_ttl SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE rbt_table_gc_ttl
+----
+TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
+                        range_min_bytes = 134217728,
+                        range_max_bytes = 536870912,
+                        gc.ttlseconds = 999,
+                        num_replicas = 3,
+                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                        lease_preferences = '[[+region=ca-central-1]]'
