@@ -4700,8 +4700,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			byteString := string(*args[0].(*tree.DBytes))
 			start := int(tree.MustBeDInt(args[1]))
-			substring := getSubstringFromIndex(byteString, start)
-			return tree.ParseDByte(substring)
+			substring := getSubstringFromIndexBytes(byteString, start)
+			return tree.NewDBytes(tree.DBytes(substring)), nil
 		},
 		Info:       "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
 		Volatility: tree.VolatilityImmutable,
@@ -4718,11 +4718,11 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			start := int(tree.MustBeDInt(args[1]))
 			length := int(tree.MustBeDInt(args[2]))
 
-			substring, err := getSubstringFromIndexOfLength(byteString, "byte subarray", start, length)
+			substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
 			if err != nil {
 				return nil, err
 			}
-			return tree.ParseDByte(substring)
+			return tree.NewDBytes(tree.DBytes(substring)), nil
 		},
 		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
@@ -4745,7 +4745,7 @@ func getSubstringFromIndex(str string, start int) string {
 }
 
 // Returns a substring of given string starting at given position and
-// include upto certain length.
+// include up to a certain length.
 func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (string, error) {
 	runes := []rune(str)
 	// SQL strings are 1-indexed.
@@ -4772,6 +4772,51 @@ func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (strin
 		start = len(runes)
 	}
 	return string(runes[start:end]), nil
+}
+
+// Returns a substring of given string starting at given position by
+// interpreting the string as raw bytes.
+func getSubstringFromIndexBytes(str string, start int) string {
+	bytes := []byte(str)
+	// SQL strings are 1-indexed.
+	start--
+
+	if start < 0 {
+		start = 0
+	} else if start > len(bytes) {
+		start = len(bytes)
+	}
+	return string(bytes[start:])
+}
+
+// Returns a substring of given string starting at given position and include up
+// to a certain length by interpreting the string as raw bytes.
+func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (string, error) {
+	bytes := []byte(str)
+	// SQL strings are 1-indexed.
+	start--
+
+	if length < 0 {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
+	}
+
+	end := start + length
+	// Check for integer overflow.
+	if end < start {
+		end = len(bytes)
+	} else if end < 0 {
+		end = 0
+	} else if end > len(bytes) {
+		end = len(bytes)
+	}
+
+	if start < 0 {
+		start = 0
+	} else if start > len(bytes) {
+		start = len(bytes)
+	}
+	return string(bytes[start:end]), nil
 }
 
 var uuidV4Impl = makeBuiltin(
