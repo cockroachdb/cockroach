@@ -309,6 +309,14 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.ProvisionalCommitTimestamp()
 }
 
+// MaxObservableTimestamp returns the largest timestamp at which the transaction
+// may observe when performing a read-only operation.
+func (txn *Txn) MaxObservableTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.MaxObservableTimestamp()
+}
+
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest. Note that this method takes a boolean
 // argument indicating whether this transaction is intended for the system
