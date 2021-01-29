@@ -300,6 +300,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper,
 		cfg.LeaseManagerConfig,
 	)
+	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(rootSQLMetrics)
