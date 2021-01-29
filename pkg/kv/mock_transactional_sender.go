@@ -124,6 +124,11 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.MinTimestamp.Backward(ts)
 }
 
+// MaxObservableTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) MaxObservableTimestamp() hlc.Timestamp {
+	return m.txn.MaxObservableTimestamp()
+}
+
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
