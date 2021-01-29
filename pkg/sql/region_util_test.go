@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
+func TestZoneConfigForDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -168,7 +168,7 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			res := zoneConfigFromRegionConfigForDatabase(tc.regionConfig)
+			res, _ := zoneConfigForDatabase(tc.regionConfig)
 			require.Equal(t, tc.expected, res)
 		})
 	}
@@ -178,7 +178,7 @@ func protoRegionName(region descpb.RegionName) *descpb.RegionName {
 	return &region
 }
 
-func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
+func TestZoneConfigForTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -378,14 +378,14 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigFromTableLocalityConfig(tc.localityConfig, tc.regionConfig)
+			zc, err := zoneConfigForTable(tc.localityConfig, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})
 	}
 }
 
-func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
+func TestZoneConfigForPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -483,7 +483,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigFromRegionConfigForPartition(tc.region, tc.regionConfig)
+			zc, err := zoneConfigForPartition(tc.region, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})
