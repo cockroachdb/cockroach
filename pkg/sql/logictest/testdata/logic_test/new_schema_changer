@@ -18,7 +18,7 @@ ALTER TABLE foo ADD COLUMN j INT
 statement ok
 INSERT INTO foo VALUES (1, 1)
 
-query II
+query II rowsort
 SELECT * FROM foo
 ----
 1  1
@@ -49,7 +49,7 @@ COMMIT
 statement ok
 INSERT INTO foo VALUES (1, 2, 3)
 
-query III
+query III rowsort
 SELECT * FROM foo
 ----
 1  2  3
@@ -68,7 +68,7 @@ CREATE TABLE foo (i INT PRIMARY KEY)
 statement ok
 INSERT INTO foo(i) VALUES (0)
 
-query I
+query I rowsort
 SELECT * FROM foo
 ----
 0
@@ -82,7 +82,7 @@ INSERT INTO foo VALUES (1, 1)
 statement ok
 INSERT INTO foo(i) VALUES (2)
 
-query II
+query II rowsort
 SELECT * FROM foo
 ----
 0  1
@@ -106,7 +106,7 @@ ALTER TABLE foo ADD COLUMN j INT AS (i+1) STORED
 statement ok
 INSERT INTO foo(i) VALUES (1)
 
-query II
+query II rowsort
 SELECT * FROM foo
 ----
 0  1
@@ -129,7 +129,7 @@ ALTER TABLE foo ADD COLUMN k INT FAMILY f2
 statement ok
 INSERT INTO foo VALUES (1, 2, 3)
 
-query III
+query III rowsort
 SELECT * FROM foo
 ----
 1  2  3
@@ -161,7 +161,7 @@ COMMIT
 statement ok
 INSERT INTO foo VALUES (1, 2)
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM foo
 ----
 i  a
@@ -170,7 +170,7 @@ i  a
 statement ok
 INSERT INTO bar VALUES (3, 4)
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM bar
 ----
 j  b
