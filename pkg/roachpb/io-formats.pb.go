@@ -68,7 +68,7 @@ func (x *IOFileFormat_FileFormat) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_FileFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{0, 0}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{0, 0}
 }
 
 type IOFileFormat_Compression int32
@@ -110,7 +110,7 @@ func (x *IOFileFormat_Compression) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_Compression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{0, 1}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{0, 1}
 }
 
 type MySQLOutfileOptions_Enclose int32
@@ -149,7 +149,7 @@ func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (MySQLOutfileOptions_Enclose) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{2, 0}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{2, 0}
 }
 
 type AvroOptions_Format int32
@@ -191,7 +191,7 @@ func (x *AvroOptions_Format) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AvroOptions_Format) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{6, 0}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{6, 0}
 }
 
 type IOFileFormat struct {
@@ -211,7 +211,7 @@ func (m *IOFileFormat) Reset()         { *m = IOFileFormat{} }
 func (m *IOFileFormat) String() string { return proto.CompactTextString(m) }
 func (*IOFileFormat) ProtoMessage()    {}
 func (*IOFileFormat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{0}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{0}
 }
 func (m *IOFileFormat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -258,7 +258,7 @@ func (m *CSVOptions) Reset()         { *m = CSVOptions{} }
 func (m *CSVOptions) String() string { return proto.CompactTextString(m) }
 func (*CSVOptions) ProtoMessage()    {}
 func (*CSVOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{1}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{1}
 }
 func (m *CSVOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -309,7 +309,7 @@ func (m *MySQLOutfileOptions) Reset()         { *m = MySQLOutfileOptions{} }
 func (m *MySQLOutfileOptions) String() string { return proto.CompactTextString(m) }
 func (*MySQLOutfileOptions) ProtoMessage()    {}
 func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{2}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{2}
 }
 func (m *MySQLOutfileOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -348,7 +348,7 @@ func (m *PgCopyOptions) Reset()         { *m = PgCopyOptions{} }
 func (m *PgCopyOptions) String() string { return proto.CompactTextString(m) }
 func (*PgCopyOptions) ProtoMessage()    {}
 func (*PgCopyOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{3}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{3}
 }
 func (m *PgCopyOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -389,7 +389,7 @@ func (m *PgDumpOptions) Reset()         { *m = PgDumpOptions{} }
 func (m *PgDumpOptions) String() string { return proto.CompactTextString(m) }
 func (*PgDumpOptions) ProtoMessage()    {}
 func (*PgDumpOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{4}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{4}
 }
 func (m *PgDumpOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -424,7 +424,7 @@ func (m *MysqldumpOptions) Reset()         { *m = MysqldumpOptions{} }
 func (m *MysqldumpOptions) String() string { return proto.CompactTextString(m) }
 func (*MysqldumpOptions) ProtoMessage()    {}
 func (*MysqldumpOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{5}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{5}
 }
 func (m *MysqldumpOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -467,7 +467,7 @@ func (m *AvroOptions) Reset()         { *m = AvroOptions{} }
 func (m *AvroOptions) String() string { return proto.CompactTextString(m) }
 func (*AvroOptions) ProtoMessage()    {}
 func (*AvroOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_802d999645186915, []int{6}
+	return fileDescriptor_io_formats_488bfbb473a8192c, []int{6}
 }
 func (m *AvroOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1214,7 +1214,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1390,7 +1390,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1623,7 +1623,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1740,7 +1740,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1848,7 +1848,7 @@ func (m *PgDumpOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1917,7 +1917,7 @@ func (m *MysqldumpOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -2092,7 +2092,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -2213,10 +2213,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_802d999645186915)
+	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_488bfbb473a8192c)
 }
 
-var fileDescriptor_io_formats_802d999645186915 = []byte{
+var fileDescriptor_io_formats_488bfbb473a8192c = []byte{
 	// 966 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcd, 0x6e, 0xdb, 0x46,
 	0x10, 0x16, 0xf5, 0x47, 0x71, 0x24, 0xd9, 0x9b, 0x6d, 0x0f, 0x44, 0xd0, 0xb2, 0xaa, 0xd2, 0x14,

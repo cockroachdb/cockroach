@@ -165,7 +165,7 @@ func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 		reason,
 	)
 	l.populateErrorDetails()
-	l.lastError = &tree.Unsupported{
+	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
 		FeatureName: feature,
 	}
@@ -175,7 +175,7 @@ func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 func (l *lexer) UnimplementedWithIssue(issue int) {
 	l.lastError = unimp.NewWithIssue(issue, "this syntax")
 	l.populateErrorDetails()
-	l.lastError = &tree.Unsupported{
+	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
 		FeatureName: fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue),
 	}
@@ -185,7 +185,7 @@ func (l *lexer) UnimplementedWithIssue(issue int) {
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
 	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
 	l.populateErrorDetails()
-	l.lastError = &tree.Unsupported{
+	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
 		FeatureName: detail,
 	}
@@ -195,7 +195,7 @@ func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
 func (l *lexer) Unimplemented(feature string) {
 	l.lastError = unimp.New(feature, "this syntax")
 	l.populateErrorDetails()
-	l.lastError = &tree.Unsupported{
+	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
 		FeatureName: feature,
 	}
