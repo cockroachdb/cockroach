@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // tenantStatusServer is an implementation of a SQLStatusServer that is
@@ -29,6 +30,8 @@ import (
 type tenantStatusServer struct {
 	baseStatusServer
 }
+
+var _ serverpb.SQLStatusServer = &tenantStatusServer{}
 
 func newTenantStatusServer(
 	ambient log.AmbientContext,
@@ -89,4 +92,12 @@ func (t *tenantStatusServer) CancelSession(
 		return nil, err
 	}
 	return t.sessionRegistry.CancelSession(request.SessionID)
+}
+
+func (t *tenantStatusServer) TableStats(
+	ctx context.Context, req *serverpb.TableStatsRequest,
+) (*serverpb.TableStatsResponse, error) {
+	// TODO(jordan): this needs to be implemented to support pg_total_relation_size
+	// for multitenant clusters.
+	return nil, errors.New("TableStats unimplemented for tenant status server")
 }
