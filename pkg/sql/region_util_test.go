@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
+func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -39,11 +39,28 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
 				},
 			},
 		},
@@ -58,13 +75,35 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(3),
+				NumReplicas: proto.Int32(4),
+				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
 				},
 			},
 		},
@@ -80,14 +119,41 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(3),
+				NumReplicas: proto.Int32(5),
+				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 			},
 		},
@@ -103,14 +169,41 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(3),
+				NumReplicas: proto.Int32(5),
+				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						NumReplicas: 2,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 			},
 		},
@@ -127,15 +220,47 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
+				NumReplicas: proto.Int32(6),
+				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_d"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_d"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 			},
 		},
@@ -152,15 +277,48 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
+				NumReplicas: proto.Int32(5),
+				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"}}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_d"}}},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_d"},
+						},
+					},
+				},
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						NumReplicas: 2,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
 				},
 			},
 		},
@@ -168,7 +326,8 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			res := zoneConfigFromRegionConfigForDatabase(tc.regionConfig)
+			res, err := zoneConfigForMultiRegionDatabase(tc.regionConfig)
+			require.NoError(t, err)
 			require.Equal(t, tc.expected, res)
 		})
 	}
@@ -178,7 +337,7 @@ func protoRegionName(region descpb.RegionName) *descpb.RegionName {
 	return &region
 }
 
-func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
+func TestZoneConfigForMultiRegionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -326,23 +485,32 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
 				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_a"},
 					{Name: "region_b"},
 					{Name: "region_c"},
-					{Name: "region_a"},
 					{Name: "region_d"},
 				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
+				NumReplicas: nil, // Set at the database level.
+				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
 				},
-				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 4, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				InheritedConstraints: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
 				},
-				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -365,27 +533,37 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
+				NumReplicas: nil, // Set at the database level.
+				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
-					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
 				},
-				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				InheritedConstraints: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						NumReplicas: 2,
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
 				},
-				InheritedVoterConstraints: true,
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigFromTableLocalityConfig(tc.localityConfig, tc.regionConfig)
+			zc, err := zoneConfigForMultiRegionTable(tc.localityConfig, tc.regionConfig)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, zc)
+			require.Equal(t, tc.expected, *zc)
 		})
 	}
 }
 
-func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
+func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -410,28 +588,20 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
-				Constraints: []zonepb.ConstraintsConjunction{
+				NumReplicas:          nil, // Set at the database level.
+				NumVoters:            proto.Int32(3),
+				InheritedConstraints: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
-						NumReplicas: 4,
 						Constraints: []zonepb.Constraint{
-							{
-								Type:  zonepb.Constraint_REQUIRED,
-								Key:   "region",
-								Value: "region_a",
-							},
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 						},
 					},
 				},
-				InheritedConstraints: false,
 				LeasePreferences: []zonepb.LeasePreference{
 					{
 						Constraints: []zonepb.Constraint{
-							{
-								Type:  zonepb.Constraint_REQUIRED,
-								Key:   "region",
-								Value: "region_a",
-							},
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 						},
 					},
 				},
@@ -453,28 +623,21 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
-				Constraints: []zonepb.ConstraintsConjunction{
+				NumReplicas:          nil, // Set at the database level.
+				NumVoters:            proto.Int32(5),
+				InheritedConstraints: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
-						NumReplicas: 1,
+						NumReplicas: 2,
 						Constraints: []zonepb.Constraint{
-							{
-								Type:  zonepb.Constraint_REQUIRED,
-								Key:   "region",
-								Value: "region_a",
-							},
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 						},
 					},
 				},
-				InheritedConstraints: false,
 				LeasePreferences: []zonepb.LeasePreference{
 					{
 						Constraints: []zonepb.Constraint{
-							{
-								Type:  zonepb.Constraint_REQUIRED,
-								Key:   "region",
-								Value: "region_a",
-							},
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 						},
 					},
 				},
@@ -483,7 +646,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigFromRegionConfigForPartition(tc.region, tc.regionConfig)
+			zc, err := zoneConfigForMultiRegionPartition(tc.region, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})
