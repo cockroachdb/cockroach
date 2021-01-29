@@ -168,41 +168,42 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 
 // MakeComputedExprs returns a slice of the computed expressions for the
 // slice of input column descriptors, or nil if none of the input column
-// descriptors have computed expressions.
+// descriptors have computed expressions. The caller provides the set of
+// sourceColumns to which the expr may refer.
 //
 // The length of the result slice matches the length of the input column
 // descriptors. For every column that has no computed expression, a NULL
 // expression is reported.
 //
-// Note that the order of columns is critical. Expressions cannot reference
-// columns that come after them in cols.
+// Note that the order of input is critical. Expressions cannot reference
+// columns that come after them in input.
 func MakeComputedExprs(
 	ctx context.Context,
-	cols []descpb.ColumnDescriptor,
+	input, sourceColumns []descpb.ColumnDescriptor,
 	tableDesc catalog.TableDescriptor,
 	tn *tree.TableName,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-) ([]tree.TypedExpr, error) {
+) (_ []tree.TypedExpr, refColIDs catalog.TableColSet, _ error) {
 	// Check to see if any of the columns have computed expressions. If there
 	// are none, we don't bother with constructing the map as the expressions
 	// are all NULL.
 	haveComputed := false
-	for i := range cols {
-		if cols[i].IsComputed() {
+	for i := range input {
+		if input[i].IsComputed() {
 			haveComputed = true
 			break
 		}
 	}
 	if !haveComputed {
-		return nil, nil
+		return nil, catalog.TableColSet{}, nil
 	}
 
 	// Build the computed expressions map from the parsed statement.
-	computedExprs := make([]tree.TypedExpr, 0, len(cols))
-	exprStrings := make([]string, 0, len(cols))
-	for i := range cols {
-		col := &cols[i]
+	computedExprs := make([]tree.TypedExpr, 0, len(input))
+	exprStrings := make([]string, 0, len(input))
+	for i := range input {
+		col := &input[i]
 		if col.IsComputed() {
 			exprStrings = append(exprStrings, *col.ComputeExpr)
 		}
@@ -210,36 +211,45 @@ func MakeComputedExprs(
 
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return nil, err
+		return nil, catalog.TableColSet{}, err
 	}
 
-	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(tableDesc.GetPublicColumns()))
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(sourceColumns))
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
 	compExprIdx := 0
-	for i := range cols {
-		col := &cols[i]
+	for i := range input {
+		col := &input[i]
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
 			nr.addColumn(col)
 			continue
 		}
+
+		// Collect all column IDs that are referenced in the partial index
+		// predicate expression.
+		colIDs, err := ExtractColumnIDs(tableDesc, exprs[compExprIdx])
+		if err != nil {
+			return nil, refColIDs, err
+		}
+		refColIDs.UnionWith(colIDs)
+
 		expr, err := nr.resolveNames(exprs[compExprIdx])
 		if err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
 		if err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 		computedExprs = append(computedExprs, typedExpr)
 		compExprIdx++
 		nr.addColumn(col)
 	}
-	return computedExprs, nil
+	return computedExprs, refColIDs, nil
 }
