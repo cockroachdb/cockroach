@@ -90,7 +90,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 
 		repls := replsForRange(ctx, t, tc, desc, numNodes)
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		baRead := makeReadBatchRequestForDesc(desc, ts)
+		baRead := makeTxnReadBatchForDesc(desc, ts)
 		testutils.SucceedsSoon(t, func() error {
 			return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 		})
@@ -161,7 +161,7 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 	reqTS := tc.Server(0).Clock().Now()
 	// Sleep for a sufficiently long time so that reqTS can be closed.
 	time.Sleep(3 * testingTargetDuration)
-	baRead := makeReadBatchRequestForDesc(desc, reqTS)
+	baRead := makeTxnReadBatchForDesc(desc, reqTS)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
@@ -190,7 +190,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
@@ -222,7 +222,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	// Attempt to send read requests to a replica in a tight loop until deadline
 	// is reached. If an error is seen on any replica then it is returned to the
 	// errgroup.
-	baRead = makeReadBatchRequestForDesc(desc, ts)
+	baRead = makeTxnReadBatchForDesc(desc, ts)
 	ensureCanReadFromReplicaUntilDeadline := func(r *kvserver.Replica) {
 		g.Go(func() error {
 			for timeutil.Now().Before(deadline) {
@@ -285,14 +285,7 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	respCh := make(chan struct{}, len(keys))
 	for i, key := range keys {
 		go func(repl *kvserver.Replica, key roachpb.Key) {
-			var baRead roachpb.BatchRequest
-			r := &roachpb.ScanRequest{}
-			r.Key = key
-			r.EndKey = key.Next()
-			baRead.Add(r)
-			baRead.Timestamp = ts
-			baRead.RangeID = desc.RangeID
-
+			baRead := makeTxnReadBatchForDesc(desc, ts)
 			testutils.SucceedsSoon(t, func() error {
 				// Expect 0 rows, because the intents will be aborted.
 				_, err := expectRows(0)(repl.Send(ctx, baRead))
@@ -356,7 +349,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	}
 	// Start by ensuring that the values can be read from all replicas at ts.
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(2))
 	})
@@ -382,10 +375,10 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	// Now immediately query both the ranges and there's 1 value per range.
 	// We need to tolerate RangeNotFound as the split range may not have been
 	// created yet.
-	baReadL := makeReadBatchRequestForDesc(lr, ts)
+	baReadL := makeTxnReadBatchForDesc(lr, ts)
 	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, baReadL, lRepls,
 		respFuncs(retryOnRangeNotFound, expectRows(1))))
-	baReadR := makeReadBatchRequestForDesc(rr, ts)
+	baReadR := makeTxnReadBatchForDesc(rr, ts)
 	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, baReadR, rRepls,
 		respFuncs(retryOnRangeNotFound, expectRows(1))))
 
@@ -397,7 +390,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	// The hazard here is that a follower is not yet aware of the merge and will
 	// return an error. We'll accept that because a client wouldn't see that error
 	// from distsender.
-	baReadMerged := makeReadBatchRequestForDesc(merged, ts)
+	baReadMerged := makeTxnReadBatchForDesc(merged, ts)
 	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, baReadMerged, mergedRepls,
 		respFuncs(retryOnRangeKeyMismatch, expectRows(2))))
 }
@@ -429,12 +422,12 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	}
 
 	// Grab a timestamp before initiating a lease transfer, transfer the lease,
-	// then ensure that reads	at that timestamp can occur from all the replicas.
+	// then ensure that reads at that timestamp can occur from all the replicas.
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	lh := getCurrentLeaseholder(t, tc, desc)
 	target := pickRandomTarget(tc, lh, desc)
 	require.Nil(t, tc.TransferRangeLease(desc, target))
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
@@ -448,7 +441,7 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 }
 
-func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
+func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -469,17 +462,30 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 
 	// Verify that we can serve a follower read at a timestamp. Wait if necessary.
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
 
-	// Create a read-only batch and attach a read-write transaction.
-	rwTxn := roachpb.MakeTransaction("test", []byte("key"), roachpb.NormalUserPriority, ts, 0)
-	baRead.Txn = &rwTxn
+	// Update the batch to simulate a transaction that has written an intent.
+	baRead.Txn.Key = []byte("key")
+	baRead.Txn.Sequence++
 
-	// Send the request to all three replicas. One should succeed and
-	// the other two should return NotLeaseHolderErrors.
+	// The write timestamp of the transaction is still closed, so a read-only
+	// request by the transaction should be servicable by followers. This is
+	// because the writing transaction can still read its writes on the
+	// followers.
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+	})
+
+	// Update the batch to simulate a transaction that has written past its read
+	// timestamp and past the expected closed timestamp. This should prevent its
+	// reads from being served by followers.
+	baRead.Txn.WriteTimestamp = baRead.Txn.WriteTimestamp.Add(time.Hour.Nanoseconds(), 0)
+
+	// Send the request to all three replicas. One should succeed and the other
+	// two should return NotLeaseHolderErrors.
 	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 }
 
@@ -502,9 +508,10 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify that we can serve a follower read at a timestamp. Wait if necessary
+	// Verify that we can serve a follower read at a timestamp. Wait if
+	// necessary.
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
@@ -519,9 +526,41 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	baQueryTxn.Add(r)
 	baQueryTxn.Timestamp = ts
 
-	// Send the request to all three replicas. One should succeed and
-	// the other two should return NotLeaseHolderErrors.
+	// Send the request to all three replicas. One should succeed and the other
+	// two should return NotLeaseHolderErrors.
 	verifyNotLeaseHolderErrors(t, baQueryTxn, repls, 2)
+}
+
+func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Limiting how long transactions can run does not work
+	// well with race unless we're extremely lenient, which
+	// drives up the test duration.
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
+
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that we can serve a follower read at a timestamp with a
+	// transactional batch. Wait if necessary.
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	baRead := makeTxnReadBatchForDesc(desc, ts)
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+	})
+
+	// Remove the transaction and send the request to all three replicas. One
+	// should succeed and the other two should return NotLeaseHolderErrors.
+	baRead.Txn = nil
+	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 }
 
 // TestClosedTimestampInactiveAfterSubsumption verifies that, during a merge,
@@ -694,7 +733,7 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 		case <-time.After(30 * time.Second):
 			t.Fatal("failed to receive next closed timestamp update")
 		}
-		baReadAfterLeaseTransfer := makeReadBatchRequestForDesc(rightDesc, inactiveClosedTSBoundary.Next())
+		baReadAfterLeaseTransfer := makeTxnReadBatchForDesc(rightDesc, inactiveClosedTSBoundary.Next())
 		rightReplFollowers := getFollowerReplicas(ctx, t, tc, rightDesc, rightLeaseholder)
 		log.Infof(ctx, "sending read requests from followers after the inactiveClosedTSBoundary")
 		verifyNotLeaseHolderErrors(t, baReadAfterLeaseTransfer, rightReplFollowers, 2 /* expectedNLEs */)
@@ -755,7 +794,7 @@ func forceLeaseTransferOnSubsumedRange(
 	// that the current rightLeaseholder has stopped heartbeating. This will prompt
 	// it to acquire the range lease for itself.
 	g.Go(func() error {
-		leaseAcquisitionRequest := makeReadBatchRequestForDesc(rightDesc, freezeStartTimestamp)
+		leaseAcquisitionRequest := makeTxnReadBatchForDesc(rightDesc, freezeStartTimestamp)
 		log.Infof(ctx,
 			"sending a read request from a follower of RHS (store %d) in order to trigger lease acquisition",
 			newRightLeaseholder.StoreID())
@@ -1351,15 +1390,16 @@ func verifyCanReadFromAllRepls(
 	return g.Wait()
 }
 
-func makeReadBatchRequestForDesc(
-	desc roachpb.RangeDescriptor, ts hlc.Timestamp,
-) roachpb.BatchRequest {
+func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) roachpb.BatchRequest {
+	txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
+
 	var baRead roachpb.BatchRequest
 	baRead.Header.RangeID = desc.RangeID
+	baRead.Header.Timestamp = ts
+	baRead.Header.Txn = &txn
 	r := &roachpb.ScanRequest{}
 	r.Key = desc.StartKey.AsRawKey()
 	r.EndKey = desc.EndKey.AsRawKey()
 	baRead.Add(r)
-	baRead.Timestamp = ts
 	return baRead
 }

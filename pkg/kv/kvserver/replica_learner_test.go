@@ -800,9 +800,12 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	})
 
 	check := func() {
+		ts := tc.Server(0).Clock().Now()
+		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
 		req := roachpb.BatchRequest{Header: roachpb.Header{
 			RangeID:   scratchDesc.RangeID,
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: ts,
+			Txn:       &txn,
 		}}
 		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
 			Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),

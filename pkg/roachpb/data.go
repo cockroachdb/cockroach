@@ -910,10 +910,40 @@ func MakeTransaction(
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
 	// Only forward by the ReadTimestamp if it is a clock timestamp.
-	// TODO(nvanbenschoten): replace this with look at the Synthetic bool.
-	if readTS, ok := t.ReadTimestamp.TryToClockTimestamp(); ok {
-		ts.Forward(readTS.ToTimestamp())
+	if !t.ReadTimestamp.Synthetic {
+		ts.Forward(t.ReadTimestamp)
 	}
+	return ts
+}
+
+// MaxObservableTimestamp returns the largest timestamp at which the transaction
+// may observe when performing a read-only operation. This is the maximum of the
+// transaction's read timestamp, its write timestamp, and its global uncertainty
+// limit.
+func (t Transaction) MaxObservableTimestamp() hlc.Timestamp {
+	// A transaction can observe committed values up to its read timestamp.
+	ts := t.ReadTimestamp
+	// Forward to the transaction's write timestamp. The transaction will read
+	// committed values at its read timestamp but may perform reads up to its
+	// intent timestamps if the transaction is reading its own intent writes,
+	// which we know to all be at timestamps <= its current write timestamp.
+	//
+	// There is a case where an intent written by a transaction is above the
+	// transactions write timestamp — after a successful intent push. Such cases
+	// do allow a transaction to operate above its max observable timestamp.
+	// However, this is fine...
+	//
+	// WIP: something about how the intent will be present on followers with a
+	// sufficiently high closed timestamp, either in its pre or post push state.
+	// Either works. Do we need to change the contract of MaxObservableTimestamp
+	// to accommodate for this?
+	ts.Forward(t.WriteTimestamp)
+	// Forward to the transaction's global uncertainty limit, because the
+	// transaction may observe committed writes from other transactions up to
+	// this time and consider them to be "uncertain". When a transaction begins,
+	// this will be above its read timestamp, but the read timestamp can surpass
+	// the global uncertainty limit due to refreshes or retries.
+	ts.Forward(t.MaxTimestamp)
 	return ts
 }
 

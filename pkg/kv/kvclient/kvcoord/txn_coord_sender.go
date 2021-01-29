@@ -931,6 +931,13 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.txn.MinTimestamp.Backward(ts)
 }
 
+// MaxObservableTimestamp is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) MaxObservableTimestamp() hlc.Timestamp {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.MaxObservableTimestamp()
+}
+
 // ManualRestart is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
