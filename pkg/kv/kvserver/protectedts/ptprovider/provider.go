@@ -50,14 +50,13 @@ func New(cfg Config) (protectedts.Provider, error) {
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor)
 	verifier := ptverifier.New(cfg.DB, storage)
-	cache := ptcache.New(ptcache.Config{
-		DB:       cfg.DB,
-		Storage:  storage,
-		Settings: cfg.Settings,
-	})
 	return &provider{
-		Storage:  storage,
-		Cache:    cache,
+		Storage: storage,
+		Cache: ptcache.New(ptcache.Config{
+			DB:       cfg.DB,
+			Storage:  storage,
+			Settings: cfg.Settings,
+		}),
 		Verifier: verifier,
 	}, nil
 }
@@ -76,5 +75,8 @@ func validateConfig(cfg Config) error {
 }
 
 func (p *provider) Start(ctx context.Context, stopper *stop.Stopper) error {
-	return p.Cache.(*ptcache.Cache).Start(ctx, stopper)
+	if cache, ok := p.Cache.(*ptcache.Cache); ok {
+		return cache.Start(ctx, stopper)
+	}
+	return nil
 }

@@ -1386,16 +1386,26 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 	return desc.StartKey.AsRawKey(), nil
 }
 
-// ScratchRangeWithExpirationLease is like ScratchRange but creates a range with
-// an expiration based lease.
+// ScratchRangeWithExpirationLease is like ScratchRangeWithExpirationLeaseEx but
+// returns a key for the RHS ranges, instead of both descriptors from the split.
 func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
-	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
-		roachpb.RKey("\x00aaa-testing")}, nil))
-	_, _, err := ts.SplitRange(scratchKey)
+	_, desc, err := ts.ScratchRangeWithExpirationLeaseEx()
 	if err != nil {
 		return nil, err
 	}
-	return scratchKey, nil
+	return desc.StartKey.AsRawKey(), nil
+}
+
+// ScratchRangeWithExpirationLeaseEx is like ScratchRange but creates a range with
+// an expiration based lease.
+func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
+	roachpb.RangeDescriptor,
+	roachpb.RangeDescriptor,
+	error,
+) {
+	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
+		roachpb.RKey("\x00aaa-testing")}, nil))
+	return ts.SplitRange(scratchKey)
 }
 
 // MetricsRecorder periodically records node-level and store-level metrics.

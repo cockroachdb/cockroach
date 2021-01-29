@@ -3432,7 +3432,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 	// 2. Wait for all nodes to process the increment (and therefore the
 	// new lease).
-	tc.WaitForValues(t, key, []int64{value, value, value})
+	tc.WaitForValues(t, key, []int64{0, value, value, value})
 
 	// 3. Wait for the lease holder to obtain raft leadership too.
 	testutils.SucceedsSoon(t, func() error {
