@@ -124,6 +124,11 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.MinTimestamp.Backward(ts)
 }
 
+// RequiredFrontier is part of the TxnSender interface.
+func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
+	return m.txn.RequiredFrontier()
+}
+
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
