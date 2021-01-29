@@ -56,7 +56,7 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// provisional commit timestamp evolves.
 		//
 		// Note that writes will be performed at the provisional commit timestamp,
-		// txn.Timestamp, regardless of the batch timestamp.
+		// txn.WriteTimestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.ReadTimestamp
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
@@ -113,6 +113,16 @@ func (ba *BatchRequest) IsLeaseRequest() bool {
 		return false
 	}
 	_, ok := ba.GetArg(RequestLease)
+	return ok
+}
+
+// IsLeaseTransferRequest returns whether the batch consists of a single
+// TransferLease request.
+func (ba *BatchRequest) IsLeaseTransferRequest() bool {
+	if !ba.IsSingleRequest() {
+		return false
+	}
+	_, ok := ba.GetArg(TransferLease)
 	return ok
 }
 
@@ -258,6 +268,16 @@ func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
 	if ba.IsSingleRequest() {
 		req, ok := ba.Requests[0].GetInner().(*AddSSTableRequest)
 		return ok && !req.IngestAsWrites
+	}
+	return false
+}
+
+// IsSingleRequestLeaseRequest returns true iff the batch contains a single
+// request, and that request is a RequestLeaseRequest.
+func (ba *BatchRequest) IsSingleRequestLeaseRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*RequestLeaseRequest)
+		return ok
 	}
 	return false
 }

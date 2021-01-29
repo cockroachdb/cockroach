@@ -240,7 +240,23 @@ message RaftCommand {
   // been added after it, and on removal, the assignment counters must be
   // updated accordingly. Managing retry of proposals becomes trickier as
   // well as that uproots whatever ordering was originally envisioned.
+  //
+  // This field is set through RaftCommandFooter hackery.
   uint64 max_lease_index = 4;
+
+  // The closed timestamp carried by this command. Once a follower is told to
+  // apply this command, it knows that there will be no further writes at
+  // timestamps <= closed_timestamp. Note that the command itself might
+  // represent a write at a lower timestamp, so the closed timestamp can only be
+  // used after this command is applied.
+  //
+  // The field can be zero, which is to be interpreted as no closed timestamp
+  // update. Some commands (lease requests) implicitly carry a closed timestamp
+  // in a command-specific way. If the value is not zero, the value is greater
+  // or equal to that of the previous commands (and all before it).
+  //
+  // This field is set through ClosedTimestampFooter hackery.
+  util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 
   reserved 3;
 
@@ -276,4 +292,11 @@ message RaftCommand {
 // and marshaling work performed under lock.
 message RaftCommandFooter {
   uint64 max_lease_index = 4;
+}
+
+// ClosedTimestampFooter is similar to RaftCommandFooter, allowing the proposal
+// buffer to fill in the closed_timestamp field after most of the proto has been
+// marshaled already.
+message ClosedTimestampFooter {
+  util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 }
