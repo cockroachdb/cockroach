@@ -30,7 +30,7 @@ func distStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
 	topology streamingccl.Topology,
 	nodes []roachpb.NodeID,
-	jobID int64,
+	initialHighWater hlc.Timestamp,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -63,8 +63,8 @@ func distStreamIngestionPlanSpecs(
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
-	// TODO: set HighWaterAtStart once the job progress logic has been hooked up.
-	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{TrackedSpans: trackedSpans}
+	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
+		HighWaterAtStart: initialHighWater, TrackedSpans: trackedSpans}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
 }
