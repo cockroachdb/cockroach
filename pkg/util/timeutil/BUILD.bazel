@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//:DEPS.bzl", "go_deps")
 
 go_library(
     name = "timeutil",
@@ -48,3 +49,48 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+# Need to check how to handle crlfmt inside generate_lowercase_timezones.go
+genrule(
+    name = "gen-lowercase-timezones-go",
+    srcs = [
+        "generate_lowercase_timezones.go",
+    ],
+    outs = ["lowercase_timezones.go"],
+    cmd = """
+      env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+      go run $(location generate_lowercase_timezones.go) 
+       """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
+)
+
+# go_library(
+#     name = "langgen_lib",
+#     srcs = [
+#         "exprs_gen.go",
+#         "main.go",
+#         "ops_gen.go",
+#     ],
+#     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/langgen",
+#     visibility = ["//visibility:private"],
+#     deps = [
+#         "//pkg/sql/opt/optgen/lang:bootstrap",  # keep
+#         "@com_github_cockroachdb_errors//:errors",
+#     ],
+# )
+
+# go_binary(
+#     name = "langgen",
+#     embed = [":langgen_lib"],
+#     visibility = ["//visibility:public"],
+# )
+
+# go_binary(
+#     name = "lowercase",
+#     srcs = ["generate_lowercase_timezones.go"],
+#     deps = ["//version:go_default_library"],
+#     x_defs = {"example.com/repo/version.Version": "0.9"},
+# )

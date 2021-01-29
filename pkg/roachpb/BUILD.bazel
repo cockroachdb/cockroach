@@ -161,3 +161,19 @@ stringer(
     file = "errors.go",
     typ = "ErrorDetailType",
 )
+
+#ERROR $GOPATH not set
+genrule(
+    name = "gen-batch-go",
+    srcs = [
+        "gen_batch.go",
+    ],
+    outs = ["batch_generated.go"],
+    cmd = """
+      env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+      go run -tags gen-batch $(location gen_batch.go) 
+       """,
+    tools = [
+        "@go_sdk//:bin/go",
+    ],
+)

@@ -1,9 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
 
 go_library(
     name = "securitytest",
     srcs = [
-        "embedded.go",
+        ":embedded",
         "securitytest.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/securitytest",
@@ -13,3 +14,19 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+bindata(
+    name = "embedded",
+    srcs = glob(["test_certs/*"], exclude =["test_certs/README.md", "test_certs/regenerate.sh"]),
+    extra_args = ["."],
+    package = "securitytest",
+)
+
+# sh_test(
+#     name = "mytest",
+#     srcs = ["mytest.sh"],
+#     data = glob(
+#         ["testdata/*.txt"],
+#         exclude = ["testdata/experimental.txt"],
+#     ),
+# )
