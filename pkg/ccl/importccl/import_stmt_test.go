@@ -936,6 +936,7 @@ END;
 		{
 			name: "sequence",
 			typ:  "PGDUMP",
+			with: "WITH ignore_unsupported",
 			data: `
 					CREATE TABLE t (a INT8);
 					CREATE SEQUENCE public.i_seq
@@ -964,6 +965,7 @@ END;
 					INSERT INTO "bob" ("c", "b") VALUES (3, 2);
 					COMMIT
 			`,
+			with: `WITH ignore_unsupported`,
 			query: map[string][][]string{
 				`SELECT * FROM bob`: {
 					{"1", "NULL", "2"},
@@ -5509,11 +5511,11 @@ func TestImportPgDump(t *testing.T) {
 				CONSTRAINT simple_pkey PRIMARY KEY (i),
 				UNIQUE INDEX simple_b_s_idx (b, s),
 				INDEX simple_s_idx (s)
-			) PGDUMP DATA ($1)`,
+			) PGDUMP DATA ($1) WITH ignore_unsupported`,
 			simple,
 		},
-		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, simple},
-		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, second},
+		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, simple},
+		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
 		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
 		{`all from multi`, expectAll, `IMPORT PGDUMP ($1) WITH ignore_unsupported`, multitable},
@@ -5730,7 +5732,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql'")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql' WITH ignore_unsupported")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
@@ -5765,7 +5767,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql'")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql' WITH ignore_unsupported")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
@@ -5882,7 +5884,7 @@ func TestImportCockroachDump(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY i", [][]string{
 		{"1", "test"},
 		{"2", "other"},
@@ -5938,7 +5940,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
 	sqlDB.CheckQueryResultsRetry(t,

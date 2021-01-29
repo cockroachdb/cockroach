@@ -1,0 +1,145 @@
+Running make with -j16
+GOPATH set to /Users/adityamaru/go
+mkdir -p lib
+rm -f lib/lib{geos,geos_c}.dylib
+cp -L /Users/adityamaru/go/native/x86_64-apple-darwin19.6.0/geos/lib/lib{geos,geos_c}.dylib lib
+GOFLAGS= go test   -mod=vendor -tags ' make x86_64_apple_darwin19.6.0 crdb_test' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v21.1.0-alpha.1-1495-g91e3aa1484-dirty" -X "github.com/cockroachdb/cockroach/pkg/build.rev=91e3aa14847e4f7f491fd2ba51dac6b6aa4ff722" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin19.6.0"  ' -run "TestImportData/PGDUMP/sequence:_save_rejected"  -timeout 30m ./pkg/ccl/importccl -show-logs -v
+I210129 22:22:00.295981 1 (gostd) rand.go:92  [-] 1  random seed: 3750889499359996365
+=== RUN   TestImportData
+I210129 22:22:00.298180 37 server/config.go:568  [n?] 2  1 storage engine initialized
+I210129 22:22:00.298215 37 server/config.go:571  [n?] 3  Pebble cache size: 128 MiB
+I210129 22:22:00.298228 37 server/config.go:571  [n?] 4  store 0: in-memory, size 0 B
+W210129 22:22:00.300854 37 server/status/runtime.go:313  [n?] 5  could not parse build timestamp: parsing time "" as "2006/01/02 15:04:05": cannot parse "" as "2006"
+I210129 22:22:00.319861 37 server/init.go:196  [n?] 6  no stores initialized
+I210129 22:22:00.319904 37 server/init.go:197  [n?] 7  awaiting `cockroach init` or join with an already initialized node
+I210129 22:22:00.319926 37 server/init.go:261  [n?] 8  cluster 2da15ade-e757-4f3d-a737-d1652a64f1a3 has been created
+I210129 22:22:00.319953 37 server/init.go:262  [n?] 9  allocated node ID: n1 (for self)
+I210129 22:22:00.319967 37 server/init.go:263  [n?] 10  active cluster version: 20.2-16
+I210129 22:22:00.320053 37 gossip/gossip.go:402  [n1] 11  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:52836" > attrs:<> locality:<> ServerVersion:<major_val:20 minor_val:2 patch:0 internal:16 > build_tag:"v21.1.0-alpha.1-1495-g91e3aa1484-dirty" started_at:1611958920320043000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:52837" >
+I210129 22:22:00.322580 37 server/node.go:387  [n1] 12  initialized store s1
+I210129 22:22:00.322631 37 kv/kvserver/stores.go:236  [n1] 13  read 0 node addresses from persistent storage
+I210129 22:22:00.322703 37 server/node.go:464  [n1] 14  started with engine type 2
+I210129 22:22:00.322727 37 server/node.go:466  [n1] 15  started with attributes []
+W210129 22:22:00.322921 292 kv/kvserver/store.go:1683  [n1,s1,r6/1:/Table/{SystemCon…-11}] 16  could not gossip system config: [NotLeaseHolderError] lease acquisition attempt lost to another lease; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210129 22:22:00.322921 292 kv/kvserver/store.go:1683  [n1,s1,r6/1:/Table/{SystemCon…-11}] 16 +(1) [NotLeaseHolderError] lease acquisition attempt lost to another lease; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210129 22:22:00.322921 292 kv/kvserver/store.go:1683  [n1,s1,r6/1:/Table/{SystemCon…-11}] 16 +Error types: (1) *roachpb.NotLeaseHolderError
+I210129 22:22:00.378301 37 sql/sqlliveness/slinstance/slinstance.go:252  [n1] 17  starting SQL liveness instance
+I210129 22:22:00.378370 361 sql/temporary_schema.go:492  [n1] 18  running temporary object cleanup background job
+I210129 22:22:00.380090 406 kv/kvserver/replica_rangefeed.go:608  [n1,s1,r6/1:/Table/{SystemCon…-11}] 19  RangeFeed closed timestamp is empty
+I210129 22:22:00.381285 361 sql/temporary_schema.go:527  [n1] 20  found 0 temporary schemas
+I210129 22:22:00.381414 361 sql/temporary_schema.go:530  [n1] 21  early exiting temporary schema cleaner as no temporary schemas were found
+I210129 22:22:00.381922 361 sql/temporary_schema.go:531  [n1] 22  completed temporary object cleanup job
+I210129 22:22:00.381950 361 sql/temporary_schema.go:610  [n1] 23  temporary object cleaner next scheduled to run at 2021-01-29 22:52:00.378325 +0000 UTC
+I210129 22:22:00.383087 371 sql/sqlliveness/slstorage/slstorage.go:352  [n1] 24  inserted sqlliveness session 0a8f1bdc95dd4a16ab5d237564f73428
+I210129 22:22:00.383129 371 sql/sqlliveness/slinstance/slinstance.go:144  [n1] 25  created new SQL liveness session 0a8f1bdc95dd4a16ab5d237564f73428
+I210129 22:22:00.384312 191 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 26 ={"Timestamp":1611958920382028000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I210129 22:22:00.386298 611 migration/manager.go:77  [n1,intExec=set-setting,migration-mgr] 27  no need to migrate, cluster already at newest version
+I210129 22:22:00.387590 611 util/log/event_log.go:32  [n1,intExec=set-setting] 28 ={"Timestamp":1611958920385637000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'20.2-16'"],"SettingName":"version","Value":"20.2-16"}
+I210129 22:22:00.394021 925 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 29 ={"Timestamp":1611958920392438000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"a6152ae0-a91a-4601-a4fb-0bcdddbdffb8"}
+I210129 22:22:00.404544 37 server/server_sql.go:801  [n1] 30  done ensuring all necessary startup migrations have run
+I210129 22:22:00.404617 1178 jobs/job_scheduler.go:352  [n1] 31  waiting 4m0s before scheduled jobs daemon start
+I210129 22:22:00.405910 1179 server/auto_upgrade.go:55  [n1] 32  no need to upgrade, cluster already at the newest version
+I210129 22:22:00.412460 1182 util/log/event_log.go:32  [n1,client=127.0.0.1:52838,hostssl,user=root] 33 ={"Timestamp":1611958920410571000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.bulk_ingest.batch_size\" = '10KB'","User":"root","SettingName":"kv.bulk_ingest.batch_size","Value":"10KB"}
+I210129 22:22:00.415209 763 kv/kvserver/replica_command.go:396  [n1,split,s1,r35/1:/{Table/39-Max}] 34  initiating a split of this range at key /Table/52 [r36] (zone config)
+I210129 22:22:00.422023 1182 sql/table.go:154  [n1,client=127.0.0.1:52838,hostssl,user=root] 35  queued new schema change job 628780303716679681 for table 52, mutation 0
+I210129 22:22:00.423956 1182 jobs/registry.go:315  [n1,client=127.0.0.1:52838,hostssl,user=root] 36  scheduled jobs [628780303716679681]
+I210129 22:22:00.429762 765 jobs/adopt.go:137  [-] 37  job 628780303716679681: resuming execution
+I210129 22:22:00.431207 769 jobs/registry.go:1135  [n1] 38  SCHEMA CHANGE job 628780303716679681: stepping through state running with error: <nil>
+I210129 22:22:00.432820 769 sql/schema_changer.go:575  [n1,job=628780303716679681,scExec,id=52] 39  schema change on "blah" (v2) starting execution...
+I210129 22:22:00.432864 769 sql/schema_changer.go:410  [n1,job=628780303716679681,scExec,id=52] 40  draining previous names
+I210129 22:22:00.435158 769 sql/schema_changer.go:484  [n1,job=628780303716679681,scExec,id=52] 41  starting GC job 628780303759015937
+I210129 22:22:00.436458 769 sql/schema_changer.go:1013  [n1,job=628780303716679681,scExec,id=52] 42  waiting for a single version...
+I210129 22:22:00.436490 1608 jobs/registry.go:1135  [n1] 43  SCHEMA CHANGE GC job 628780303759015937: stepping through state running with error: <nil>
+I210129 22:22:00.437198 769 sql/schema_changer.go:1015  [n1,job=628780303716679681,scExec,id=52] 44  waiting for a single version... done (at v 3)
+I210129 22:22:00.437225 769 jobs/registry.go:1135  [n1] 45  SCHEMA CHANGE job 628780303716679681: stepping through state succeeded with error: <nil>
+=== RUN   TestImportData/PGDUMP/sequence:_save_rejected=false
+    import_stmt_test.go:1115: IMPORT PGDUMP ($1)  http://127.0.0.1:52839 
+        File contents:
+         
+        					CREATE TABLE t (a INT8);
+        					CREATE SEQUENCE public.i_seq
+        						START WITH 1
+        						INCREMENT BY 1
+        						NO MINVALUE
+        						NO MAXVALUE
+        						CACHE 1;
+        					ALTER SEQUENCE public.i_seq OWNED BY public.i.id;
+        					ALTER TABLE ONLY t ALTER COLUMN a SET DEFAULT nextval('public.i_seq'::regclass);
+        					SELECT pg_catalog.setval('public.i_seq', 10, true);
+        				
+I210129 22:22:00.457358 1625 jobs/registry.go:1135  [n1] 46  IMPORT job 628780303825502209: stepping through state running with error: <nil>
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47  IMPORT job 628780303825502209: stepping through state reverting with error: unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +(1) attached stack trace
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  -- stack trace:
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.readPostgresStmt
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/read_import_pgdump.go:450
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.readPostgresCreateTable
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/read_import_pgdump.go:303
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.parseAndCreateBundleTableDescs
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1309
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.(*importResumer).parseBundleSchemaIfNeeded
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1348
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.(*importResumer).Resume
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1385
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).stepThroughStateMachine.func1
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/registry.go:1153
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).stepThroughStateMachine
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/registry.go:1154
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).runJob
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/adopt.go:236
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*StartableJob).Start.func3
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/jobs.go:861
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:352
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | runtime.goexit
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +  | 	/usr/local/opt/go/libexec/src/runtime/asm_amd64.s:1374
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +Wraps: (2) unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+I210129 22:22:00.459589 1625 jobs/registry.go:1135  [n1] 47 +Error types: (1) *withstack.withStack (2) *errutil.leafError
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48  IMPORT job 628780303825502209: stepping through state failed with error: unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +(1) attached stack trace
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  -- stack trace:
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.readPostgresStmt
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/read_import_pgdump.go:450
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.readPostgresCreateTable
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/read_import_pgdump.go:303
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.parseAndCreateBundleTableDescs
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1309
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.(*importResumer).parseBundleSchemaIfNeeded
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1348
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/ccl/importccl.(*importResumer).Resume
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/ccl/importccl/import_stmt.go:1385
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).stepThroughStateMachine.func1
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/registry.go:1153
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).stepThroughStateMachine
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/registry.go:1154
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*Registry).runJob
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/adopt.go:236
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/jobs.(*StartableJob).Start.func3
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/jobs/jobs.go:861
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/Users/adityamaru/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:352
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | runtime.goexit
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +  | 	/usr/local/opt/go/libexec/src/runtime/asm_amd64.s:1374
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +Wraps: (2) unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+I210129 22:22:00.461293 1625 jobs/registry.go:1135  [n1] 48 +Error types: (1) *withstack.withStack (2) *errutil.leafError
+E210129 22:22:00.462873 1625 jobs/adopt.go:241  [n1] 49  job 628780303825502209: adoption completed with error unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+    import_stmt_test.go:1119: expected error '', got: pq: unsupported *tree.AlterSequence statement: ALTER SEQUENCE public.i_seq OWNED BY public.i.id
+I210129 22:22:00.464122 1182 sql/table.go:70  [n1,client=127.0.0.1:52838,hostssl,user=root] 50  queued new drop database job 628780303855190017 for database 53
+I210129 22:22:00.466312 1182 jobs/registry.go:315  [n1,client=127.0.0.1:52838,hostssl,user=root] 51  scheduled jobs [628780303855190017]
+I210129 22:22:00.472937 1660 jobs/adopt.go:137  [-] 52  job 628780303855190017: resuming execution
+I210129 22:22:00.473972 1662 jobs/registry.go:1135  [n1] 53  SCHEMA CHANGE job 628780303855190017: stepping through state running with error: <nil>
+I210129 22:22:00.475634 1662 sql/schema_changer.go:575  [n1,job=628780303855190017,scExec,id=53] 54  schema change on "d76" (v2) starting execution...
+I210129 22:22:00.475665 1662 sql/schema_changer.go:410  [n1,job=628780303855190017,scExec,id=53] 55  draining previous names
+I210129 22:22:00.477053 1662 sql/schema_changer.go:1013  [n1,job=628780303855190017,scExec,id=53] 56  waiting for a single version...
+I210129 22:22:00.477911 1662 sql/schema_changer.go:1015  [n1,job=628780303855190017,scExec,id=53] 57  waiting for a single version... done (at v 3)
+I210129 22:22:00.478131 1662 jobs/registry.go:1135  [n1] 58  SCHEMA CHANGE job 628780303855190017: stepping through state succeeded with error: <nil>
+I210129 22:22:00.488570 37 util/stop/stopper.go:560  [-] 59  quiescing
+W210129 22:22:00.488618 372 jobs/registry.go:703  [-] 60  canceling all adopted jobs due to stopper quiescing
+W210129 22:22:00.488728 1924 kv/kvserver/intentresolver/intent_resolver.go:752  [-] 61  failed to gc transaction record: could not GC completed transaction anchored at /Table/15/1/628780303855190017: node unavailable; try another peer
+W210129 22:22:00.488621 371 sql/sqlliveness/slinstance/slinstance.go:183  [n1] 62  exiting heartbeat loop
+--- FAIL: TestImportData (0.19s)
+    --- FAIL: TestImportData/PGDUMP/sequence:_save_rejected=false (0.04s)
+FAIL
+FAIL	github.com/cockroachdb/cockroach/pkg/ccl/importccl	1.798s
+FAIL
+make: *** [test] Error 1
