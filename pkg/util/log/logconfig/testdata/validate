@@ -293,7 +293,7 @@ sinks:
       redactable: true
       exit-on-error: true
   stderr:
-    channels: DEV
+    channels: [DEV]
     filter: NONE
     format: crdb-v2-tty
     redact: false

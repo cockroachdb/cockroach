@@ -50,7 +50,7 @@ func TestSetupLogging(t *testing.T) {
 	stdCaptureFd2Re := regexp.MustCompile(
 		`capture-stray-errors: \{enable: true, dir: (?P<path>[^}]+)\}`)
 	fileCfgRe := regexp.MustCompile(
-		`\{channels: (?P<chans>[^ ]+), dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: (?P<buf>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
+		`\{channels: (?P<chans>all|\[[^]]*\]), dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: (?P<buf>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
 
 	stderrCfgRe := regexp.MustCompile(
 		`stderr: {channels: all, filter: (?P<level>[^,]+), format: crdb-v2-tty, redactable: (?P<redactable>[^}]+)}`)
@@ -111,7 +111,7 @@ func TestSetupLogging(t *testing.T) {
 		actual = fileDefaultsNoMaxSizeRe.ReplaceAllString(actual, "<fileDefaultsNoMaxSize($path)>")
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
 		actual = stdCaptureFd2Re.ReplaceAllString(actual, "<stdCaptureFd2($path)>")
-		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg([$chans],$path,$buf,$format)>")
+		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg($chans,$path,$buf,$format)>")
 		actual = stderrCfgRe.ReplaceAllString(actual, "<stderrCfg($level,$redactable)>")
 		actual = strings.ReplaceAll(actual, `<stderrCfg(NONE,true)>`, `<stderrDisabled>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(INFO,false)>`, `<stderrEnabledInfoNoRedaction>`)
