@@ -157,7 +157,6 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in CHECK constraints.
-	// Renaming columns that are being referenced by checks that are being added is not allowed.
 	for i := range tableDesc.Checks {
 		var err error
 		tableDesc.Checks[i].Expr, err = schemaexpr.RenameColumn(tableDesc.Checks[i].Expr, *oldName, *newName)
@@ -187,6 +186,38 @@ func (p *planner) renameColumn(
 			indexDesc := *index.IndexDesc()
 			indexDesc.Predicate = newExpr
 			tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), indexDesc)
+		}
+	}
+
+	// Do all of the above renames inside check constraints, computed expressions,
+	// and index predicates that are in mutations.
+	for i := range tableDesc.Mutations {
+		m := &tableDesc.Mutations[i]
+		if constraint := m.GetConstraint(); constraint != nil {
+			if constraint.ConstraintType == descpb.ConstraintToUpdate_CHECK ||
+				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL {
+				var err error
+				constraint.Check.Expr, err = schemaexpr.RenameColumn(constraint.Check.Expr, *oldName, *newName)
+				if err != nil {
+					return false, err
+				}
+			}
+		} else if otherCol := m.GetColumn(); otherCol != nil {
+			if otherCol.IsComputed() {
+				newExpr, err := schemaexpr.RenameColumn(*otherCol.ComputeExpr, *oldName, *newName)
+				if err != nil {
+					return false, err
+				}
+				otherCol.ComputeExpr = &newExpr
+			}
+		} else if index := m.GetIndex(); index != nil {
+			if index.IsPartial() {
+				var err error
+				index.Predicate, err = schemaexpr.RenameColumn(index.Predicate, *oldName, *newName)
+				if err != nil {
+					return false, err
+				}
+			}
 		}
 	}
 
