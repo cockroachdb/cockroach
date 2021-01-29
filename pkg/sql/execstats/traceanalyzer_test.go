@@ -185,6 +185,11 @@ func TestTraceAnalyzer(t *testing.T) {
 }
 
 func TestTraceAnalyzerProcessStats(t *testing.T) {
+	const (
+		node1Time      = 3 * time.Second
+		node2Time      = 5 * time.Second
+		cumulativeTime = node1Time + node2Time
+	)
 	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
 	a.AddComponentStats(
 		1, /* nodeID */
@@ -194,7 +199,8 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				1, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime: optional.MakeTimeValue(3 * time.Second),
+				KVTime:         optional.MakeTimeValue(node1Time),
+				ContentionTime: optional.MakeTimeValue(node1Time),
 			},
 		},
 	)
@@ -207,12 +213,16 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				2, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime: optional.MakeTimeValue(5 * time.Second),
+				KVTime:         optional.MakeTimeValue(node2Time),
+				ContentionTime: optional.MakeTimeValue(node2Time),
 			},
 		},
 	)
 
-	expected := execstats.QueryLevelStats{KVTime: 8 * time.Second}
+	expected := execstats.QueryLevelStats{
+		KVTime:         cumulativeTime,
+		ContentionTime: cumulativeTime,
+	}
 
 	assert.NoError(t, a.ProcessStats())
 	if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {
