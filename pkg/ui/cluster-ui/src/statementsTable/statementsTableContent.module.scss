@@ -1,4 +1,4 @@
-@import 'src/core/index.module';
+@import "src/core/index.module";
 
 .cl-table-link__description {
   font-size: $font-size--small;
@@ -6,6 +6,7 @@
   color: $colors--neutral-1;
   white-space: pre-wrap;
   margin-bottom: 0;
+  @include line-clamp(15);
 }
 
 .cl-table-link__statement-tooltip--fixed-width {
@@ -54,7 +55,7 @@
   align-items: center;
 
   .activate-diagnostic-link {
-    width: auto!important;
+    width: auto !important;
   }
 
   .activate-diagnostic-dropdown {

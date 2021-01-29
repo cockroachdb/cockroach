@@ -22,6 +22,7 @@
   width: 400px;
   text-decoration: none;
   cursor: pointer;
+  @include line-clamp(2);
   &:hover {
     color: $colors--link;
     text-decoration: underline;
