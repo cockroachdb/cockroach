@@ -35,3 +35,6 @@ build/Railroad.jar
 
 # Bazel generated symlinks
 /bazel-*
+
+# Per-user .bazelrc
+/.bazelrc.user
