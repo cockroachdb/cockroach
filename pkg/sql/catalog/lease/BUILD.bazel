@@ -83,6 +83,7 @@ go_test(
         "//pkg/util/log/logpb",
         "//pkg/util/randutil",
         "//pkg/util/retry",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
