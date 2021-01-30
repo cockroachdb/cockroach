@@ -185,6 +185,24 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 		2*s.leaseJitterFraction*rand.Float64()))
 }
 
+// nonPublicDescriptorError is returned from the attempt to acquire a lease
+// when the descriptor is found to be in a non-public state. This means that
+// it cannot be leased, however, the Manager can utilize this to update
+// the descriptorState and to also guide calls to Acquire with a timestamp
+// preceding the drop.
+type nonPublicDescriptorError struct {
+	cause error
+	desc  catalog.Descriptor
+}
+
+func (e *nonPublicDescriptorError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *nonPublicDescriptorError) Cause() error {
+	return e.cause
+}
+
 // acquire a lease on the most recent version of a descriptor. If the lease
 // cannot be obtained because the descriptor is in the process of being dropped
 // or offline (currently only applicable to tables), the error will be of type
@@ -222,7 +240,7 @@ func (s storage) acquire(
 		if err := catalog.FilterDescriptorState(
 			desc, tree.CommonLookupFlags{}, // filter all non-public state
 		); err != nil {
-			return err
+			return &nonPublicDescriptorError{cause: err, desc: desc}
 		}
 		// Once the descriptor is set it is immutable and care must be taken
 		// to not modify it.
@@ -853,7 +871,21 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
 func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, error) {
-	var toRelease *storedLease
+	upsertDescriptorAndMaybeDropLease := func(ctx context.Context, desc *descriptorVersionState, takenOffline bool) error {
+		t := m.findDescriptorState(id, false /* create */)
+		t.mu.Lock()
+		t.mu.takenOffline = takenOffline
+		defer t.mu.Unlock()
+		toRelease, err := t.upsertLocked(ctx, desc)
+		if err != nil {
+			return err
+		}
+		m.names.insert(desc)
+		if toRelease != nil {
+			releaseLease(toRelease, m)
+		}
+		return nil
+	}
 	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
 		// Note that we use a new `context` here to avoid a situation where a cancellation
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
@@ -870,20 +902,27 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			minExpiration = newest.expiration
 		}
 		desc, err := m.storage.acquire(newCtx, minExpiration, id)
+		// Deal with the case where the descriptor has been taken offline.
+		// Queries attempting to use this descriptor at a historical timestamp
+		// prior to its having been dropped would not be able to if we just surfaced
+		// this error alone.
+		if e := new(nonPublicDescriptorError); errors.As(err, &e) {
+			if err := upsertDescriptorAndMaybeDropLease(ctx, &descriptorVersionState{
+				Descriptor: e.desc,
+				expiration: e.desc.GetModificationTime(),
+			}, true /* takenOffline */); err != nil {
+				return nil, errors.CombineErrors(e,
+					errors.Wrapf(err, "upserting non-public descriptor"))
+			}
+			return nil, err
+		}
 		if err != nil {
 			return nil, err
 		}
-		t := m.findDescriptorState(id, false /* create */)
-		t.mu.Lock()
-		t.mu.takenOffline = false
-		defer t.mu.Unlock()
-		toRelease, err = t.upsertLocked(newCtx, desc)
-		if err != nil {
+		if err := upsertDescriptorAndMaybeDropLease(
+			ctx, desc, false, /* takenOffline */
+		); err != nil {
 			return nil, err
-		}
-		m.names.insert(desc)
-		if toRelease != nil {
-			releaseLease(toRelease, m)
 		}
 		return leaseToken(desc), nil
 	})
@@ -1377,17 +1416,6 @@ func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
 // the returned descriptor. Renewal of a lease may begin in the
 // background. Renewal is done in order to prevent blocking on future
 // acquisitions.
-//
-// Known limitation: AcquireByName() calls Acquire() and therefore suffers
-// from the same limitation as Acquire (See Acquire). AcquireByName() is
-// unable to function correctly on a timestamp less than the timestamp
-// of a transaction with a DROP/TRUNCATE on the descriptor. The limitation in
-// the face of a DROP follows directly from the limitation on Acquire().
-// A TRUNCATE is implemented by changing the name -> id mapping
-// and by dropping the descriptor with the old id. While AcquireByName
-// can use the timestamp and get the correct name->id  mapping at a
-// timestamp, it uses Acquire() to get a descriptor with the corresponding
-// id and fails because the id has been dropped by the TRUNCATE.
 func (m *Manager) AcquireByName(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
@@ -1536,12 +1564,6 @@ func (m *Manager) resolveName(
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
 // the returned descriptor.
-//
-// Known limitation: Acquire() can return an error after the descriptor with
-// the ID has been dropped. This is true even when using a timestamp
-// less than the timestamp of the DROP command. This is because Acquire
-// can only return an older version of a descriptor if the latest version
-// can be leased; as it stands a dropped descriptor cannot be leased.
 func (m *Manager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (catalog.Descriptor, hlc.Timestamp, error) {
@@ -1569,6 +1591,11 @@ func (m *Manager) Acquire(
 				_, errLease := acquireNodeLease(ctx, m, id)
 				return errLease
 			}(); err != nil {
+				// Go back around because now we know about a dropped descriptor.
+				if e := new(nonPublicDescriptorError); errors.As(err, &e) &&
+					timestamp.Less(e.desc.GetModificationTime()) {
+					continue
+				}
 				return nil, hlc.Timestamp{}, err
 			}
 
