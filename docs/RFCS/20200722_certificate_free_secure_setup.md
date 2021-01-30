@@ -12,24 +12,22 @@ This RFC proposes a means of creating a CRDB single or multi-node cluster runnin
 
 # Motivation
 
-Certificates and their management have traditionally been major sources of toil and confusion for system administrators and users across all sectors that depend upon them for trust. Our current user story for CockroachDB does not stand out against this tradition.
-
-After reviewing the existing CockroachDB trust mechanisms, it seems that the effort and complexity of certificate management drives users to test and prototype with the `--insecure` flag rather than the default (secure) state. Our "Getting Started" guide highlights this well as the "insecure" guide (https://www.cockroachlabs.com/docs/v20.1/start-a-local-cluster.html) starts with `cockroach start` whereas the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) has four complex certificate generation steps before the user may even start their cluster.
+After reviewing the existing CockroachDB trust mechanisms, it seems that the effort and complexity of certificate management drives users to test and prototype with the `--insecure` flag rather than the default (secure) state. Our "Getting Started" guide highlights this where the "insecure" guide (https://www.cockroachlabs.com/docs/v20.1/start-a-local-cluster.html) starts with `cockroach start` whereas the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) has four complex certificate generation steps before the user may start their cluster.
 
 In addition, the functional security gap between default and "insecure" mode is not well presented ([https://github.com/cockroachdb/cockroach/issues/53404], [https://github.com/cockroachdb/cockroach/issues/44842], [https://github.com/cockroachdb/cockroach/issues/16188#issuecomment-571191964], [https://github.com/cockroachdb/cockroach/issues/49532], [https://github.com/cockroachdb/cockroach/issues/49918]) and has resulted in unpleasant user surprises.
 
 Implementation of the approach in this RFC is expected to decrease usage of the `--insecure' flag (which we can measure internally against our own engineering teams) resulting in a smoother and more secure experience for all CockroachDB users.
 
-This also addresses the deployment challenge where some CAs demand issued certificates match fully qualified domain names ([https://aws.amazon.com/certificate-manager/faqs/?nc=sn&loc=5#ACM_Public_Certificates]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
+This also eases the deployment challenge where some CAs require issued certificates match fully qualified domain names ([https://aws.amazon.com/certificate-manager/faqs/?nc=sn&loc=5#ACM_Public_Certificates]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
 
-This removes the _requirement_ that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. This may also help with orchestration as any node may then be used to create a `join-token` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
+This removes the requirement that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. It may also help with orchestration as any node may then be used to create a `join-token` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
 
 Existing users deploying with the default secure mode will find that they have fewer steps to get to a running cluster. Users who have relied on `--insecure` to avoid the hassle of managing certificates when testing will now be able to test with the system in a secure state by default with minor adjustment to their workflow.
 
 ## Goals
 
 ### 0 Support for multiple deployment patterns without UX regression
-All subsequent goals are expected to be met for manual, kubernetes, and CLI launchable configurations. We should avoid solutions that create UX regressions when compared to the existing `--insecure` configurations of these wherever possible.
+All subsequent goals are expected to be met for manual, scriptable, and kubernetes configurations. We should avoid solutions that create UX regressions when compared to the existing `--insecure` configurations of these _wherever possible_.
 
 ### 1 Initial startup path
 Initialization must complete the following two tasks in addition to starting the base nodes:
@@ -40,7 +38,7 @@ Initialization must complete the following two tasks in addition to starting the
 Any solution must satisfy the following list of requirements:
 * All nodes have distinct node-to-node trust based on a node CA (`interNodeCa`)
 * Nodes rely on a distinct user CA for access to the cluster (`userAuthCa`)
-* Node user-facing services have a distinct CA (`sqlServiceCa` and `rpcServiceCa`)
+* Node user-facing services have distinct CAs (`sqlServiceCa` and `rpcServiceCa`)
 * A valid administrative certificate (traditionally "root" in CockroachDB) or analog has been emitted
 
 Optional requirements:
@@ -50,7 +48,7 @@ Optional requirements:
 ### 2 Add/Remove nodes
 Support secure and atomic add/remove operations for existing clusters.
 
-### 3 Adding new regions
+### 3 Adding new regions (Stretch Goal)
 Enable manual and k8s users to add new regions (collections of nodes) to an existing cluster
 
 ## Non-Goals
@@ -66,20 +64,18 @@ Except where otherwise noted, manual, scripted, and kubernetes flows are identic
 Operators may use an `initialization-token` to avoid all certificate management, or supply their own `interNodeCa` if desired. Both provide auto-initializing paths to a secure cluster.
 
 **initialization-token**
-To support the generation and propagation of trust primitives a starting token may be provided to all nodes in the initial set. The token contains a seed for the PRNG to permit generation of a deterministic internode CA which all nodes can independently construct. Once nodes have constructed this CA, they mint their own host certificates, and establish trust with peers via mTLS. Once a quorum of nodes trust each other, a leader self-nominates that will generate any missing CA's and/or relevant certificates. The leader then serves these to all peers to enable TLS on all interfaces across the cluster. The initial deterministic CA is rotated after a short period of time to reduce the window for cryptologic attacks.
+To support the generation and propagation of trust primitives, a starting token may be provided to all nodes in the initial set. The token is any string of bytes that may serve as a shared secret. The starting set of nodes will use this shared secret to create mutual trust relationships before generating and sharing their initial certificate bundle including a common interNodeCa. The initial generated CA is rotated after a short period of time to reduce the window for cryptologic attacks.
 
-Borrowing from the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) this feature will allow all four of the existing certificate management steps to fall away. We may add an implicit `initialization-token` to the single-node start case or a flag that tells the node to synthesis its own `initialization-token` (such as `--self-secure-init`). For the second and third nodes, since they share the same certificate directory, the documentation would remain unchanged and the cluster would start with all internode traffic secured by strong TLS.
+Borrowing from the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) this feature will allow all four of the existing certificate management steps to fall away. We may add an implicit `initialization-token` to the single-node start case, a flag that tells the node to synthesis its own `initialization-token` (such as `--self-secure-init`), or a file path. For the second and third nodes, since they share the same certificate directory, the documentation would remain unchanged and the cluster would start with all internode traffic secured by strong TLS.
 
 **BYO interNodeCa**
-If an operator wishes to supply their own `interNodeCa` they may skip the use of initialization tokens altogether by placing it on each nodes filesystem. The nodes will then follow the initialization process identical to that listed above.
-
-_This will likely be the preferred kubernetes deployment pattern._
+If an operator wishes to supply their own `interNodeCa` they may skip the use of initialization tokens altogether by placing it on each node's filesystem. The nodes will then follow the initialization process identical to that listed above.
 
 ## Add/Join operation
 
 Any node with access to the `interNodeCa` may be joined to the cluster (at any time) by simply providing it a list of peers (as is already the case). On startup, it will use the `interNodeCa` to mint its own host certificate, then use that to connect to peers and request the current `initialization-bundle` from any of them.
 
-_In a kubernetes environment it is conjectured that this internode CA may be presented as a secret and managed by an operator if desired._
+_In a kubernetes environment it is envisioned that this internode CA will be copied from any existing node to the joining node by an operator._
 
 In a configuration where it is impossible or undesirable to directly manage the internode CA, a SQL function is exposed for generating `join-token`s that are single-use, time-limited primitives that enable a node without access to the `interNodeCa` to submit proof of membership.
 
@@ -90,7 +86,7 @@ cockroach start --certs-dir=certs \
     --join=node1,node2,node3 \
     --cache=.25 \
     --max-sql-memory=.25 \
-    --join-token=b122701da0ade08fc31b54ebdac40a6b23322ae5c74d7a5d0f798f6663af6c67c4b0ef741644bc355c0945ddb8995375d05825cd5918bbc7445c6c8451a34262
+    --join-token=b122701da0ade08fc31b54ebdac40a6b23
 ```
 
 # Reference-level explanation
@@ -123,15 +119,15 @@ This is the collection of CAs that a new node node needs to generate its certifi
 **New term:** `join-token`
 This is a user opaque token that can be requested by a cluster operator from any online node and supplied to a fresh unprovisioned node to join it to the cluster.
 
-A `join-token` must contain a means to:
- - Confirm the identity of the server (certificate public key fingerprint, plus explicit verification of shared secret)
- - Identify the joining node (shared secret)
+A `join-token` must provide a means to:
+ - Confirm the identity of the server (node to join)
+ - Identify the joining node
  - Establish token uniqueness (for auditing and to avoid reuse)
  - Expire (hygiene)
 
 ## Initial Configuration (establishing trust)
 
-Nodes will use the below flow to reach an mTLS-ready state:
+Nodes will use the below flow to reach an init-ready state:
 
 ![
 @startuml
@@ -141,28 +137,38 @@ if (Is `interNodeHostCertificate` (public, private) key present) then (yes)
 else (no)
   if (Is `interNodeCa` (public, private) key present) then (no)
     if (Is `initToken` commandline argument present) then (yes)
-      :generate short-lived `interNodeCa`;
+      :mutually establish trust and pick node to generate CAs;
     else (no)
     :fail normally with missing CA;
     stop
     endif
+  else (yes)
   endif
-  :generate `interNodeHostCertificate` (public, private) keys;
+  if (node picked to generate CAs) then (yes)
+  :generate short-lived `interNodeCa`;
+  :generate any missing interface CAs;
+  else (no)
+  : wait for `initialization-bundle`;
+  : install CAs from `initialization-bundle`;
 endif
-:restart to bootstrap valid `interNodeHostCertificate`;
+:generate `interNodeHostCertificate` (public, private) keys;
+:generate any host interface certificates (public, private) keys;
+:restart to bootstrap valid `interNodeHostCertificate` and any interface certificates;
+endif
+: node starts normally;
 stop
 @enduml
-](http://www.plantuml.com/plantuml/png/bP6nJiCm48PtFyK_9XAyGBCKTO65YGUeMr_QK-sxo7SfojiZEKD080HUV8E_pv_ilNciFfSSsX1seedGvY447j6z68uiJlLL4psh-O6gyyZdw7H4DysdpES7J9NlqQd7ZHPCbOp4U_YL1Dr2rWVAHkX4-m1yynxY7rKh_zd0_gOtaYFEMagKb5a8iLxcGk8_bg2jtOM4QdI2NRNwO-OxfQz9GpkwXJTiZ9mXMalCUS4x-nM5pLWkE3ojXBbEAog9nx3jsvt_VL8RmYhPLMg_0rUSLDsynWdtc3dz8Xr2QzgJfBda3m00)
+](http://www.plantuml.com/plantuml/png/bPFF3fim3CRlF8MF8Aql09TElMoNdVO0JS4Kg_c3OgSLU_gvYKHfrquRfv3u-_dxJDYpc2Z9sIelgjQ70I6lkuf6gByp7CaBnXzwy2sm730AZTGRmIFKSpfPwh_07EcgEmrSSD4NPFJIW4peeLwGcmej8zG-D1N07zo3-KTKqMy993_31VqH-k2SyOCbZs3YEJcLlNK2-MbTacIiNG0rhNRc2IGc5b08pDHV88z20fpHOpI2SFZANPPlmoXgD6IrEhhCkv5Cu8YP_5abHS4IvYBr0urLGQo6ocQ9TU-Q--FmslmbHhkUyHIYx2nTSNYUQlTKPloo6ijLe-dNLDjCBTmC2OmXbX6JiVJB20M_EoMTCHQmGbWqynq1OmpkStL9k5hvxpkb5fzpJ2hRXEWV1FvCY9XlDaY0KmZ24iqCLxKx_CsGyKDk-RxRcWqUlmwljw6hyfVVQqrozZS0)
 
 In the case where a `interNodeHostCertificate` is already present on the system. It is assumed that all other intended certificate provisioning has already occurred.
 
 Failing that, the node will attempt to use a supplied `interNodeCa`, if present, to create its own `interNodeHostCertificate`. (_This permits k8s operators to use an externally generated CA for these interfaces mounted as a secret._)
 
-Failing that, the node will look for a ***valid*** `initToken` command line argument. If present it will use this to generate a deterministic certificate that will be used as above to generate its `interNodeHostCertificate`.
+Failing that, the node will look for an `initToken`. If present it will use this to mutually authenticate with peers and coordinate generation of a common `interNodeHostCa`, relevant interface CAs, and subsequently its own `interNodeHostCertificate`.
 
-**Generating Interface Certificates**
+**Interface Certificates**
 
-Once nodes have successfully joined each other via mTLS and reached quorum, one of the nodes will grab a mutex (or analog), set it to an initializing state (`INIT`) and craft any needed certificates that are not already present on its local filesystem (or analog). This will follow the below flow for each of the interface CAs:
+Once nodes have established common trust, the same node that generates the `interNodeHostCa` will examine its filesystem for any interface CAs and craft any needed certificates that are not already present on its local filesystem (or analog). This will follow the below flow for each of the interface CAs:
 * `sqlServiceCa`
 * `rpcServiceCa`
 * `adminUiServiceCa`
@@ -183,57 +189,28 @@ stop
 @enduml
 ](http://www.plantuml.com/plantuml/png/bT31IeCn40JW-px571FG5sX1AvvyYyPqqYp-JNwoMyl_zlve4K4FzROCp0SxE_Cq_7oQvFEGmPd9DoXzW2bNxBKvHqcP-ws85eGN-ncYTdDa3jUYEJaHvlFhfFaEyz3tDOXuuuAJccaxHdXbGrXeKO0_lEUdVmd0viZ6aPmtCROLWEsWHNvNR__e2icNT9qDbweJ4Gwz4HVrYc_L7YFK45gFSl-mS6sRzrbsAx2k_m40)
 
+Any CAs generated in this step will be included in the initial certificate bundle distributed to the rest of the nodes.
+
 **Root User**
 The node then checks for a `userAuthCA` containing a _public_ key. If found it continues with the remaining initialization path. If NOT found, if generates a `userAuthCA` and a `root` user certificate and emits both to the filesystem.
 
 **Distribution**
-The node upon satisfying the above checks and/or generation steps. Sets the mutex to `READY`, marks itself initialized, then restarts to pick up all newly minted certificates.
+The node upon satisfying the above checks and/or generation steps distributes the `initialization-bundle` to all peers before restarting to pick up all certificates per normal operation.
 
-While this is happening, its peers poll the mutex waiting for the `READY` state. Once they detect this state change, they begin polling their peers until one of them provides an `initialization-bundle`. Upon receipt of an `initialization-bundle` the node installs the received certificates and restarts to begin using them on all relevant interfaces.
+For peers that receive an `initialization-bundle`, they install the received certificates, generate their own host specific certificates and restart to begin using them on all relevant interfaces.
 
-![
-@startuml
-database Node_Orange
-control ClusterInitStatus
-database Node_Cherry
-database Node_Banana
-== mTLS established ==
-group Interface Initialization
-Node_Orange -> ClusterInitStatus : Set get (lock) and set status to `INIT`
-activate ClusterInitStatus
-Node_Banana --> ClusterInitStatus : Poll for `READY` status
-Node_Cherry --> ClusterInitStatus : Poll for `READY` status
-note over Node_Orange : Generate Interface Certs
-note over Node_Orange : Generate Root User Cert if necessary
-Node_Orange -> ClusterInitStatus : Set status to `READY`
-note over Node_Orange : Restart
-Node_Cherry -> ClusterInitStatus : Read `READY` status
-Node_Banana -> ClusterInitStatus : Read `READY` status
-end
-group Nodes begin polling neighbors to request certificate bundle
-Node_Banana --> Node_Cherry : request certBundle (fail)
-Node_Banana -> Node_Orange : request certBundle (success)
-note over Node_Banana : Restart
-Node_Cherry -> Node_Orange : request certBundle (success)
-note over Node_Cherry : Restart
-end
-== Certificates propagation conplete ==
-@enduml
-](http://www.plantuml.com/plantuml/png/dPF1Yjj044JlynLrN1_s1mmEctL2C8HDi3U7dEBMg2GF6VSeCws5pTS72qC6Em9dhvAgkkgf-w6OP1kFqRLYqaWXdbBB7r-oQ4_darfE4Uiu5cFUQB2TYOtbulFrWJc_NZny51KLvrOh79y_xy1YqiHG3conMZdd-fp60HirvauySR8F4iDliP3KLK5m_-uw0vROqT3JS1UJ_xc0Q8j2GvdUmnBscwVDyzw9j_0YndyKgQBYVcRCrnGZkfInttvy_-7x_Zp0LTt_Mwl9YFJ2N0F74f-ep6AikAoPxGR1DYN3jy8y2H0wA3rBaVnw8yiAt3djxDGjfysf4SmPRodjDRcA-kqoHstFUpFbAMZO1yMGOWpQGndwGvFoL27pryXYyCmMkk35Y6RKDj9T_VMwnXAryd5IuAwJ41SNkMicCx8oUizI5XN8scCMv9kSAu_AcTfEHxZ-ow5Wo6cGVZeq-AH3fF5qbG_KTZp6Fm00)
-
-The cluster is now ready.
-
-**Kubernetes (additional note)**
-If the operator elects to use a kubernetes secret for the `interNodeCa` they will be responsible for rotating it as that path may not be writable.
+The cluster is now ready for a normal `init` instruction.
 
 ## Adding Nodes
 
+**N.B.:** If a node starts and detects an `interNodeCa` but does not find a corresponding `interNodeHostCertificate` it will generate its own `interNodeHostCertificate` and use that to connect to a peer and request an 'initialization-bundle' to aquire any other CAs which it will then use to generate certificates for related interfaces with the same logic as above.
+
 **Kubernetes**
 
-In the kubernetes case, adding nodes is trivial if the `interNodeCa` is mounted in the container of the joining node. The node starts, detects the CA, generates it's host certificate, then connects to a peer and asks for an `initialization-bundle`. After installing this it restarts and is ready to function.
+In the kubernetes case, adding nodes is trivial if the `interNodeCa` is placed in the container of the joining node. The node starts, detects the CA, generates it's host certificate, then connects to a peer and asks for an `initialization-bundle`. After installing this and generating related certificates it restarts and is ready to function.
 
 **Other orchestration (using interNodeCa )**
-Identical to the kubernetes case except that the orchestration solution must place the `interNodeCa` on the node's local filesystem.
+Identical to the kubernetes case except that the orchestration solution must place the `interNodeCa` on the node's filesystem.
 
 **Manual (join-tokens)**
 Any user with the permissions to add or remove nodes would have the ability to generate a `join-token` via a SQL call. The `join-token` would then be passed as an initial argument to the new node enabling it to prove membership and receive the `interNodeCa`, restart, and request provisioning (and populate its own certificates directory). The token would be consumed upon successful join to reduce risks associated with join token spillage.
@@ -248,55 +225,63 @@ To add a new region an operator may copy the `interNodeCa` to the nodes in the n
 
 ## Establishing Initial Node Trust
 
-Internode trust is predicated on being able to generate identical copies of the `interNodeCa` on all nodes. This is accomplished by seeding a PRNG with a common secret and generating all certs with an identical sign date and validity window. 
+_Reference implementation here:_ https://github.com/aaron-crl/toy-secure-init-handshake/tree/n-way-join
+
+Internode trust is established though a bootstrapped TLS process. Nodes provided with the right constraints and an `initialization-token` will take the following steps:
+* generate a self-signed CA
+* use that CA to generate a service certificate signed by that CA
+* start a listener using that certificate that hosts two endpoints
+  * the CA public key and a MAC generated using the shared secret
+  * an `initialization-bundle` receiver
+* Nodes will also make **insecure** TLS connection requests to all peers to request their CA public key and MACs (in the reference implementation this is a bidirectional share to reduce the number of required connections)
+* Nodes will verify the MAC for each peer and (if correct) add the CA to a peer address map
+
+Once all nodes have exchanged public CA keys, the node with the "lowest" certificate signature value self nominates to generate the `initialization-bundle`. Once this bundle is created, this node uses the public key for each peer's CA to create strong TLS connections to each peer using their trusted CA and deliver the `initialization-bundle` in addition to a MAC of the bundle generated with the `initialization-token` to prove authenticity.
 
 **initialization-token**
-The initialization token must provide all required information to perform this process. For convenience and portability it should be user editable and easily copied. It may also carry relevant configurable information (such as cluster name).
+The initialization token can be any string of bytes though for security it is recommended that they be of a adequate length and entropy to resist guessing for the duration of the initialization period.
 
-Strawman JSON token:
-```json
-{
-  "clusterName": "indominable",
-  "numNodes": 3,
-  "initSecret": "super secret string",
-  "initStartValidity": "2020-01-02T03:00:00.000Z",
-  "lifespanInSeconds": 3600
-}
-```
-
-**Generating a CA deterministically**
-All CA's generated across the cluster should have identical signatures. That means that in addition to using the same names, serial numbers, and options, they must have the same "randomly chosen" keys and must also use the same timestamps. This can be accomplished by specifying the validity window in the `initialization-token` and generating a PRNG seed value from the `initSecret`.
-
-In order to reduce the feasibility of attacks against the initial certificates for their short lifespans the PRNG seed should be generated with a key derivation function like PBKDF2 to increase the amount of time required to brute force the certificate generation key space. The key derivation function should include at least the `initStartValidity` in addition to the `initSecret`  and possibly the cluster name to increase the key space.
 
 ## Joining a Cluster
 
 Nodes must prove membership to join a cluster. This is affected with a join token that provides the material for a Diffie-Hellman-like mutual assertion of trust using HMACs. The tokens are ephemeral and single-use to reduce risk associated with spillage.
 
+**Establishing client/server trust and a new provisioning service**
+
+**N.B.:** _This process requires the addition of an unauthenticated provisioning endpoint that behaves similiarly to the cluster initialization service._
+
+The provisioning service does not require mTLS. It has one endpoint that responds to HTTPS post requests. These requests must contain a `proof-of-membership`.
+
+**New Term:** `proof-of-membership`
+Proof of membership is a struct containing `tokenId`, and a MAC of a peer's `interNodeHostCertificate` public key concatinated with the `tokenId` keyed with the `sharedSecret` ( HMAC[tokenId+serverPublicKey, sharedSecret] ).
+
 **Generating a join-token**
 Any existing node may be used to generate a `join-token` if the user has appropriate permissions (let us assume these will be the same as current requirement for adding nodes).
 On existing node:
 - A user or operator invokes a new token request.
-- The node (called the surrogate from here forward) generates a token of of the form:
-`<token-uuid>|<surrogate-node-ca-public-key-fingerprint>|<shared-secret>|<expiration>`
-- The surrogate will place the token in a `join-token`'s table where its `token-uuid` and `expiration` are noted.
-- The new `join-token` is returned to the invoker.
+- This node generates an entry in the `join-tokens` capturing
+```golang
+type joinToken struct {
+  tokenId UUID
+  sharedSecret string // random string of 32 alphanumeric characters
+  expiration DateTime
+}
+```
+- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret base62 encoded as the `join-token` to the invoker and a single concatinated string.
 
 **Upon new node launch:**
-- The new node will be provided a `join-token` with its start flags.
-- The new node will attempt to connect to a peer and upon success will attempt to validate the existing node ("server" from here forward) through the following two steps:
-    1. Check that the provided certificate of the host was signed by a CA with the expected fingerprint.
-    2. Send its `join-token`,  `token-uuid`, and a random plaintext `server-challenge` to the host.
+- The new node will be provided a `join-token` or the location of a file containing it with its start flags.
+- The node will TLS Dial a peer and collect the certificate chain
+- The node will recompute the authentication fingerprint from above chain using the `interNodeCA.PublicKey` and `sharedSecret` from its `join-token` to confirm it matches the one in it's join token
+- If validation succeeds
+    1. The new node will compute its `proof-of-membership` using the `interNodeHostCertificate` from its peer
+    2. The new node will create a secure TLS connection to the same peer's provisioning service and request an `initialization-bundle` by send its `token-uuid`, and `proof-of-membership`.
         - The server will:
             - Look up the token associated with this `token-uuid`
-            - Generate an HMAC using the `server-challenge` and the `shared-secret` contained in the `join-token` with the specified `token-uuid`
-            - Return this HMAC via the existing TLS connection. The server will also return it's own plaintext `node-challenge` for node validation in a later step.
-- Once the node has validated the server by checking the returned HMAC it will perform the same form of HMAC using the `shared-secret` and the server's `node-challenge`. It will present this HMAC to the server as proof that it possesses a valid join token.
-- The server will then return the `interNodeCa`.
-- The server will mark the `join-token` as consumed in the cluster registry to avoid reuse.
-- The joining node writes the CA to its local private storage, mints its own host certificate, then restarts into a joining state.
-- The node reconnects to a peer secured by mTLS and receives the `initialization-bundle`.
-- The node initializes itself in the same way as the initial nodes.
+            - Confirm the `proof-of-membership` using its own cert public key and the `shared-secret` stored in the `join-tokens` table with the specified `token-uuid`
+            - Upon success the server will collect and return an `initialization-bundle` to the new node.
+            - The server will mark the `join-token` as consumed in the `join-tokens` table to avoid reuse.
+    3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
 
 ** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
 
@@ -323,23 +308,26 @@ This creates new functionality by which an operator or orchestration solution ma
 
 The cluster can reach a state of deadlock if the node that generates all interface certificates dies before it comes back online. 
 
-`TBD`
+The initialization process may also deadlock if any node dies before establishing mutual trust.
+
+The process will fail to provide a full set of joined nodes if a node dies between establishing mutual trust and provisioning of a common `interNodeCa`.
 
 ## Rationale and Alternatives
 
-This approach removes certificate management of cluster internal interfaces from the operator. It cleanly separates the trust relationships for application internal communications from external user and administrative interface greatly enhancing security boundaries. It removes almost all existing friction for experimenting and testing with a secure cluster reducing dependence on insecure configurations. It simplifies the documentation and user story to achieve a more secure configuration.
+This approach removes certificate management of cluster internal interfaces from the operator. It cleanly separates the trust relationships for application internal communications from external user and administrative interface enhancing security boundaries. It removes friction from experimenting and testing with a secure cluster reducing dependence on insecure configurations. It simplifies the documentation and user story.
 
 Other patterns are being pursued to address or work around the challenges of our existing certificate story:
 - A custom kubernetes operator([https://github.com/cockroachdb/cockroach-operator]) is being constructed to aid with certificate management and pod deployment.
 - The docs team has invested heavily in attempting to improve the documentation around our use of certificates with some success.
 
-Neither of these approach the gap between enterprises with well developed certificate management infrastructures and independent developers. Enterprises are generally willing to work through a hardening guide to deploy a production system. Independent developers tend to want the thing to "just work."
+Neither of these address the gap between enterprises with well developed certificate management infrastructures and independent developers. Enterprises are generally willing to work through a hardening guide to deploy a production system. Independent developers tend to want the thing to "just work."
 
 If we do not address this now we will continue to experience certificate-based frustration internally, among customers, and external developers. More insecure clusters will continue to be deployed. We may miss future opportunities where a smoother certificate user experience would have rendered success.
 
 ## Unresolved questions
 - It may also be worth adding a startup option that generates a non-`root` _user_ and _generated password_ to facilitate local testing and development.
 - How does this interact with the existing init functionality?
-- What will the exact format and content of the join token be?
+- What will the exact format and content of the join token be? (base62 string)
 - Can we just store the node provisioning certificates in the database permanently instead of writing them to external storage?
 - If the operator elects to use a kubernetes secret for the `interNodeCa` they will be responsible for rotating it as that path may not be writable.
+- Does it make sense to attempt to document the multiregion pattern here?
