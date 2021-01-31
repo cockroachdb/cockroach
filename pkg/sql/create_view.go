@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 // createViewNode represents a CREATE VIEW statement.
@@ -77,9 +79,11 @@ func (n *createViewNode) startExec(params runParams) error {
 	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
 		for _, dep := range n.planDeps {
 			if dbID := dep.desc.ParentID; dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"the view cannot refer to other databases; (see the '%s' cluster setting)",
-					allowCrossDatabaseViewsSetting,
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.FeatureNotSupported,
+						"the view cannot refer to other databases; (see the '%s' cluster setting)",
+						allowCrossDatabaseViewsSetting),
+					crossDBReferenceDeprecationHint(),
 				)
 			}
 		}
@@ -464,4 +468,9 @@ func overrideColumnNames(cols colinfo.ResultColumns, newNames tree.NameList) col
 		res[i].Name = string(newNames[i])
 	}
 	return res
+}
+
+func crossDBReferenceDeprecationHint() string {
+	return fmt.Sprintf("Note that cross-database references will be removed in future releases. See: %s",
+		docs.ReleaseNotesURL(`#deprecations`))
 }
