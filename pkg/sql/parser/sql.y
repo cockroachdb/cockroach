@@ -11453,7 +11453,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$.val = tree.Exprs{tree.NewStrVal($1), $3.expr()}
+    $$.val = tree.Exprs{tree.NewStrVal(strings.ToLower($1)), $3.expr()}
   }
 | expr_list
   {
