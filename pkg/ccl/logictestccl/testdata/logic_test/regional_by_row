@@ -300,6 +300,10 @@ CREATE TABLE public.regional_by_row_table (
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_crdb_region (pk, pk2, a, b, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
 ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@primary CONFIGURE ZONE USING
   num_replicas = 3,
   constraints = '{+region=ap-southeast-2: 1}',
@@ -312,6 +316,14 @@ ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_b
   num_replicas = 3,
   constraints = '{+region=ap-southeast-2: 1}',
   lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
 ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@primary CONFIGURE ZONE USING
   num_replicas = 3,
   constraints = '{+region=ca-central-1: 1}',
@@ -324,6 +336,14 @@ ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_
   num_replicas = 3,
   constraints = '{+region=ca-central-1: 1}',
   lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 1}',
+  lease_preferences = '[[+region=us-east-1]]';
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@primary CONFIGURE ZONE USING
   num_replicas = 3,
   constraints = '{+region=us-east-1: 1}',
@@ -336,26 +356,6 @@ ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row
   num_replicas = 3,
   constraints = '{+region=us-east-1: 1}',
   lease_preferences = '[[+region=us-east-1]]';
-ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
-  num_replicas = 3,
-  constraints = '{+region=ap-southeast-2: 1}',
-  lease_preferences = '[[+region=ap-southeast-2]]';
-ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
-  num_replicas = 3,
-  constraints = '{+region=ca-central-1: 1}',
-  lease_preferences = '[[+region=ca-central-1]]';
-ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
-  num_replicas = 3,
-  constraints = '{+region=us-east-1: 1}',
-  lease_preferences = '[[+region=us-east-1]]';
-ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
-  num_replicas = 3,
-  constraints = '{+region=ap-southeast-2: 1}',
-  lease_preferences = '[[+region=ap-southeast-2]]';
-ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
-  num_replicas = 3,
-  constraints = '{+region=ca-central-1: 1}',
-  lease_preferences = '[[+region=ca-central-1]]';
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
   num_replicas = 3,
   constraints = '{+region=us-east-1: 1}',

@@ -24,7 +24,7 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 
 	const showCreateQuery = `
 WITH zone_configs AS (
-    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+    SELECT string_agg(raw_config_sql, e';\n' ORDER BY partition_name, index_name) FROM crdb_internal.zones
     WHERE database_name = %[1]s
     AND table_name = %[2]s
     AND raw_config_yaml IS NOT NULL
