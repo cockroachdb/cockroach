@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,8 +33,9 @@ func Get(
 	reply := resp.(*roachpb.GetResponse)
 
 	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:          h.Txn,
+		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:              h.Txn,
+		FailOnMoreRecent: args.KeyLocking != lock.None,
 	})
 	if err != nil {
 		return result.Result{}, err
@@ -61,5 +63,12 @@ func Get(
 			}
 		}
 	}
-	return result.FromEncounteredIntents(intents), err
+
+	var res result.Result
+	if args.KeyLocking != lock.None && h.Txn != nil && val != nil {
+		acq := roachpb.MakeLockAcquisition(h.Txn, args.Key, lock.Unreplicated)
+		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
+	}
+	res.Local.EncounteredIntents = intents
+	return res, err
 }
