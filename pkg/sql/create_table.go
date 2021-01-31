@@ -248,10 +248,12 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Warn against creating non-partitioned indexes on a partitioned table,
 	// which is undesirable in most cases.
+	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly
+	// have relevant partitioning columns prepended at the front.
 	if n.n.PartitionByTable.ContainsPartitions() {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
-				if d.PartitionByIndex == nil {
+				if d.PartitionByIndex == nil && !n.n.PartitionByTable.All {
 					params.p.BufferClientNotice(
 						params.ctx,
 						errors.WithHint(
