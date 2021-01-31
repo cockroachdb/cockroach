@@ -358,13 +358,27 @@ func (txn *Txn) NewBatch() *Batch {
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key to not exist.
 //
-//   r, err := db.Get("a")
+//   r, err := txn.Get("a")
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
+	return getOneRow(txn.Run(ctx, b), b)
+}
+
+// GetForUpdate retrieves the value for a key, returning the retrieved key/value
+// or an error. An unreplicated, exclusive lock is acquired on the key, if it
+// exists. It is not considered an error for the key to not exist.
+//
+//   r, err := txn.GetForUpdate("a")
+//   // string(r.Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
+	b := txn.NewBatch()
+	b.GetForUpdate(key)
 	return getOneRow(txn.Run(ctx, b), b)
 }
 

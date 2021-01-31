@@ -81,6 +81,19 @@ func TestDB_Get(t *testing.T) {
 	checkResult(t, []byte(""), result.ValueBytes())
 }
 
+func TestDB_GetForUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	result, err := db.GetForUpdate(context.Background(), "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte(""), result.ValueBytes())
+}
+
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

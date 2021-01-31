@@ -110,6 +110,13 @@ message ResponseHeader {
 // A GetRequest is the argument for the Get() method.
 message GetRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The desired key-level locking mode used during this get. When set to None
+  // (the default), no key-level locking mode is used - meaning that the get
+  // does not acquire a lock. When set to any other strength, a lock of that
+  // strength is acquired with the Unreplicated durability (i.e. best-effort)
+  // the key, if it exists.
+  kv.kvserver.concurrency.lock.Strength key_locking = 2;
 }
 
 // A GetResponse is the return value from the Get() method.

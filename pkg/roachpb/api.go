@@ -986,12 +986,15 @@ func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
-// NewGet returns a Request initialized to get the value at key.
-func NewGet(key Key) Request {
+// NewGet returns a Request initialized to get the value at key. If
+// forUpdate is true, an unreplicated, exclusive lock is acquired on on
+// the key, if it exists.
+func NewGet(key Key, forUpdate bool) Request {
 	return &GetRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
+		KeyLocking: scanLockStrength(forUpdate),
 	}
 }
 
@@ -1158,8 +1161,16 @@ func scanLockStrength(forUpdate bool) lock.Strength {
 	return lock.None
 }
 
-func (*GetRequest) flags() int {
-	return isRead | isTxn | updatesTSCache | needsRefresh
+func flagForLockStrength(l lock.Strength) int {
+	if l != lock.None {
+		return isLocking
+	}
+	return 0
+}
+
+func (gr *GetRequest) flags() int {
+	maybeLocking := flagForLockStrength(gr.KeyLocking)
+	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 
 func (*PutRequest) flags() int {
@@ -1233,18 +1244,12 @@ func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
 func (*RevertRangeRequest) flags() int { return isWrite | isRange }
 
 func (sr *ScanRequest) flags() int {
-	maybeLocking := 0
-	if sr.KeyLocking != lock.None {
-		maybeLocking = isLocking
-	}
+	maybeLocking := flagForLockStrength(sr.KeyLocking)
 	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 
 func (rsr *ReverseScanRequest) flags() int {
-	maybeLocking := 0
-	if rsr.KeyLocking != lock.None {
-		maybeLocking = isLocking
-	}
+	maybeLocking := flagForLockStrength(rsr.KeyLocking)
 	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 

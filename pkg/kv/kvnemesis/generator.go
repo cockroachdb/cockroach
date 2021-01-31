@@ -73,8 +73,14 @@ type ClosureTxnConfig struct {
 type ClientOperationConfig struct {
 	// GetMissing is an operation that Gets a key that definitely doesn't exist.
 	GetMissing int
+	// GetMissingForUpdate is an operation that Gets a key that definitely
+	// doesn't exist using a locking read.
+	GetMissingForUpdate int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
+	// GetExistingForUpdate is an operation that Gets a key that likely exists
+	// using a locking read.
+	GetExistingForUpdate int
 	// PutMissing is an operation that Puts a key that definitely doesn't exist.
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
@@ -143,12 +149,14 @@ type ChangeLeaseConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:    1,
-		GetExisting:   1,
-		PutMissing:    1,
-		PutExisting:   1,
-		Scan:          1,
-		ScanForUpdate: 1,
+		GetMissing:           1,
+		GetMissingForUpdate:  1,
+		GetExisting:          1,
+		GetExistingForUpdate: 1,
+		PutMissing:           1,
+		PutExisting:          1,
+		Scan:                 1,
+		ScanForUpdate:        1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -370,9 +378,11 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
+	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
+		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
@@ -387,9 +397,22 @@ func randGetMissing(_ *generator, rng *rand.Rand) Operation {
 	return get(randKey(rng))
 }
 
+func randGetMissingForUpdate(_ *generator, rng *rand.Rand) Operation {
+	op := get(randKey(rng))
+	op.Get.ForUpdate = true
+	return op
+}
+
 func randGetExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
 	return get(key)
+}
+
+func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
+	key := randMapKey(rng, g.keys)
+	op := get(key)
+	op.Get.ForUpdate = true
+	return op
 }
 
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
@@ -595,6 +618,10 @@ func closureTxnCommitInBatch(commitInBatch []Operation, ops ...Operation) Operat
 
 func get(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key)}}
+}
+
+func getForUpdate(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
 func put(key, value string) Operation {
