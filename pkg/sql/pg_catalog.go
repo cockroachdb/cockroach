@@ -1004,9 +1004,12 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
+					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/)
+					if err != nil {
+						return false, err
+					}
 					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
-						table.Dropped() ||
-						!userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/) {
+						table.Dropped() || !canSeeDescriptor {
 						return false, nil
 					}
 					h := makeOidHasher()

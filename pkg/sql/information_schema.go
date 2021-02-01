@@ -1782,7 +1782,11 @@ func forEachSchema(
 	}
 	for i := range userDefinedSchemas {
 		desc := userDefinedSchemas[i]
-		if !userCanSeeDescriptor(ctx, p, desc, false /* allowAdding */) {
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
 			continue
 		}
 		schemas = append(schemas, catalog.ResolvedSchema{
@@ -1848,7 +1852,11 @@ func forEachDatabaseDesc(
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		if !requiresPrivileges || userCanSeeDescriptor(ctx, p, dbDesc, false /* allowAdding */) {
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, dbDesc, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if !requiresPrivileges || canSeeDescriptor {
 			if err := fn(dbDesc); err != nil {
 				return err
 			}
@@ -1887,7 +1895,11 @@ func forEachTypeDesc(
 		if !ok {
 			return errors.AssertionFailedf("schema id %d not found", typ.GetParentSchemaID())
 		}
-		if !userCanSeeDescriptor(ctx, p, typ, false /* allowAdding */) {
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typ, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
 			continue
 		}
 		if err := fn(dbDesc, scName, typ); err != nil {
@@ -2090,7 +2102,11 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		if table.Dropped() || !userCanSeeDescriptor(ctx, p, table, allowAdding) {
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, allowAdding)
+		if err != nil {
+			return err
+		}
+		if table.Dropped() || !canSeeDescriptor {
 			continue
 		}
 		var scName string
@@ -2218,8 +2234,19 @@ func forEachRoleMembership(
 
 func userCanSeeDescriptor(
 	ctx context.Context, p *planner, desc catalog.Descriptor, allowAdding bool,
-) bool {
-	return descriptorIsVisible(desc, allowAdding) && p.CheckAnyPrivilege(ctx, desc) == nil
+) (bool, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: false,
+	})
+	if err != nil {
+		return false, err
+	}
+	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
+	// Users can see objects in the database if they have connect privilege.
+	if dbDesc != nil {
+		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, dbDesc, privilege.CONNECT) == nil
+	}
+	return descriptorIsVisible(desc, allowAdding) && canSeeDescriptor, nil
 }
 
 func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
