@@ -19,6 +19,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -226,6 +227,7 @@ func (cm *CertificateManager) Metrics() CertificateMetrics {
 // RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
 // refresh of the certificates directory on notification.
 func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
+	ctx := context.Background()
 	go func() {
 		ch := sysutil.RefreshSignaledChan()
 		for {
@@ -233,11 +235,12 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 			case <-stopper.ShouldQuiesce():
 				return
 			case sig := <-ch:
-				log.Infof(context.Background(), "received signal %q, triggering certificate reload", sig)
+				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
 				if err := cm.LoadCertificates(); err != nil {
-					log.Warningf(context.Background(), "could not reload certificates: %v", err)
+					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
+					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: false, ErrorMessage: err.Error()})
 				} else {
-					log.Info(context.Background(), "successfully reloaded certificates")
+					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: true})
 				}
 			}
 		}
