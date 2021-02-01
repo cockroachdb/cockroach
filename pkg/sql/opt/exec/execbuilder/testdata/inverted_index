@@ -1125,9 +1125,6 @@ anti-join (lookup geo_table)
 subtest multi_column
 
 statement ok
-SET experimental_enable_multi_column_inverted_indexes=true
-
-statement ok
 CREATE TABLE m (
     k INT PRIMARY KEY,
     a INT,

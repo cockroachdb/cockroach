@@ -1,9 +1,6 @@
 # LogicTest: 5node-default-configs !5node-metadata
 
 statement ok
-SET experimental_enable_multi_column_inverted_indexes=true
-
-statement ok
 CREATE TABLE j1 (
   k INT PRIMARY KEY,
   j JSON
