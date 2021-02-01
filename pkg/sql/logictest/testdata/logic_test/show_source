@@ -50,7 +50,6 @@ escape_string_warning                                 on
 experimental_distsql_planning                         off
 experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
-experimental_enable_multi_column_inverted_indexes     off
 experimental_enable_temp_tables                       off
 experimental_enable_unique_without_index_constraints  off
 experimental_enable_virtual_columns                   off

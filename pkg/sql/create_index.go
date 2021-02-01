@@ -185,9 +185,6 @@ func MakeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
 
-		if !params.SessionData().EnableMultiColumnInvertedIndexes && len(n.Columns) > 1 {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "indexing more than one column with an inverted index is not supported")
-		}
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
 		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[len(n.Columns)-1].Column)
 		if err != nil {

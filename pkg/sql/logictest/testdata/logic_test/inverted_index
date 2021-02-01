@@ -13,10 +13,10 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: inverted indexes can't be unique
@@ -52,7 +52,7 @@ c  CREATE TABLE public.c (
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error indexing more than one column with an inverted index is not supported
+statement error column foo of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo JSONB,
@@ -60,7 +60,7 @@ CREATE TABLE d (
   INVERTED INDEX (foo, bar)
 )
 
-statement error column foo is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
