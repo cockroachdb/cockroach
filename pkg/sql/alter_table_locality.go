@@ -181,11 +181,9 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			// GLOBAL to GLOBAL - no op.
 			return nil
 		case tree.LocalityLevelRow:
-			// GLOBAL to REGIONAL BY ROW
-			return unimplemented.New("alter table locality to REGIONAL BY ROW", "implementation pending")
+			return unimplemented.NewWithIssue(58341, "implementation pending")
 		case tree.LocalityLevelTable:
 			if err = n.alterTableLocalityGlobalToRegionalByTable(params, dbDesc); err != nil {
 				return err
@@ -201,7 +199,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				return err
 			}
 		case tree.LocalityLevelRow:
-			return unimplemented.New("alter table locality to REGIONAL BY ROW", "implementation pending")
+			return unimplemented.NewWithIssue(58341, "implementation pending")
 		case tree.LocalityLevelTable:
 			err = n.alterTableLocalityRegionalByTableToRegionalByTable(params, dbDesc)
 			if err != nil {
@@ -213,12 +211,11 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			return unimplemented.New("alter table locality from REGIONAL BY ROW", "implementation pending")
+			return unimplemented.NewWithIssue(59632, "implementation pending")
 		case tree.LocalityLevelRow:
-			// Altering to same table locality pattern. We're done.
-			return unimplemented.New("alter table locality from REGIONAL BY ROW", "implementation pending")
+			return unimplemented.NewWithIssue(59632, "implementation pending")
 		case tree.LocalityLevelTable:
-			return unimplemented.New("alter table locality from REGIONAL BY ROW", "implementation pending")
+			return unimplemented.NewWithIssue(59632, "implementation pending")
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}

@@ -260,7 +260,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	); err != nil {
 		return nil, err
 	}
-	return nil, unimplemented.New("alter database drop region", "implementation pending")
+	return nil, unimplemented.NewWithIssue(58333, "implementation pending")
 }
 
 type alterDatabasePrimaryRegionNode struct {

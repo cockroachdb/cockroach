@@ -38,8 +38,7 @@ const (
 	RegionalByRowRegionDefaultColName Name = Name(RegionalByRowRegionDefaultCol)
 	// PrimaryRegionLocalityName is the string denoting the primary region in the
 	// locality config.
-	// TODO(#multiregion): clean this up to use something nicer,
-	// see https://github.com/cockroachdb/cockroach/issues/59455.
+	// TODO(#59455): clean this up to use something nicer,
 	PrimaryRegionLocalityName Name = ""
 )
 
