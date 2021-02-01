@@ -244,7 +244,7 @@ CREATE TABLE public.t (
   PARTITION two VALUES IN (2)
 )
 
-statement ok
+query T noticetrace
 CREATE TABLE public.t (
   pk int PRIMARY KEY,
   pk2 int NOT NULL,
@@ -261,14 +261,16 @@ CREATE TABLE public.t (
   PARTITION one VALUES IN (1),
   PARTITION two VALUES IN (2)
 )
+----
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
   PARTITION one VALUES IN ((1))
 )
 
-statement ok
+query T noticetrace
 CREATE INDEX created_idx ON t(c)
+----
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT unique_c_d UNIQUE(c, d)
