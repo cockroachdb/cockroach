@@ -1586,7 +1586,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
-	oidc, err := ConfigureOIDC(ctx, s.ClusterSettings(), &s.mux, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID())
+	oidc, err := ConfigureOIDC(
+		ctx, s.ClusterSettings(), s.cfg.Locality,
+		&s.mux, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(),
+	)
 	if err != nil {
 		return err
 	}

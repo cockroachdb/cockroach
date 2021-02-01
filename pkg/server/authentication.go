@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -72,6 +73,7 @@ type OIDC interface {
 var ConfigureOIDC = func(
 	ctx context.Context,
 	st *cluster.Settings,
+	locality roachpb.Locality,
 	mux *http.ServeMux,
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
