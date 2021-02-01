@@ -11,11 +11,10 @@
 // This file generates batch_generated.go. It can be run via:
 //    go run -tags gen-batch gen_batch.go
 
-// +build gen-batch
-
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -133,8 +132,11 @@ func (ru *%[1]s) MustSetInner(r %[2]s) {
 
 func main() {
 	initVariants()
+	var filenameFlag = flag.String("filename", "batch_generated.go", "filename path")
+	flag.Parse()
+	fileName := *filenameFlag
 
-	f, err := os.Create("batch_generated.go")
+	f, err := os.Create(fileName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error opening file: ", err)
 		os.Exit(1)
