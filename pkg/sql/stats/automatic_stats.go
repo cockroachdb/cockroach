@@ -306,7 +306,7 @@ func (r *Refresher) Start(
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
 
-			case <-stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

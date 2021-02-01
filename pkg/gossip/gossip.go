@@ -1372,7 +1372,7 @@ func (g *Gossip) manage() {
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
 			select {
-			case <-g.server.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(c)

@@ -153,7 +153,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-timerCh:
 				timer.Read = true
 			case <-changeCh:
-			case <-stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

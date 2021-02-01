@@ -1035,7 +1035,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 	var wg sync.WaitGroup
 
-	transferAllAway := func(transferCtx context.Context) int {
+	transferAllAway := func(ctx context.Context) int {
 		// Limit the number of concurrent lease transfers.
 		const leaseTransferConcurrency = 100
 		sem := quotapool.NewIntPool("Store.SetDraining", leaseTransferConcurrency)
@@ -1063,7 +1063,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					defer wg.Done()
 
 					select {
-					case <-transferCtx.Done():
+					case <-ctx.Done():
 						// Context canceled: the timeout loop has decided we've
 						// done enough draining
 						// (server.shutdown.lease_transfer_wait).
@@ -1675,7 +1675,7 @@ func (s *Store) startGossip() {
 				// making it impossible to get an epoch-based range lease), in which
 				// case we want to retry quickly.
 				retryOptions := base.DefaultRetryOptions()
-				retryOptions.Closer = s.stopper.ShouldQuiesce()
+				retryOptions.Closer = ctx.Done()
 				for r := retry.Start(retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
@@ -1694,7 +1694,7 @@ func (s *Store) startGossip() {
 				}
 				select {
 				case <-ticker.C:
-				case <-s.stopper.ShouldQuiesce():
+				case <-ctx.Done():
 					return
 				}
 			}
@@ -1714,7 +1714,7 @@ func (s *Store) startGossip() {
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
-	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(s.AnnotateCtx(context.Background()), "lease-renewer", func(ctx context.Context) {
 		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
@@ -1747,7 +1747,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			case <-s.renewableLeasesSignal:
 			case <-timer.C:
 				timer.Read = true
-			case <-s.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -1757,7 +1757,8 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 // startClosedTimestampRangefeedSubscriber establishes a new ClosedTimestamp
 // subscription and runs an infinite loop to listen for closed timestamp updates
 // and inform Replicas with active Rangefeeds about them.
-func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
+func (s *Store) startClosedTimestampRangefeedSubscriber() {
+	ctx := s.AnnotateCtx(context.Background())
 	// NB: We can't use Stopper.RunWorker because doing so would race with
 	// calling Stopper.Stop. We give the subscription channel a small capacity
 	// to avoid blocking the closed timestamp goroutine.
@@ -1804,7 +1805,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 					repl.handleClosedTimestampUpdate(ctx)
 				}
 				replIDs = replIDs[:0]
-			case <-s.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

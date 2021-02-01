@@ -190,7 +190,7 @@ func (fs *FlowScheduler) Start() {
 					atomic.AddInt32(&fs.atomics.numRunning, -1)
 				}
 
-			case <-fs.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				fs.mu.Lock()
 				stopped = true
 			}

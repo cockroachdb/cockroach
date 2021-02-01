@@ -1792,8 +1792,6 @@ func (m *Manager) watchForGossipUpdates(
 		gossipUpdateC := rawG.RegisterSystemConfigChannel()
 		filter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 
-		ctx, cancel := s.WithCancelOnQuiesce(ctx)
-		defer cancel()
 		for {
 			select {
 			case <-gossipUpdateC:
@@ -1813,7 +1811,6 @@ func (m *Manager) watchForRangefeedUpdates(
 	}
 	distSender := db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 	eventCh := make(chan *roachpb.RangeFeedEvent)
-	ctx, _ = s.WithCancelOnQuiesce(ctx)
 	if err := s.RunAsyncTask(ctx, "lease rangefeed", func(ctx context.Context) {
 
 		// Run the rangefeed in a loop in the case of failure, likely due to node

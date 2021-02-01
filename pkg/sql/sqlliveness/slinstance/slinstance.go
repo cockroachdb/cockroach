@@ -179,11 +179,6 @@ func (l *Instance) extendSession(ctx context.Context, s sqlliveness.Session) (bo
 }
 
 func (l *Instance) heartbeatLoop(ctx context.Context) {
-	defer func() {
-		log.Warning(ctx, "exiting heartbeat loop")
-	}()
-	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
-	defer cancel()
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {

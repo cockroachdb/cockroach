@@ -117,8 +117,8 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
 	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry, defaultZoneConfig)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
-	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
-		<-n.Stopper.ShouldQuiesce()
+	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(ctx context.Context) {
+		<-ctx.Done()
 		netutil.FatalIfUnexpected(ln.Close())
 		node.Gossip.EnableSimulationCycler(false)
 	})

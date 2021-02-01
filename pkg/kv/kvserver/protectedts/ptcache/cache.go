@@ -188,8 +188,7 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 
 func (c *Cache) doSingleFlightUpdate() (interface{}, error) {
 	// TODO(ajwerner): add log tags to the context.
-	ctx, cancel := c.stopper.WithCancelOnQuiesce(context.Background())
-	defer cancel()
+	ctx := context.Background()
 	return nil, c.stopper.RunTaskWithErr(ctx,
 		"refresh-protectedts-cache", c.doUpdate)
 }

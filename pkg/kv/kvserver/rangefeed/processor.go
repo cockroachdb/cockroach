@@ -333,7 +333,7 @@ func (p *Processor) run(
 			return
 
 		// Exit on stopper.
-		case <-stopper.ShouldQuiesce():
+		case <-ctx.Done():
 			pErr := roachpb.NewError(&roachpb.NodeUnavailableError{})
 			p.reg.DisconnectWithErr(all, pErr)
 			return

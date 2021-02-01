@@ -108,7 +108,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 
 			timer.Reset(addJitter(nextReport.Sub(timeutil.Now())))
 			select {
-			case <-stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			case <-timer.C:
 				timer.Read = true

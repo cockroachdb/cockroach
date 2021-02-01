@@ -118,10 +118,7 @@ func (connectorFactory) NewConnector(
 // cluster's ID and set Connector.rpcContext.ClusterID.
 func (c *Connector) Start(ctx context.Context) error {
 	startupC := c.startupC
-	if err := c.rpcContext.Stopper.RunAsyncTask(context.Background(), "connector", func(ctx context.Context) {
-		ctx = c.AnnotateCtx(ctx)
-		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
+	if err := c.rpcContext.Stopper.RunAsyncTask(c.AnnotateCtx(context.Background()), "connector", func(ctx context.Context) {
 		c.runGossipSubscription(ctx)
 	}); err != nil {
 		return err
@@ -363,8 +360,6 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 	}
 	ch, _ := c.rpcDial.DoChan("dial", func() (interface{}, error) {
 		dialCtx := c.AnnotateCtx(context.Background())
-		dialCtx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
-		defer cancel()
 		err := c.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Connector: dial", c.dialAddrs)
 		if err != nil {
 			return nil, err

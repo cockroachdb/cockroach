@@ -39,7 +39,7 @@ func (n *Node) startAssertEngineHealth(
 				t.Read = true
 				t.Reset(10 * time.Second)
 				n.assertEngineHealth(ctx, engines, maxSyncDuration, fatalOnExceeded)
-			case <-n.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

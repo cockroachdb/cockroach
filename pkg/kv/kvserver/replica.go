@@ -1475,7 +1475,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 			})
 			if err := r.DB().Run(ctx, b); err != nil {
 				select {
-				case <-r.store.stopper.ShouldQuiesce():
+				case <-ctx.Done():
 					// The server is shutting down. The error while pushing the
 					// transaction was probably caused by the shutdown, so ignore it.
 					return

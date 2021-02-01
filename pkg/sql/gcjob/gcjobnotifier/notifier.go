@@ -129,12 +129,12 @@ func (n *Notifier) Start(ctx context.Context) {
 	}
 }
 
-func (n *Notifier) run(_ context.Context) {
+func (n *Notifier) run(ctx context.Context) {
 	defer n.markStopped()
 	gossipUpdateCh := n.provider.RegisterSystemConfigChannel()
 	for {
 		select {
-		case <-n.stopper.ShouldQuiesce():
+		case <-ctx.Done():
 			return
 		case <-gossipUpdateCh:
 			n.maybeNotify()

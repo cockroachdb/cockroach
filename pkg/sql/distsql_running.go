@@ -98,13 +98,11 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 	for i := 0; i < numRunners; i++ {
 		_ = dsp.stopper.RunAsyncTask(ctx, "distslq-runner", func(context.Context) {
 			runnerChan := dsp.runnerChan
-			stopChan := dsp.stopper.ShouldQuiesce()
 			for {
 				select {
 				case req := <-runnerChan:
 					req.run()
-
-				case <-stopChan:
+				case <-ctx.Done():
 					return
 				}
 			}

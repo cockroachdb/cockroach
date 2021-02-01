@@ -661,7 +661,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 				if err := n.computePeriodicMetrics(ctx, tick); err != nil {
 					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
-			case <-stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

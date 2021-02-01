@@ -354,7 +354,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
 			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
 			select {
-			case <-stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			case <-timer.C:
 				if !schedulerEnabledSetting.Get(&s.Settings.SV) {

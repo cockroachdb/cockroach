@@ -766,7 +766,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 		migrationRetryOpts := retry.Options{
 			InitialBackoff: 1 * time.Minute,
 			MaxBackoff:     10 * time.Minute,
-			Closer:         m.stopper.ShouldQuiesce(),
+			Closer:         ctx.Done(),
 		}
 		startTime := timeutil.Now().String()
 		for migRetry := retry.Start(migrationRetryOpts); migRetry.Next(); {
@@ -797,13 +797,11 @@ func (m *Manager) StartSystemNamespaceMigration(
 func (m *Manager) migrateSystemNamespace(
 	ctx context.Context, migrationKey roachpb.Key, r runner, startTime string,
 ) error {
-	migrateCtx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
-	defer cancel()
-	migrateCtx = logtags.AddTag(migrateCtx, "system-namespace-migration", nil)
+	ctx = logtags.AddTag(ctx, "system-namespace-migration", nil)
 	// Loop until there's no more work to be done.
 	workLeft := true
 	for workLeft {
-		if err := m.db.Txn(migrateCtx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Check again to see if someone else wrote the migration key.
 			if kv, err := txn.Get(ctx, migrationKey); err != nil {
 				log.Infof(ctx, "error getting record of system.namespace migration: %s", err.Error())
@@ -882,9 +880,9 @@ func (m *Manager) migrateSystemNamespace(
 		}
 	}
 	// No more work to be done.
-	log.Infof(migrateCtx, "system.namespace migration completed")
-	if err := m.db.Put(migrateCtx, migrationKey, startTime); err != nil {
-		log.Warningf(migrateCtx, "error persisting record of system.namespace migration, will retry: %s", err.Error())
+	log.Infof(ctx, "system.namespace migration completed")
+	if err := m.db.Put(ctx, migrationKey, startTime); err != nil {
+		log.Warningf(ctx, "error persisting record of system.namespace migration, will retry: %s", err.Error())
 		return err
 	}
 	return nil

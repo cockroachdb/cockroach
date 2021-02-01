@@ -1856,7 +1856,7 @@ func (s *Server) startListenRPCAndSQL(
 		// The SQL listener shutdown worker, which closes everything under
 		// the SQL port when the stopper indicates we are shutting down.
 		waitQuiesce := func(ctx context.Context) {
-			<-s.stopper.ShouldQuiesce()
+			<-ctx.Done()
 			// NB: we can't do this as a Closer because (*Server).ServeWith is
 			// running in a worker and usually sits on accept() which unblocks
 			// only when the listener closes. In other words, the listener needs
@@ -1899,8 +1899,8 @@ func (s *Server) startListenRPCAndSQL(
 	}
 
 	// The remainder shutdown worker.
-	waitForQuiesce := func(context.Context) {
-		<-s.stopper.ShouldQuiesce()
+	waitForQuiesce := func(ctx context.Context) {
+		<-ctx.Done()
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
 	}
@@ -2045,7 +2045,7 @@ func (s *SQLServer) startServeSQL(
 		}
 
 		waitQuiesce := func(ctx context.Context) {
-			<-stopper.ShouldQuiesce()
+			<-ctx.Done()
 			// NB: we can't do this as a Closer because (*Server).ServeWith is
 			// running in a worker and usually sits on accept() which unblocks
 			// only when the listener closes. In other words, the listener needs
@@ -2233,7 +2233,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 		}
 	}
 
-	return cfg.stopper.RunAsyncTask(ctx, "mem-logger", func(ctx context.Context) {
+	return cfg.stopper.RunAsyncTask(context.Background(), "mem-logger", func(ctx context.Context) {
 		var goMemStats atomic.Value // *status.GoMemStats
 		goMemStats.Store(&status.GoMemStats{})
 		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
@@ -2244,7 +2244,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 
 		for {
 			select {
-			case <-cfg.stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			case <-timer.C:
 				timer.Read = true

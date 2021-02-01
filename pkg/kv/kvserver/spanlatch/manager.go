@@ -402,10 +402,6 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 		case <-ctx.Done():
 			log.VEventf(ctx, 2, "%s while acquiring latch %s, held by %s", ctx.Err(), wait, held)
 			return ctx.Err()
-		case <-m.stopper.ShouldQuiesce():
-			// While shutting down, requests may acquire
-			// latches and never release them.
-			return &roachpb.NodeUnavailableError{}
 		}
 	}
 }

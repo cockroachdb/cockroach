@@ -102,7 +102,6 @@ func NewRegistry(
 
 // Start will start the polling loop for the Registry.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 	// NB: The only error that should occur here would be if the server were
 	// shutting down so let's swallow it.
 	_ = stopper.RunAsyncTask(ctx, "stmt-diag-poll", r.poll)

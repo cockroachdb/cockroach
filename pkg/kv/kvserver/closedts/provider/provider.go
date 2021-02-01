@@ -231,7 +231,7 @@ func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 					return
 				}
 				handle(entry)
-			case <-p.cfg.Stopper.ShouldQuiesce():
+			case <-ctx.Done():
 				return
 			}
 		}

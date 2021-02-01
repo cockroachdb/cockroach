@@ -579,8 +579,6 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-tc.Stopper().ShouldQuiesce():
-				return
 			case <-time.After(queryInterval):
 			}
 		}

@@ -275,8 +275,6 @@ DELETE FROM sqlliveness WHERE session_id = $1
 
 // deleteSessionsLoop is launched in start and periodically deletes sessions.
 func (s *Storage) deleteSessionsLoop(ctx context.Context) {
-	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-	defer cancel()
 	t := s.newTimer()
 	t.Reset(s.gcInterval())
 	for {

@@ -725,7 +725,7 @@ func StartTenant(
 
 	{
 		waitQuiesce := func(ctx context.Context) {
-			<-args.stopper.ShouldQuiesce()
+			<-ctx.Done()
 			_ = httpL.Close()
 		}
 		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {

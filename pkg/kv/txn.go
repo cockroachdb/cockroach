@@ -743,9 +743,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	// long this request is going to be around or it could leak a goroutine (in case of a
 	// long-lived network partition).
 	stopper := txn.db.ctx.Stopper
-	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-		defer cancel()
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
@@ -764,7 +762,6 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 			return nil
 		})
 	}); err != nil {
-		cancel()
 		return roachpb.NewError(err)
 	}
 	return nil
