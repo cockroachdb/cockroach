@@ -741,13 +741,16 @@ func (w *interleavedPartitioned) updateFunc(
 // Hooks implements the Hookser interface.
 func (w *interleavedPartitioned) Hooks() workload.Hooks {
 	return workload.Hooks{
+		PreCreate: func(db *gosql.DB) error {
+			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+				return err
+			}
+			return nil
+		},
 		PreLoad: func(db *gosql.DB) error {
 			if _, err := db.Exec(
 				zoneLocationsStmt, w.eastZoneName, w.westZoneName, w.centralZoneName,
 			); err != nil {
-				return err
-			}
-			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
 				return err
 			}
 
