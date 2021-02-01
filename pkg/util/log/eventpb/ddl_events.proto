@@ -428,6 +428,17 @@ message CreateStatistics {
   string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+
+message Import {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+message Restore {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
 // UnsafeUpsertDescriptor is recorded when a descriptor is written
 // using crdb_internal.unsafe_upsert_descriptor().
 message UnsafeUpsertDescriptor {

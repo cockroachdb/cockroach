@@ -136,6 +136,10 @@ export function getEventDescription(e: Event$Properties): string {
       return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
       return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+    case eventTypes.IMPORT:
+      return `Data/Schema Imported: User ${info.User} ran ${info.Statement}`;
+    case eventTypes.RESTORE:
+      return `Data/Schema Restored: User ${info.User} ran ${info.Statement}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
         info,

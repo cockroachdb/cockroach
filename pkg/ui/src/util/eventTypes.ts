@@ -99,6 +99,10 @@ export const CREATE_ROLE = "create_role";
 export const DROP_ROLE = "drop_role";
 // Recorded when a role is altered.
 export const ALTER_ROLE = "alter_role";
+// Recorded when an IMPORT is run.
+export const IMPORT = "import";
+// Recorded when a RESTORE is run.
+export const RESTORE = "restore";
 
 // Node Event Types
 export const nodeEvents = [

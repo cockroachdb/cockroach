@@ -116,6 +116,9 @@ func (m *FinishSchemaChange) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *FinishSchemaChangeRollback) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *Import) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RenameDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -126,6 +129,9 @@ func (m *RenameTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_
 
 // LoggingChannel implements the EventPayload interface.
 func (m *RenameType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *Restore) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *ReverseSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }

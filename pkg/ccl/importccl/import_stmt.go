@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1491,6 +1492,22 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	ev := &eventpb.Import{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			Timestamp: details.Walltime,
+		},
+		CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+			Statement: r.job.Payload().Description,
+			User:      p.User().Normalized(),
+		},
+	}
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sql.InsertEventRecord(
+			ctx, p.ExecCfg().InternalExecutor, txn, 0, 0, false, ev, false,
+		)
+	}); err != nil {
+		log.Warningf(ctx, "failed to log event: %v", err)
+	}
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
 	const mb = 1 << 20

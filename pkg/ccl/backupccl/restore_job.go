@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1285,6 +1286,24 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	}
 
 	r.restoreStats = res
+
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ev := &eventpb.Restore{
+			CommonEventDetails: eventpb.CommonEventDetails{
+				Timestamp: txn.ReadTimestamp().WallTime,
+			},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+				Statement: r.job.Payload().Description,
+				User:      p.User().Normalized(),
+			},
+		}
+		return sql.InsertEventRecord(
+			ctx, p.ExecCfg().InternalExecutor, txn /* txn */, 0 /* targetID */, 0, /* reportingID */
+			false /* skipExternalLog */, ev, false, /* onlyLog */
+		)
+	}); err != nil {
+		log.Warningf(ctx, "failed to log event: %v", err)
+	}
 
 	// Collect telemetry.
 	{
