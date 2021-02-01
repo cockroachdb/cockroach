@@ -264,12 +264,6 @@ func (ih *instrumentationHelper) Finish(
 			ih.finishCollectionDiagnostics()
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
-
-		// Handle EXPLAIN ANALYZE (DEBUG). If there was a communication error
-		// already, no point in setting any results.
-		if ih.outputMode == explainAnalyzeDebugOutput && retErr == nil {
-			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
-		}
 	}
 
 	// If there was a communication error already, no point in setting any
