@@ -95,3 +95,13 @@ message NodeRecommissioned {
 }
 
 
+
+// CertsReload is recorded when the TLS certificates are
+// reloaded/rotated from disk.
+message CertsReload {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Whether the operation completed without errors.
+  bool success = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // If an error was encountered, the text of the error.
+  string error_message = 3 [(gogoproto.jsontag) = ",omitempty"];
+}

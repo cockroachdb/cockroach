@@ -32,6 +32,25 @@ SQL-level events for individual tenants.
 Events in this category are logged to channel OPS.
 
 
+### `certs_reload`
+
+An event of type `certs_reload` is recorded when the TLS certificates are
+reloaded/rotated from disk.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Success` | Whether the operation completed without errors. | no |
+| `ErrorMessage` | If an error was encountered, the text of the error. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `node_decommissioned`
 
 An event of type `node_decommissioned` is recorded when a node is marked as
