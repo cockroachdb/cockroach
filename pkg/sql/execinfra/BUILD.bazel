@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "execinfra",
@@ -93,12 +93,12 @@ go_test(
 
 stringer(
     name = "gen-procstate-stringer",
-    file = "processorsbase.go",
+    src = "processorsbase.go",
     typ = "procState",
 )
 
 stringer(
     name = "gen-consumerstatus-stringer",
-    file = "base.go",
+    src = "base.go",
     typ = "ConsumerStatus",
 )

@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "roleoption",
@@ -19,6 +19,6 @@ go_library(
 
 stringer(
     name = "gen-option-stringer",
-    file = "role_option.go",
+    src = "role_option.go",
     typ = "Option",
 )

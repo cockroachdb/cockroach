@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sql",
@@ -595,24 +595,24 @@ go_test(
 
 stringer(
     name = "gen-txnevent-stringer",
-    file = "txn_state.go",
+    src = "txn_state.go",
     typ = "txnEvent",
 )
 
 stringer(
     name = "gen-txntype-stringer",
-    file = "txn_state.go",
+    src = "txn_state.go",
     typ = "txnType",
 )
 
 stringer(
     name = "gen-advancecode-stringer",
-    file = "txn_state.go",
+    src = "txn_state.go",
     typ = "advanceCode",
 )
 
 stringer(
     name = "gen-nodestatus-stringer",
-    file = "distsql_physical_planner.go",
+    src = "distsql_physical_planner.go",
     typ = "NodeStatus",
 )
