@@ -498,3 +498,48 @@ INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
 
 statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
 UPDATE t SET b = 1 WHERE pk = 2
+
+# Regression tests for #59583.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (
+  pk INT,
+  pk2 INT NOT NULL,
+  partition_by INT,
+  x INT,
+  y INT,
+  INDEX (y)
+) PARTITION BY LIST (partition_by) (
+    PARTITION p1 VALUES IN (1)
+);
+INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
+
+query IIIII
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+CREATE INDEX new_idx ON t(x)
+
+query IIIII
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS(pk2)
+
+query IIIII
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+query IIIII
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
