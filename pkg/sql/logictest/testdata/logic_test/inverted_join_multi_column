@@ -504,13 +504,13 @@ CREATE TABLE t59615_inv (
   INVERTED INDEX (x, y)
 )
 
-query TITI
+query TITI rowsort
 SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) LEFT JOIN t59615_inv t ON t.y @> u.y
 ----
 "a"  NULL  NULL  NULL
 "b"  NULL  NULL  NULL
 
-query T
+query T rowsort
 SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615_inv t WHERE t.y @> u.y
 )
