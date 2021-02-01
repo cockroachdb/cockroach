@@ -499,6 +499,87 @@ INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
 statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
 UPDATE t SET b = 1 WHERE pk = 2
 
+subtest upsert
+
+# The conflict columns in an upsert should only include the primary key,
+# not any implicit partitioning columns.
+query T
+EXPLAIN UPSERT INTO t VALUES (3, 3, 3, 3, 3, 3, 3)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (right outer)
+│               │
+│               ├── • filter
+│               │   │ filter: pk = 3
+│               │   │
+│               │   └── • scan
+│               │         missing stats
+│               │         table: t@primary
+│               │         spans: FULL SCAN
+│               │
+│               └── • values
+│                     size: 7 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (pk) = (upsert_pk)
+│           │ pred: column3 != partition_by
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_a_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (column5)
+            │ pred: (upsert_pk != pk) OR (column3 != partition_by)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t@t_b_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# One row already exists, one row is new.
+statement ok
+UPSERT INTO t VALUES (2, 4, 4, 4, 4, 4, 4), (3, 3, 3, 3, 3, 3, 3)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPSERT INTO t VALUES (3, 2, 2, 1, 1, 1, 1)
+
+query IIIIIII colnames,rowsort
+SELECT * from t
+----
+pk  pk2  partition_by  a  b  c  d
+1   1    1             1  1  1  1
+3   3    3             3  3  3  3
+2   4    4             4  4  4  4
+
 # Regression tests for #59583.
 statement ok
 DROP TABLE t;
@@ -514,7 +595,7 @@ CREATE TABLE t (
 );
 INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
 
-query IIIII
+query IIIII rowsort
 SELECT * FROM t@t_y_idx
 ----
 1   2   3   4   5
@@ -523,7 +604,7 @@ SELECT * FROM t@t_y_idx
 statement ok
 CREATE INDEX new_idx ON t(x)
 
-query IIIII
+query IIIII rowsort
 SELECT * FROM t@new_idx
 ----
 1   2   3   4   5
@@ -532,13 +613,13 @@ SELECT * FROM t@new_idx
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS(pk2)
 
-query IIIII
+query IIIII rowsort
 SELECT * FROM t@t_y_idx
 ----
 1   2   3   4   5
 11  12  13  14  15
 
-query IIIII
+query IIIII rowsort
 SELECT * FROM t@new_idx
 ----
 1   2   3   4   5

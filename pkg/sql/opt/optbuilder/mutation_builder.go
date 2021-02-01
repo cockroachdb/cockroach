@@ -1204,6 +1204,18 @@ func getIndexLaxKeyOrdinals(index cat.Index) util.FastIntSet {
 	return keyOrds
 }
 
+// getExplicitPrimaryKeyOrdinals returns the ordinals of the primary key
+// columns, excluding any implicit partitioning columns in the primary index.
+func getExplicitPrimaryKeyOrdinals(tab cat.Table) util.FastIntSet {
+	index := tab.Index(cat.PrimaryIndex)
+	skipCols := index.ImplicitPartitioningColumnCount()
+	var keyOrds util.FastIntSet
+	for i, n := skipCols, index.LaxKeyColumnCount(); i < n; i++ {
+		keyOrds.Add(index.Column(i).Ordinal())
+	}
+	return keyOrds
+}
+
 // findNotNullIndexCol finds the first not-null column in the given index and
 // returns its ordinal position in the owner table. There must always be such a
 // column, even if it turns out to be an implicit primary key column.
