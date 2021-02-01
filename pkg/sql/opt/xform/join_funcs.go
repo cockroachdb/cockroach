@@ -277,6 +277,16 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 
+			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
+				// We cannot create a lookup join in this case, because constructing a
+				// cross join with foundVals will increase the size of the input. As a
+				// result, non-matching input rows will show up more than once in the
+				// output, which is incorrect (see #59615).
+				// TODO(rytaft,mgartner): find a way to create a lookup join for this
+				// case.
+				return
+			}
+
 			// We will join these constant values with the input to make
 			// equality columns for the lookup join.
 			if constFilters == nil {
@@ -528,6 +538,16 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			if !ok {
 				// Cannot constrain prefix column and therefore cannot generate
 				// an inverted join.
+				return
+			}
+
+			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
+				// We cannot create an inverted join in this case, because constructing
+				// a cross join with foundVals will increase the size of the input. As a
+				// result, non-matching input rows will show up more than once in the
+				// output, which is incorrect (see #59615).
+				// TODO(rytaft,mgartner): find a way to create an inverted join for this
+				// case.
 				return
 			}
 

@@ -588,3 +588,28 @@ CREATE TABLE tab4 (
 query I
 SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
 ----
+
+# Regression test for #59615. Ensure that invalid lookup joins are not created
+# for left and anti joins.
+statement ok
+CREATE TABLE t59615 (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y INT NOT NULL,
+  z INT,
+  PRIMARY KEY (x, y)
+)
+
+# We cannot create a lookup join in this case.
+query IIII
+SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
+----
+1  NULL  NULL  NULL
+2  NULL  NULL  NULL
+
+query I
+SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615 t WHERE u.y = t.y
+)
+----
+1
+2

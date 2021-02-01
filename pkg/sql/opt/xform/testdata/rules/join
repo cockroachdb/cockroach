@@ -3122,6 +3122,58 @@ anti-join (hash)
       ├── m:1 = a:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── n:2 = c:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
+# Regression test for #59615. Ensure that invalid lookup joins are not created
+# for left and anti joins.
+exec-ddl
+CREATE TABLE t59615 (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y INT NOT NULL,
+  z INT,
+  PRIMARY KEY (x, y)
+)
+----
+
+opt expect-not=GenerateLookupJoins
+SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
+----
+right-join (hash)
+ ├── columns: y:1!null x:2 y:3 z:4
+ ├── cardinality: [2 - ]
+ ├── fd: (2,3)-->(4)
+ ├── scan t59615 [as=t]
+ │    ├── columns: x:2!null y:3!null z:4
+ │    ├── check constraint expressions
+ │    │    └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
+ │    ├── key: (2,3)
+ │    └── fd: (2,3)-->(4)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1,)
+ │    └── (2,)
+ └── filters
+      └── column1:1 = y:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+
+opt expect-not=GenerateLookupJoins
+SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615 t WHERE u.y = t.y
+)
+----
+anti-join (hash)
+ ├── columns: y:1!null
+ ├── cardinality: [0 - 2]
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1,)
+ │    └── (2,)
+ ├── scan t59615 [as=t]
+ │    ├── columns: y:3!null
+ │    └── check constraint expressions
+ │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
+ └── filters
+      └── column1:1 = y:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------
@@ -6078,41 +6130,29 @@ semi-join (lookup json_arr1 [as=t1])
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
-# Generate an inverted anti-join on a multi-column inverted index.
-opt expect=GenerateInvertedJoinsFromSelect
+# We cannot generate an inverted anti-join in this case, due to the multiple
+# possible values for t1.i.
+opt expect-not=GenerateInvertedJoinsFromSelect
 SELECT * FROM json_arr2 AS t2
 WHERE NOT EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i IN (3, 4)
 )
 ----
-anti-join (lookup json_arr1 [as=t1])
+anti-join (cross)
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [20] = [6]
- ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null t1.k:20 i:21 continuation:33
- │    ├── prefix key columns: [19] = [21]
- │    ├── inverted-expr
- │    │    └── t1.j:22 @> t2.j:3
- │    ├── fd: (1)-->(2-4), (20)-->(21,33)
- │    ├── inner-join (cross)
- │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
- │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
- │    │    ├── fd: (1)-->(2-4)
- │    │    ├── scan json_arr2 [as=t2]
- │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2-4)
- │    │    ├── values
- │    │    │    ├── columns: "inverted_join_const_col_@7":19!null
- │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── (3,)
- │    │    │    └── (4,)
- │    │    └── filters (true)
- │    └── filters (true)
+ ├── scan json_arr2 [as=t2]
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: i:7!null t1.j:8
+ │    ├── scan json_arr1 [as=t1]
+ │    │    └── columns: i:7 t1.j:8
+ │    └── filters
+ │         └── i:7 IN (3, 4) [outer=(7), constraints=(/7: [/3 - /3] [/4 - /4]; tight)]
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
@@ -6145,6 +6185,57 @@ anti-join (lookup json_arr1 [as=t1])
  │    └── filters (true)
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+
+# Regression test for #59615. Ensure that invalid inverted joins are not created
+# for left and anti joins.
+exec-ddl
+CREATE TABLE t59615_inv (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y JSON,
+  z INT,
+  INVERTED INDEX (x, y)
+)
+----
+
+opt expect-not=GenerateInvertedJoins
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) LEFT JOIN t59615_inv t ON t.y @> u.y
+----
+right-join (cross)
+ ├── columns: y:1!null x:2 y:3 z:4
+ ├── cardinality: [2 - ]
+ ├── immutable
+ ├── scan t59615_inv [as=t]
+ │    ├── columns: x:2!null y:3 z:4
+ │    └── check constraint expressions
+ │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('"a"',)
+ │    └── ('"b"',)
+ └── filters
+      └── y:3 @> column1:1 [outer=(1,3), immutable]
+
+opt expect-not=GenerateInvertedJoins
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615_inv t WHERE t.y @> u.y
+)
+----
+anti-join (cross)
+ ├── columns: y:1!null
+ ├── cardinality: [0 - 2]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('"a"',)
+ │    └── ('"b"',)
+ ├── scan t59615_inv [as=t]
+ │    ├── columns: y:3
+ │    └── check constraint expressions
+ │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
+ └── filters
+      └── y:3 @> column1:1 [outer=(1,3), immutable]
 
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
