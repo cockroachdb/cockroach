@@ -4,34 +4,13 @@
   white-space: nowrap;
 }
 
-.statements-table__col-count--bar-chart {
-  width: 100px;
-}
-
-.statements-table__col-retries--bar-chart {
-  width: 80px;
-}
-
 .numeric-stats-table {
   .bar-chart {
     width: 200px;
   }
 }
 
-.statements-table__col-rows,
-.statements-table__col-latency {
-  &--bar-chart {
-    min-width: 150px;
-  }
-}
-
-.statements-table__col-count,
-.statements-table__col-rows,
-.statements-table__col-rows-read,
-.statements-table__col-bytes-read ,
-.statements-table__col-max-mem-usage,
-.statements-tabe__col-network-bytes,
-.statements-table__col-retries {
+.statements-table__col {
   &--bar-chart {
     margin-left: 0;
 
@@ -42,6 +21,30 @@
     }
   }
 }
+
+// Overrides to widths of specific table columns
+// to make them look nicer or emphasize certain
+// bar graphs over others, otherwise by default
+// widths of table columns will be governed by
+// the length of the name of the column
+.statements-table__col-count {
+  .statements-table__col--bar-chart {
+    width: 100px;
+  }
+}
+
+.statements-table__col-retries {
+  .statements-table__col--bar-chart {
+    width: 80px;
+  }
+}
+
+.statements-table__col-rows-read, .statements-table__col-latency {
+  .statements-table__col--bar-chart {
+    min-width: 150px;
+  }
+}
+
 
 .cl-table__col-query-text a {
   font-family: $font-family--monospace;
