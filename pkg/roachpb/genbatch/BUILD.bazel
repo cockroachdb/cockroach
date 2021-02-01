@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:bootstrap
+
+go_library(
+    name = "genbatch_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/genbatch",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/roachpb:bootstrap"],
+)
+
+go_binary(
+    name = "genbatch",
+    embed = [":genbatch_lib"],
+    visibility = ["//visibility:public"],
+)
