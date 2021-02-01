@@ -69,6 +69,17 @@ func (*sqlSmith) Meta() workload.Meta { return sqlSmithMeta }
 // Flags implements the Flagser interface.
 func (g *sqlSmith) Flags() workload.Flags { return g.flags }
 
+func (g *sqlSmith) Hooks() workload.Hooks {
+	return workload.Hooks{
+		PreCreate: func(db *gosql.DB) error {
+			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
 // Tables implements the Generator interface.
 func (g *sqlSmith) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(g.seed))
@@ -132,10 +143,6 @@ func (g *sqlSmith) Ops(
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
-
-	if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
-		return workload.QueryLoad{}, err
-	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {

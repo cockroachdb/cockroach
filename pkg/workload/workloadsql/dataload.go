@@ -55,6 +55,12 @@ func (l InsertsDataLoader) InitialDataLoad(
 		hooks = h.Hooks()
 	}
 
+	if hooks.PreCreate != nil {
+		if err := hooks.PreCreate(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not precreate")
+		}
+	}
+
 	for _, table := range tables {
 		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
