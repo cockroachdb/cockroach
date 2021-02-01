@@ -12,6 +12,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,19 +36,19 @@ var buildCmd = &cobra.Command{
 }
 
 var buildTargetMapping = map[string]string{
-	"cockroach":        "@cockroach//pkg/cmd/cockroach",
-	"cockroach-oss":    "@cockroach//pkg/cmd/cockroach-oss",
-	"cockroach-short":  "@cockroach//pkg/cmd/cockroach-short",
-	"dev":              "@cockroach//pkg/cmd/dev",
-	"docgen":           "@cockroach//pkg/cmd/docgen",
-	"execgen":          "@cockroach//pkg/sql/colexec/execgen/cmd/execgen",
-	"optgen":           "@cockroach//pkg/sql/opt/optgen/cmd/optgen",
-	"optfmt":           "@cockroach//pkg/sql/opt/optgen/cmd/optfmt",
-	"langgen":          "@cockroach//pkg/sql/opt/optgen/cmd/langgen",
-	"roachprod":        "@cockroach//pkg/cmd/roachprod",
-	"roachprod-stress": "@cockroach//pkg/cmd/roachprod-stress",
-	"workload":         "@cockroach//pkg/cmd/workload",
-	"roachtest":        "@cockroach//pkg/cmd/roachtest",
+	"cockroach":        "//pkg/cmd/cockroach",
+	"cockroach-oss":    "//pkg/cmd/cockroach-oss",
+	"cockroach-short":  "//pkg/cmd/cockroach-short",
+	"dev":              "//pkg/cmd/dev",
+	"docgen":           "//pkg/cmd/docgen",
+	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen",
+	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen",
+	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt",
+	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen",
+	"roachprod":        "//pkg/cmd/roachprod",
+	"roachprod-stress": "//pkg/cmd/roachprod-stress",
+	"workload":         "//pkg/cmd/workload",
+	"roachtest":        "//pkg/cmd/roachtest",
 }
 
 func runBuild(cmd *cobra.Command, targets []string) error {
@@ -57,7 +60,6 @@ func runBuild(cmd *cobra.Command, targets []string) error {
 	}
 
 	// TODO(irfansharif): Add grouping shorthands like "all" or "bins", etc.
-	// TODO(irfansharif): Extract built binaries out of the bazel sandbox.
 	// TODO(irfansharif): Make sure all the relevant binary targets are defined
 	// above, and in usage docs.
 
@@ -74,5 +76,48 @@ func runBuild(cmd *cobra.Command, targets []string) error {
 
 		args = append(args, buildTarget)
 	}
-	return execute(ctx, "bazel", args...)
+	if err := execute(ctx, "bazel", args...); err != nil {
+		return err
+	}
+
+	workspaceBuf, err := executeReturningStdout(ctx, "bazel", "info", "workspace")
+	if err != nil {
+		return err
+	}
+	workspace := strings.TrimSpace(workspaceBuf.String())
+
+	var binDirCreated bool
+	for _, target := range targets {
+		buildTarget := buildTargetMapping[target]
+		output, err := getPathToGoBin(ctx, buildTarget)
+		if err != nil {
+			return err
+		}
+		
+		base := path.Base(output)
+		var dest string
+		// Binaries beginning with the string "cockroach" go right at
+		// the top of the workspace; others go in the `bin` directory.
+		if strings.HasPrefix(base, "cockroach") {
+			dest = path.Join(workspace, base)
+		} else {
+			if !binDirCreated {
+				if err := os.MkdirAll(path.Join(workspace, "bin"), 0755); err != nil {
+					return err
+				}
+				binDirCreated = true
+			}
+			dest = path.Join(workspace, "bin", base)
+		}
+
+		// Symlink from output -> dest
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Symlink(output, dest); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

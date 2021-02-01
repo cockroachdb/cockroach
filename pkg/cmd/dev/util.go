@@ -12,8 +12,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,4 +76,54 @@ func execute(ctx context.Context, name string, args ...string) error {
 	}
 
 	return nil
+}
+
+func executeReturningStdout(ctx context.Context, name string, args ...string) (*bytes.Buffer, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(stdout); err != nil {
+		return nil, err
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func getPathToGoBin(ctx context.Context, target string) (string, error) {
+	// We could pass --output=proto instead, but then we'd have to import
+	// the generated Go code for the proto definition. For now, until we're
+	// comfortable depending on that, just parse the JSON instead.
+	buf, err := executeReturningStdout(ctx, "bazel", "aquery", target, "--output=jsonproto")
+	if err != nil {
+		return "", err
+	}
+
+	m := make(map[string]interface{})
+	json.Unmarshal(buf.Bytes(), &m)
+
+	// Find the action corresponding to the final result binary (its
+	// mnemonic is "GoLink").
+	for _, action := range m["actions"].([]interface{}) {
+		action := action.(map[string]interface{})
+		if action["mnemonic"] == "GoLink" {
+			// The path is the output with this output ID.
+			outputIdStr := action["outputIds"].([]interface{})[0].(string)
+			outputId, err := strconv.Atoi(outputIdStr)
+			if err != nil {
+				return "", nil
+			}
+			return m["artifacts"].([]interface{})[outputId].(map[string]interface{})["execPath"].(string), nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find path to binary %q", target)
 }
