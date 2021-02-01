@@ -805,6 +805,8 @@ vectorized: true
                               label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
+# TODO(rytaft): This plan is suboptimal because it's not safe to construct
+# a left lookup join in this case (see #59649).
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT DO NOTHING
@@ -835,73 +837,53 @@ vectorized: true
 │           │ render column3: column3
 │           │ render column4: column4
 │           │
-│           └── • project
+│           └── • hash join (right anti)
 │               │ columns: (column1, column2, column3, column4)
 │               │ estimated row count: 0 (missing stats)
+│               │ equality: (i) = (column3)
+│               │
+│               ├── • scan
+│               │     columns: (i)
+│               │     estimated row count: 1,000 (missing stats)
+│               │     table: uniq_enum@primary
+│               │     spans: FULL SCAN
 │               │
 │               └── • lookup join (anti)
-│                   │ columns: ("lookup_join_const_col_@29", column1, column2, column3, column4)
-│                   │ table: uniq_enum@uniq_enum_r_s_j_key
-│                   │ equality: (lookup_join_const_col_@29, column2, column4) = (r,s,j)
+│                   │ columns: (column1, column2, column3, column4)
+│                   │ estimated row count: 0 (missing stats)
+│                   │ table: uniq_enum@primary
+│                   │ equality: (column1, column3) = (r,i)
 │                   │ equality cols are key
 │                   │
-│                   └── • cross join (inner)
-│                       │ columns: ("lookup_join_const_col_@29", column1, column2, column3, column4)
+│                   └── • lookup join (anti)
+│                       │ columns: (column1, column2, column3, column4)
 │                       │ estimated row count: 0 (missing stats)
+│                       │ table: uniq_enum@uniq_enum_r_s_j_key
+│                       │ equality: (column1, column2, column4) = (r,s,j)
+│                       │ equality cols are key
 │                       │
-│                       ├── • values
-│                       │     columns: ("lookup_join_const_col_@29")
-│                       │     size: 1 column, 3 rows
-│                       │     row 0, expr 0: 'us-east'
-│                       │     row 1, expr 0: 'us-west'
-│                       │     row 2, expr 0: 'eu-west'
-│                       │
-│                       └── • project
+│                       └── • hash join (right anti)
 │                           │ columns: (column1, column2, column3, column4)
 │                           │ estimated row count: 0 (missing stats)
+│                           │ equality: (s, j) = (column2, column4)
 │                           │
-│                           └── • lookup join (anti)
-│                               │ columns: ("lookup_join_const_col_@23", column1, column2, column3, column4)
-│                               │ table: uniq_enum@primary
-│                               │ equality: (lookup_join_const_col_@23, column3) = (r,i)
-│                               │ equality cols are key
-│                               │
-│                               └── • cross join (inner)
-│                                   │ columns: ("lookup_join_const_col_@23", column1, column2, column3, column4)
-│                                   │ estimated row count: 0 (missing stats)
-│                                   │
-│                                   ├── • values
-│                                   │     columns: ("lookup_join_const_col_@23")
-│                                   │     size: 1 column, 3 rows
-│                                   │     row 0, expr 0: 'us-east'
-│                                   │     row 1, expr 0: 'us-west'
-│                                   │     row 2, expr 0: 'eu-west'
-│                                   │
-│                                   └── • lookup join (anti)
-│                                       │ columns: (column1, column2, column3, column4)
-│                                       │ estimated row count: 0 (missing stats)
-│                                       │ table: uniq_enum@primary
-│                                       │ equality: (column1, column3) = (r,i)
-│                                       │ equality cols are key
-│                                       │
-│                                       └── • lookup join (anti)
-│                                           │ columns: (column1, column2, column3, column4)
-│                                           │ estimated row count: 0 (missing stats)
-│                                           │ table: uniq_enum@uniq_enum_r_s_j_key
-│                                           │ equality: (column1, column2, column4) = (r,s,j)
-│                                           │ equality cols are key
-│                                           │
-│                                           └── • values
-│                                                 columns: (column1, column2, column3, column4)
-│                                                 size: 4 columns, 2 rows
-│                                                 row 0, expr 0: 'us-west'
-│                                                 row 0, expr 1: 'foo'
-│                                                 row 0, expr 2: 1
-│                                                 row 0, expr 3: 1
-│                                                 row 1, expr 0: 'us-east'
-│                                                 row 1, expr 1: 'bar'
-│                                                 row 1, expr 2: 2
-│                                                 row 1, expr 3: 2
+│                           ├── • scan
+│                           │     columns: (s, j)
+│                           │     estimated row count: 1,000 (missing stats)
+│                           │     table: uniq_enum@primary
+│                           │     spans: FULL SCAN
+│                           │
+│                           └── • values
+│                                 columns: (column1, column2, column3, column4)
+│                                 size: 4 columns, 2 rows
+│                                 row 0, expr 0: 'us-west'
+│                                 row 0, expr 1: 'foo'
+│                                 row 0, expr 2: 1
+│                                 row 0, expr 3: 1
+│                                 row 1, expr 0: 'us-east'
+│                                 row 1, expr 1: 'bar'
+│                                 row 1, expr 2: 2
+│                                 row 1, expr 3: 2
 │
 ├── • constraint-check
 │   │
@@ -2313,6 +2295,8 @@ vectorized: true
                               label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
+# TODO(rytaft): This plan is suboptimal because it's not safe to construct
+# a left lookup join in this case (see #59649).
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT (s, j) DO UPDATE SET i = 3
@@ -2369,38 +2353,28 @@ vectorized: true
 │                   │ render i: i
 │                   │ render j: j
 │                   │
-│                   └── • project
-│                       │ columns: (column1, column2, column3, column4, r, s, i, j)
+│                   └── • hash join (right outer)
+│                       │ columns: (r, s, i, j, column1, column2, column3, column4)
 │                       │ estimated row count: 2 (missing stats)
+│                       │ equality: (s, j) = (column2, column4)
 │                       │
-│                       └── • lookup join (left outer)
-│                           │ columns: ("lookup_join_const_col_@11", column1, column2, column3, column4, r, s, i, j)
-│                           │ table: uniq_enum@uniq_enum_r_s_j_key
-│                           │ equality: (lookup_join_const_col_@11, column2, column4) = (r,s,j)
-│                           │ equality cols are key
-│                           │
-│                           └── • cross join (inner)
-│                               │ columns: ("lookup_join_const_col_@11", column1, column2, column3, column4)
-│                               │ estimated row count: 6
-│                               │
-│                               ├── • values
-│                               │     columns: ("lookup_join_const_col_@11")
-│                               │     size: 1 column, 3 rows
-│                               │     row 0, expr 0: 'us-east'
-│                               │     row 1, expr 0: 'us-west'
-│                               │     row 2, expr 0: 'eu-west'
-│                               │
-│                               └── • values
-│                                     columns: (column1, column2, column3, column4)
-│                                     size: 4 columns, 2 rows
-│                                     row 0, expr 0: 'us-west'
-│                                     row 0, expr 1: 'foo'
-│                                     row 0, expr 2: 1
-│                                     row 0, expr 3: 1
-│                                     row 1, expr 0: 'us-east'
-│                                     row 1, expr 1: 'bar'
-│                                     row 1, expr 2: 2
-│                                     row 1, expr 3: 2
+│                       ├── • scan
+│                       │     columns: (r, s, i, j)
+│                       │     estimated row count: 1,000 (missing stats)
+│                       │     table: uniq_enum@primary
+│                       │     spans: FULL SCAN
+│                       │
+│                       └── • values
+│                             columns: (column1, column2, column3, column4)
+│                             size: 4 columns, 2 rows
+│                             row 0, expr 0: 'us-west'
+│                             row 0, expr 1: 'foo'
+│                             row 0, expr 2: 1
+│                             row 0, expr 3: 1
+│                             row 1, expr 0: 'us-east'
+│                             row 1, expr 1: 'bar'
+│                             row 1, expr 2: 2
+│                             row 1, expr 3: 2
 │
 ├── • constraint-check
 │   │
