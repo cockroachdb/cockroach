@@ -1597,34 +1597,17 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			// Make the mutations public in a private copy of the descriptor
-			// and add it to the Collection, so that we can use SQL below to perform
-			// the validation. We wouldn't have needed to do this if we could have
-			// updated the descriptor and run validation in the same transaction. However,
-			// our current system is incapable of running long running schema changes
-			// (the validation can take many minutes). So we pretend that the schema
-			// has been updated and actually update it in a separate transaction that
-			// follows this one.
+			// Make the mutations public in an in-memory copy of the descriptor and
+			// add it to the Collection's synthetic descriptors, so that we can use
+			// SQL below to perform the validation.
 			desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
 			if err != nil {
-				return err
-			}
-			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
-			// pretend that the schema has been modified.
-			if err := tc.AddUncommittedDescriptor(desc); err != nil {
 				return err
 			}
 
 			// Retrieve the row count in the index.
 			var idxLen int64
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
-				// TODO(vivek): This is not a great API. Leaving #34304 open.
-				ie := evalCtx.InternalExecutor.(*InternalExecutor)
-				ie.tcModifier = tc
-				defer func() {
-					ie.tcModifier = nil
-				}()
-
 				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.ID)
 				// If the index is a partial index the predicate must be added
 				// as a filter to the query to force scanning the index.
@@ -1632,15 +1615,18 @@ func (sc *SchemaChanger) validateForwardIndexes(
 					query = fmt.Sprintf(`%s WHERE %s`, query, idx.Predicate)
 				}
 
-				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
-				if err != nil {
-					return err
-				}
-				if row == nil {
-					return errors.New("failed to verify index count")
-				}
-				idxLen = int64(tree.MustBeDInt(row[0]))
-				return nil
+				ie := evalCtx.InternalExecutor.(*InternalExecutor)
+				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
+					if err != nil {
+						return err
+					}
+					if row == nil {
+						return errors.New("failed to verify index count")
+					}
+					idxLen = int64(tree.MustBeDInt(row[0]))
+					return nil
+				})
 			}); err != nil {
 				return err
 			}
@@ -1681,26 +1667,16 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		start := timeutil.Now()
 
 		// The query to count the expected number of rows can reference columns
-		// added earlier in the same mutation. Here we make those mutations
-		// pubic so that the query can reference those columns.
+		// added earlier in the same mutation. Make the mutations public in an
+		// in-memory copy of the descriptor and add it to the Collection's synthetic
+		// descriptors, so that we can use SQL below to perform the validation.
 		desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
 		if err != nil {
 			return err
 		}
 
-		tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
-		if err := tc.AddUncommittedDescriptor(desc); err != nil {
-			return err
-		}
-
 		// Count the number of rows in the table.
 		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
-			ie := evalCtx.InternalExecutor.(*InternalExecutor)
-			ie.tcModifier = tc
-			defer func() {
-				ie.tcModifier = nil
-			}()
-
 			var s strings.Builder
 			for _, idx := range indexes {
 				// For partial indexes, count the number of rows in the table
@@ -1715,24 +1691,27 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// query plan that uses the indexes being backfilled.
 			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.ID, desc.GetPrimaryIndexID())
 
-			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
-			if err != nil {
-				return err
-			}
-			if cnt == nil {
-				return errors.New("failed to verify index")
-			}
-
-			tableRowCount = int64(tree.MustBeDInt(cnt[0]))
-			cntIdx := 1
-			for _, idx := range indexes {
-				if idx.IsPartial() {
-					partialIndexExpectedCounts[idx.ID] = int64(tree.MustBeDInt(cnt[cntIdx]))
-					cntIdx++
+			ie := evalCtx.InternalExecutor.(*InternalExecutor)
+			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
+				if err != nil {
+					return err
 				}
-			}
+				if cnt == nil {
+					return errors.New("failed to verify index")
+				}
 
-			return nil
+				tableRowCount = int64(tree.MustBeDInt(cnt[0]))
+				cntIdx := 1
+				for _, idx := range indexes {
+					if idx.IsPartial() {
+						partialIndexExpectedCounts[idx.ID] = int64(tree.MustBeDInt(cnt[cntIdx]))
+						cntIdx++
+					}
+				}
+
+				return nil
+			})
 		}); err != nil {
 			return err
 		}
@@ -2122,19 +2101,13 @@ func validateCheckInTxn(
 	checkExpr string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
+	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
-		// pretend that the schema has been modified.
-		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
-			return err
-		}
-
-		ie.tcModifier = newTc
-		defer func() {
-			ie.tcModifier = nil
-		}()
+		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	return validateCheckExpr(ctx, semaCtx, checkExpr, tableDesc, ie, txn)
+	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+		return validateCheckExpr(ctx, semaCtx, checkExpr, tableDesc, ie, txn)
+	})
 }
 
 // validateFkInTxn validates foreign key constraints within the provided
@@ -2158,17 +2131,9 @@ func validateFkInTxn(
 	fkName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
+	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
-		// pretend that the schema has been modified.
-		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
-			return err
-		}
-
-		ie.tcModifier = newTc
-		defer func() {
-			ie.tcModifier = nil
-		}()
+		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 
 	var fk *descpb.ForeignKeyConstraint
@@ -2183,7 +2148,9 @@ func validateFkInTxn(
 		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
 
-	return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
+	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+		return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
+	})
 }
 
 // validateUniqueConstraintInTxn validates a unique constraint within the
@@ -2207,17 +2174,9 @@ func validateUniqueConstraintInTxn(
 	constraintName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
+	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
-		// pretend that the schema has been modified.
-		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
-			return err
-		}
-
-		ie.tcModifier = newTc
-		defer func() {
-			ie.tcModifier = nil
-		}()
+		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 
 	var uc *descpb.UniqueWithoutIndexConstraint
@@ -2232,7 +2191,9 @@ func validateUniqueConstraintInTxn(
 		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
 	}
 
-	return validateUniqueConstraint(ctx, tableDesc, uc, ie, txn)
+	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+		return validateUniqueConstraint(ctx, tableDesc, uc, ie, txn)
+	})
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in

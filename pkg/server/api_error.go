@@ -12,15 +12,18 @@ package server
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
+var errAPIInternalErrorString = "An internal server error has occurred. Please check your CockroachDB logs for more details."
+
 var errAPIInternalError = status.Errorf(
 	codes.Internal,
-	"An internal server error has occurred. Please check your CockroachDB logs for more details.",
+	errAPIInternalErrorString,
 )
 
 // apiInternalError should be used to wrap server-side errors during API
@@ -30,4 +33,13 @@ var errAPIInternalError = status.Errorf(
 func apiInternalError(ctx context.Context, err error) error {
 	log.ErrorfDepth(ctx, 1, "%s", err)
 	return errAPIInternalError
+}
+
+// apiV2InternalError should be used to wrap server-side errors during API
+// requests for V2 (non-GRPC) endpoints. This method records the contents
+// of the error to the server log, and sends the standard internal error string
+// over the http.ResponseWriter.
+func apiV2InternalError(ctx context.Context, err error, w http.ResponseWriter) {
+	log.ErrorfDepth(ctx, 1, "%s", err)
+	http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
 }

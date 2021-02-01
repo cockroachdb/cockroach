@@ -134,17 +134,18 @@ func matchFullUnacceptableKeyQuery(
 // values in the key are excluded from matching (for both MATCH FULL and MATCH
 // SIMPLE).
 //
-// For example, a FK constraint on columns (a_id, b_id) with an index c_id on
-// the table "child", referencing columns (a, b) with an index p_id on the table
-// "parent", would require the following query:
+// For example, a FK constraint on columns (a_id, b_id) on the table "child",
+// referencing columns (a, b) on the table "parent", would require the following
+// query:
 //
-// SELECT
-//   s.a_id, s.b_id, s.pk1, s.pk2
-// FROM
-//   (SELECT * FROM child@c_idx WHERE a_id IS NOT NULL AND b_id IS NOT NULL) AS s
-//   LEFT OUTER JOIN parent@p_idx AS t ON s.a_id = t.a AND s.b_id = t.b
-// WHERE
-//   t.a IS NULL
+// SELECT s.a_id, s.b_id, s.rowid
+//  FROM (
+//        SELECT a_id, b_id, rowid
+//          FROM [<ID of child> AS src]@{IGNORE_FOREIGN_KEYS}
+//         WHERE a_id IS NOT NULL AND b_id IS NOT NULL
+//       ) AS s
+//       LEFT JOIN [<id of parent> AS target] AS t ON s.a_id = t.a AND s.b_id = t.b
+// WHERE t.a IS NULL
 // LIMIT 1  -- if limitResults is set
 //
 // TODO(radu): change this to a query which executes as an anti-join when we
@@ -209,7 +210,7 @@ func nonMatchingRowQuery(
 		`SELECT %[1]s FROM 
 		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS} WHERE %[4]s) AS s
 			LEFT OUTER JOIN
-			(SELECT * FROM [%[5]d AS target]) AS t
+			[%[5]d AS target] AS t
 			ON %[6]s
 		 WHERE %[7]s IS NULL %[8]s`,
 		strings.Join(qualifiedSrcCols, ", "), // 1

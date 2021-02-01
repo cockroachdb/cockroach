@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -65,14 +65,32 @@ type InternalExecutor struct {
 	// the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
 
-	// The internal executor uses its own Collection. A Collection
-	// is a schema cache for each transaction and contains data like the schema
-	// modified by a transaction. Occasionally an internal executor is called
-	// within the context of a transaction that has modified the schema, the
-	// internal executor should see the modified schema. This interface allows
-	// the internal executor to modify its Collection to match the
-	// Collection of the parent executor.
-	tcModifier descs.ModifiedCollectionCopier
+	// syntheticDescriptors stores the synthetic descriptors to be injected into
+	// each query/statement's descs.Collection upon initialization.
+	//
+	// Warning: Not safe for concurrent use from multiple goroutines.
+	syntheticDescriptors []catalog.Descriptor
+}
+
+// WithSyntheticDescriptors sets the synthetic descriptors before running the
+// the provided closure and resets them afterward. Used for queries/statements
+// that need to use in-memory synthetic descriptors different from descriptors
+// written to disk. These descriptors override all other descriptors on the
+// immutable resolution path.
+//
+// Warning: Not safe for concurrent use from multiple goroutines. This API is
+// flawed in that the internal executor is meant to function as a stateless
+// wrapper, and creates a new connExecutor and descs.Collection on each query/
+// statement, so these descriptors should really be specified at a per-query/
+// statement level. See #34304.
+func (ie *InternalExecutor) WithSyntheticDescriptors(
+	descs []catalog.Descriptor, run func() error,
+) error {
+	ie.syntheticDescriptors = descs
+	defer func() {
+		ie.syntheticDescriptors = nil
+	}()
+	return run()
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
@@ -165,7 +183,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			txn,
-			ie.tcModifier,
+			ie.syntheticDescriptors,
 			appStats,
 		)
 	}

@@ -12,12 +12,14 @@ package descs_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -316,4 +318,64 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			return nil
 		}))
 	})
+}
+
+// TestSyntheticDescriptorResolution tests descriptor resolution when synthetic
+// descriptors are injected into the collection.
+func TestSyntheticDescriptorResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s0 := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE TABLE tbl(foo INT)`)
+	row := tdb.QueryRow(t, `SELECT 'tbl'::regclass::int`)
+	var tableID descpb.ID
+	row.Scan(&tableID)
+
+	lm := s0.LeaseManager().(*lease.Manager)
+	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
+	require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		// Resolve the descriptor so we can mutate it.
+		tn := tree.MakeTableName("db", "tbl")
+		found, desc, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+		require.True(t, found)
+		require.NoError(t, err)
+
+		// Modify the column name.
+		desc.Columns[0].Name = "bar"
+		descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc})
+
+		// Resolve the table by name again.
+		found, desc, err = descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+		require.True(t, found)
+		require.NoError(t, err)
+		require.Equal(t, "bar", desc.Columns[0].Name)
+
+		// Attempting to resolve the table mutably is not allowed.
+		_, _, err = descriptors.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
+
+		// Resolution by ID.
+
+		desc, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		require.NoError(t, err)
+		require.Equal(t, "bar", desc.Columns[0].Name)
+
+		// Attempting to resolve the table mutably is not allowed.
+		_, err = descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
+
+		return nil
+	}),
+	)
 }

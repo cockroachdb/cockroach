@@ -351,3 +351,43 @@ DROP TYPE d."b+c"
 
 statement ok
 DROP DATABASE d
+
+# Test that dropping a schema which contains a type which refers to things
+# outside of that schema works.
+
+subtest drop_schema_cascade
+
+statement ok
+CREATE SCHEMA schema_to_drop;
+CREATE TYPE schema_to_drop.typ AS ENUM ('a');
+CREATE TABLE t (k schema_to_drop.typ PRIMARY KEY);
+CREATE TABLE schema_to_drop.t (k schema_to_drop.typ PRIMARY KEY);
+
+statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop._typ" because other objects \(\[test\.public\.t\]\) still depend on it
+DROP SCHEMA schema_to_drop CASCADE;
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP SCHEMA schema_to_drop CASCADE;
+
+# Test that dropping a table via a DROP SCHEMA CASCADE properly removes
+# back-references to types in different schemas which are not being dropped.
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc2.typ AS ENUM ('a');
+CREATE TABLE sc1.table (k sc2.typ);
+DROP SCHEMA sc1 CASCADE;
+
+
+# If the backreference to the type had not been properly removed
+# for sc1.table above, the below statement would fail.
+statement ok
+DROP TYPE sc2.typ;
+
+# This is just cleanup.
+statement ok
+DROP SCHEMA sc2 CASCADE;
