@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -59,6 +59,8 @@ var (
 	)
 )
 
+const backupProcessorName = "backupDataProcessor"
+
 // TODO(pbardea): It would be nice if we could add some DistSQL processor tests
 // we would probably want to have a mock cloudStorage object that we could
 // verify with.
@@ -69,55 +71,77 @@ var (
 // will each export a span at a time. After exporting the span, it will stream
 // back its progress through the metadata channel provided by DistSQL.
 type backupDataProcessor struct {
+	execinfra.ProcessorBase
+
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.BackupDataSpec
 	output  execinfra.RowReceiver
+
+	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	backupErr error
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
-
-func (cp *backupDataProcessor) OutputTypes() []*types.T {
-	return backupOutputTypes
-}
+var _ execinfra.RowSource = &backupDataProcessor{}
 
 func newBackupDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackupDataSpec,
+	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	cp := &backupDataProcessor{
+	bp := &backupDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
 		output:  output,
+		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	return cp, nil
+	if err := bp.Init(bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		execinfra.ProcStateOpts{
+			// This processor doesn't have any inputs to drain.
+			InputsToDrain: nil,
+		}); err != nil {
+		return nil, err
+	}
+	return bp, nil
 }
 
-func (cp *backupDataProcessor) Run(ctx context.Context) {
-	ctx, span := tracing.ChildSpan(ctx, "backupDataProcessor")
-	defer span.Finish()
-	defer cp.output.ProducerDone()
-
-	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-
-	var err error
-	// We don't have to worry about this go routine leaking because next we loop over progCh
-	// which is closed only after the go routine returns.
+// Start is part of the RowSource interface.
+func (bp *backupDataProcessor) Start(ctx context.Context) context.Context {
 	go func() {
-		defer close(progCh)
-		err = runBackupProcessor(ctx, cp.flowCtx, &cp.spec, progCh)
+		defer close(bp.progCh)
+		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
 	}()
+	return bp.StartInternal(ctx, backupProcessorName)
+}
 
-	for prog := range progCh {
-		// Take a copy so that we can send the progress address to the output processor.
+// Next is part of the RowSource interface.
+func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if bp.State != execinfra.StateRunning {
+		return nil, bp.DrainHelper()
+	}
+
+	for prog := range bp.progCh {
+		// Take a copy so that we can send the progress address to the output
+		// processor.
 		p := prog
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
 	}
 
-	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+	if bp.backupErr != nil {
+		bp.MoveToDraining(bp.backupErr)
+		return nil, bp.DrainHelper()
 	}
+
+	bp.MoveToDraining(nil /* error */)
+	return nil, bp.DrainHelper()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (bp *backupDataProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	bp.InternalClose()
 }
 
 type spanAndTime struct {
