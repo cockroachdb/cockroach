@@ -37,8 +37,6 @@ func init() {
 	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
 }
 
-const asyncTaskNamePrefix = "[async] "
-
 // ErrThrottled is returned from RunLimitedAsyncTask in the event that there
 // is no more capacity for async tasks, as limited by the semaphore.
 var ErrThrottled = errors.New("throttled on async limiting semaphore")
@@ -258,31 +256,26 @@ func (s *Stopper) AddCloser(c Closer) {
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
-	return s.withCancel(ctx, s.mu.qCancels, s.quiescer)
-}
-
-func (s *Stopper) withCancel(
-	ctx context.Context, cancels map[int]func(), cancelCh chan struct{},
-) (context.Context, func()) {
-	var cancel func()
-	ctx, cancel = context.WithCancel(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	select {
-	case <-cancelCh:
-		// Cancel immediately.
+	return s.registerCancelLocked(ctx)
+}
+
+func (s *Stopper) registerCancelLocked(ctx context.Context) (context.Context, func()) {
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	if s.mu.quiescing || s.mu.stopCalled {
 		cancel()
-		return ctx, func() {}
-	default:
-		id := s.mu.idAlloc
-		s.mu.idAlloc++
-		cancels[id] = cancel
-		return ctx, func() {
-			cancel()
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			delete(cancels, id)
-		}
+		return ctx, cancel
+	}
+	id := s.mu.idAlloc
+	s.mu.idAlloc++
+	s.mu.qCancels[id] = cancel
+	return ctx, func() {
+		cancel()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.mu.qCancels, id)
 	}
 }
 
@@ -300,7 +293,9 @@ func (s *Stopper) withCancel(
 // Returns an error to indicate that the system is currently quiescing and
 // function f was not called.
 func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.Context)) error {
-	if !s.runPrelude(taskName) {
+	ctx, cancel, ok := s.runPrelude(ctx, taskName)
+	defer cancel()
+	if !ok {
 		return ErrUnavailable
 	}
 
@@ -317,7 +312,9 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 func (s *Stopper) RunTaskWithErr(
 	ctx context.Context, taskName string, f func(context.Context) error,
 ) error {
-	if !s.runPrelude(taskName) {
+	ctx, cancel, ok := s.runPrelude(ctx, taskName)
+	defer cancel()
+	if !ok {
 		return ErrUnavailable
 	}
 
@@ -333,8 +330,8 @@ func (s *Stopper) RunTaskWithErr(
 func (s *Stopper) RunAsyncTask(
 	ctx context.Context, taskName string, f func(context.Context),
 ) error {
-	taskName = asyncTaskNamePrefix + taskName
-	if !s.runPrelude(taskName) {
+	ctx, cancel, ok := s.runPrelude(ctx, taskName)
+	if !ok {
 		return ErrUnavailable
 	}
 
@@ -345,6 +342,7 @@ func (s *Stopper) RunAsyncTask(
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
 		defer span.Finish()
+		defer cancel()
 
 		f(ctx)
 	}()
@@ -393,7 +391,9 @@ func (s *Stopper) RunLimitedAsyncTask(
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if !s.runPrelude(taskName) {
+
+	ctx, cancel, ok := s.runPrelude(ctx, taskName)
+	if !ok {
 		return ErrUnavailable
 	}
 
@@ -404,21 +404,27 @@ func (s *Stopper) RunLimitedAsyncTask(
 		defer s.runPostlude(taskName)
 		defer alloc.Release()
 		defer span.Finish()
+		defer cancel()
 
 		f(ctx)
 	}()
 	return nil
 }
 
-func (s *Stopper) runPrelude(taskName string) bool {
+func (s *Stopper) runPrelude(
+	ctx context.Context, taskName string,
+) (_ context.Context, cancel func(), ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.mu.quiescing {
-		return false
+
+	ctx, cancel = s.registerCancelLocked(ctx)
+
+	if ctx.Err() != nil {
+		return ctx, cancel, false
 	}
 	s.mu.numTasks++
 	s.mu.tasks[taskName]++
-	return true
+	return ctx, cancel, true
 }
 
 func (s *Stopper) runPostlude(taskName string) {

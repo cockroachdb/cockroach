@@ -578,7 +578,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 		for i := 0; i < maxConcurrency*2; i++ {
 			if err := s.RunLimitedAsyncTask(ctx, "test", sem, true, f); err != nil {
 				if !errors.Is(err, context.Canceled) {
-					t.Fatal(err)
+					t.Error(err)
 				}
 				atomic.AddInt32(&workersCanceled, 1)
 			}
