@@ -31,47 +31,20 @@ const longToInt = (d: number | Long) => Number(FixLong(d));
 function makeCommonColumns(
   statements: AggregateStatistics[],
 ): ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements, {
+  const barChartOptions = {
     classes: {
-      root: cx("statements-table__col-count--bar-chart"),
-      label: cx("statements-table__col-count--bar-chart__label"),
+      root: cx("statements-table__col--bar-chart"),
+      label: cx("statements-table__col--bar-chart__label"),
     },
-  });
-  const rowsReadBar = rowsReadBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-rows-read--bar-chart"),
-      label: cx("statements-table__col-rows-read--bar-chart__label"),
-    },
-  });
-  const bytesReadBar = bytesReadBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-bytes-read--bar-chart"),
-      label: cx("statements-table__col-bytes-read--bar-chart__label"),
-    },
-  });
-  const latencyBar = latencyBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-latency--bar-chart"),
-    },
-  });
-  const maxMemUsageBar = maxMemUsageBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-max-mem-usage--bar-chart"),
-      label: cx("statements-table__col-max-mem-usage--bar-chart__label"),
-    },
-  });
-  const networkBytesBar = networkBytesBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-network-bytes--bar-chart"),
-      label: cx("statements-table__col-network-bytes--bar-chart__label"),
-    },
-  });
-  const retryBar = retryBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-retries--bar-chart"),
-      label: cx("statements-table__col-retries--bar-chart__label"),
-    },
-  });
+  };
+
+  const countBar = countBarChart(statements, barChartOptions);
+  const rowsReadBar = rowsReadBarChart(statements, barChartOptions);
+  const bytesReadBar = bytesReadBarChart(statements, barChartOptions);
+  const latencyBar = latencyBarChart(statements, barChartOptions);
+  const maxMemUsageBar = maxMemUsageBarChart(statements, barChartOptions);
+  const networkBytesBar = networkBytesBarChart(statements, barChartOptions);
+  const retryBar = retryBarChart(statements, barChartOptions);
 
   return [
     {
