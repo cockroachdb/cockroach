@@ -600,13 +600,13 @@ CREATE TABLE t59615 (
 )
 
 # We cannot create a lookup join in this case.
-query IIII
+query IIII rowsort
 SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
 1  NULL  NULL  NULL
 2  NULL  NULL  NULL
 
-query I
+query I rowsort
 SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615 t WHERE u.y = t.y
 )
