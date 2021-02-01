@@ -746,6 +746,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	// as well.
 	c.Put(ctx, cockroach, "./cockroach", loadNodes)
 	c.Put(ctx, workload, "./workload", loadNodes)
+	// Don't encrypt in tpccbench tests.
+	c.encryptDefault = false
+	c.encryptAtRandom = false
 	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 
 	useHAProxy := b.Chaos
