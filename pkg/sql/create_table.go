@@ -2033,6 +2033,26 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
+			// During CreatePartitioning, implicitly partitioned columns may be
+			// created. This needs to happen before CreatePartitioning is called
+			// as CreatePartitioning requires IDs to be allocated.
+			// As such, do a post check for implicitly partitioned columns, and
+			// if they are detected, ensure each index contains the implicitly
+			// partitioned column.
+			if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
+				for _, idx := range desc.AllIndexes() {
+					if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
+							if !idx.ContainsColumnID(implicitPrimaryColID) {
+								idx.IndexDesc().ExtraColumnIDs = append(
+									idx.IndexDesc().ExtraColumnIDs,
+									implicitPrimaryColID,
+								)
+							}
+						}
+					}
+				}
+			}
 			desc.SetPrimaryIndex(newPrimaryIndex)
 		}
 	}
