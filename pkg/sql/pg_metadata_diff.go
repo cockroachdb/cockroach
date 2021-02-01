@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // GetPGMetadataSQL is a query uses udt_name::regtype instead of data_type column because
@@ -187,7 +190,8 @@ func (p PGMetadataTables) rewriteDiffs(diffFile string) error {
 	return nil
 }
 
-// Save have the purpose of storing all the data retrieved from postgres and useful information as postgres version
+// Save have the purpose of storing all the data retrieved from postgres and
+// useful information as postgres version.
 func (f *PGMetadataFile) Save(writer io.Writer) {
 	byteArray, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
@@ -197,4 +201,28 @@ func (f *PGMetadataFile) Save(writer io.Writer) {
 	if _, err = writer.Write(byteArray); err != nil {
 		panic(err)
 	}
+}
+
+//getUnimplementedTables retrieves the tables that are not yet part of CRDB.
+func (p PGMetadataTables) getUnimplementedTables(source PGMetadataTables) PGMetadataTables {
+	notImplemented := make(PGMetadataTables)
+	for tableName := range p {
+		if len(p[tableName]) == 0 && len(source[tableName].getUnimplementedTypes()) == 0 {
+			notImplemented[tableName] = source[tableName]
+		}
+	}
+	return notImplemented
+}
+
+// getUnimplementedTypes verifies that all the types are implemented in cockroach db.
+func (c PGMetadataColumns) getUnimplementedTypes() map[oid.Oid]string {
+	unimplemented := make(map[oid.Oid]string)
+	for _, column := range c {
+		typeOid := oid.Oid(column.Oid)
+		if _, ok := types.OidToType[typeOid]; !ok || typeOid == oid.T_anyarray {
+			unimplemented[typeOid] = column.DataType
+		}
+	}
+
+	return unimplemented
 }
