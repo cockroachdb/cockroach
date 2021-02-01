@@ -493,6 +493,7 @@ function makeStats() {
     bytes_sent_over_network: makeStat(),
     max_mem_usage: makeStat(),
     exec_stat_collection_count: Long.fromNumber(10),
+    contention_time: makeStat(),
   };
 }
 
