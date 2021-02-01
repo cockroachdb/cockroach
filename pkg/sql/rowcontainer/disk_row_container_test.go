@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -222,15 +223,19 @@ func TestDiskRowContainer(t *testing.T) {
 					}
 
 					// Check sorted order.
+					encRow, err := sortedRows.EncRow(numKeysRead)
+					assert.NoError(t, err)
 					if cmp, err := compareRows(
-						types, sortedRows.EncRow(numKeysRead), row, &evalCtx, d.datumAlloc, ordering,
+						types, encRow, row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
+						expectedRow, err := sortedRows.EncRow(numKeysRead)
+						assert.NoError(t, err)
 						t.Fatalf(
 							"expected %s to be equal to %s",
 							row.String(types),
-							sortedRows.EncRow(numKeysRead).String(types),
+							expectedRow.String(types),
 						)
 					}
 					numKeysRead++
@@ -395,8 +400,9 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	defer d.Close(ctx)
 
-	row := rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
-	err = d.AddRow(ctx, row)
+	ed, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))
+	assert.NoError(t, err)
+	err = d.AddRow(ctx, rowenc.EncDatumRow{ed})
 	if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -64,12 +64,19 @@ func (jb *joinerBase) init(
 	}
 
 	jb.emptyLeft = make(rowenc.EncDatumRow, len(leftTypes))
+	var err error
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = rowenc.DatumToEncDatum(leftTypes[i], tree.DNull)
+		jb.emptyLeft[i], err = rowenc.DatumToEncDatum(leftTypes[i], tree.DNull)
+		if err != nil {
+			return err
+		}
 	}
 	jb.emptyRight = make(rowenc.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = rowenc.DatumToEncDatum(rightTypes[i], tree.DNull)
+		jb.emptyRight[i], err = rowenc.DatumToEncDatum(rightTypes[i], tree.DNull)
+		if err != nil {
+			return err
+		}
 	}
 
 	jb.eqCols[leftSide] = leftEqColumns

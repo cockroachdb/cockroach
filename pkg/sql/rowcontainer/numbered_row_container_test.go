@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -560,7 +561,8 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))
 		for j := range typs {
-			rows[i][j] = rowenc.DatumToEncDatum(typs[j], rowenc.RandDatum(rng, typs[j], false))
+			rows[i][j], err = rowenc.DatumToEncDatum(typs[j], rowenc.RandDatum(rng, typs[j], false))
+			assert.NoError(b, err)
 		}
 	}
 

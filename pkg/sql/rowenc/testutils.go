@@ -931,7 +931,11 @@ func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 func RandEncDatum(rng *rand.Rand) (EncDatum, *types.T) {
 	typ := RandEncodableType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
-	return DatumToEncDatum(typ, datum), typ
+	encDatum, err := DatumToEncDatum(typ, datum)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "can't generate random enc datum"))
+	}
+	return encDatum, typ
 }
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
@@ -939,8 +943,12 @@ func RandEncDatum(rng *rand.Rand) (EncDatum, *types.T) {
 func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T) {
 	typ := RandSortingType(rng)
 	vals := make([]EncDatum, numVals)
+	var err error
 	for i := range vals {
-		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		vals[i], err = DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "can't generate random enc datum"))
+		}
 	}
 	return vals, typ
 }
@@ -964,7 +972,11 @@ func RandSortingEncDatumSlices(
 func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) EncDatumRow {
 	vals := make([]EncDatum, len(types))
 	for i := range types {
-		vals[i] = DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
+		var err error
+		vals[i], err = DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "can't generate random enc datum"))
+		}
 	}
 	return vals
 }

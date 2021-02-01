@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/jackc/pgx"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,8 +52,10 @@ func TestPostProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	// We run the same input rows through various PostProcessSpecs.

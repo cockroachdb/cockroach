@@ -182,7 +182,7 @@ func (d *DiskBackedNumberedRowContainer) GetRow(
 		if skip {
 			return nil, nil
 		}
-		return d.rc.mrc.EncRow(idx), nil
+		return d.rc.mrc.EncRow(idx)
 	}
 	return d.rowIter.getRow(ctx, idx, skip)
 }

@@ -11,6 +11,8 @@
 package rowexec
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/stretchr/testify/assert"
 )
 
 type setOpTestCase struct {
@@ -78,11 +81,13 @@ func setOpTestCaseToHashJoinerTestCase(tc setOpTestCase) hashJoinerTestCase {
 	}
 }
 
-func intersectAllTestCases() []setOpTestCase {
+func intersectAllTestCases(t *testing.T) []setOpTestCase {
 	null := rowenc.EncDatum{Datum: tree.DNull}
 	var v = [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	return []setOpTestCase{
@@ -211,11 +216,13 @@ func intersectAllTestCases() []setOpTestCase {
 	}
 }
 
-func exceptAllTestCases() []setOpTestCase {
+func exceptAllTestCases(t *testing.T) []setOpTestCase {
 	null := rowenc.EncDatum{Datum: tree.DNull}
 	var v = [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	return []setOpTestCase{

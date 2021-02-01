@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 )
 
 // The encoder/decoder don't maintain the ordering between rows and metadata
@@ -116,9 +117,11 @@ func TestStreamEncodeDecode(t *testing.T) {
 		for i := range rows {
 			if rng.Intn(10) != 0 {
 				rows[i].row = make(rowenc.EncDatumRow, rowLen)
+				var err error
 				for j := range rows[i].row {
-					rows[i].row[j] = rowenc.DatumToEncDatum(info[j].Type,
+					rows[i].row[j], err = rowenc.DatumToEncDatum(info[j].Type,
 						rowenc.RandDatum(rng, info[j].Type, true))
+					assert.NoError(t, err)
 				}
 			} else {
 				rows[i].meta.Err = fmt.Errorf("test error %d", i)

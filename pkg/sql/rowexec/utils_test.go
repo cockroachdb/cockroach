@@ -128,8 +128,12 @@ func (r *rowGeneratingSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 		r.scratchEncDatumRow = r.scratchEncDatumRow[:len(datumRow)]
 	}
 
+	var err error
 	for i := range r.scratchEncDatumRow {
-		r.scratchEncDatumRow[i] = rowenc.DatumToEncDatum(r.types[i], datumRow[i])
+		r.scratchEncDatumRow[i], err = rowenc.DatumToEncDatum(r.types[i], datumRow[i])
+		if err != nil {
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
+		}
 	}
 	r.rowIdx++
 	return r.scratchEncDatumRow, nil

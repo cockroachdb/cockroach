@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 type hashJoinerTestCase struct {
@@ -45,10 +46,12 @@ type hashJoinerTestCase struct {
 	expected    rowenc.EncDatumRows
 }
 
-func hashJoinerTestCases() []hashJoinerTestCase {
+func hashJoinerTestCases(t *testing.T) []hashJoinerTestCase {
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 	null := rowenc.EncDatum{Datum: tree.DNull}
 
@@ -843,10 +846,12 @@ type hashJoinerErrorTestCase struct {
 	expectedErr error
 }
 
-func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
+func hashJoinerErrorTestCases(t *testing.T) []hashJoinerErrorTestCase {
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	testCases := []hashJoinerErrorTestCase{
@@ -989,7 +994,7 @@ func mirrorJoinTypeAndOnExpr(
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testCases := hashJoinerTestCases()
+	testCases := hashJoinerTestCases(t)
 
 	for _, c := range testCases {
 		if c.joinType == descpb.LeftSemiJoin || c.joinType == descpb.LeftAntiJoin {
@@ -1007,12 +1012,12 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	// Add INTERSECT ALL cases with HashJoinerSpecs.
-	for _, tc := range intersectAllTestCases() {
+	for _, tc := range intersectAllTestCases(t) {
 		testCases = append(testCases, setOpTestCaseToHashJoinerTestCase(tc))
 	}
 
 	// Add EXCEPT ALL cases with HashJoinerSpecs.
-	for _, tc := range exceptAllTestCases() {
+	for _, tc := range exceptAllTestCases(t) {
 		testCases = append(testCases, setOpTestCaseToHashJoinerTestCase(tc))
 	}
 
@@ -1099,11 +1104,13 @@ func TestHashJoinerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
-	testCases := hashJoinerErrorTestCases()
+	testCases := hashJoinerErrorTestCases(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1207,8 +1214,10 @@ func checkExpectedRows(
 func TestHashJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -1315,8 +1324,10 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
