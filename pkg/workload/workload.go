@@ -88,6 +88,9 @@ type Hooks struct {
 	// Validate is called after workload flags are parsed. It should return an
 	// error if the workload configuration is invalid.
 	Validate func() error
+	// PreCreate is called before workload tables are created.
+	// Implementations should be idempotent.
+	PreCreate func(*gosql.DB) error
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
 	// Implementations should be idempotent.

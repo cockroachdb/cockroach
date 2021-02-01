@@ -131,15 +131,19 @@ func (m *roachmart) Hooks() workload.Hooks {
 			return nil
 		},
 
+		PreCreate: func(db *gosql.DB) error {
+			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+				return err
+			}
+			return nil
+		},
+
 		PreLoad: func(db *gosql.DB) error {
 			if _, err := db.Exec(zoneLocationsStmt); err != nil {
 				return err
 			}
 			if !m.partition {
 				return nil
-			}
-			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
-				return err
 			}
 			for _, z := range zones {
 				// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
