@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "pgwirebase",
@@ -43,36 +43,36 @@ go_library(
 
 stringer(
     name = "gen-pgnumericsign-stringer",
-    file = "encoding.go",
+    src = "encoding.go",
     typ = "PGNumericSign",
 )
 
 stringer(
     name = "gen-formatcode-stringer",
-    file = "encoding.go",
+    src = "encoding.go",
     typ = "FormatCode",
 )
 
 stringer(
     name = "gen-clientmessagetype-stringer",
-    file = "msg.go",
+    src = "msg.go",
     typ = "ClientMessageType",
 )
 
 stringer(
     name = "gen-servermessagetype-stringer",
-    file = "msg.go",
+    src = "msg.go",
     typ = "ServerMessageType",
 )
 
 stringer(
     name = "gen-servererrfieldtype-stringer",
-    file = "msg.go",
+    src = "msg.go",
     typ = "ServerErrFieldType",
 )
 
 stringer(
     name = "gen-preparetype-stringer",
-    file = "msg.go",
+    src = "msg.go",
     typ = "PrepareType",
 )
