@@ -1,8 +1,8 @@
-# Admin UI
+# DB Console
 
-This directory contains the client-side code for CockroachDB's web-based admin
-UI, which provides details about a cluster's performance and health. See the
-[Admin UI docs](https://www.cockroachlabs.com/docs/stable/explore-the-admin-ui.html)
+This directory contains the client-side code for CockroachDB's web-based DB 
+Console, which provides details about a cluster's performance and health. See the
+[DB Console docs](https://www.cockroachlabs.com/docs/stable/ui-overview.html)
 for an expanded overview.
 
 ## Getting Started
@@ -28,7 +28,7 @@ preprocessor to assemble assets into the `dist` directory. Then, we package
 those assets into `bindata.go` using
 [go-bindata](https://github.com/kevinburke/go-bindata). When you later run `make
 build` in the parent directory, `bindata.go` is linked into the `cockroach`
-binary so that it can serve the admin UI when you run `cockroach start`.
+binary so that it can serve the DB Console when you run `cockroach start`.
 
 ## Developing
 
