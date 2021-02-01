@@ -155,7 +155,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// The version of the array type needs to get bumped as well so that
 		// changes to the underlying type are picked up.
 		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, t.typeID)
 			if err != nil {
 				return err
 			}

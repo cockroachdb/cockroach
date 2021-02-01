@@ -175,7 +175,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+	typeDesc, err := params.p.Descriptors().GetMutableTypeByIDDeprecated(
 		params.ctx,
 		params.p.txn,
 		n.desc.RegionConfig.RegionEnumID,
@@ -328,7 +328,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+	typeDesc, err := params.p.Descriptors().GetMutableTypeByIDDeprecated(
 		params.ctx,
 		params.p.txn,
 		n.desc.RegionConfig.RegionEnumID)

@@ -36,7 +36,7 @@ func updateDescriptorGCMutations(
 		execCfg.DB, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
-			tbl, err := descsCol.GetMutableTableVersionByID(ctx, tableID, txn)
+			tbl, err := descsCol.GetMutableTableByIDDeprecated(ctx, tableID, txn)
 			if err != nil {
 				return err
 			}

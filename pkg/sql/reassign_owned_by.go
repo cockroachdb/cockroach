@@ -110,7 +110,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	dbDesc *dbdesc.Immutable, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.ID, params.p.txn)
+	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByIDDeprecated(params.ctx, dbDesc.ID, params.p.txn)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 func (n *reassignOwnedByNode) reassignSchemaOwner(
 	schemaDesc *schemadesc.Immutable, params runParams,
 ) error {
-	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
+	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByIDDeprecated(
 		params.ctx, schemaDesc.ID, params.p.txn)
 	if err != nil {
 		return err
@@ -152,7 +152,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 func (n *reassignOwnedByNode) reassignTableOwner(
 	tbDesc *tabledesc.Immutable, params runParams,
 ) error {
-	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
+	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByIDDeprecated(
 		params.ctx, tbDesc.ID, params.p.txn)
 	if err != nil {
 		return err
@@ -172,12 +172,12 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 func (n *reassignOwnedByNode) reassignTypeOwner(
 	typDesc *typedesc.Immutable, params runParams,
 ) error {
-	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
+	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByIDDeprecated(
 		params.ctx, typDesc.ID, params.p.txn)
 	if err != nil {
 		return err
 	}
-	arrayDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+	arrayDesc, err := params.p.Descriptors().GetMutableTypeByIDDeprecated(
 		params.ctx, params.p.txn, typDesc.ArrayTypeID)
 	if err != nil {
 		return err

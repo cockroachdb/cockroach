@@ -209,7 +209,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 	if err != nil {
 		return err
 	}
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,7 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return err
 	}
 
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -361,7 +361,7 @@ func (p *planner) alterTypeOwner(
 		return nil
 	}
 
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}

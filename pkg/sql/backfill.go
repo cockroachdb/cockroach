@@ -367,7 +367,7 @@ func (sc *SchemaChanger) dropConstraints(
 
 	// Create update closure for the table and all other tables with backreferences.
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -399,7 +399,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name != constraint.Name {
 						continue
 					}
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
+					backrefTable, err := descsCol.GetMutableTableByIDDeprecated(ctx,
 						constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
@@ -512,7 +512,7 @@ func (sc *SchemaChanger) addConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -563,7 +563,7 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
@@ -1972,7 +1972,7 @@ func runSchemaChangesInTxn(
 				}
 				if oldIndex.NumInterleaveAncestors() != 0 {
 					ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					ancestor, err := planner.Descriptors().GetMutableTableByIDDeprecated(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
@@ -2067,7 +2067,7 @@ func runSchemaChangesInTxn(
 			if selfReference {
 				referencedTableDesc = tableDesc
 			} else {
-				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+				lookup, err := planner.Descriptors().GetMutableTableByIDDeprecated(ctx, fk.ReferencedTableID, planner.Txn())
 				if err != nil {
 					return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
 				}

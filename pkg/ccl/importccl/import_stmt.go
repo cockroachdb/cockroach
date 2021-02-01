@@ -1121,7 +1121,7 @@ func prepareExistingTableDescForIngestion(
 	}
 
 	// Note that desc is just used to verify that the version matches.
-	importing, err := descsCol.GetMutableTableVersionByID(ctx, desc.ID, txn)
+	importing, err := descsCol.GetMutableTableByIDDeprecated(ctx, desc.ID, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -1527,7 +1527,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	) error {
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			newTableDesc, err := descsCol.GetMutableTableByIDDeprecated(ctx, tbl.Desc.ID, txn)
 			if err != nil {
 				return err
 			}
@@ -1645,7 +1645,7 @@ func (r *importResumer) dropTables(
 	var empty []*tabledesc.Immutable
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			desc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			desc, err := descsCol.GetMutableTableByIDDeprecated(ctx, tbl.Desc.ID, txn)
 			if err != nil {
 				return err
 			}
@@ -1687,7 +1687,7 @@ func (r *importResumer) dropTables(
 	dropTime := int64(1)
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+		newTableDesc, err := descsCol.GetMutableTableByIDDeprecated(ctx, tbl.Desc.ID, txn)
 		if err != nil {
 			return err
 		}

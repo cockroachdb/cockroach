@@ -380,7 +380,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.ID, txn)
+		mut, err := descsCol.GetMutableTableByIDDeprecated(ctx, table.ID, txn)
 		if err != nil {
 			return err
 		}
@@ -417,7 +417,7 @@ func drainNamesForDescriptor(
 		}
 
 		// Free up the old name(s) for reuse.
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, descID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, descID, txn)
 		if err != nil {
 			return err
 		}
@@ -438,7 +438,7 @@ func drainNamesForDescriptor(
 		// If the descriptor to drain is a schema, then we need to delete the
 		// draining names from the parent database's schema mapping.
 		if _, isSchema := mutDesc.(catalog.SchemaDescriptor); isSchema {
-			mutDB, err := descsCol.GetMutableDescriptorByID(ctx, mutDesc.GetParentID(), txn)
+			mutDB, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, mutDesc.GetParentID(), txn)
 			if err != nil {
 				return err
 			}
@@ -840,7 +840,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// clean up the descriptor.
 	var cleanupJob *jobs.StartableJob
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -909,7 +909,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1040,7 +1040,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		interleaveParents = make(map[descpb.ID]struct{})
 
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1129,7 +1129,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				mutation.Direction == descpb.DescriptorMutation_ADD &&
 				constraint.ForeignKey.Validity == descpb.ConstraintValidity_Unvalidated {
 				// Add backreference on the referenced table (which could be the same table)
-				backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
+				backrefTable, err := descsCol.GetMutableTableByIDDeprecated(ctx,
 					constraint.ForeignKey.ReferencedTableID, txn)
 				if err != nil {
 					return err
@@ -1220,7 +1220,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 					if oldIndex.NumInterleaveAncestors() != 0 {
 						ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
+						ancestor, err := descsCol.GetMutableTableByIDDeprecated(ctx, ancestorInfo.TableID, txn)
 						if err != nil {
 							return err
 						}
@@ -1289,7 +1289,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// don't install any backreferences.
 		if !scTable.Dropped() {
 			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, id)
 				if err != nil {
 					return nil, err
 				}
@@ -1301,7 +1301,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for _, id := range referencedTypeIDs {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, id)
 				if err != nil {
 					return err
 				}
@@ -1311,7 +1311,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 			for _, id := range newReferencedTypeIDs {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, id)
 				if err != nil {
 					return err
 				}
@@ -1490,7 +1490,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	const kvTrace = true // TODO(ajwerner): figure this out
 	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1570,7 +1570,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Get the foreign key backreferences to remove.
 				if constraint.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
 					fk := &constraint.ForeignKey
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, fk.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
