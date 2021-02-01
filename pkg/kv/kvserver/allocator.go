@@ -362,7 +362,6 @@ func (a *Allocator) ComputeAction(
 func (a *Allocator) computeAction(
 	ctx context.Context, zone *zonepb.ZoneConfig, voterReplicas []roachpb.ReplicaDescriptor,
 ) (AllocatorAction, float64) {
-	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	have := len(voterReplicas)
 	decommissioningReplicas := a.storePool.decommissioningReplicas(voterReplicas)
 	clusterNodes := a.storePool.ClusterNodeCount()
