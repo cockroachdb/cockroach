@@ -9,33 +9,13 @@
 package kvfeed
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 const pollRequestNanosHistMaxLatency = time.Hour
-
-var (
-	metaChangefeedBufferEntriesIn = metric.Metadata{
-		Name:        "changefeed.buffer_entries.in",
-		Help:        "Total entries entering the buffer between raft and changefeed sinks",
-		Measurement: "Entries",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaChangefeedBufferEntriesOut = metric.Metadata{
-		Name:        "changefeed.buffer_entries.out",
-		Help:        "Total entries leaving the buffer between raft and changefeed sinks",
-		Measurement: "Entries",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaChangefeedPollRequestNanos = metric.Metadata{
-		Name:        "changefeed.poll_request_nanos",
-		Help:        "Time spent fetching changes",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-)
 
 // Metrics is a metric.Struct for kvfeed metrics.
 //
@@ -48,10 +28,20 @@ type Metrics struct {
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
-func MakeMetrics(histogramWindow time.Duration) Metrics {
+func MakeMetrics(prefix string, histogramWindow time.Duration) Metrics {
 	return Metrics{
-		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
+		BufferEntriesIn: metric.NewCounter(metric.Metadata{
+			Name:        fmt.Sprintf("%s.buffer_entries.in", prefix),
+			Help:        "Total entries entering the buffer between raft and changefeed sinks",
+			Measurement: "Entries",
+			Unit:        metric.Unit_COUNT,
+		}),
+		BufferEntriesOut: metric.NewCounter(metric.Metadata{
+			Name:        fmt.Sprintf("%s.buffer_entries.out", prefix),
+			Help:        "Total entries leaving the buffer between raft and changefeed sinks",
+			Measurement: "Entries",
+			Unit:        metric.Unit_COUNT,
+		}),
 		// Metrics for changefeed performance debugging: - PollRequestNanos and
 		// PollRequestNanosHist, things are first
 		//   fetched with some limited concurrency. We're interested in both the
@@ -66,7 +56,12 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 		//   cause of a ProcessingNanos blowup.
 		// - EmitNanos and FlushNanos. All of our interactions with the sink.
 		PollRequestNanosHist: metric.NewHistogram(
-			metaChangefeedPollRequestNanos, histogramWindow,
+			metric.Metadata{
+				Name:        fmt.Sprintf("%s.poll_request_nanosn", prefix),
+				Help:        "Time spent fetching changes",
+				Measurement: "Nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+			}, histogramWindow,
 			pollRequestNanosHistMaxLatency.Nanoseconds(), 1),
 	}
 }

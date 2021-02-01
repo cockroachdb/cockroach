@@ -181,7 +181,7 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		KVFeedMetrics:   kvfeed.MakeMetrics(histogramWindow),
+		KVFeedMetrics:   kvfeed.MakeMetrics("changefeed", histogramWindow),
 		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
 		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:         metric.NewCounter(metaChangefeedFlushes),

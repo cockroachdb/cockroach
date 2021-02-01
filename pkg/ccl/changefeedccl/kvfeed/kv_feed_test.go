@@ -96,7 +96,7 @@ func TestKVFeed(t *testing.T) {
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
-		metrics := MakeMetrics(time.Minute)
+		metrics := MakeMetrics("testfeed", time.Minute)
 		bufferFactory := func() EventBuffer {
 			return makeMemBuffer(mm.MakeBoundAccount(), &metrics)
 		}
