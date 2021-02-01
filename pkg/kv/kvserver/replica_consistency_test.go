@@ -111,7 +111,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	// Next condition, node should quiesce.
-	tc.repl.store.Stopper().Quiesce(ctx)
+	tc.repl.store.Stopper().Stop(ctx)
 	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
 	if !testutils.IsError(err, "store quiescing") {
 		t.Fatal(err)

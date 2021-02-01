@@ -174,7 +174,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 		defer w.stopper.Stop(ctx)
 
 		go func() {
-			w.stopper.Quiesce(ctx)
+			w.stopper.Stop(ctx)
 		}()
 
 		err := w.WaitOn(ctx, makeReq(), g)
@@ -245,7 +245,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 		defer w.stopper.Stop(ctx)
 
 		go func() {
-			w.stopper.Quiesce(ctx)
+			w.stopper.Stop(ctx)
 		}()
 
 		err := w.WaitOn(ctx, makeReq(), g)

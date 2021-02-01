@@ -148,5 +148,5 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// Wait for outstanding tasks to complete. Specifically, we are waiting for
 	// the outbox's drain signal listener to return.
-	outboxStopper.Quiesce(ctx)
+	outboxStopper.Stop(ctx)
 }

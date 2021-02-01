@@ -361,6 +361,7 @@ func TestStopperWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	ctx := context.Background()
+	defer s.Stop(ctx)
 	ctx1, _ := s.WithCancelOnQuiesce(ctx)
 	ctx3, cancel3 := s.WithCancelOnQuiesce(ctx)
 
@@ -379,12 +380,10 @@ func TestStopperWithCancel(t *testing.T) {
 		t.Fatalf("should be canceled: %v", err)
 	}
 
-	s.Quiesce(ctx)
+	s.Stop(ctx)
 	if err := ctx1.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
-
-	s.Stop(ctx)
 }
 
 func TestStopperWithCancelConcurrent(t *testing.T) {

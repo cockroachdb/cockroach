@@ -12515,7 +12515,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	}
 	log.Flush()
 
-	stopper.Quiesce(ctx)
+	stopper.Stop(ctx)
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("net/trace"), log.WithFlattenedSensitiveData)
 	if err != nil {
@@ -12611,7 +12611,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	stopper.Quiesce(ctx)
+	stopper.Stop(ctx)
 	// Check and see if the trace package logged an error.
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
