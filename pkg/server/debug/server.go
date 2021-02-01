@@ -93,7 +93,7 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
+func NewServer(st *cluster.Settings, hbaConfDebugFn, healthFn http.HandlerFunc) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -113,6 +113,10 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	// https://github.com/golang/net/blob/master/trace/trace.go
 	mux.HandleFunc("/debug/requests", trace.Traces)
 	mux.HandleFunc("/debug/events", trace.Events)
+
+	if healthFn != nil {
+		mux.HandleFunc("/debug/health", healthFn)
+	}
 
 	// This registers a superset of the variables exposed through the
 	// /debug/vars endpoint onto the /debug/metrics endpoint. It includes all

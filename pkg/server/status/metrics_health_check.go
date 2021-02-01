@@ -103,12 +103,15 @@ func (d metricsMap) update(tracked map[string]threshold, m metricsMap) metricsMa
 				continue
 			}
 
+			// Store the current value of the metric unconditionally in d.
+			// We do so even for gauges so that the health checker
+			// can report health lines below.
+			prevVal, havePrev := d[storeID][name]
+			if d[storeID] == nil {
+				d[storeID] = map[string]float64{}
+			}
+			d[storeID][name] = val
 			if !threshold.gauge {
-				prevVal, havePrev := d[storeID][name]
-				if d[storeID] == nil {
-					d[storeID] = map[string]float64{}
-				}
-				d[storeID][name] = val
 				if havePrev {
 					val -= prevVal
 				} else {
@@ -129,9 +132,10 @@ func (d metricsMap) update(tracked map[string]threshold, m metricsMap) metricsMa
 	return out
 }
 
-// A HealthChecker inspects the node metrics and optionally a NodeStatus for
-// anomalous conditions that the operator should be alerted to.
-type HealthChecker struct {
+// A MetricsHealthChecker inspects the node metrics and optionally a
+// NodeStatus for anomalous conditions that the operator should be
+// alerted to.
+type MetricsHealthChecker struct {
 	mu struct {
 		syncutil.Mutex
 		metricsMap // - the last recorded values of all counters
@@ -139,25 +143,24 @@ type HealthChecker struct {
 	tracked map[string]threshold
 }
 
-// NewHealthChecker creates a new health checker that emits alerts whenever the
-// given metrics are nonzero. Setting the boolean map value indicates a gauge
-// (in which case it is reported whenever it's nonzero); otherwise the metric is
-// treated as a counter and reports whenever it is incremented between
-// consecutive calls of `CheckHealth`.
-func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
-	h := &HealthChecker{tracked: trackedMetrics}
+// NewMetricsHealthChecker creates a new health checker that emits
+// alerts whenever the given metrics are nonzero. Setting the boolean
+// map value indicates a gauge (in which case it is reported whenever
+// it's nonzero); otherwise the metric is treated as a counter and
+// reports whenever it is incremented between consecutive calls of
+// `CheckHealth`.
+func NewMetricsHealthChecker(trackedMetrics map[string]threshold) *MetricsHealthChecker {
+	h := &MetricsHealthChecker{tracked: trackedMetrics}
 	h.mu.metricsMap = metricsMap{}
 	return h
 }
 
-// CheckHealth performs a (cheap) health check.
-func (h *HealthChecker) CheckHealth(
+// CheckMetricsHealth performs a (cheap) health check.
+func (h *MetricsHealthChecker) CheckMetricsHealth(
 	ctx context.Context, nodeStatus statuspb.NodeStatus,
 ) statuspb.HealthCheckResult {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	// Gauges that trigger alerts when nonzero.
-	var alerts []statuspb.HealthAlert
 
 	m := map[roachpb.StoreID]map[string]float64{
 		0: nodeStatus.Metrics,
@@ -168,16 +171,32 @@ func (h *HealthChecker) CheckHealth(
 
 	diffs := h.mu.update(h.tracked, m)
 
-	for storeID, storeDiff := range diffs {
-		for name, value := range storeDiff {
-			alerts = append(alerts, statuspb.HealthAlert{
+	// Report lines for all known metrics.
+	var lines []statuspb.HealthLine
+	for storeID, storeVals := range h.mu.metricsMap {
+		for name, value := range storeVals {
+			lines = append(lines, statuspb.HealthLine{
 				StoreID:     storeID,
-				Category:    statuspb.HealthAlert_METRICS,
+				Category:    statuspb.HealthCategory_METRICS,
 				Description: name,
 				Value:       value,
 			})
 		}
 	}
 
-	return statuspb.HealthCheckResult{Alerts: alerts}
+	// Report alerts for gauge values or metric diffs that exceed their
+	// threshold.
+	var alerts []statuspb.HealthAlert
+	for storeID, storeDiff := range diffs {
+		for name, value := range storeDiff {
+			alerts = append(alerts, statuspb.HealthAlert{
+				StoreID:     storeID,
+				Category:    statuspb.HealthCategory_METRICS,
+				Description: name,
+				Value:       value,
+			})
+		}
+	}
+
+	return statuspb.HealthCheckResult{Alerts: alerts, Lines: lines}
 }

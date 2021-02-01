@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1368,15 +1369,37 @@ func (s *adminServer) Cluster(
 //
 // See the docstring for HealthRequest for more details about
 // what this function precisely reports.
-//
-// Note: Health is non-privileged and non-authenticated and thus
-// must not report privileged information.
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
+	_, err := s.getHealth(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.HealthResponse{}, nil
+}
+
+// PublicHealth returns the health report for the node target of the request.
+//
+// See the docstring for HealthRequest for more details about
+// what this function precisely reports.
+//
+// Note: Health is non-privileged and non-authenticated and thus
+// must not report privileged information.
+func (s *adminServer) PublicHealth(
+	ctx context.Context, req *serverpb.HealthRequest,
+) (*statuspb.HealthCheckResult, error) {
+	return s.getHealth(ctx, req)
+}
+
+func (s *adminServer) getHealth(
+	ctx context.Context, req *serverpb.HealthRequest,
+) (*statuspb.HealthCheckResult, error) {
 	telemetry.Inc(telemetryHealthCheck)
 
-	resp := &serverpb.HealthResponse{}
+	resp := s.server.healthChecker.GetResult()
+
 	// If Ready is not set, the client doesn't want to know whether this node is
 	// ready to receive client traffic.
 	if !req.Ready {
@@ -1384,7 +1407,7 @@ func (s *adminServer) Health(
 	}
 
 	if err := s.checkReadinessForHealthCheck(ctx); err != nil {
-		return nil, err
+		return resp, err
 	}
 	return resp, nil
 }

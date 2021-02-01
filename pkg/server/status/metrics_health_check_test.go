@@ -18,7 +18,7 @@ import (
 	"github.com/kr/pretty"
 )
 
-func TestHealthCheckMetricsMap(t *testing.T) {
+func TestMetricsHealthCheckMetricsMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	m := metricsMap{}
@@ -35,7 +35,8 @@ func TestHealthCheckMetricsMap(t *testing.T) {
 	check := func(act, exp metricsMap) {
 		t.Helper()
 		if diff := pretty.Diff(act, exp); len(diff) != 0 {
-			t.Fatalf("diff(act,exp) = %s\n\nact=%+v\nexp=%+v", strings.Join(diff, "\n"), act, exp)
+			t.Fatalf("diff(act,exp):\n  %s\n\nact=%+v\nexp=%+v",
+				strings.ReplaceAll(strings.TrimSpace(strings.Join(diff, "\n")), "\n", "\n  "), act, exp)
 		}
 	}
 
@@ -54,11 +55,14 @@ func TestHealthCheckMetricsMap(t *testing.T) {
 		1: {"gauge0": 10},
 	})
 
+	// Check what has been preserved in the in-memory map in-between calls.
 	check(m, metricsMap{
 		0: {
+			"gauge0":   1,
 			"counter0": 12,
 		},
 		1: {
+			"gauge0":   10,
 			"counter2": 0,
 		},
 	})
@@ -79,10 +83,12 @@ func TestHealthCheckMetricsMap(t *testing.T) {
 
 	check(m, metricsMap{
 		0: {
+			"gauge0":   1,
 			"counter0": 14,
 			"counter1": 5,
 		},
 		1: {
+			"gauge0":   10,
 			"counter2": 100,
 		},
 	})
@@ -106,10 +112,12 @@ func TestHealthCheckMetricsMap(t *testing.T) {
 
 	check(m, metricsMap{
 		0: {
+			"gauge0":   1,
 			"counter0": 14,
 			"counter1": 5,
 		},
 		1: {
+			"gauge0":   12,
 			"counter1": 9,
 			"counter2": 201,
 		},
@@ -133,10 +141,12 @@ func TestHealthCheckMetricsMap(t *testing.T) {
 
 	finalMap := metricsMap{
 		0: {
+			"gauge0":   1,
 			"counter0": 3,
 			"counter1": 10,
 		},
 		1: {
+			"gauge0":   12,
 			"counter1": 4,
 			"counter2": 201,
 		},

@@ -153,18 +153,19 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or initializing new stores as
 // they're added on subsequent instantiations.
 type Node struct {
-	stopper      *stop.Stopper
-	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
-	sqlExec      *sql.InternalExecutor    // For event logging
-	stores       *kvserver.Stores         // Access to node-local stores
-	metrics      nodeMetrics
-	recorder     *status.MetricsRecorder
-	startedAt    int64
-	lastUp       int64
-	initialStart bool // True if this is the first time this node has started.
-	txnMetrics   kvcoord.TxnMetrics
+	stopper       *stop.Stopper
+	clusterID     *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor    roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg      kvserver.StoreConfig     // Config to use and pass to stores
+	sqlExec       *sql.InternalExecutor    // For event logging
+	stores        *kvserver.Stores         // Access to node-local stores
+	metrics       nodeMetrics
+	recorder      *status.MetricsRecorder
+	startedAt     int64
+	lastUp        int64
+	initialStart  bool // True if this is the first time this node has started.
+	txnMetrics    kvcoord.TxnMetrics
+	healthChecker *nodeHealthChecker
 
 	// Used to signal when additional stores, if any, have been initialized.
 	additionalStoreInitCh chan struct{}
@@ -304,6 +305,7 @@ func NewNode(
 		sqlExec:    sqlExec,
 		clusterID:  clusterID,
 	}
+	n.healthChecker = newNodeHealthChecker(n)
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -588,7 +590,7 @@ func (n *Node) initializeAdditionalStores(
 
 	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
+	if err := n.writeNodeStatus(ctx, true /* forceNow */, false /* mustExist */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 
@@ -711,7 +713,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 	// Immediately record summaries once on server startup. The update loop below
 	// will only update the key if it exists, to avoid race conditions during
 	// node decommissioning, so we have to error out if we can't create it.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
+	if err := n.writeNodeStatus(ctx, true /* forceNow */, false /* mustExist */); err != nil {
 		return errors.Wrap(err, "error recording initial status summaries")
 	}
 	return n.stopper.RunAsyncTask(ctx, "write-node-status", func(ctx context.Context) {
@@ -722,17 +724,12 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 		for {
 			select {
 			case <-ticker.C:
-				// Use an alertTTL of twice the ticker frequency. This makes sure that
-				// alerts don't disappear and reappear spuriously while at the same
-				// time ensuring that an alert doesn't linger for too long after having
-				// resolved.
-				//
 				// The status key must already exist, to avoid race conditions
 				// during decommissioning of this node. Decommissioning may be
 				// carried out by a different node, so this avoids resurrecting
 				// the status entry after the decommissioner has removed it.
 				// See Server.Decommission().
-				if err := n.writeNodeStatus(ctx, 2*frequency, true /* mustExist */); err != nil {
+				if err := n.writeNodeStatus(ctx, false /* forceNow */, true /* mustExist */); err != nil {
 					log.Warningf(ctx, "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldQuiesce():
@@ -746,37 +743,10 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // NodeStatusRecorder and persists them to the cockroach data store.
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
-func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
+func (n *Node) writeNodeStatus(ctx context.Context, forceNow, mustExist bool) error {
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
-		nodeStatus := n.recorder.GenerateNodeStatus(ctx)
-		if nodeStatus == nil {
-			return
-		}
-
-		if result := n.recorder.CheckHealth(ctx, *nodeStatus); len(result.Alerts) != 0 {
-			var numNodes int
-			if err := n.storeCfg.Gossip.IterateInfos(gossip.KeyNodeIDPrefix, func(k string, info gossip.Info) error {
-				numNodes++
-				return nil
-			}); err != nil {
-				log.Warningf(ctx, "%v", err)
-			}
-			if numNodes > 1 {
-				// Avoid this warning on single-node clusters, which require special UX.
-				log.Warningf(ctx, "health alerts detected: %+v", result)
-			}
-			if err := n.storeCfg.Gossip.AddInfoProto(
-				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, alertTTL,
-			); err != nil {
-				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
-			}
-
-			// TODO(tschottdorf): add a metric that we increment every time there are
-			// alerts. This can help understand how long the cluster has been in that
-			// state (since it'll be incremented every ~10s).
-		}
-
+		nodeStatus := n.healthChecker.getLatestNodeStatus(ctx, false /* forceNow */)
 		err = n.recorder.WriteNodeStatus(ctx, n.storeCfg.DB, *nodeStatus, mustExist)
 	}); runErr != nil {
 		err = runErr

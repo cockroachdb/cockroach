@@ -15,6 +15,7 @@ option go_package = "serverpb";
 import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
+import "server/status/statuspb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/log.proto";
@@ -822,15 +823,25 @@ service Admin {
     };
   }
 
-  // Health returns liveness for the node target of the request.
-  // API: PUBLIC
+  // Health returns UI-level liveness for the node target of the request.
+  // This is the service endpoint specific to the web UI. For a general
+  // endpoint suitable for monitoring, etc., use /health.
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
-      additional_bindings {get : "/health"}
     };
   }
 
+  // PublicHealth returns UI-level liveness for the node target of the request.
+  // This endpoint does not require authentication.
+  // API: PUBLIC
+  rpc PublicHealth(HealthRequest) returns (cockroach.server.status.statuspb.HealthCheckResult) {
+    option (google.api.http) = {
+      get: "/health"
+    };
+  }
+
+    
   // Liveness returns the liveness state of all nodes on the cluster.
   rpc Liveness(LivenessRequest) returns (LivenessResponse) {
     option (google.api.http) = {

@@ -154,6 +154,8 @@ type Server struct {
 
 	debug *debug.Server
 
+	healthChecker *healthChecker
+
 	replicationReporter   *reports.Reporter
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
@@ -569,6 +571,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, nil /* execCfg */, &rpcContext.ClusterID)
+	// FIXME(knz): should this not be *lateBoundNode = *node ?
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -662,7 +665,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
-	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
+
+	healthChecker := newHealthChecker(lateBoundServer, node.healthChecker, stopper)
+
+	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn(), healthChecker.handleDebug)
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
@@ -698,6 +704,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsReconciler:  protectedtsReconciler,
 		sqlServer:              sqlServer,
 		externalStorageBuilder: externalStorageBuilder,
+		healthChecker:          healthChecker,
 	}
 	return lateBoundServer, err
 }
@@ -1130,6 +1137,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
+
+	// Start the health checker.
+	if err := s.healthChecker.startHealthChecks(workersCtx); err != nil {
+		return err
+	}
 
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the
