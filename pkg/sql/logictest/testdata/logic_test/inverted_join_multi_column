@@ -494,3 +494,27 @@ ORDER BY (lk, rk)
 3  16
 5  12
 5  16
+
+# Regression test for #59615. Ensure that invalid inverted joins are not created
+# for left and anti joins.
+statement ok
+CREATE TABLE t59615_inv (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y JSON,
+  z INT,
+  INVERTED INDEX (x, y)
+)
+
+query TITI
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) LEFT JOIN t59615_inv t ON t.y @> u.y
+----
+"a"  NULL  NULL  NULL
+"b"  NULL  NULL  NULL
+
+query T
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615_inv t WHERE t.y @> u.y
+)
+----
+"a"
+"b"
