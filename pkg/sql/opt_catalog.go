@@ -1337,6 +1337,11 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 	return res
 }
 
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (oi *optIndex) ImplicitPartitioningColumnCount() int {
+	return int(oi.desc.Partitioning.NumImplicitColumns)
+}
+
 // InterleaveAncestorCount is part of the cat.Index interface.
 func (oi *optIndex) InterleaveAncestorCount() int {
 	return len(oi.desc.Interleave.Ancestors)
@@ -2047,6 +2052,11 @@ func (oi *optVirtualIndex) Ordinal() int {
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
 	return nil
+}
+
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
+	return 0
 }
 
 // InterleaveAncestorCount is part of the cat.Index interface.

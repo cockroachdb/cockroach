@@ -308,7 +308,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			primaryOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
+			primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
 			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
@@ -1108,9 +1108,11 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		}
 	}
 
-	// Never update primary key columns.
+	// Never update primary key columns. Implicit partitioning columns are not
+	// considered part of the primary key in this case.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
-	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
+	skipCols := conflictIndex.ImplicitPartitioningColumnCount()
+	for i, n := skipCols, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}
 }

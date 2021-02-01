@@ -189,6 +189,25 @@ type Index interface {
 	//
 	PartitionByListPrefixes() []tree.Datums
 
+	// ImplicitPartitioningColumnCount returns the number of implicit partitioning
+	// columns at the front of the index. For example, consider the following
+	// table:
+	//
+	// CREATE TABLE t (
+	//   x INT,
+	//   y INT,
+	//   INDEX (y) PARTITION BY LIST (x) (
+	//     PARTITION p1 VALUES IN (1)
+	//   )
+	// );
+	//
+	// In this case, the number of implicit partitioning columns in the index on
+	// y is 1, since x is implicitly added to the front of the index.
+	//
+	// The implicit partitioning columns are always a prefix of the full column
+	// list, and ImplicitPartitioningColumnCount < LaxKeyColumnCount.
+	ImplicitPartitioningColumnCount() int
+
 	// InterleaveAncestorCount returns the number of interleave ancestors for this
 	// index (or zero if this is not an interleaved index). Each ancestor is an
 	// index (usually from another table) with a key that shares a prefix with

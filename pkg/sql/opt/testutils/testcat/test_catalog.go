@@ -944,6 +944,11 @@ func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 	return res
 }
 
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (ti *Index) ImplicitPartitioningColumnCount() int {
+	return 0
+}
+
 // InterleaveAncestorCount is part of the cat.Index interface.
 func (ti *Index) InterleaveAncestorCount() int {
 	return 0
