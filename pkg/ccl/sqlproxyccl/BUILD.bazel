@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sqlproxyccl",
@@ -62,6 +62,6 @@ go_test(
 
 stringer(
     name = "gen-errorcode-stringer",
-    file = "error.go",
+    src = "error.go",
     typ = "ErrorCode",
 )

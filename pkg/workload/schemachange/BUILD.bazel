@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "schemachange",
@@ -9,6 +9,8 @@ go_library(
         "error_screening.go",
         "operation_generator.go",
         "schemachange.go",
+        # TODO(alanmas,irfansharif): Generate this stringer file within the
+        # sandbox as well.
         "txstatus_string.go",
         "type_resolver.go",
         ":gen-optype-stringer",  # keep
@@ -38,28 +40,6 @@ go_library(
 
 stringer(
     name = "gen-optype-stringer",
-    file = "operation_generator.go",
+    src = "operation_generator.go",
     typ = "opType",
 )
-
-# TODO (alanmas): Solve stringer issue "stringer: can't happen: constant is not an integer TxStatusInFailure"
-# Seems that we need to include github.com/jackc/pgx somehow.
-# We already tried to copy the source files over so bazel source now are enconding and encodingtype
-# but it is still failing due to the same error.
-
-# genrule(
-#     name = "gen-txstatus-stringer",
-#     srcs = [
-#         "schemachange.go",
-#     ],
-#     outs = ["txstatus_string.go"],
-#     cmd = """
-#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
-#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type TxStatus $(location @com_github_jackc_pgx//:pgx) $(location schemachange.go)
-#     """,
-#     tools = [
-#         "@go_sdk//:bin/go",
-#         "@org_golang_x_tools//cmd/stringer",
-#         "@com_github_jackc_pgx//:pgx",
-#     ],
-# )

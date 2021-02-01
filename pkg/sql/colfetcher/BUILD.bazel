@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "colfetcher",
@@ -42,6 +42,6 @@ go_library(
 
 stringer(
     name = "gen-fetcherstate-stringer",
-    file = "cfetcher.go",
+    src = "cfetcher.go",
     typ = "fetcherState",
 )
