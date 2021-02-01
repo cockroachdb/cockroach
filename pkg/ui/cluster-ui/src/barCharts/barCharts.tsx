@@ -39,8 +39,11 @@ const maxMemUsageBars = [
 ];
 
 const networkBytesBars = [
-  bar("network-bytes", (d: StatementStatistics) => d.stats.bytes_sent_over_network?.mean),
-]
+  bar(
+    "network-bytes",
+    (d: StatementStatistics) => d.stats.bytes_sent_over_network?.mean,
+  ),
+];
 
 const retryBars = [
   bar(
@@ -68,7 +71,10 @@ const maxMemUsageStdDev = bar(
 const networkBytesStdDev = bar(
   cx("network-bytes-dev"),
   (d: StatementStatistics) =>
-    stdDevLong(d.stats.bytes_sent_over_network, d.stats.exec_stat_collection_count),
+    stdDevLong(
+      d.stats.bytes_sent_over_network,
+      d.stats.exec_stat_collection_count,
+    ),
 );
 
 export const countBarChart = barChartFactory("grey", countBars, approximify);
@@ -92,16 +98,16 @@ export const latencyBarChart = barChartFactory(
   latencyStdDev,
 );
 export const maxMemUsageBarChart = barChartFactory(
-    "grey",
-    maxMemUsageBars,
-    Bytes,
-    maxMemUsageStdDev,
-)
+  "grey",
+  maxMemUsageBars,
+  Bytes,
+  maxMemUsageStdDev,
+);
 export const networkBytesBarChart = barChartFactory(
   "grey",
   networkBytesBars,
   Bytes,
   networkBytesStdDev,
-)
+);
 
 export const retryBarChart = barChartFactory("red", retryBars, approximify);
