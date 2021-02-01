@@ -362,8 +362,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(otan): for MR databases with no locality set, set a default locality
-	// and add a notice.
 	if desc.LocalityConfig != nil {
 		dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
@@ -1447,7 +1445,7 @@ func NewTableDesc(
 	locality := n.Locality
 	var partitionAllBy *tree.PartitionBy
 	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
-		// TODO(#multiregion): consider decoupling implicit column partitioning from the
+		// TODO(#59629): consider decoupling implicit column partitioning from the
 		// REGIONAL BY ROW experimental flag.
 		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
 			return nil, errors.WithHint(
@@ -1547,7 +1545,7 @@ func NewTableDesc(
 				)
 			}
 			oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
-			// TODO(#multiregion): set the column visibility to be hidden.
+			// TODO(#59630): set the column visibility to be hidden.
 			c := &tree.ColumnTableDef{
 				Name: tree.RegionalByRowRegionDefaultColName,
 				Type: &tree.OIDTypeReference{OID: oid},
