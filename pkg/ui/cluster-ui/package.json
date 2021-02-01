@@ -26,7 +26,7 @@
   "keywords": [],
   "license": "MIT",
   "dependencies": {
-    "@cockroachlabs/crdb-protobuf-client": "^0.0.4",
+    "@cockroachlabs/crdb-protobuf-client": "^0.0.5",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.14-alpha.0",
     "@popperjs/core": "^2.4.0",
