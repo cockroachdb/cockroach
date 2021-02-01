@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -1284,10 +1285,10 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	var mergeRetries int64
 	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
-			if cput := req.GetConditionalPut(); cput != nil {
-				if v := lhsDescKey.Load(); v != nil && v.(roachpb.Key).Equal(cput.Key) {
+			if get := req.GetGet(); get != nil && get.KeyLocking != lock.None {
+				if v := lhsDescKey.Load(); v != nil && v.(roachpb.Key).Equal(get.Key) {
 					// If this is the first merge attempt, launch the split
-					// before the merge's first write succeeds.
+					// before the merge's first locking read succeeds.
 					if atomic.CompareAndSwapInt64(&launchSplit, 1, 0) {
 						_, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
 						return pErr
