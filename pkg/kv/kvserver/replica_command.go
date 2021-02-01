@@ -170,7 +170,8 @@ func splitTxnAttempt(
 ) error {
 	txn.SetDebugName(splitTxnName)
 
-	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, oldDesc.StartKey, checkDescsEqual(oldDesc))
+	_, dbDescValue, err := conditionalGetDescValueFromDB(
+		ctx, txn, oldDesc.StartKey, false /* forUpdate */, checkDescsEqual(oldDesc))
 	if err != nil {
 		return err
 	}
@@ -241,7 +242,8 @@ func splitTxnAttempt(
 func splitTxnStickyUpdateAttempt(
 	ctx context.Context, txn *kv.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
 ) error {
-	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
+	_, dbDescValue, err := conditionalGetDescValueFromDB(
+		ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 	if err != nil {
 		return err
 	}
@@ -449,7 +451,8 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
+		_, dbDescValue, err := conditionalGetDescValueFromDB(
+			ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 		if err != nil {
 			return err
 		}
@@ -576,15 +579,26 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
-		// NB: reads do NOT impact transaction record placement.
-
 		origLeftDesc := r.Desc()
 		if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 			// Merging the final range doesn't make sense.
 			return errors.New("cannot merge final range")
 		}
 
-		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc.StartKey, checkDescsEqual(origLeftDesc))
+		// Retrieve the current left hand side's range descriptor and confirm
+		// that it matches our expectation. Do so using a locking read. Locking
+		// the descriptor early (i.e. on the read instead of the write of the
+		// read-modify-write operation) helps prevent multiple concurrent Range
+		// merges from thrashing. Thrashing is especially detrimental for Range
+		// merges because any restart results in an abort (see the retry loop
+		// below), so thrashing can result in indefinite livelock.
+		//
+		// Because this is a locking read, this also dictates the location of
+		// the merge's transaction record. It is critical to the range merge
+		// protocol that the transaction record be placed on the the left hand
+		// side's descriptor, as the MergeTrigger depends on this.
+		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(
+			ctx, txn, origLeftDesc.StartKey, true /* forUpdate */, checkDescsEqual(origLeftDesc))
 		if err != nil {
 			return err
 		}
@@ -600,9 +614,11 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Do a consistent read of the right hand side's range descriptor.
+		// Again, use a locking read because we intend to update this key
+		// shortly.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		dbRightDescKV, err := txn.Get(ctx, rightDescKey)
+		dbRightDescKV, err := txn.GetForUpdate(ctx, rightDescKey)
 		if err != nil {
 			return err
 		}
@@ -651,26 +667,6 @@ func (r *Replica) AdminMerge(
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
-		// Update the range descriptor for the receiving range. It is important
-		// (for transaction record placement) that the first write inside the
-		// transaction is this conditional put to change the left hand side's
-		// descriptor end key.
-		{
-			b := txn.NewBatch()
-			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(
-				ctx, b, leftDescKey, dbOrigLeftDescValue, &updatedLeftDesc,
-			); err != nil {
-				return err
-			}
-			// Commit this batch on its own to ensure that the transaction record
-			// is created in the right place (our triggers rely on this).
-			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
-		}
-
 		// Log the merge into the range event log.
 		// TODO(spencer): event logging API should accept a batch
 		// instead of a transaction; there's no reason this logging
@@ -684,6 +680,15 @@ func (r *Replica) AdminMerge(
 
 		// Update the meta addressing records.
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
+			return err
+		}
+
+		// Update the range descriptor for the receiving range.
+		leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
+		if err := updateRangeDescriptor(ctx, b, leftDescKey,
+			dbOrigLeftDescValue, /* oldValue */
+			&updatedLeftDesc,    /* newDesc */
+		); err != nil {
 			return err
 		}
 
@@ -1730,7 +1735,8 @@ func execChangeReplicasTxn(
 	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		desc, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, referenceDesc.StartKey, check)
+		desc, dbDescValue, err := conditionalGetDescValueFromDB(
+			ctx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
 		if err != nil {
 			return err
 		}
@@ -2265,6 +2271,22 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 // the raw fetched roachpb.Value. If the fetched value doesn't match the
 // expectation, a ConditionFailedError is returned.
 //
+// The method allows callers to specify whether a locking read should be used or
+// not. A locking read can be used to manage contention and avoid transaction
+// restarts in a read-modify-write operation (which all users of this method
+// are). Callers should be aware that a locking read impacts transaction record
+// placement, unlike a non-locking read. Callers should also be aware that in
+// mixed version clusters that contain v20.2 nodes, the locking mode of the read
+// may be ignored because the leaseholder of the range may be a v20.2 node that
+// is not aware of the locking option on Get requests. However, even if the
+// locking mode is ignored, the impact on the transaction record placement
+// remains, because that logic lives in the kv client (our process), which we
+// know is a v21.1 node.
+//
+// TODO(nvanbenschoten): once this migration period has passed and we can rely
+// on the locking mode of the read being respected, remove the forUpdate param
+// and perform locking reads for all callers.
+//
 // This ConditionFailedError is a historical artifact. We used to pass the
 // parsed RangeDescriptor directly as the expected value in a CPut, but proto
 // message encodings aren't stable so this was fragile. Calling this method and
@@ -2274,10 +2296,15 @@ func conditionalGetDescValueFromDB(
 	ctx context.Context,
 	txn *kv.Txn,
 	startKey roachpb.RKey,
+	forUpdate bool,
 	check func(*roachpb.RangeDescriptor) bool,
 ) (*roachpb.RangeDescriptor, []byte, error) {
+	get := txn.Get
+	if forUpdate {
+		get = txn.GetForUpdate
+	}
 	descKey := keys.RangeDescriptorKey(startKey)
-	existingDescKV, err := txn.Get(ctx, descKey)
+	existingDescKV, err := get(ctx, descKey)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
 	}
