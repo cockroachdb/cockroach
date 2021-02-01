@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -755,23 +756,32 @@ func parseClientProvidedSessionParameters(
 			}
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
 
-		default:
-			exists, configurable := sql.IsSessionVariableConfigurable(key)
+		case "options":
+			optionsRaw, err := url.QueryUnescape(value)
+			if err != nil {
+				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+					"failed to unescape options %q", value)
+			}
 
-			switch {
-			case exists && configurable:
-				args.SessionDefaults[key] = value
+			options := strings.Split(optionsRaw, "-c ")
 
-			case !exists:
-				if _, ok := sql.UnsupportedVars[key]; ok {
-					counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
-					telemetry.Inc(counter)
+			for i := 1; i < len(options); i++ {
+				kv := strings.Split(strings.TrimSpace(options[i]), "=")
+				if len(kv) != 2 {
+					return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+						"option %q is invalid, check '='", options[i])
 				}
-				log.Warningf(ctx, "unknown configuration parameter: %q", key)
+				err = loadParameter(ctx, kv[0], kv[1], &args)
+				if err != nil {
+					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err),
+						"options: %s ", err)
+				}
+			}
 
-			case !configurable:
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.CantChangeRuntimeParam,
-					"parameter %q cannot be changed", key)
+		default:
+			err = loadParameter(ctx, key, value, &args)
+			if err != nil {
+				return sql.SessionArgs{}, err
 			}
 		}
 	}
@@ -788,6 +798,27 @@ func parseClientProvidedSessionParameters(
 	}
 
 	return args, nil
+}
+
+func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
+	exists, configurable := sql.IsSessionVariableConfigurable(key)
+
+	switch {
+	case exists && configurable:
+		args.SessionDefaults[key] = value
+
+	case !exists:
+		if _, ok := sql.UnsupportedVars[key]; ok {
+			counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
+			telemetry.Inc(counter)
+		}
+		log.Warningf(ctx, "unknown configuration parameter: %q", key)
+
+	case !configurable:
+		return pgerror.Newf(pgcode.CantChangeRuntimeParam,
+			"parameter %q cannot be changed", key)
+	}
+	return nil
 }
 
 // Note: Usage of an env var here makes it possible to unconditionally
