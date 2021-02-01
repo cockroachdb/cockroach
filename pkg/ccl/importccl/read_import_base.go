@@ -19,6 +19,7 @@ import (
 	"math"
 	"net/url"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -112,7 +113,9 @@ func runImport(
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *roachpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+		pprof.Do(ctx, pprof.Labels("op", "import"), func(ctx context.Context) {
+			summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+		})
 		if err != nil {
 			return err
 		}

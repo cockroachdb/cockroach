@@ -11,10 +11,50 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"runtime"
+	"runtime/debug"
+	runtimepprof "runtime/pprof"
 	"sort"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var every = Every(5 * time.Second)
+
+func AssertHasLabel(ctx context.Context) context.Context {
+	var ok bool
+	// NB: we would really want to check the goroutine's labels
+	// but there is no access to that. For example, this would
+	// fail the assert despite having the proper label:
+	//
+	//     runtimepprof.Do(ctx, runtimepprof.Labels("foo", "bar"), func(ctx context.Context) {
+	//     	go func() {
+	//     		ctx := context.Background()
+	//     		AssertHasLabel(ctx)
+	//     	}()
+	//     })
+	//
+	// You can make a similar example where the label is missing
+	// but the context has it.
+	runtimepprof.ForLabels(ctx, func(_, _ string) bool {
+		ok = true
+		return false
+	})
+	if !ok {
+		if every.ShouldProcess(timeutil.Now()) {
+			fmt.Fprintf(os.Stderr, "missing label\n%s\n", debug.Stack())
+		}
+		_, f, l, _ := runtime.Caller(2)
+		ctx = runtimepprof.WithLabels(ctx, runtimepprof.Labels("appname", fmt.Sprintf("%s:%d", f, l)))
+		runtimepprof.SetGoroutineLabels(ctx)
+	}
+	return ctx
+}
 
 // moveTopKToFront swaps elements in the range [start, end) so that all elements
 // in the range [start, k) are <= than all elements in the range [k, end).

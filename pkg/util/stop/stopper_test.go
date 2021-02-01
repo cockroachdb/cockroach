@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	runtimepprof "runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -636,6 +637,22 @@ func BenchmarkStopperPar(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkLabel(b *testing.B) {
+	ch := make(chan struct{})
+	ctx := context.Background()
+	runtimepprof.Do(ctx, runtimepprof.Labels("foo", "bar"), func(ctx context.Context) {
+		go func() {
+			defer close(ch)
+			var n int64
+			for i := 0; i < b.N; i++ {
+				n += n + 12
+			}
+			_ = n
+		}()
+	})
+	<-ch
 }
 
 func TestCancelInCloser(t *testing.T) {
