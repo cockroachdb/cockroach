@@ -1,9 +1,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//:DEPS.bzl", "go_deps")
 
 go_library(
     name = "timeutil",
     srcs = [
-        "lowercase_timezones.go",
         "manual_time.go",
         "now_unix.go",
         "now_windows.go",
@@ -14,6 +14,7 @@ go_library(
         "timer.go",
         "timeutil.go",
         "zoneinfo.go",
+        ":gen-lowercase-timezones-go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil",
     visibility = ["//visibility:public"],
@@ -47,5 +48,23 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-lowercase-timezones-go",
+    srcs = [
+            "//pkg/util/timeutil/lowercase",
+            "@go_sdk//:lib/time/zoneinfo.zip",
+    ],
+    outs = ["lowercase_timezones.go"],
+    cmd = """
+    env PATH=`dirname $(location @go_sdk//:bin/go)`:`dirname $(location @com_github_cockroachdb_crlfmt//:crlfmt)`:$$PATH HOME=$(GENDIR) \
+    $(location //pkg/util/timeutil/lowercase) \
+    --filename=$(location lowercase_timezones.go) --zoneinfo=$(location @go_sdk//:lib/time/zoneinfo.zip)
+       """,
+    tools = [
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+        "@go_sdk//:bin/go",
     ],
 )

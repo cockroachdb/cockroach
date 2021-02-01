@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "lowercase_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil/lowercase",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_binary(
+    name = "lowercase",
+    data = ["@go_sdk//:lib/time/zoneinfo.zip"],
+    embed = [":lowercase_lib"],
+    visibility = ["//visibility:public"],
+)
