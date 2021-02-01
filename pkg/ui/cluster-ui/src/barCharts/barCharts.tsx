@@ -1,7 +1,7 @@
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { stdDevLong } from "src/util/appStats";
-import { Duration } from "src/util/format";
+import { Duration, Bytes } from "src/util/format";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { bar, formatTwoPlaces, longToInt, approximify } from "./utils";
@@ -16,16 +16,12 @@ const countBars = [
   ),
 ];
 
-const retryBars = [
-  bar(
-    "count-retry",
-    (d: StatementStatistics) =>
-      longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count),
-  ),
+const rowsReadBars = [
+  bar("rows-read", (d: StatementStatistics) => d.stats.rows_read.mean),
 ];
 
-const rowsBars = [
-  bar("rows", (d: StatementStatistics) => d.stats.num_rows.mean),
+const bytesReadBars = [
+  bar("bytes-read", (d: StatementStatistics) => d.stats.bytes_read.mean),
 ];
 
 const latencyBars = [
@@ -38,22 +34,56 @@ const latencyBars = [
   ),
 ];
 
+const maxMemUsageBars = [
+  bar("max-mem-usage", (d: StatementStatistics) => d.stats.max_mem_usage?.mean),
+];
+
+const networkBytesBars = [
+  bar("network-bytes", (d: StatementStatistics) => d.stats.bytes_sent_over_network?.mean),
+]
+
+const retryBars = [
+  bar(
+    "count-retry",
+    (d: StatementStatistics) =>
+      longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count),
+  ),
+];
+
+const rowsReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
+  stdDevLong(d.stats.rows_read, d.stats.exec_stat_collection_count),
+);
+const bytesReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
+  stdDevLong(d.stats.bytes_read, d.stats.exec_stat_collection_count),
+);
 const latencyStdDev = bar(
   cx("bar-chart__overall-dev"),
   (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count),
 );
-const rowsStdDev = bar(cx("rows-dev"), (d: StatementStatistics) =>
-  stdDevLong(d.stats.num_rows, d.stats.count),
+const maxMemUsageStdDev = bar(
+  cx("max-mem-usage-dev"),
+  (d: StatementStatistics) =>
+    stdDevLong(d.stats.max_mem_usage, d.stats.exec_stat_collection_count),
+);
+const networkBytesStdDev = bar(
+  cx("network-bytes-dev"),
+  (d: StatementStatistics) =>
+    stdDevLong(d.stats.bytes_sent_over_network, d.stats.exec_stat_collection_count),
 );
 
 export const countBarChart = barChartFactory("grey", countBars, approximify);
-export const retryBarChart = barChartFactory("red", retryBars, approximify);
-export const rowsBarChart = barChartFactory(
+export const rowsReadBarChart = barChartFactory(
   "grey",
-  rowsBars,
+  rowsReadBars,
   approximify,
-  rowsStdDev,
+  rowsReadStdDev,
   formatTwoPlaces,
+);
+export const bytesReadBarChart = barChartFactory(
+  "grey",
+  bytesReadBars,
+  Bytes,
+  bytesReadStdDev,
 );
 export const latencyBarChart = barChartFactory(
   "grey",
@@ -61,3 +91,17 @@ export const latencyBarChart = barChartFactory(
   v => Duration(v * 1e9),
   latencyStdDev,
 );
+export const maxMemUsageBarChart = barChartFactory(
+    "grey",
+    maxMemUsageBars,
+    Bytes,
+    maxMemUsageStdDev,
+)
+export const networkBytesBarChart = barChartFactory(
+  "grey",
+  networkBytesBars,
+  Bytes,
+  networkBytesStdDev,
+)
+
+export const retryBarChart = barChartFactory("red", retryBars, approximify);
