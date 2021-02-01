@@ -3636,3 +3636,16 @@ CREATE TABLE partial_parent (p INT, UNIQUE INDEX (p) WHERE p > 100)
 
 statement error there is no unique constraint matching given keys for referenced table partial_parent
 CREATE TABLE partial_child (p INT REFERENCES partial_parent (p))
+
+# Test that rowid can be referenced in a foreign key constraint.
+subtest 59582_reference_rowid
+
+statement ok
+CREATE TABLE parent_59582(a INT);
+CREATE TABLE child_59582(i INT);
+
+statement ok
+ALTER TABLE child_59582 ADD FOREIGN KEY (i) REFERENCES child_59582(rowid)
+
+statement ok
+DROP TABLE parent_59582, child_59582

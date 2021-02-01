@@ -402,12 +402,13 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 
 // indexToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as columns in the index.
+// sqlName can be any string but should uniquely identify a schema.
 func indexToAvroSchema(
-	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor, sqlName string,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(tableDesc.GetName()),
+			Name:       SQLNameToAvroName(sqlName),
 			SchemaType: `record`,
 		},
 		fieldIdxByName:   make(map[string]int),

@@ -50,6 +50,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/hydratedtables",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

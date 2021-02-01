@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,6 +92,12 @@ const (
 	// maxConcurrentRequests is the maximum number of RPC fan-out requests
 	// that will be made at any point of time.
 	maxConcurrentRequests = 100
+
+	// maxConcurrentPaginatedRequests is the maximum number of RPC fan-out
+	// requests that will be made at any point of time for a row-limited /
+	// paginated request. This should be much lower than maxConcurrentRequests
+	// as too much concurrency here can result in wasted results.
+	maxConcurrentPaginatedRequests = 4
 
 	// omittedKeyStr is the string returned in place of a key when keys aren't
 	// permitted in responses.
@@ -1890,6 +1897,125 @@ func (s *statusServer) iterateNodes(
 	return resultErr
 }
 
+// paginatedIterateNodes iterates nodeFn over all non-removed nodes
+// sequentially.  It then calls nodeResponse for every valid result of nodeFn,
+// and nodeError on every error result. It returns the next `limit` results
+// after `offset`.
+func (s *statusServer) paginatedIterateNodes(
+	ctx context.Context,
+	errorCtx string,
+	limit int,
+	pagState paginationState,
+	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
+	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
+	responseFn func(nodeID roachpb.NodeID, resp interface{}),
+	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
+) (next paginationState, err error) {
+	if limit == 0 {
+		return paginationState{}, s.iterateNodes(ctx, errorCtx, dialFn, nodeFn, responseFn, errorFn)
+	}
+	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	if err != nil {
+		return paginationState{}, err
+	}
+
+	numNodes := len(nodeStatuses)
+	nodeIDs := make([]roachpb.NodeID, 0, numNodes)
+	for nodeID := range nodeStatuses {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	// Sort all nodes by IDs, as this is what mergeNodeIDs expects.
+	sort.Slice(nodeIDs, func(i, j int) bool {
+		return nodeIDs[i] < nodeIDs[j]
+	})
+	pagState.mergeNodeIDs(nodeIDs)
+	// Remove any node that have already been queried.
+	nodeIDs = nodeIDs[:0]
+	if pagState.inProgress != 0 {
+		nodeIDs = append(nodeIDs, pagState.inProgress)
+	}
+	nodeIDs = append(nodeIDs, pagState.nodesToQuery...)
+
+	paginator := &rpcNodePaginator{
+		limit:        limit,
+		numNodes:     len(nodeIDs),
+		errorCtx:     errorCtx,
+		pagState:     pagState,
+		nodeStatuses: nodeStatuses,
+		dialFn:       dialFn,
+		nodeFn:       nodeFn,
+		responseFn:   responseFn,
+		errorFn:      errorFn,
+	}
+
+	paginator.init()
+	// Issue the requests concurrently.
+	sem := quotapool.NewIntPool("node status", maxConcurrentPaginatedRequests)
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	for idx, nodeID := range nodeIDs {
+		nodeID := nodeID // needed to ensure the closure below captures a copy.
+		idx := idx
+		if err := s.stopper.RunLimitedAsyncTask(
+			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+			sem, true, /* wait */
+			func(ctx context.Context) { paginator.queryNode(ctx, nodeID, idx) },
+		); err != nil {
+			return pagState, err
+		}
+	}
+
+	return paginator.processResponses(ctx)
+}
+
+func (s *statusServer) listSessionsHelper(
+	ctx context.Context, req *serverpb.ListSessionsRequest, limit int, start paginationState,
+) (*serverpb.ListSessionsResponse, paginationState, error) {
+	response := &serverpb.ListSessionsResponse{
+		Sessions: make([]serverpb.Session, 0),
+		Errors:   make([]serverpb.ListSessionsError, 0),
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalSessions(ctx, req)
+		if resp != nil && err == nil {
+			if len(resp.Errors) > 0 {
+				return nil, errors.Errorf("%s", resp.Errors[0].Message)
+			}
+			sort.Slice(resp.Sessions, func(i, j int) bool {
+				return resp.Sessions[i].Start.Before(resp.Sessions[j].Start)
+			})
+			return resp.Sessions, nil
+		}
+		return nil, err
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		sessions := nodeResp.([]serverpb.Session)
+		response.Sessions = append(response.Sessions, sessions...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	var err error
+	var pagState paginationState
+	if pagState, err = s.paginatedIterateNodes(
+		ctx, "session list", limit, start, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		err := serverpb.ListSessionsError{Message: err.Error()}
+		response.Errors = append(response.Errors, err)
+	}
+	return response, pagState, nil
+}
+
 // ListSessions returns a list of SQL sessions on all nodes in the cluster.
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
@@ -1901,33 +2027,8 @@ func (s *statusServer) ListSessions(
 		return nil, err
 	}
 
-	response := &serverpb.ListSessionsResponse{
-		Sessions: make([]serverpb.Session, 0),
-		Errors:   make([]serverpb.ListSessionsError, 0),
-	}
-
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
-		return status.ListLocalSessions(ctx, req)
-	}
-	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
-		sessions := nodeResp.(*serverpb.ListSessionsResponse)
-		response.Sessions = append(response.Sessions, sessions.Sessions...)
-	}
-	errorFn := func(nodeID roachpb.NodeID, err error) {
-		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
-		response.Errors = append(response.Errors, errResponse)
-	}
-
-	if err := s.iterateNodes(ctx, "session list", dialFn, nodeFn, responseFn, errorFn); err != nil {
-		err := serverpb.ListSessionsError{Message: err.Error()}
-		response.Errors = append(response.Errors, err)
-	}
-	return response, nil
+	resp, _, err := s.listSessionsHelper(ctx, req, 0 /* limit */, paginationState{})
+	return resp, err
 }
 
 // CancelSession responds to a session cancellation request by canceling the
