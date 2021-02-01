@@ -167,16 +167,14 @@ type Stopper struct {
 
 	mu struct {
 		syncutil.Mutex
-		quiesce   *sync.Cond // Conditional variable to wait for outstanding tasks
-		quiescing bool       // true when Stop() has been called
-		numTasks  int        // number of outstanding tasks
-		tasks     TaskMap
-		closers   []Closer
-		idAlloc   int
-		qCancels  map[int]func()
-		sCancels  map[int]func()
-
-		stopCalled bool // turns all but first call to Stop into noop
+		quiesce    *sync.Cond // Conditional variable to wait for outstanding tasks
+		quiescing  bool       // true when Stop() has been called
+		numTasks   int        // number of outstanding tasks
+		tasks      TaskMap
+		closers    []Closer
+		idAlloc    int            // allocates index into qCancels
+		qCancels   map[int]func() // ctx cancels to be called on Quiesce
+		stopCalled bool           // turns all but first call to Stop into noop
 	}
 }
 
@@ -209,7 +207,6 @@ func NewStopper(options ...Option) *Stopper {
 
 	s.mu.tasks = TaskMap{}
 	s.mu.qCancels = map[int]func(){}
-	s.mu.sCancels = map[int]func(){}
 
 	for _, opt := range options {
 		opt.apply(s)
@@ -514,11 +511,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	s.Quiesce(ctx)
-	s.mu.Lock()
-	for _, cancel := range s.mu.sCancels {
-		cancel()
-	}
-	s.mu.Unlock()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
