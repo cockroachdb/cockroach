@@ -58,7 +58,7 @@ func (s *backgroundStepper) launch(ctx context.Context, _ *test, u *versionUpgra
 	})
 }
 
-func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgradeTest) {
+func (s *backgroundStepper) wait(ctx context.Context, t *test, u *versionUpgradeTest) {
 	s.m.cancel()
 	// We don't care about the workload failing since we only use it to produce a
 	// few `RESTORE` jobs. And indeed workload will fail because it does not
@@ -312,7 +312,7 @@ func runJobsMixedVersions(
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(roachNodes),
 		resumeAllJobsAndWaitStep,
-		backgroundTPCC.stop,
+		backgroundTPCC.wait,
 		checkForFailedJobsStep,
 	)
 	u.run(ctx, t)
