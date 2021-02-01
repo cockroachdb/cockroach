@@ -148,6 +148,23 @@ const statementStats: IStatementStatistics = {
       ],
     },
   },
+  "bytes_read": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "rows_read": {
+    "mean": 10,
+    "squared_diffs": 1,
+  },
+  "bytes_sent_over_network": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "max_mem_usage": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "exec_stat_collection_count": Long.fromNumber(180),
 };
 
 const diagnosticsReports: IStatementDiagnosticsReport[] = [

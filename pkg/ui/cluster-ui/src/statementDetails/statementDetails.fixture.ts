@@ -73,6 +73,15 @@ const statementStats: any = {
       ],
     },
   },
+  bytes_sent_over_network: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  max_mem_usage: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  exec_stat_collection_count: 1,
 };
 
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({

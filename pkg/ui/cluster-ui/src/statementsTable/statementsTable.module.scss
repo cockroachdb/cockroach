@@ -26,8 +26,12 @@
 }
 
 .statements-table__col-count,
-.statements-table__col-retries,
-.statements-table__col-rows {
+.statements-table__col-rows,
+.statements-table__col-rows-read,
+.statements-table__col-bytes-read ,
+.statements-table__col-max-mem-usage,
+.statements-tabe__col-network-bytes,
+.statements-table__col-retries {
   &--bar-chart {
     margin-left: 0;
 

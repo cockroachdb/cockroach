@@ -82,47 +82,6 @@ export const StatementTableTitle = {
       TXN Type
     </Tooltip>
   ),
-  diagnostics: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
-          <p>
-            {"Option to activate "}
-            <Anchor href={statementDiagnostics} target="_blank">
-              diagnostics
-            </Anchor>
-            {
-              " for each statement. If activated, this displays the status of diagnostics collection ("
-            }
-            <code>WAITING</code>, <code>READY</code>, OR <code>ERROR</code>).
-          </p>
-        </div>
-      }
-    >
-      Diagnostics
-    </Tooltip>
-  ),
-  retries: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
-          <p>
-            {"Cumulative number of "}
-            <Anchor href={statementsRetries} target="_blank">
-              retries
-            </Anchor>
-            {
-              " of statements with this fingerprint within the last hour or specified time interval."
-            }
-          </p>
-        </div>
-      }
-    >
-      Retries
-    </Tooltip>
-  ),
   executionCount: (
     <Tooltip
       placement="bottom"
@@ -174,6 +133,54 @@ export const StatementTableTitle = {
       Rows Affected
     </Tooltip>
   ),
+  rowsRead: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average number of rows read while executing statements with this fingerprint within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates the mean number of rows returned. The blue
+            bar indicates one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Rows Read
+    </Tooltip>
+  ),
+  bytesRead: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average number of bytes read while executing statements with this fingerprint within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates the mean number of rows returned. The blue
+            bar indicates one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Bytes Read
+    </Tooltip>
+  ),
   latency: (
     <Tooltip
       placement="bottom"
@@ -191,6 +198,95 @@ export const StatementTableTitle = {
       }
     >
       Latency
+    </Tooltip>
+  ),
+  maxMemUsage: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average of the maximum memory used while executing statements with this fingerprint within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates the mean number of rows returned. The blue
+            bar indicates one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Max Memory
+    </Tooltip>
+  ),
+  networkBytes: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average number of bytes sent over the network while executing statements with this fingerprint within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates the mean number of rows returned. The blue
+            bar indicates one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Network
+    </Tooltip>
+  ),
+  retries: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {"Cumulative number of "}
+            <Anchor href={statementsRetries} target="_blank">
+              retries
+            </Anchor>
+            {
+              " of statements with this fingerprint within the last hour or specified time interval."
+            }
+          </p>
+        </div>
+      }
+    >
+      Retries
+    </Tooltip>
+  ),
+  diagnostics: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {"Option to activate "}
+            <Anchor href={statementDiagnostics} target="_blank">
+              diagnostics
+            </Anchor>
+            {
+              " for each statement. If activated, this displays the status of diagnostics collection ("
+            }
+            <code>WAITING</code>, <code>READY</code>, OR <code>ERROR</code>).
+          </p>
+        </div>
+      }
+    >
+      Diagnostics
     </Tooltip>
   ),
 };
