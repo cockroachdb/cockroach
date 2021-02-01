@@ -83,6 +83,7 @@ func runDev(ctx context.Context) error {
 func main() {
 	ctx := context.Background()
 	if err := runDev(ctx); err != nil {
+		log.Errorf(ctx, "%v", err)
 		os.Exit(1)
 	}
 }
