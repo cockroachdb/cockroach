@@ -1,11 +1,9 @@
-# Common function to create //go:generate stringer files within bazel sandbox
-
-def stringer(file, typ, name):
+# stringer lets us define the equivalent of `//go:generate stringer` files
+# within bazel sandbox.
+def stringer(src, typ, name):
    native.genrule(
       name = name, 
-      srcs = [
-          file,
-      ],
+      srcs = [src], # Accessed below using `$<`.
       outs = [typ.lower() + "_string.go"],
       cmd = """
          env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
@@ -16,3 +14,4 @@ def stringer(file, typ, name):
          "@org_golang_x_tools//cmd/stringer",
        ],
    )
+

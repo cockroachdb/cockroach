@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "tree",
@@ -232,12 +232,12 @@ go_test(
 
 stringer(
     name = "gen-createtypevariety-stringer",
-    file = "create.go",
+    src = "create.go",
     typ = "CreateTypeVariety",
 )
 
 stringer(
     name = "gen-statementtype-stringer",
-    file = "stmt.go",
+    src = "stmt.go",
     typ = "StatementType",
 )

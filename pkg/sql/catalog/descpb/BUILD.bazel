@@ -1,7 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "descpb",
@@ -87,12 +87,12 @@ go_proto_library(
 
 stringer(
     name = "gen-privilegedescversion-stringer",
-    file = "privilege.go",
+    src = "privilege.go",
     typ = "PrivilegeDescVersion",
 )
 
 stringer(
     name = "gen-formatversion-stringer",
-    file = "structured.go",
+    src = "structured.go",
     typ = "FormatVersion",
 )

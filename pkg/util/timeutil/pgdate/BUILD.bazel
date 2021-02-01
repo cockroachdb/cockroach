@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg:STRINGER.bzl", "stringer")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "pgdate",
@@ -44,12 +44,12 @@ go_test(
 
 stringer(
     name = "gen-field-stringer",
-    file = "fields.go",
+    src = "fields.go",
     typ = "field",
 )
 
 stringer(
     name = "gen-parsemode-stringer",
-    file = "parsing.go",
+    src = "parsing.go",
     typ = "ParseMode",
 )
