@@ -120,6 +120,8 @@ is missing, ensure it is used in code. This can be a blank dependency, e.g.
 `import _ "golang.org/api/compute/v1"`. These changes must then be committed in the submodule directory
 (see [Working with Submodules](#working-with-submodules)).
 
+Finally, run `make bazel-generate` to regenerate `DEPS.bzl` with the updated Go dependency information.
+
 Programs can then be run using `go build ...` or `go test ...`.
 
 ### Removing a dependency
