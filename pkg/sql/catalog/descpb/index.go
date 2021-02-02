@@ -176,7 +176,9 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 // It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
-	return desc.Unique && !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+	return desc.Unique &&
+		!desc.IsPartial() &&
+		ColumnIDs(desc.ColumnIDs[desc.Partitioning.NumImplicitColumns:]).Equals(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
