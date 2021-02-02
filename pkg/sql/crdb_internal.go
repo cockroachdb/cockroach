@@ -58,11 +58,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -100,6 +102,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalGossipLivenessTableID:            crdbInternalGossipLivenessTable,
 		catconstants.CrdbInternalGossipNetworkTableID:             crdbInternalGossipNetworkTable,
 		catconstants.CrdbInternalIndexColumnsTableID:              crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalInflightTraceSpanTableID:         crdbInternalInflightTraceSpanTable,
 		catconstants.CrdbInternalJobsTableID:                      crdbInternalJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:              crdbInternalKVNodeStatusTable,
 		catconstants.CrdbInternalKVStoreStatusTableID:             crdbInternalKVStoreStatusTable,
@@ -1128,6 +1131,53 @@ CREATE TABLE crdb_internal.session_trace (
 			}
 		}
 		return nil
+	},
+}
+
+// crdbInternalInflightTraceSpanTable exposes the node-local registry of in-flight spans.
+var crdbInternalInflightTraceSpanTable = virtualSchemaTable{
+	comment: `in-flight spans (RAM; local node only)`,
+	schema: `
+CREATE TABLE crdb_internal.node_inflight_trace_spans (
+  trace_id       INT NOT NULL,    -- The trace's ID.
+  parent_span_id INT NOT NULL,    -- The span's parent ID.
+  span_id        INT NOT NULL,    -- The span's ID.
+  start_time     TIMESTAMPTZ,     -- The span's start time.
+  duration       INTERVAL,        -- The span's duration, measured by time of 
+                                  -- collection - start time for all in-flight spans.
+  operation      STRING NULL      -- The span's operation.
+)`,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return p.ExecCfg().Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+			for _, rec := range span.GetRecording() {
+				traceID := rec.TraceID
+				parentSpanID := rec.ParentSpanID
+				spanID := rec.SpanID
+
+				startTime, err := tree.MakeDTimestampTZ(rec.StartTime, time.Microsecond)
+				if err != nil {
+					return err
+				}
+
+				spanDuration := rec.Duration
+				operation := rec.Operation
+
+				if err := addRow(
+					tree.NewDInt(tree.DInt(traceID)),
+					tree.NewDInt(tree.DInt(parentSpanID)),
+					tree.NewDInt(tree.DInt(spanID)),
+					startTime,
+					tree.NewDInterval(
+						duration.MakeDuration(spanDuration.Nanoseconds(), 0, 0),
+						types.DefaultIntervalTypeMetadata,
+					),
+					tree.NewDString(operation),
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 

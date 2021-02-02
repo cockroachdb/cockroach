@@ -94,6 +94,7 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.leases",
 
 	"crdb_internal.node_build_info",
+	"crdb_internal.node_inflight_trace_spans",
 	"crdb_internal.node_metrics",
 	"crdb_internal.node_queries",
 	"crdb_internal.node_runtime_info",
@@ -106,6 +107,7 @@ var debugZipTablesPerNode = []string{
 
 // Override for the default SELECT * when dumping the table.
 var customSelectClause = map[string]string{
+	"crdb.internal.node_inflight_trace_spans": "*, WHERE duration > 10*time.Second ORDER BY trace_id ASC, duration DESC",
 	"system.jobs":       "*, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress",
 	"system.descriptor": "*, to_hex(descriptor) AS hex_descriptor",
 }

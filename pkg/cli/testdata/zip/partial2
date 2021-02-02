@@ -39,6 +39,7 @@ retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/1/c
 retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/1/crdb_internal.gossip_nodes.txt
 retrieving SQL data for crdb_internal.leases... writing: debug/nodes/1/crdb_internal.leases.txt
 retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/1/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt
 retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/1/crdb_internal.node_metrics.txt
 retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crdb_internal.node_queries.txt
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
@@ -104,6 +105,7 @@ retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/3/c
 retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/3/crdb_internal.gossip_nodes.txt
 retrieving SQL data for crdb_internal.leases... writing: debug/nodes/3/crdb_internal.leases.txt
 retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/3/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing: debug/nodes/3/crdb_internal.node_inflight_trace_spans.txt
 retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/3/crdb_internal.node_metrics.txt
 retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/3/crdb_internal.node_queries.txt
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/3/crdb_internal.node_runtime_info.txt
