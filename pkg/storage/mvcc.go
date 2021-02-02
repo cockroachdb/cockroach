@@ -2123,6 +2123,9 @@ func MVCCClearTimeRange(
 		return nil
 	}
 
+	const maxBatchByteSize, recheckBatchSizeEvery = 32 << 20, 32
+	var recheckBatchSize int
+
 	// Using the IncrementalIterator with the time-bound iter optimization could
 	// potentially be a big win here -- the expected use-case for this is to run
 	// over an entire table's span with a very recent timestamp, rolling back just
@@ -2186,6 +2189,15 @@ func MVCCClearTimeRange(
 			if batchSize >= maxBatchSize {
 				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
 				break
+			}
+			if recheckBatchSize >= recheckBatchSizeEvery {
+				if b, ok := rw.(Batch); ok && b.Len() >= maxBatchByteSize {
+					resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
+					break
+				}
+				recheckBatchSize = 0
+			} else {
+				recheckBatchSize++
 			}
 			clearMatchingKey(k)
 			clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
