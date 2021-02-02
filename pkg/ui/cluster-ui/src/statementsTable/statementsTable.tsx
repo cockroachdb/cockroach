@@ -5,9 +5,12 @@ import Long from "long";
 import { FixLong, StatementSummary, StatementStatistics } from "src/util";
 import {
   countBarChart,
+  rowsReadBarChart,
+  bytesReadBarChart,
   latencyBarChart,
+  maxMemUsageBarChart,
+  networkBytesBarChart,
   retryBarChart,
-  rowsBarChart,
   ActivateDiagnosticsModalRef,
   ColumnDescriptor,
   SortedTable,
@@ -28,39 +31,22 @@ const longToInt = (d: number | Long) => Number(FixLong(d));
 function makeCommonColumns(
   statements: AggregateStatistics[],
 ): ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements, {
+  const barChartOptions = {
     classes: {
-      root: cx("statements-table__col-count--bar-chart"),
-      label: cx("statements-table__col-count--bar-chart__label"),
+      root: cx("statements-table__col--bar-chart"),
+      label: cx("statements-table__col--bar-chart__label"),
     },
-  });
-  const retryBar = retryBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-retries--bar-chart"),
-      label: cx("statements-table__col-retries--bar-chart__label"),
-    },
-  });
-  const rowsBar = rowsBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-rows--bar-chart"),
-      label: cx("statements-table__col-rows--bar-chart__label"),
-    },
-  });
-  const latencyBar = latencyBarChart(statements, {
-    classes: {
-      root: cx("statements-table__col-latency--bar-chart"),
-    },
-  });
+  };
+
+  const countBar = countBarChart(statements, barChartOptions);
+  const rowsReadBar = rowsReadBarChart(statements, barChartOptions);
+  const bytesReadBar = bytesReadBarChart(statements, barChartOptions);
+  const latencyBar = latencyBarChart(statements, barChartOptions);
+  const maxMemUsageBar = maxMemUsageBarChart(statements, barChartOptions);
+  const networkBytesBar = networkBytesBarChart(statements, barChartOptions);
+  const retryBar = retryBarChart(statements, barChartOptions);
 
   return [
-    {
-      name: "retries",
-      title: StatementTableTitle.retries,
-      className: cx("statements-table__col-retries"),
-      cell: retryBar,
-      sort: stmt =>
-        longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
-    },
     {
       name: "executionCount",
       title: StatementTableTitle.executionCount,
@@ -69,11 +55,18 @@ function makeCommonColumns(
       sort: stmt => FixLong(Number(stmt.stats.count)),
     },
     {
-      name: "rowsAffected",
-      title: StatementTableTitle.rowsAffected,
-      className: cx("statements-table__col-rows"),
-      cell: rowsBar,
-      sort: stmt => stmt.stats.num_rows.mean,
+      name: "rowsRead",
+      title: StatementTableTitle.rowsRead,
+      className: cx("statements-table__col-rows-read"),
+      cell: rowsReadBar,
+      sort: stmt => FixLong(Number(stmt.stats.rows_read.mean)),
+    },
+    {
+      name: "bytesRead",
+      title: StatementTableTitle.bytesRead,
+      className: cx("statements-table__col-bytes-read"),
+      cell: bytesReadBar,
+      sort: stmt => FixLong(Number(stmt.stats.bytes_read.mean)),
     },
     {
       name: "latency",
@@ -81,6 +74,28 @@ function makeCommonColumns(
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: stmt => stmt.stats.service_lat.mean,
+    },
+    {
+      name: "maxMemoryUsage",
+      title: StatementTableTitle.maxMemUsage,
+      className: cx("statements-table__col-max-mem-usage"),
+      cell: maxMemUsageBar,
+      sort: stmt => FixLong(Number(stmt.stats.max_mem_usage.mean)),
+    },
+    {
+      name: "networkBytes",
+      title: StatementTableTitle.networkBytes,
+      className: cx("statements-table__col-network-bytes"),
+      cell: networkBytesBar,
+      sort: stmt => FixLong(Number(stmt.stats.bytes_sent_over_network.mean)),
+    },
+    {
+      name: "retries",
+      title: StatementTableTitle.retries,
+      className: cx("statements-table__col-retries"),
+      cell: retryBar,
+      sort: stmt =>
+        longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
     },
   ];
 }

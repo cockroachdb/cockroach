@@ -55,12 +55,12 @@
     background-color: $colors--alert;
   }
 
-  .rows {
+  .rows, .rows-read, .bytes-read, .max-mem-usage, .network-bytes {
     background-color: $colors--neutral-4;
     border-radius: 3px;
   }
 
-  .rows-dev {
+  .rows-dev, .rows-read-dev, .bytes-read-dev, .max-mem-usage-dev, .network-bytes-dev {
     background-color: $colors--primary-blue-3;
   }
 
