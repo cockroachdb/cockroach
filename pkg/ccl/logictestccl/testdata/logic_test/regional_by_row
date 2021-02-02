@@ -81,7 +81,7 @@ CREATE TABLE regional_by_row_table (
   FAMILY (pk, pk2, a, b)
 ) LOCALITY REGIONAL BY ROW
 
-# TODO(#multiregion): determine how we should display the presence of a crdb_region column
+# TODO(#59630): determine how we should display the presence of a crdb_region column
 # to the user.
 # TODO(#59362): ensure this CREATE TABLE statement round trips.
 query T
