@@ -16,13 +16,21 @@ After reviewing the existing CockroachDB trust mechanisms, it seems that the eff
 
 In addition, the functional security gap between default and "insecure" mode is not well presented ([https://github.com/cockroachdb/cockroach/issues/53404], [https://github.com/cockroachdb/cockroach/issues/44842], [https://github.com/cockroachdb/cockroach/issues/16188#issuecomment-571191964], [https://github.com/cockroachdb/cockroach/issues/49532], [https://github.com/cockroachdb/cockroach/issues/49918]) and has resulted in unpleasant user surprises.
 
-Implementation of the approach in this RFC is expected to decrease usage of the `--insecure' flag (which we can measure internally against our own engineering teams) resulting in a smoother and more secure experience for all CockroachDB users.
+Implementation of the approach in this RFC is expected to decrease usage of the `--insecure' flag (which we can measure internally against our own engineering teams) resulting in a smoother and more secure experience for all CockroachDB users. It cleanly separates the trust relationships for application internal communications from external user and administrative interface enhancing security boundaries. It removes friction from experimenting and testing with a secure cluster reducing dependence on insecure configurations. It simplifies the documentation and user story.
 
 This also eases the deployment challenge where some CAs require issued certificates match fully qualified domain names ([https://aws.amazon.com/certificate-manager/faqs/?nc=sn&loc=5#ACM_Public_Certificates]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
 
 This removes the requirement that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. It may also help with orchestration as any node may then be used to create a `join-token` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
 
 Existing users deploying with the default secure mode will find that they have fewer steps to get to a running cluster. Users who have relied on `--insecure` to avoid the hassle of managing certificates when testing will now be able to test with the system in a secure state by default with minor adjustment to their workflow.
+
+Other patterns are being pursued to address or work around the challenges of our existing certificate story:
+- A custom kubernetes operator([https://github.com/cockroachdb/cockroach-operator]) is being constructed to aid with certificate management and pod deployment.
+- The docs team has invested heavily in attempting to improve the documentation around our use of certificates with some success.
+
+Neither of these address the gap between enterprises with well developed certificate management infrastructures and independent developers. Enterprises are generally willing to work through a hardening guide to deploy a production system. Independent developers tend to want the thing to "just work."
+
+If we do not address this now we will continue to experience certificate-based frustration internally, among customers, and external developers. More insecure clusters will continue to be deployed. We may miss future opportunities where a smoother certificate user experience would have rendered success.
 
 ## Goals
 
@@ -46,7 +54,7 @@ Optional requirements:
 * A distinct admin-ui CA may be created (`adminUiServiceCa`)
 
 ### 2 Add/Remove nodes
-Support secure and atomic add/remove operations for existing clusters.
+Support secure and simple for an operator add/remove operations for existing clusters with a minimal number of managed steps.
 
 ### 3 Adding new regions (Stretch Goal)
 Enable manual and k8s users to add new regions (collections of nodes) to an existing cluster
@@ -90,6 +98,8 @@ cockroach start --certs-dir=certs \
 ```
 
 # Reference-level explanation
+
+It is assumed that any customer-facing TLS configuration is separate from inter-node config in this approach. This will require additional TLS work within CRDB. The RPC service is also given it's own certificate which presupposes that it may be offered on a separate port from SQL. The latter is temporary until the RPC service's features are fully migrated to SQL.
 
 **Documentation aids:**
 The following names to refer to node certificate authorities.
@@ -238,6 +248,8 @@ Internode trust is established though a bootstrapped TLS process. Nodes provided
 
 Once all nodes have exchanged public CA keys, the node with the "lowest" certificate signature value self nominates to generate the `initialization-bundle`. Once this bundle is created, this node uses the public key for each peer's CA to create strong TLS connections to each peer using their trusted CA and deliver the `initialization-bundle` in addition to a MAC of the bundle generated with the `initialization-token` to prove authenticity.
 
+**N.B.:** Since at this point all nodes should be provisioned and functional, it may be reasonable to have the same node that generates the `initialization-bundle` also begin the KV init process.
+
 **initialization-token**
 The initialization token can be any string of bytes though for security it is recommended that they be of a adequate length and entropy to resist guessing for the duration of the initialization period.
 
@@ -267,7 +279,14 @@ type joinToken struct {
   expiration DateTime
 }
 ```
-- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret base62 encoded as the `join-token` to the invoker and a single concatinated string.
+- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret base62 and a one byte checksum encoded as the `join-token` to the invoker and a single concatinated string.
+```
+id := base62(tokenId)
+authFingerPrint := base62(HMAC(interNodeCA.PublicKey, sharedSecret))
+secret := base62(sharedSecret)
+cSum := oneByteChecksum(id+authFingerPrint+secret)
+join-token := id + authFingerPrint + secret + cSum 
+```
 
 **Upon new node launch:**
 - The new node will be provided a `join-token` or the location of a file containing it with its start flags.
@@ -275,7 +294,7 @@ type joinToken struct {
 - The node will recompute the authentication fingerprint from above chain using the `interNodeCA.PublicKey` and `sharedSecret` from its `join-token` to confirm it matches the one in it's join token
 - If validation succeeds
     1. The new node will compute its `proof-of-membership` using the `interNodeHostCertificate` from its peer
-    2. The new node will create a secure TLS connection to the same peer's provisioning service and request an `initialization-bundle` by send its `token-uuid`, and `proof-of-membership`.
+    2. The new node will create a secure TLS connection to the same peer's provisioning service and request an `initialization-bundle` by sending its `token-uuid`, and `proof-of-membership`.
         - The server will:
             - Look up the token associated with this `token-uuid`
             - Confirm the `proof-of-membership` using its own cert public key and the `shared-secret` stored in the `join-tokens` table with the specified `token-uuid`
@@ -283,46 +302,75 @@ type joinToken struct {
             - The server will mark the `join-token` as consumed in the `join-tokens` table to avoid reuse.
     3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
 
-** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
+**N.B.:** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
 
 
-### Success monitoring
-
-Success will present itself through:
-- A decrease in the percentage of clusters running in insecure mode.
-- Reduce operator toil and friction easing adoption of the product where proof of concepts may have been conducted with the --insecure flag.
 
 ### What does it do
 
-This creates new functionality by which an operator or orchestration solution may create a fully secured cluster and/or add nodes without directly managing certificates.
+This creates new functionality by which an operator or orchestration solution may create a fully secured cluster and/or add nodes without directly managing certificates. In order to do this it makes use of a pre-shared secret provided to a node or nodes at start which they may use to establish mutual trust.
 
-### How it works
+### How it works (generally)
+
+This approach assumes that a malicious entity may manipulate any traffic between all nodes at any time. The first step is bootstrapping the shared secret to mTLS.
+
+Several approaches were explored to accomplish this. Discussion summarized below.
+
+**Deterministic certificate generation from the `init-token`**
+This appeared to work well and could have providedd for a simple common format between the init and add/join functions as all endpoints would be able to start in an mTLS-ready state. However, the Golang authors agressively protect their cryptologic implementation against inadvertent insecure misuse and include traps to prevent exactly this type of approach within the certificate generation libraries. Reference: [Maybe read a byte - how Go crypto library prevents you from getting overdependent on it](https://nogoegst.net/post/maybereadbyte/).
+
+**Encoding an initial CA _as_ the join token**
+This approach would simplify the implementation logic at a usability and add/join security cost.
+* Simpler since the nodes could just use the CA to configure trust, then rotate it. However, the token would be hundreds of bytes long making text manipulation difficult and error prone.
+* Less secure for the add/join case as a valid CA would have much greater potential splash damage if spilled as opposed to a one-time-use token.
+
+**Use of shared secret as a signing value** 
+This has the advantage of not requiring any format or length (beyond basic guessability constraints).
+
+For the init case it can be used to establish mutual trust by signing individual node self-signed CAs but is rendered inert the moment the cluster finishes adding initial nodes.
+
+For the add join case, a slight varient of this approach including a token UUID and signature for the existing cluster CA is needed.
 
 **Kubernetes**
 
+A kubernetes case may either make use of the `init-token` and add/remove function (using valid credentials) or simply copy the valid `interNodeCa` from an existing node to the container of the joining node.
 
 **Manual Deployment**
 
+[TBD]
 
 ## Drawbacks
 
-The cluster can reach a state of deadlock if the node that generates all interface certificates dies before it comes back online. 
+The cluster can reach a state of deadlock if the node that generates all interface certificates dies before it comes back online.
 
 The initialization process may also deadlock if any node dies before establishing mutual trust.
 
 The process will fail to provide a full set of joined nodes if a node dies between establishing mutual trust and provisioning of a common `interNodeCa`.
 
+An operator will need to monitor node health to determine if any of these have occurred. Mercifully they should all manifest during a single short window.
+
 ## Rationale and Alternatives
 
-This approach removes certificate management of cluster internal interfaces from the operator. It cleanly separates the trust relationships for application internal communications from external user and administrative interface enhancing security boundaries. It removes friction from experimenting and testing with a secure cluster reducing dependence on insecure configurations. It simplifies the documentation and user story.
+**Why not create a multi-use join token, then it could share the same characteristics as the init token and simplify both code flows?**
+Join tokens are consumable by design to decrease the risk associated with transporting and using them. It's expected that join tokens may appear in kubernetes or other orchestration solution logs making it highly desirable that they are rendered inert upon use.
 
-Other patterns are being pursued to address or work around the challenges of our existing certificate story:
-- A custom kubernetes operator([https://github.com/cockroachdb/cockroach-operator]) is being constructed to aid with certificate management and pod deployment.
-- The docs team has invested heavily in attempting to improve the documentation around our use of certificates with some success.
+The same is roughly true for the init token set which is why init tokens are only used to bootstrap mTLS for the initial node set before they too become inert.
 
-Neither of these address the gap between enterprises with well developed certificate management infrastructures and independent developers. Enterprises are generally willing to work through a hardening guide to deploy a production system. Independent developers tend to want the thing to "just work."
+**What can't we use the same token for both?**
+We can but it creates an increased denial of service attack surface.
 
-If we do not address this now we will continue to experience certificate-based frustration internally, among customers, and external developers. More insecure clusters will continue to be deployed. We may miss future opportunities where a smoother certificate user experience would have rendered success.
+In the current proposal, the init token can be any string of bytes. However, in order to make join tokens consumable, valid tokens must be stored somewhere. If the joining node does not supply an ID to find a valid token, the receiving cluster would be responsible for testing every valid token against the client join request. In practice this would mean an unauthenticated attacker could force a target cluster to repeatedly query the database for valid join tokens and compute hashes for each one against all incoming join requests.
+
+In addition to the above denial of service angle, the joining node will need a means to identify that it has connected to a node via valid TLS. Otherwise an attacker could man-in-the-middle the exchange of node proof of membership and receipt of the CA enabling the attacker to mint valid node certificates and join the cluster.
+
+The proposed mitigations are to include a UUID token ID with the valid token and a cryptologic hash of the inter-node CA public key. This allows receiving nodes to check for presence of a valid UUID (only) before undertaking hashing and validation work, and allows the joining node to verify that the certificate of the node it is connecting to was issued using the same CA that was signed by its shared secret.
+
+## Success monitoring
+
+Success will present itself through:
+- A decrease in the percentage of clusters running in insecure mode.
+- Reduce operator toil and friction easing adoption of the product where proof of concepts may have been conducted with the --insecure flag.
+
 
 ## Unresolved questions
 - It may also be worth adding a startup option that generates a non-`root` _user_ and _generated password_ to facilitate local testing and development.
