@@ -377,9 +377,10 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
-		isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
+		for j, n := 0, idx.NumColumns(); j < n; j++ {
+			// Only the last column of an inverted index is an inverted column.
+			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && j == n-1
 
-		for j := 0; j < idx.NumColumns(); j++ {
 			// Generate stats for each indexed column.
 			addIndexColumnStatsIfNotExists(idx.GetColumnID(j), isInverted)
 
@@ -420,6 +421,11 @@ func createStatsDefaultColumns(
 
 			// Generate stats for each column individually.
 			for _, colID := range colIDs.Ordered() {
+				col, err := desc.FindColumnByID(colID)
+				if err != nil {
+					return nil, err
+				}
+				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.Type)
 				addIndexColumnStatsIfNotExists(colID, isInverted)
 			}
 		}

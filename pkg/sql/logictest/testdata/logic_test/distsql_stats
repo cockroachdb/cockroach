@@ -798,8 +798,16 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 # Test that columns referenced in partial index predicates always have
 # histograms collected for them, with up to 200 buckets.
 statement ok
-CREATE TABLE partial (a INT, b INT, c INT, INDEX (a) WHERE b > 0 OR c > 0);
-INSERT INTO partial VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE TABLE partial (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  j JSON,
+  INDEX (a) WHERE b > 0 OR c > 0,
+  INVERTED INDEX (j) WHERE d = 10
+);
+INSERT INTO partial VALUES (1, 1, 1, 1, '{"a": "b"}'), (2, 2, 2, 10, '{"c": "d"}'), (3, 3, 3, 1, '{"e": "f"}');
 CREATE STATISTICS s FROM partial
 
 query TTIIB colnames,rowsort
@@ -818,6 +826,8 @@ statistics_name  column_names  row_count  null_count  has_histogram
 s                {a}           3          0           true
 s                {b}           3          0           true
 s                {c}           3          0           true
+s                {d}           3          0           true
+s                {j}           3          0           true
 s                {rowid}       3          0           true
 
 let $hist_id_1
@@ -959,6 +969,31 @@ upper_bound                                                                     
 '\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+# Stats for multi-column inverted indexes.
+statement ok
+CREATE TABLE multi_col (
+  id INT PRIMARY KEY,
+  s STRING,
+  j JSON,
+  INVERTED INDEX (s, j)
+);
+INSERT INTO multi_col VALUES (1, 'foo', '{"a": "b"}');
+CREATE STATISTICS s FROM multi_col;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE multi_col]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{id}          true
+{j}           true
+{s}           true
 
 # Regression test for #56356. Histograms on all-null columns should not cause
 # an error.
