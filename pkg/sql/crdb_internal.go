@@ -1142,6 +1142,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   trace_id       INT NOT NULL,    -- The trace's ID.
   parent_span_id INT NOT NULL,    -- The span's parent ID.
   span_id        INT NOT NULL,    -- The span's ID.
+  goroutine_id   INT NOT NULL,    -- The ID of the goroutine on which the span was created.
   start_time     TIMESTAMPTZ,     -- The span's start time.
   duration       INTERVAL,        -- The span's duration, measured by time of 
                                   -- collection - start time for all in-flight spans.
@@ -1153,6 +1154,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID
+				goroutineID := rec.GoroutineID
 
 				startTime, err := tree.MakeDTimestampTZ(rec.StartTime, time.Microsecond)
 				if err != nil {
@@ -1166,6 +1168,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 					tree.NewDInt(tree.DInt(traceID)),
 					tree.NewDInt(tree.DInt(parentSpanID)),
 					tree.NewDInt(tree.DInt(spanID)),
+					tree.NewDInt(tree.DInt(goroutineID)),
 					startTime,
 					tree.NewDInterval(
 						duration.MakeDuration(spanDuration.Nanoseconds(), 0, 0),
