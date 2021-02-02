@@ -1755,7 +1755,11 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 	}
 
 	switch lc := desc.LocalityConfig.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_, *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		if !desc.IsPartitionAllBy() {
+			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
+		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false

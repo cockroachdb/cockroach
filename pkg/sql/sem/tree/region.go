@@ -36,6 +36,9 @@ const (
 	RegionalByRowRegionDefaultCol string = "crdb_region"
 	// RegionalByRowRegionDefaultColName is the same, typed as Name.
 	RegionalByRowRegionDefaultColName Name = Name(RegionalByRowRegionDefaultCol)
+	// RegionalByRowRegionNotSpecifiedName is the string denoting the REGIONAL BY ROW
+	// has no AS <col> specified.
+	RegionalByRowRegionNotSpecifiedName = ""
 	// PrimaryRegionLocalityName is the string denoting the primary region in the
 	// locality config.
 	// TODO(#59455): clean this up to use something nicer,
