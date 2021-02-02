@@ -1230,7 +1230,7 @@ func (r *Replica) checkExecutionCanProceed(
 	} else {
 		// If the request is a write or a consistent read, it requires the
 		// replica serving it to hold the range lease.
-		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.Timestamp)
+		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
 		if err != nil {
 			// If not, can we serve this request on a follower?
 			// TODO(nvanbenschoten): once we make this check cheaper
