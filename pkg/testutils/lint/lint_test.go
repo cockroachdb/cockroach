@@ -2005,12 +2005,13 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
 		}
 
-		roachlint, err := exec.LookPath("roachvet")
+		const vetTool = "roachvet"
+		vetToolPath, err := exec.LookPath(vetTool)
 		if err != nil {
-			t.Fatalf("failed to find roachvet: %v", err)
+			t.Fatalf("failed to find %s: %s", vetTool, err)
 		}
 		vetCmd(t, crdb.Dir, "go",
-			[]string{"vet", "-vettool", roachlint, "-all", "-printf.funcs", printfuncs, pkgScope},
+			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
 
 	})
