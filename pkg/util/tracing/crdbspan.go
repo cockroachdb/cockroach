@@ -32,6 +32,7 @@ type crdbSpan struct {
 	traceID      uint64 // probabilistically unique.
 	spanID       uint64 // probabilistically unique.
 	parentSpanID uint64
+	goroutineID  uint64
 
 	operation string
 	startTime time.Time
@@ -241,6 +242,7 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		TraceID:      s.traceID,
 		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
+		GoroutineID:  s.goroutineID,
 		Operation:    s.operation,
 		StartTime:    s.startTime,
 		Duration:     s.mu.duration,
