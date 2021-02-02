@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -145,7 +144,7 @@ func updateTableStatus(
 	execCfg *sql.ExecutorConfig,
 	ttlSeconds int64,
 	protectedtsCache protectedts.Cache,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	tableDropTimes map[descpb.ID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
 ) time.Time {
@@ -154,7 +153,7 @@ func updateTableStatus(
 
 	for i, t := range progress.Tables {
 		droppedTable := &progress.Tables[i]
-		if droppedTable.ID != table.ID || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
+		if droppedTable.ID != table.GetID() || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
 			continue
 		}
 
@@ -190,7 +189,7 @@ func updateIndexesStatus(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	tableTTL int32,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	protectedtsCache protectedts.Cache,
 	zoneCfg *zonepb.ZoneConfig,
 	indexDropTimes map[descpb.IndexID]int64,
@@ -211,19 +210,19 @@ func updateIndexesStatus(
 		deadlineNanos := indexDropTimes[idxProgress.IndexID] + int64(ttlSeconds)*time.Second.Nanoseconds()
 		deadline := timeutil.Unix(0, deadlineNanos)
 		if isProtected(ctx, protectedtsCache, indexDropTimes[idxProgress.IndexID], sp) {
-			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.ID)
+			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
 		lifetime := time.Until(deadline)
 		if lifetime > 0 {
 			if log.V(2) {
-				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.ID, lifetime)
+				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
 			}
 		}
 		if lifetime < 0 {
 			expired = true
 			if log.V(2) {
-				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.ID)
+				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
 			}
 			idxProgress.Status = jobspb.SchemaChangeGCProgress_DELETING
 		} else if deadline.Before(soonestDeadline) {

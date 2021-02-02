@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,7 +27,7 @@ import (
 type planDependencyInfo struct {
 	// desc is a reference to the descriptor for the table being
 	// depended on.
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 	// deps is the list of ways in which the current plan depends on
 	// that table. There can be more than one entries when the same
 	// table is used in different places. The entries can also be
@@ -49,7 +48,8 @@ type planDependencies map[descpb.ID]planDependencyInfo
 func (d planDependencies) String() string {
 	var buf bytes.Buffer
 	for id, deps := range d {
-		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrNameStringP(&deps.desc.Name))
+		name := deps.desc.GetName()
+		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrNameStringP(&name))
 		for _, dep := range deps.deps {
 			buf.WriteString(" [")
 			if dep.IndexID != 0 {

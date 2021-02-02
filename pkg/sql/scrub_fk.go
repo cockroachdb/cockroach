@@ -25,8 +25,8 @@ import (
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
 	tableName           *tree.TableName
-	tableDesc           *tabledesc.Immutable
-	referencedTableDesc *tabledesc.Immutable
+	tableDesc           catalog.TableDescriptor
+	referencedTableDesc catalog.TableDescriptor
 	constraint          *descpb.ConstraintDetail
 	asOf                hlc.Timestamp
 
@@ -45,7 +45,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	constraint descpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
@@ -106,9 +106,9 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	// columns and extra columns in the secondary index used for foreign
 	// key referencing. This also implicitly includes all primary index
 	// columns.
-	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.Columns))
-	for i := range o.tableDesc.Columns {
-		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
+	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.GetPublicColumns()))
+	for i := range o.tableDesc.GetPublicColumns() {
+		columnsByID[o.tableDesc.GetPublicColumns()[i].ID] = &o.tableDesc.GetPublicColumns()[i]
 	}
 
 	// Get primary key columns not included in the FK.

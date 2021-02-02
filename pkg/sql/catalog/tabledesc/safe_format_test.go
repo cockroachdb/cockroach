@@ -59,7 +59,7 @@ func TestSafeMessage(t *testing.T) {
 			id:       12,
 			parentID: 21,
 			schema:   "CREATE TABLE foo (i INT PRIMARY KEY, j INT, j_str STRING AS (j::STRING) STORED, INDEX (j_str))",
-			exp: `tabledesc.Immutable: {` +
+			exp: `tabledesc.immutable: {` +
 				`ID: 12, Version: 1, ModificationTime: "1.000000000,0", ` +
 				`ParentID: 21, ParentSchemaID: 29, State: PUBLIC, ` +
 				`NextColumnID: 6, ` +
@@ -236,7 +236,7 @@ func TestSafeMessage(t *testing.T) {
 			id:       12,
 			parentID: 21,
 			schema:   "CREATE TABLE foo ()",
-			exp: "tabledesc.Immutable: {" +
+			exp: "tabledesc.immutable: {" +
 				"ID: 12, Version: 1, " +
 				"ModificationTime: \"0,0\", " +
 				"ParentID: 21, ParentSchemaID: 29, " +

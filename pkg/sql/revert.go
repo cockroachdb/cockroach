@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,13 +33,13 @@ func RevertTables(
 	ctx context.Context,
 	db *kv.DB,
 	execCfg *ExecutorConfig,
-	tables []*tabledesc.Immutable,
+	tables []catalog.TableDescriptor,
 	targetTime hlc.Timestamp,
 	batchSize int64,
 ) error {
 	reverting := make(map[descpb.ID]bool, len(tables))
 	for i := range tables {
-		reverting[tables[i].ID] = true
+		reverting[tables[i].GetID()] = true
 	}
 
 	spans := make([]roachpb.Span, 0, len(tables))
@@ -47,12 +47,12 @@ func RevertTables(
 	// Check that all the tables are revertable -- i.e. offline and that their
 	// full interleave hierarchy is being reverted.
 	for i := range tables {
-		if tables[i].State != descpb.DescriptorState_OFFLINE {
+		if tables[i].GetState() != descpb.DescriptorState_OFFLINE {
 			return errors.New("only offline tables can be reverted")
 		}
 
 		if !tables[i].IsPhysicalTable() {
-			return errors.Errorf("cannot revert virtual table %s", tables[i].Name)
+			return errors.Errorf("cannot revert virtual table %s", tables[i].GetName())
 		}
 		for _, idx := range tables[i].NonDropIndexes() {
 			for j := 0; j < idx.NumInterleaveAncestors(); j++ {
@@ -74,7 +74,7 @@ func RevertTables(
 	for i := range tables {
 		// This is a) rare and b) probably relevant if we are looking at logs so it
 		// probably makes sense to log it without a verbosity filter.
-		log.Infof(ctx, "reverting table %s (%d) to time %v", tables[i].Name, tables[i].ID, targetTime)
+		log.Infof(ctx, "reverting table %s (%d) to time %v", tables[i].GetName(), tables[i].GetID(), targetTime)
 	}
 
 	// TODO(dt): pre-split requests up using a rangedesc cache and run batches in

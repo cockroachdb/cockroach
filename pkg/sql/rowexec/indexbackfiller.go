@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -42,7 +43,7 @@ type indexBackfiller struct {
 
 	adder kvserverbase.BulkAdder
 
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	spec execinfrapb.BackfillerSpec
 
@@ -388,12 +389,11 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	}
 
 	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
-	immutable := tabledesc.NewImmutable(*desc.TableDesc())
 	if err != nil {
 		return err
 	}
 	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, immutable, typed.Key, v)
+	return row.NewUniquenessConstraintViolationError(ctx, desc, typed.Key, v)
 }
 
 const indexBackfillProgressReportInterval = 10 * time.Second

@@ -104,7 +104,7 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			sb.WriteString(childTable.Name)
+			sb.WriteString(childTable.GetName())
 		}
 		sb.WriteString("]")
 		return errors.Newf(

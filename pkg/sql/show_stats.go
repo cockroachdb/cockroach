@@ -14,9 +14,9 @@ import (
 	"context"
 	encjson "encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -79,7 +79,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				 FROM system.table_statistics
 				 WHERE "tableID" = $1
 				 ORDER BY "createdAt"`,
-				desc.ID,
+				desc.GetID(),
 			)
 			if err != nil {
 				return nil, err
@@ -189,7 +189,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	}, nil
 }
 
-func statColumnString(desc *tabledesc.Immutable, colID tree.Datum) string {
+func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) string {
 	id := descpb.ColumnID(*colID.(*tree.DInt))
 	colDesc, err := desc.FindColumnByID(id)
 	if err != nil {

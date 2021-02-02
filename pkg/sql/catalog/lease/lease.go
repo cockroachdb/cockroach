@@ -1785,7 +1785,7 @@ func (m *Manager) watchForGossipUpdates(
 	}
 
 	_ = s.RunAsyncTask(ctx, "gossip-updates", func(ctx context.Context) {
-		descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
+		descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.GetID()))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon
 		// return. NB: this call is allowed to bypass OptionalGossip because
 		// we'll never get here after RangefeedLeases.
@@ -1827,7 +1827,7 @@ func (m *Manager) watchForRangefeedUpdates(
 			Closer:         s.ShouldQuiesce(),
 		}); r.Next(); i++ {
 			ts := m.getResolvedTimestamp()
-			descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
+			descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.GetID()))
 			span := roachpb.Span{
 				Key:    descKeyPrefix,
 				EndKey: descKeyPrefix.PrefixEnd(),

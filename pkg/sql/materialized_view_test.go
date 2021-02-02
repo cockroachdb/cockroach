@@ -66,14 +66,14 @@ REFRESH MATERIALIZED VIEW t.v;
 	}
 
 	// Add a zone config to delete all table data.
-	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.ID)
+	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// The data should be deleted.
 	testutils.SucceedsSoon(t, func() error {
-		indexPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(descBeforeRefresh.ID), uint32(descBeforeRefresh.GetPrimaryIndexID()))
+		indexPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(descBeforeRefresh.GetID()), uint32(descBeforeRefresh.GetPrimaryIndexID()))
 		indexEnd := indexPrefix.PrefixEnd()
 		if kvs, err := kvDB.Scan(ctx, indexPrefix, indexEnd, 0); err != nil {
 			t.Fatal(err)
@@ -182,7 +182,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 	descBeforeRefresh := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 
 	// Add a zone config to delete all table data.
-	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.ID)
+	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		tableStart := keys.SystemSQLCodec.TablePrefix(uint32(descBeforeRefresh.ID))
+		tableStart := keys.SystemSQLCodec.TablePrefix(uint32(descBeforeRefresh.GetID()))
 		tableEnd := tableStart.PrefixEnd()
 		if kvs, err := kvDB.Scan(ctx, tableStart, tableEnd, 0); err != nil {
 			t.Fatal(err)
@@ -228,7 +228,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 `)
 	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 	// Add a zone config to delete all table data.
-	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.ID)
+	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.GetID())
 	require.NoError(t, err)
 
 	// Now drop the view.
@@ -237,7 +237,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 
 	// All of the table data should be cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		tableStart := keys.SystemSQLCodec.TablePrefix(uint32(desc.ID))
+		tableStart := keys.SystemSQLCodec.TablePrefix(uint32(desc.GetID()))
 		tableEnd := tableStart.PrefixEnd()
 		if kvs, err := kvDB.Scan(ctx, tableStart, tableEnd, 0); err != nil {
 			t.Fatal(err)

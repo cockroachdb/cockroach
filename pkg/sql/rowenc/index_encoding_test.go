@@ -52,7 +52,7 @@ type indexKeyTest struct {
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, catalog.TableColMap) {
+func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.TableColMap) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
@@ -111,7 +111,7 @@ func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, catalog.Tabl
 }
 
 func decodeIndex(
-	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, index *descpb.IndexDescriptor, key []byte,
+	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, index *descpb.IndexDescriptor, key []byte,
 ) ([]tree.Datum, error) {
 	types, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs, nil)
 	if err != nil {
@@ -210,11 +210,11 @@ func TestIndexKey(t *testing.T) {
 			colNames []string
 			colIDs   descpb.ColumnIDs
 		)
-		for _, c := range tableDesc.Columns {
+		for _, c := range tableDesc.GetPublicColumns() {
 			colNames = append(colNames, c.Name)
 			colIDs = append(colIDs, c.ID)
 		}
-		tableDesc.Families = []descpb.ColumnFamilyDescriptor{{
+		tableDesc.TableDesc().Families = []descpb.ColumnFamilyDescriptor{{
 			Name:            "defaultFamily",
 			ID:              0,
 			ColumnNames:     colNames,
@@ -979,7 +979,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex().IndexDesc())
+			equivSigs, err := TableEquivSignatures(desc.TableDesc(), desc.GetPrimaryIndex().IndexDesc())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1070,7 +1070,7 @@ func TestEquivSignature(t *testing.T) {
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex().IndexDesc())
+				tempEquivSigs, err := TableEquivSignatures(desc.TableDesc(), desc.GetPrimaryIndex().IndexDesc())
 				if err != nil {
 					t.Fatal(err)
 				}

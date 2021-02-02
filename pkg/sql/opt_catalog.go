@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -59,7 +58,7 @@ type optCatalog struct {
 	// repeated calls for the same data source.
 	// Note that the data source object might still need to be recreated if
 	// something outside of the descriptor has changed (e.g. table stats).
-	dataSources map[*tabledesc.Immutable]cat.DataSource
+	dataSources map[catalog.TableDescriptor]cat.DataSource
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
@@ -72,7 +71,7 @@ var _ cat.Catalog = &optCatalog{}
 // called for each query.
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
-	oc.dataSources = make(map[*tabledesc.Immutable]cat.DataSource)
+	oc.dataSources = make(map[catalog.TableDescriptor]cat.DataSource)
 }
 
 // reset prepares the optCatalog to be used for a new query.
@@ -81,7 +80,7 @@ func (oc *optCatalog) reset() {
 	// This deals with possible edge cases where we do a lot of DDL in a
 	// long-lived session.
 	if len(oc.dataSources) > 100 {
-		oc.dataSources = make(map[*tabledesc.Immutable]cat.DataSource)
+		oc.dataSources = make(map[catalog.TableDescriptor]cat.DataSource)
 	}
 
 	oc.cfg = oc.planner.execCfg.SystemConfig.GetSystemConfig()
@@ -276,7 +275,7 @@ func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, e
 	}
 }
 
-func getDescForDataSource(o cat.DataSource) (*tabledesc.Immutable, error) {
+func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 	switch t := o.(type) {
 	case *optTable:
 		return t.desc, nil
@@ -347,18 +346,18 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		return cat.DataSourceName{}, err
 	}
 
-	dbID := desc.ParentID
+	dbID := desc.GetParentID()
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, oc.codec(), dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.Name)), nil
+	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.GetName())), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
-	ctx context.Context, flags cat.Flags, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// Because they are backed by physical data, we treat materialized views
 	// as tables for the purposes of planning.
@@ -390,7 +389,7 @@ func (oc *optCatalog) dataSourceForDesc(
 // dataSourceForTable returns a table data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForTable(
-	ctx context.Context, flags cat.Flags, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	if desc.IsVirtualTable() {
 		// Virtual tables can have multiple effective instances that utilize the
@@ -404,7 +403,7 @@ func (oc *optCatalog) dataSourceForTable(
 	var tableStats []*stats.TableStatistic
 	if !flags.NoTableStats {
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.GetID())
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
@@ -438,14 +437,14 @@ var emptyZoneConfig = &zonepb.ZoneConfig{}
 // ZoneConfigs are stored in protobuf binary format in the SystemConfig, which
 // is gossiped around the cluster. Note that the returned ZoneConfig might be
 // somewhat stale, since it's taken from the gossiped SystemConfig.
-func (oc *optCatalog) getZoneConfig(desc *tabledesc.Immutable) (*zonepb.ZoneConfig, error) {
+func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (*zonepb.ZoneConfig, error) {
 	// Lookup table's zone if system config is available (it may not be as node
 	// is starting up and before it's received the gossiped config). If it is
 	// not available, use an empty config that has no zone constraints.
 	if oc.cfg == nil || desc.IsVirtualTable() {
 		return emptyZoneConfig, nil
 	}
-	zone, err := oc.cfg.GetZoneConfigForObject(oc.codec(), uint32(desc.ID))
+	zone, err := oc.cfg.GetZoneConfigForObject(oc.codec(), uint32(desc.GetID()))
 	if err != nil {
 		return nil, err
 	}
@@ -460,26 +459,26 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 	return oc.planner.ExecCfg().Codec
 }
 
-// optView is a wrapper around sqlbase.Immutable that implements
+// optView is a wrapper around catalog.TableDescriptor that implements
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 }
 
 var _ cat.View = &optView{}
 
-func newOptView(desc *tabledesc.Immutable) *optView {
+func newOptView(desc catalog.TableDescriptor) *optView {
 	return &optView{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
 func (ov *optView) ID() cat.StableID {
-	return cat.StableID(ov.desc.ID)
+	return cat.StableID(ov.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ov *optView) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ov.desc.ID)
+	return cat.StableID(ov.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -488,12 +487,12 @@ func (ov *optView) Equals(other cat.Object) bool {
 	if !ok {
 		return false
 	}
-	return ov.desc.ID == otherView.desc.ID && ov.desc.Version == otherView.desc.Version
+	return ov.desc.GetID() == otherView.desc.GetID() && ov.desc.GetVersion() == otherView.desc.GetVersion()
 }
 
 // Name is part of the cat.View interface.
 func (ov *optView) Name() tree.Name {
-	return tree.Name(ov.desc.Name)
+	return tree.Name(ov.desc.GetName())
 }
 
 // IsSystemView is part of the cat.View interface.
@@ -503,40 +502,40 @@ func (ov *optView) IsSystemView() bool {
 
 // Query is part of the cat.View interface.
 func (ov *optView) Query() string {
-	return ov.desc.ViewQuery
+	return ov.desc.GetViewQuery()
 }
 
 // ColumnNameCount is part of the cat.View interface.
 func (ov *optView) ColumnNameCount() int {
-	return len(ov.desc.Columns)
+	return len(ov.desc.GetPublicColumns())
 }
 
 // ColumnName is part of the cat.View interface.
 func (ov *optView) ColumnName(i int) tree.Name {
-	return tree.Name(ov.desc.Columns[i].Name)
+	return tree.Name(ov.desc.GetPublicColumns()[i].Name)
 }
 
-// optSequence is a wrapper around sqlbase.Immutable that
+// optSequence is a wrapper around catalog.TableDescriptor that
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 }
 
 var _ cat.DataSource = &optSequence{}
 var _ cat.Sequence = &optSequence{}
 
-func newOptSequence(desc *tabledesc.Immutable) *optSequence {
+func newOptSequence(desc catalog.TableDescriptor) *optSequence {
 	return &optSequence{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSequence) ID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSequence) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -545,21 +544,21 @@ func (os *optSequence) Equals(other cat.Object) bool {
 	if !ok {
 		return false
 	}
-	return os.desc.ID == otherSeq.desc.ID && os.desc.Version == otherSeq.desc.Version
+	return os.desc.GetID() == otherSeq.desc.GetID() && os.desc.GetVersion() == otherSeq.desc.GetVersion()
 }
 
 // Name is part of the cat.Sequence interface.
 func (os *optSequence) Name() tree.Name {
-	return tree.Name(os.desc.Name)
+	return tree.Name(os.desc.GetName())
 }
 
 // SequenceMarker is part of the cat.Sequence interface.
 func (os *optSequence) SequenceMarker() {}
 
-// optTable is a wrapper around sqlbase.Immutable that caches
+// optTable is a wrapper around catalog.TableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	// columns contains all the columns presented to the catalog. This includes:
 	//  - ordinary table columns (those in the table descriptor)
@@ -613,7 +612,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	codec keys.SQLCodec,
 	stats []*stats.TableStatistic,
 	tblZone *zonepb.ZoneConfig,
@@ -637,7 +636,7 @@ func newOptTable(
 	}
 
 	ot.columns = make([]cat.Column, len(colDescs), numCols)
-	numOrdinary := len(ot.desc.Columns)
+	numOrdinary := len(ot.desc.GetPublicColumns())
 	numWritable := len(ot.desc.WritableColumns())
 	for ordinal := range colDescs {
 		desc := colDescs[ordinal]
@@ -721,9 +720,9 @@ func newOptTable(
 
 	// Add unique without index constraints. Constraints for implicitly
 	// partitioned unique indexes will be added below.
-	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.UniqueWithoutIndexConstraints))
-	for i := range ot.desc.UniqueWithoutIndexConstraints {
-		u := &ot.desc.UniqueWithoutIndexConstraints[i]
+	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.GetUniqueWithoutIndexConstraints()))
+	for i := range ot.desc.GetUniqueWithoutIndexConstraints() {
+		u := &ot.desc.GetUniqueWithoutIndexConstraints()[i]
 		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 			name:         u.Name,
 			table:        ot.ID(),
@@ -795,8 +794,8 @@ func newOptTable(
 		}
 	}
 
-	for i := range ot.desc.OutboundFKs {
-		fk := &ot.desc.OutboundFKs[i]
+	for i := range ot.desc.GetOutboundFKs() {
+		fk := &ot.desc.GetOutboundFKs()[i]
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -809,8 +808,8 @@ func newOptTable(
 			updateAction:      fk.OnUpdate,
 		})
 	}
-	for i := range ot.desc.InboundFKs {
-		fk := &ot.desc.InboundFKs[i]
+	for i := range ot.desc.GetInboundFKs() {
+		fk := &ot.desc.GetInboundFKs()[i]
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),
@@ -824,10 +823,10 @@ func newOptTable(
 		})
 	}
 
-	ot.primaryFamily.init(ot, &desc.Families[0])
-	ot.families = make([]optFamily, len(desc.Families)-1)
+	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
+	ot.families = make([]optFamily, len(desc.GetFamilies())-1)
 	for i := range ot.families {
-		ot.families[i].init(ot, &desc.Families[i+1])
+		ot.families[i].init(ot, &desc.GetFamilies()[i+1])
 	}
 
 	// Synthesize any check constraints for user defined types.
@@ -886,18 +885,18 @@ func newOptTable(
 
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // isStale checks if the optTable object needs to be refreshed because the stats,
 // zone config, or used types have changed. False positives are ok.
 func (ot *optTable) isStale(
-	rawDesc *tabledesc.Immutable, tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig,
+	rawDesc catalog.TableDescriptor, tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig,
 ) bool {
 	// Fast check to verify that the statistics haven't changed: we check the
 	// length and the address of the underlying array. This is not a perfect
@@ -929,7 +928,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 		// Fast path when it is the same object.
 		return true
 	}
-	if ot.desc.ID != otherTable.desc.ID || ot.desc.Version != otherTable.desc.Version {
+	if ot.desc.GetID() != otherTable.desc.GetID() || ot.desc.GetVersion() != otherTable.desc.GetVersion() {
 		return false
 	}
 
@@ -969,7 +968,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 
 // Name is part of the cat.Table interface.
 func (ot *optTable) Name() tree.Name {
-	return tree.Name(ot.desc.Name)
+	return tree.Name(ot.desc.GetName())
 }
 
 // IsVirtualTable is part of the cat.Table interface.
@@ -1292,7 +1291,7 @@ func (oi *optIndex) Span() roachpb.Span {
 	desc := oi.tab.desc
 	// Tables up to MaxSystemConfigDescID are grouped in a single system config
 	// span.
-	if desc.ID <= keys.MaxSystemConfigDescID {
+	if desc.GetID() <= keys.MaxSystemConfigDescID {
 		return keys.SystemConfigSpan
 	}
 	return desc.IndexSpan(oi.tab.codec, oi.desc.ID)
@@ -1630,7 +1629,7 @@ func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction 
 
 // optVirtualTable is similar to optTable but is used with virtual tables.
 type optVirtualTable struct {
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	// columns contains all the columns presented to the catalog. This includes
 	// the dummy PK column and the columns in the table descriptor.
@@ -1669,10 +1668,10 @@ type optVirtualTable struct {
 var _ cat.Table = &optVirtualTable{}
 
 func newOptVirtualTable(
-	ctx context.Context, oc *optCatalog, desc *tabledesc.Immutable, name *cat.DataSourceName,
+	ctx context.Context, oc *optCatalog, desc catalog.TableDescriptor, name *cat.DataSourceName,
 ) (*optVirtualTable, error) {
 	// Calculate the stable ID (see the comment for optVirtualTable.id).
-	id := cat.StableID(desc.ID)
+	id := cat.StableID(desc.GetID())
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
 		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
@@ -1703,7 +1702,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.Columns)+1)
+	ot.columns = make([]cat.Column, len(desc.GetPublicColumns())+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
 		0,
@@ -1716,8 +1715,8 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 	)
-	for i := range desc.Columns {
-		d := desc.Columns[i]
+	for i := range desc.GetPublicColumns() {
+		d := desc.GetPublicColumns()[i]
 		ot.columns[i+1].InitNonVirtual(
 			i+1,
 			cat.StableID(d.ID),
@@ -1781,7 +1780,7 @@ func (ot *optVirtualTable) ID() cat.StableID {
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optVirtualTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return cat.StableID(ot.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
@@ -1794,7 +1793,7 @@ func (ot *optVirtualTable) Equals(other cat.Object) bool {
 		// Fast path when it is the same object.
 		return true
 	}
-	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
+	if ot.id != otherTable.id || ot.desc.GetVersion() != otherTable.desc.GetVersion() {
 		return false
 	}
 
@@ -1828,8 +1827,8 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i > 0 && i <= len(ot.desc.Columns) {
-		return &ot.desc.Columns[i-1]
+	if i > 0 && i <= len(ot.desc.GetPublicColumns()) {
+		return &ot.desc.GetPublicColumns()[i-1]
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -52,19 +53,19 @@ CREATE INDEX ON t.t1 (x);
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t1")
 	desc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remember the old foreign keys.
-	oldInboundFKs := append([]descpb.ForeignKeyConstraint{}, desc.InboundFKs...)
+	oldInboundFKs := append([]descpb.ForeignKeyConstraint{}, desc.GetInboundFKs()...)
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
 	// to the pre-19.2 table descriptor format where foreign key information
 	// is stored on the index.
-	downgradeForeignKey := func(tbl *tabledesc.Immutable) *tabledesc.Immutable {
+	downgradeForeignKey := func(tbl catalog.TableDescriptor) catalog.TableDescriptor {
 		// Downgrade the outbound foreign keys.
-		for i := range tbl.OutboundFKs {
-			fk := &tbl.OutboundFKs[i]
+		for i := range tbl.GetOutboundFKs() {
+			fk := &tbl.GetOutboundFKs()[i]
 			idx, err := tabledesc.FindFKOriginIndex(tbl, fk.OriginColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var referencedTbl *tabledesc.Immutable
+			var referencedTbl catalog.TableDescriptor
 			err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				referencedTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.ReferencedTableID)
 				return err
@@ -87,15 +88,15 @@ CREATE INDEX ON t.t1 (x);
 				Match:           fk.Match,
 			}
 		}
-		tbl.OutboundFKs = nil
+		tbl.TableDesc().OutboundFKs = nil
 		// Downgrade the inbound foreign keys.
-		for i := range tbl.InboundFKs {
-			fk := &tbl.InboundFKs[i]
+		for i := range tbl.GetInboundFKs() {
+			fk := &tbl.GetInboundFKs()[i]
 			refIdx, err := tabledesc.FindFKReferencedUniqueConstraint(desc, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var originTbl *tabledesc.Immutable
+			var originTbl catalog.TableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				originTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.OriginTableID)
 				return err
@@ -114,13 +115,13 @@ CREATE INDEX ON t.t1 (x);
 			idx := refIdx.(*descpb.IndexDescriptor)
 			idx.ReferencedBy = append(idx.ReferencedBy, fkRef)
 		}
-		tbl.InboundFKs = nil
+		tbl.TableDesc().InboundFKs = nil
 		return tbl
 	}
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		newDesc := downgradeForeignKey(desc)
-		if err := catalogkv.WriteDescToBatch(ctx, false, s.ClusterSettings(), b, keys.SystemSQLCodec, desc.ID, newDesc); err != nil {
+		if err := catalogkv.WriteDescToBatch(ctx, false, s.ClusterSettings(), b, keys.SystemSQLCodec, desc.GetID(), newDesc); err != nil {
 			return err
 		}
 		return txn.Run(ctx, b)
@@ -135,13 +136,13 @@ CREATE INDEX ON t.t1 (x);
 	desc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remove the validity field on all the descriptors for comparison, since
 	// foreign keys on the referenced side's validity is not always updated correctly.
-	for i := range desc.InboundFKs {
-		desc.InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
+	for i := range desc.TableDesc().InboundFKs {
+		desc.TableDesc().InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
 	}
 	for i := range oldInboundFKs {
 		oldInboundFKs[i].Validity = descpb.ConstraintValidity_Validated
 	}
-	if !reflect.DeepEqual(desc.InboundFKs, oldInboundFKs) {
-		t.Error("expected fks", oldInboundFKs, "but found", desc.InboundFKs)
+	if !reflect.DeepEqual(desc.GetInboundFKs(), oldInboundFKs) {
+		t.Error("expected fks", oldInboundFKs, "but found", desc.GetInboundFKs())
 	}
 }

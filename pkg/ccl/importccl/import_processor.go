@@ -173,7 +173,7 @@ func makeInputConverter(
 	seqChunkProvider *row.SeqChunkProvider,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
-	var singleTable *tabledesc.Immutable
+	var singleTable catalog.TableDescriptor
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {

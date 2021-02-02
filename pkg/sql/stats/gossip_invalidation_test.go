@@ -56,7 +56,7 @@ func TestGossipInvalidation(t *testing.T) {
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
-	tableID := tableDesc.ID
+	tableID := tableDesc.GetID()
 
 	expectNStats := func(n int) error {
 		stats, err := sc.GetTableStats(ctx, tableID)

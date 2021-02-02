@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -39,7 +39,7 @@ import (
 )
 
 type initFetcherArgs struct {
-	tableDesc       *tabledesc.Immutable
+	tableDesc       catalog.TableDescriptor
 	indexIdx        int
 	valNeededForCol util.FastIntSet
 	spans           roachpb.Spans
@@ -56,7 +56,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 			Index:            index.IndexDesc(),
 			ColIdxMap:        entry.tableDesc.ColumnIdxMap(),
 			IsSecondaryIndex: !index.Primary(),
-			Cols:             entry.tableDesc.Columns,
+			Cols:             entry.tableDesc.GetPublicColumns(),
 			ValNeededForCol:  entry.valNeededForCol,
 		}
 	}
@@ -192,10 +192,10 @@ func TestNextRowSingle(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().GetName(),
+						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -313,10 +313,10 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().GetName(),
+						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -673,10 +673,10 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.PublicNonPrimaryIndexes()[0].GetName(),
+						tableDesc.GetName(), tableDesc.PublicNonPrimaryIndexes()[0].GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -984,7 +984,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			for i, entry := range entries {
 				tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, entry.tableName)
 				indexID := tableDesc.ActiveIndexes()[entry.indexIdx].GetID()
-				idLookups[idLookupKey(tableDesc.ID, indexID)] = entry
+				idLookups[idLookupKey(tableDesc.GetID(), indexID)] = entry
 
 				// We take every entry's index span (primary or
 				// secondary) and use it to start our scan.

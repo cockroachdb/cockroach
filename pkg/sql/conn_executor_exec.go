@@ -760,7 +760,7 @@ func validatePrimaryKeys(tc *descs.Collection) error {
 		if !table.HasPrimaryKey() {
 			return unimplemented.NewWithIssuef(48026,
 				"primary key of table %s dropped without subsequent addition of new primary key",
-				table.Name,
+				table.GetName(),
 			)
 		}
 	}

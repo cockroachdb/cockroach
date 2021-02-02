@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -117,13 +117,13 @@ func checkDistAggregationInfo(
 	ctx context.Context,
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
 	info DistAggregationInfo,
 ) {
-	colType := tableDesc.Columns[colIdx].Type
+	colType := tableDesc.GetPublicColumns()[colIdx].Type
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
@@ -463,9 +463,9 @@ func TestDistAggregationTable(t *testing.T) {
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
-		for colIdx := 1; colIdx < len(desc.Columns); colIdx++ {
+		for colIdx := 1; colIdx < len(desc.GetPublicColumns()); colIdx++ {
 			// See if this column works with this function.
-			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
+			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.GetPublicColumns()[colIdx].Type)
 			if err != nil {
 				continue
 			}
@@ -477,7 +477,7 @@ func TestDistAggregationTable(t *testing.T) {
 			}
 			foundCol = true
 			for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
-				name := fmt.Sprintf("%s/%s/%d", fn, desc.Columns[colIdx].Name, numRows)
+				name := fmt.Sprintf("%s/%s/%d", fn, desc.GetPublicColumns()[colIdx].Name, numRows)
 				t.Run(name, func(t *testing.T) {
 					checkDistAggregationInfo(
 						context.Background(), t, tc.Server(0), desc, colIdx, numRows, fn, info)

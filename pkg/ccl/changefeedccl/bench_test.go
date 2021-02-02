@@ -189,8 +189,8 @@ func createBenchmarkChangefeed(
 	tableDesc := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
-		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
-			StatementTimeName: tableDesc.Name,
+		Targets: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.GetName(),
 		}},
 		Opts: map[string]string{
 			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),

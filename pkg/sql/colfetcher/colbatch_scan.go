@@ -170,10 +170,10 @@ func NewColBatchScan(
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	// TODO(ajwerner): The need to construct an Immutable here
+	// TODO(ajwerner): The need to construct an immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
-	// retrieving the hydrated Immutable from cache.
+	// retrieving the hydrated immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
 	typs := table.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
@@ -239,16 +239,19 @@ func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	colIdxMap catalog.TableColMap,
 	valNeededForCol util.FastIntSet,
 	spec *execinfrapb.TableReaderSpec,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(int(spec.IndexIdx))
-	if err != nil {
-		return nil, false, err
+	indexIdx := int(spec.IndexIdx)
+	if indexIdx >= len(desc.ActiveIndexes()) {
+		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	indexI := desc.ActiveIndexes()[indexIdx]
+	index = indexI.IndexDesc()
+	isSecondaryIndex = !indexI.Primary()
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,

@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +39,7 @@ func newCSVInputReader(
 	opts roachpb.CSVOptions,
 	walltime int64,
 	parallelism int,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 	seqChunkProvider *row.SeqChunkProvider,

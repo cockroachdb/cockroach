@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -654,7 +653,7 @@ func TestJoinReader(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	for i, td := range []*tabledesc.Immutable{tdSecondary, tdFamily, tdInterleaved} {
+	for i, td := range []catalog.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
 			for _, reqOrdering := range []bool{true, false} {
 				// Small and large batches exercise different paths of interest for

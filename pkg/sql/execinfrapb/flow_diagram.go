@@ -148,8 +148,8 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	if len(tr.Spans) > 0 {
 		tbl := tabledesc.NewImmutable(tr.Table)
 		// only show the first span
-		idx, _, _ := tbl.FindIndexByIndexIdx(int(tr.IndexIdx))
-		valDirs := catalogkeys.IndexKeyValDirs(idx)
+		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
+		valDirs := catalogkeys.IndexKeyValDirs(idx.IndexDesc())
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -90,11 +89,11 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	parentDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
 	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
-	for _, desc := range []*tabledesc.Immutable{parentDesc, childDesc} {
+	for _, desc := range []catalog.TableDescriptor{parentDesc, childDesc} {
 		var colIdxMap catalog.TableColMap
 		var valNeededForCol util.FastIntSet
-		for colIdx := range desc.Columns {
-			id := desc.Columns[colIdx].ID
+		for colIdx := range desc.GetPublicColumns() {
+			id := desc.GetPublicColumns()[colIdx].ID
 			colIdxMap.Set(id, colIdx)
 			valNeededForCol.Add(colIdx)
 		}
@@ -104,7 +103,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			Index:            desc.GetPrimaryIndex().IndexDesc(),
 			ColIdxMap:        colIdxMap,
 			IsSecondaryIndex: false,
-			Cols:             desc.Columns,
+			Cols:             desc.GetPublicColumns(),
 			ValNeededForCol:  valNeededForCol,
 		})
 	}

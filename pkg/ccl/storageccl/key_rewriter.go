@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -77,12 +78,12 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // and splits.
 type KeyRewriter struct {
 	prefixes prefixRewriter
-	descs    map[descpb.ID]*tabledesc.Immutable
+	descs    map[descpb.ID]catalog.TableDescriptor
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
 func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	descs := make(map[descpb.ID]*tabledesc.Immutable)
+	descs := make(map[descpb.ID]catalog.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
@@ -98,7 +99,7 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 }
 
 // MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, error) {
+func MakeKeyRewriter(descs map[descpb.ID]catalog.TableDescriptor) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
@@ -107,7 +108,7 @@ func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, er
 
 		for _, index := range desc.NonDropIndexes() {
 			oldPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(oldID, index.GetID()))
-			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.GetID()))
+			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.GetID(), index.GetID()))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
 				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{

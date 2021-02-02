@@ -545,7 +545,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := tabledesc.NewExistingMutable(systemschema.NamespaceTable.TableDescriptor)
+	table := tabledesc.NewExistingMutable(*systemschema.NamespaceTable.TableDesc())
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -799,16 +799,16 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.NamespaceTable.CreateAsOfTime
-			table.ModificationTime = systemschema.NamespaceTable.ModificationTime
+			table.CreateAsOfTime = systemschema.NamespaceTable.GetCreateAsOfTime()
+			table.ModificationTime = systemschema.NamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
 		}
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.CreateAsOfTime
-			table.ModificationTime = systemschema.DeprecatedNamespaceTable.ModificationTime
+			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.GetCreateAsOfTime()
+			table.ModificationTime = systemschema.DeprecatedNamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
 		}
 		return nil
@@ -840,7 +840,7 @@ CREATE TABLE system.jobs (
 		keys.SystemDatabaseID,
 		keys.JobsTableID,
 		oldJobsTableSchema,
-		systemschema.JobsTable.Privileges,
+		systemschema.JobsTable.GetPrivileges(),
 	)
 	require.NoError(t, err)
 
@@ -880,14 +880,14 @@ CREATE TABLE system.jobs (
 
 	newJobsTable := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.Equal(t, 7, len(newJobsTable.Columns))
-	require.Equal(t, "created_by_type", newJobsTable.Columns[5].Name)
-	require.Equal(t, "created_by_id", newJobsTable.Columns[6].Name)
-	require.Equal(t, 2, len(newJobsTable.Families))
+	require.Equal(t, 7, len(newJobsTable.GetPublicColumns()))
+	require.Equal(t, "created_by_type", newJobsTable.GetPublicColumns()[5].Name)
+	require.Equal(t, "created_by_id", newJobsTable.GetPublicColumns()[6].Name)
+	require.Equal(t, 2, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family name.
-	require.Equal(t, primaryFamilyName, newJobsTable.Families[0].Name)
+	require.Equal(t, primaryFamilyName, newJobsTable.GetFamilies()[0].Name)
 	// Make sure our primary family has new columns added to it.
-	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.Families[0].ColumnNames)
+	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.GetFamilies()[0].ColumnNames)
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))
@@ -925,7 +925,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 		keys.SystemDatabaseID,
 		keys.JobsTableID,
 		oldJobsTableSchema,
-		systemschema.JobsTable.Privileges,
+		systemschema.JobsTable.GetPrivileges(),
 	)
 	require.NoError(t, err)
 
@@ -962,15 +962,15 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 
 	newJobsTable := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.Equal(t, 9, len(newJobsTable.Columns))
-	require.Equal(t, "claim_session_id", newJobsTable.Columns[7].Name)
-	require.Equal(t, "claim_instance_id", newJobsTable.Columns[8].Name)
-	require.Equal(t, 3, len(newJobsTable.Families))
+	require.Equal(t, 9, len(newJobsTable.GetPublicColumns()))
+	require.Equal(t, "claim_session_id", newJobsTable.GetPublicColumns()[7].Name)
+	require.Equal(t, "claim_instance_id", newJobsTable.GetPublicColumns()[8].Name)
+	require.Equal(t, 3, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family names.
-	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.Families[0].Name)
-	require.Equal(t, "progress", newJobsTable.Families[1].Name)
+	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.GetFamilies()[0].Name)
+	require.Equal(t, "progress", newJobsTable.GetFamilies()[1].Name)
 	// ... and that the new one is here.
-	require.Equal(t, "claim", newJobsTable.Families[2].Name)
+	require.Equal(t, "claim", newJobsTable.GetFamilies()[2].Name)
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))

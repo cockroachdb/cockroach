@@ -64,7 +64,7 @@ type invertedJoiner struct {
 
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
-	desc         tabledesc.Immutable
+	desc         catalog.TableDescriptor
 	// The map from ColumnIDs in the table to the column position.
 	colIdxMap catalog.TableColMap
 	index     *descpb.IndexDescriptor
@@ -185,7 +185,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
-		desc:                 tabledesc.MakeImmutable(spec.Table),
+		desc:                 tabledesc.NewImmutable(spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		prefixEqualityCols:   spec.PrefixEqualityColumns,
@@ -196,10 +196,11 @@ func newInvertedJoiner(
 	ij.colIdxMap = ij.desc.ColumnIdxMap()
 
 	var err error
-	ij.index, _, err = ij.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
-	if err != nil {
-		return nil, err
+	indexIdx := int(spec.IndexIdx)
+	if indexIdx >= len(ij.desc.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	ij.index = ij.desc.ActiveIndexes()[indexIdx].IndexDesc()
 	ij.invertedColID = ij.index.InvertedColumnID()
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
@@ -219,13 +220,13 @@ func newInvertedJoiner(
 		}
 		tableRowIdx := ij.colIdxMap.GetDefault(colID)
 		ij.indexRowToTableRowMap[indexRowIdx] = tableRowIdx
-		ij.indexRowTypes[indexRowIdx] = ij.desc.Columns[tableRowIdx].Type
+		ij.indexRowTypes[indexRowIdx] = ij.desc.GetPublicColumns()[tableRowIdx].Type
 		indexRowIdx++
 	}
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.ColumnTypesWithMutations(false /* mutations */)
+	rightColTypes := ij.desc.ColumnTypes()
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)
@@ -300,7 +301,7 @@ func newInvertedJoiner(
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
+		flowCtx, &fetcher, ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
 		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		nil /* systemColumns */, nil, /* virtualColumn */
@@ -321,7 +322,7 @@ func newInvertedJoiner(
 		ij.fetcher = &fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &ij.desc, ij.index)
+	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
 	ij.spanBuilder.SetNeededColumns(allIndexCols)
 
 	// Initialize memory monitors and row container for index rows.
@@ -447,7 +448,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 					ij.index.ColumnDirections,
-					&ij.desc,
+					ij.desc,
 					ij.index,
 					&ij.alloc,
 					nil, /* keyPrefix */
@@ -540,7 +541,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
 				ij.index.ColumnDirections,
-				&ij.desc,
+				ij.desc,
 				ij.index,
 				&ij.alloc,
 				nil, /* keyPrefix */

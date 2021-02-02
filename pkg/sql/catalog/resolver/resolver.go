@@ -47,7 +47,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Immutable, error)
+	LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableDescriptor, error)
 
 	tree.TypeReferenceResolver
 }
@@ -85,7 +85,7 @@ func GetObjectNames(
 // if no object is found.
 func ResolveExistingTableObject(
 	ctx context.Context, sc SchemaResolver, tn *tree.TableName, lookupFlags tree.ObjectLookupFlags,
-) (res *tabledesc.Immutable, err error) {
+) (res catalog.TableDescriptor, err error) {
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	//  passed as an argument to this function.
 	un := tn.ToUnresolvedObjectName()
@@ -94,7 +94,7 @@ func ResolveExistingTableObject(
 		return nil, err
 	}
 	tn.ObjectNamePrefix = prefix
-	return desc.(*tabledesc.Immutable), nil
+	return desc.(catalog.TableDescriptor), nil
 }
 
 // ResolveMutableExistingTableObject looks up an existing mutable object.
@@ -208,7 +208,7 @@ func ResolveExistingObject(
 			return descI.(*tabledesc.Mutable), prefix, nil
 		}
 
-		return descI.(*tabledesc.Immutable), prefix, nil
+		return descI.(catalog.TableDescriptor), prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
 			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)
