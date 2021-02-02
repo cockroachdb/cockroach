@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "compiler",
+    srcs = [
+        "compiler.go",
+        "gen_dep_edges.go",
+        "gen_op_edges.go",
+        "graphviz.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/ops",
+        "//pkg/sql/schemachanger/targets",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_emicklei_dot//:dot",
+    ],
+)
+
+go_test(
+    name = "compiler_test",
+    srcs = ["compiler_test.go"],
+    embed = [":compiler"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/ops",
+        "//pkg/sql/schemachanger/targets",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "@com_github_emicklei_dot//:dot",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "scplan",
+    srcs = [
+        "declarative.go",
+        "helpers.go",
+        "plan.go",
+        "rules.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scgraph",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

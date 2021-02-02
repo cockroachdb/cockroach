@@ -1963,9 +1963,10 @@ func TestJobInTxn(t *testing.T) {
 			if !ok {
 				return nil, nil, nil, false, nil
 			}
-			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
 				job, err = execCtx.ExtendedEvalContext().QueueJob(
+					ctx,
 					jobs.Record{
 						Description: st.String(),
 						Details:     jobspb.BackupDetails{},
@@ -1998,9 +1999,10 @@ func TestJobInTxn(t *testing.T) {
 			if !ok {
 				return nil, nil, nil, false, nil
 			}
-			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
 				job, err = execCtx.ExtendedEvalContext().QueueJob(
+					ctx,
 					jobs.Record{
 						Description: "RESTORE",
 						Details:     jobspb.RestoreDetails{},

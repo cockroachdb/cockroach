@@ -1206,6 +1206,25 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(experimentalUniqueWithoutIndexConstraintsMode.Get(sv))
 		},
 	},
+
+	`experimental_use_new_schema_changer`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_use_new_schema_changer`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			mode, ok := sessiondata.NewSchemaChangerModeFromString(s)
+			if !ok {
+				return newVarValueError(`experimental_user_new_schema_changer`, s,
+					"off", "on", "unsafe_always")
+			}
+			m.SetUseNewSchemaChanger(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.NewSchemaChangerMode.String()
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondata.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

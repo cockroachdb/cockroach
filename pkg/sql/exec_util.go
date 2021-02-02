@@ -319,6 +319,19 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
+// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
+var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
+	"sql.defaults.experimental_new_schema_changer.enabled",
+	"default value for experimental_use_new_schema_changer session setting;"+
+		"disables new schema changer by default",
+	"off",
+	map[int64]string{
+		int64(sessiondata.UseNewSchemaChangerOff):          "off",
+		int64(sessiondata.UseNewSchemaChangerOn):           "on",
+		int64(sessiondata.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
+	},
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -782,6 +795,10 @@ type ExecutorConfig struct {
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
+
+	// IndexBackfiller is used to backfill indexes. It is another rather circular
+	// object which mostly just holds on to an ExecConfig.
+	IndexBackfiller *IndexBackfillPlanner
 }
 
 // Organization returns the value of cluster.organization.
@@ -2233,6 +2250,10 @@ func (m *sessionDataMutator) SetVirtualColumnsEnabled(val bool) {
 // supported.
 func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 	m.data.EnableUniqueWithoutIndexConstraints = val
+}
+
+func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondata.NewSchemaChangerMode) {
+	m.data.NewSchemaChangerMode = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

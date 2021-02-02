@@ -2798,7 +2798,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	if err := walkPlan(planCtx.ctx, n, planObserver{
 		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
 			switch plan.(type) {
-			case *explainVecNode, *explainPlanNode:
+			case *explainVecNode, *explainPlanNode, *explainDDLNode:
 				// Don't continue recursing into explain nodes - they need to be left
 				// alone since they handle their own planning later.
 				return false, nil

@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scgraph",
+    srcs = [
+        "graph.go",
+        "iteration.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

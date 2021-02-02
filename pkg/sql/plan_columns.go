@@ -97,6 +97,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	// Nodes with a fixed schema.
 	case *scrubNode:
 		return n.getColumns(mut, colinfo.ScrubColumns)
+	case *explainDDLNode:
+		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *explainPlanNode:
 		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *explainVecNode:

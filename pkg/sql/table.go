@@ -63,7 +63,7 @@ func (p *planner) createDropDatabaseJob(
 		},
 		Progress: jobspb.SchemaChangeProgress{},
 	}
-	newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+	newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		},
 		Progress: jobspb.SchemaChangeProgress{},
 	}
-	newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+	newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 		if err != nil {
 			return err
 		}

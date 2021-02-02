@@ -7,6 +7,7 @@ go_library(
         "catalog.go",
         "desc_getter.go",
         "descriptor.go",
+        "descriptor_id_set.go",
         "errors.go",
         "table_col_map.go",
         "table_col_set.go",

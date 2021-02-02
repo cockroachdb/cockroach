@@ -767,6 +767,11 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 			options: options,
 			plan:    *p,
 		}
+	} else if options.Mode == tree.ExplainDDL {
+		explainNode = &explainDDLNode{
+			options: options,
+			plan:    *p,
+		}
 	} else {
 		explainNode = &explainPlanNode{
 			options: options,

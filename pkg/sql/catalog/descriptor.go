@@ -233,6 +233,7 @@ type TableDescriptor interface {
 	NumFamilies() int
 	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
 	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
+	GetNextFamilyID() descpb.FamilyID
 
 	IsTable() bool
 	IsView() bool

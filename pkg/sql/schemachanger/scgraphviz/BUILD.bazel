@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scgraphviz",
+    srcs = ["graphviz.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/scgraph",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_emicklei_dot//:dot",
+        "@com_github_gogo_protobuf//jsonpb",
+    ],
+)

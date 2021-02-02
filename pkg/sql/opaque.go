@@ -47,143 +47,21 @@ func buildOpaque(
 	scalarProps.Require(stmt.StatementTag(), tree.RejectSubqueries)
 
 	var plan planNode
-	var err error
-	switch n := stmt.(type) {
-	case *tree.AlterDatabaseOwner:
-		plan, err = p.AlterDatabaseOwner(ctx, n)
-	case *tree.AlterDatabaseAddRegion:
-		plan, err = p.AlterDatabaseAddRegion(ctx, n)
-	case *tree.AlterDatabaseDropRegion:
-		plan, err = p.AlterDatabaseDropRegion(ctx, n)
-	case *tree.AlterDatabasePrimaryRegion:
-		plan, err = p.AlterDatabasePrimaryRegion(ctx, n)
-	case *tree.AlterDatabaseSurvivalGoal:
-		plan, err = p.AlterDatabaseSurvivalGoal(ctx, n)
-	case *tree.AlterIndex:
-		plan, err = p.AlterIndex(ctx, n)
-	case *tree.AlterSchema:
-		plan, err = p.AlterSchema(ctx, n)
-	case *tree.AlterTable:
-		plan, err = p.AlterTable(ctx, n)
-	case *tree.AlterTableLocality:
-		plan, err = p.AlterTableLocality(ctx, n)
-	case *tree.AlterTableOwner:
-		plan, err = p.AlterTableOwner(ctx, n)
-	case *tree.AlterTableSetSchema:
-		plan, err = p.AlterTableSetSchema(ctx, n)
-	case *tree.AlterType:
-		plan, err = p.AlterType(ctx, n)
-	case *tree.AlterRole:
-		plan, err = p.AlterRole(ctx, n)
-	case *tree.AlterSequence:
-		plan, err = p.AlterSequence(ctx, n)
-	case *tree.CommentOnColumn:
-		plan, err = p.CommentOnColumn(ctx, n)
-	case *tree.CommentOnDatabase:
-		plan, err = p.CommentOnDatabase(ctx, n)
-	case *tree.CommentOnIndex:
-		plan, err = p.CommentOnIndex(ctx, n)
-	case *tree.CommentOnTable:
-		plan, err = p.CommentOnTable(ctx, n)
-	case *tree.CreateDatabase:
-		plan, err = p.CreateDatabase(ctx, n)
-	case *tree.CreateIndex:
-		plan, err = p.CreateIndex(ctx, n)
-	case *tree.CreateSchema:
-		plan, err = p.CreateSchema(ctx, n)
-	case *tree.CreateType:
-		plan, err = p.CreateType(ctx, n)
-	case *tree.CreateRole:
-		plan, err = p.CreateRole(ctx, n)
-	case *tree.CreateSequence:
-		plan, err = p.CreateSequence(ctx, n)
-	case *tree.CreateExtension:
-		plan, err = p.CreateExtension(ctx, n)
-	case *tree.Deallocate:
-		plan, err = p.Deallocate(ctx, n)
-	case *tree.Discard:
-		plan, err = p.Discard(ctx, n)
-	case *tree.DropDatabase:
-		plan, err = p.DropDatabase(ctx, n)
-	case *tree.DropIndex:
-		plan, err = p.DropIndex(ctx, n)
-	case *tree.DropOwnedBy:
-		plan, err = p.DropOwnedBy(ctx)
-	case *tree.DropRole:
-		plan, err = p.DropRole(ctx, n)
-	case *tree.DropSchema:
-		plan, err = p.DropSchema(ctx, n)
-	case *tree.DropSequence:
-		plan, err = p.DropSequence(ctx, n)
-	case *tree.DropTable:
-		plan, err = p.DropTable(ctx, n)
-	case *tree.DropType:
-		plan, err = p.DropType(ctx, n)
-	case *tree.DropView:
-		plan, err = p.DropView(ctx, n)
-	case *tree.Grant:
-		plan, err = p.Grant(ctx, n)
-	case *tree.GrantRole:
-		plan, err = p.GrantRole(ctx, n)
-	case *tree.ReassignOwnedBy:
-		plan, err = p.ReassignOwnedBy(ctx, n)
-	case *tree.RefreshMaterializedView:
-		plan, err = p.RefreshMaterializedView(ctx, n)
-	case *tree.RenameColumn:
-		plan, err = p.RenameColumn(ctx, n)
-	case *tree.RenameDatabase:
-		plan, err = p.RenameDatabase(ctx, n)
-	case *tree.ReparentDatabase:
-		plan, err = p.ReparentDatabase(ctx, n)
-	case *tree.RenameIndex:
-		plan, err = p.RenameIndex(ctx, n)
-	case *tree.RenameTable:
-		plan, err = p.RenameTable(ctx, n)
-	case *tree.Revoke:
-		plan, err = p.Revoke(ctx, n)
-	case *tree.RevokeRole:
-		plan, err = p.RevokeRole(ctx, n)
-	case *tree.Scatter:
-		plan, err = p.Scatter(ctx, n)
-	case *tree.Scrub:
-		plan, err = p.Scrub(ctx, n)
-	case *tree.SetClusterSetting:
-		plan, err = p.SetClusterSetting(ctx, n)
-	case *tree.SetZoneConfig:
-		plan, err = p.SetZoneConfig(ctx, n)
-	case *tree.SetVar:
-		plan, err = p.SetVar(ctx, n)
-	case *tree.SetTransaction:
-		plan, err = p.SetTransaction(ctx, n)
-	case *tree.SetSessionAuthorizationDefault:
-		plan, err = p.SetSessionAuthorizationDefault()
-	case *tree.SetSessionCharacteristics:
-		plan, err = p.SetSessionCharacteristics(n)
-	case *tree.ShowClusterSetting:
-		plan, err = p.ShowClusterSetting(ctx, n)
-	case *tree.ShowHistogram:
-		plan, err = p.ShowHistogram(ctx, n)
-	case *tree.ShowTableStats:
-		plan, err = p.ShowTableStats(ctx, n)
-	case *tree.ShowTraceForSession:
-		plan, err = p.ShowTrace(ctx, n)
-	case *tree.ShowZoneConfig:
-		plan, err = p.ShowZoneConfig(ctx, n)
-	case *tree.ShowFingerprints:
-		plan, err = p.ShowFingerprints(ctx, n)
-	case *tree.Truncate:
-		plan, err = p.Truncate(ctx, n)
-	case tree.CCLOnlyStatement:
-		plan, err = p.maybePlanHook(ctx, stmt)
-		if plan == nil && err == nil {
-			return nil, pgerror.Newf(pgcode.CCLRequired,
-				"a CCL binary is required to use this statement type: %T", stmt)
+	if tree.CanModifySchema(stmt) {
+		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
+		if err != nil {
+			return nil, err
 		}
-	default:
-		return nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
+		if usePlan {
+			plan = scPlan
+		}
 	}
-	if err != nil {
-		return nil, err
+	if plan == nil {
+		var err error
+		plan, err = planOpaque(ctx, p, stmt)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if plan == nil {
 		return nil, errors.AssertionFailedf("planNode cannot be nil for %T", stmt)
@@ -194,6 +72,144 @@ func buildOpaque(
 		columns: planColumns(plan),
 	}
 	return res, nil
+}
+
+func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode, error) {
+	switch n := stmt.(type) {
+	case *tree.AlterDatabaseOwner:
+		return p.AlterDatabaseOwner(ctx, n)
+	case *tree.AlterDatabaseAddRegion:
+		return p.AlterDatabaseAddRegion(ctx, n)
+	case *tree.AlterDatabaseDropRegion:
+		return p.AlterDatabaseDropRegion(ctx, n)
+	case *tree.AlterDatabasePrimaryRegion:
+		return p.AlterDatabasePrimaryRegion(ctx, n)
+	case *tree.AlterDatabaseSurvivalGoal:
+		return p.AlterDatabaseSurvivalGoal(ctx, n)
+	case *tree.AlterIndex:
+		return p.AlterIndex(ctx, n)
+	case *tree.AlterSchema:
+		return p.AlterSchema(ctx, n)
+	case *tree.AlterTable:
+		return p.AlterTable(ctx, n)
+	case *tree.AlterTableLocality:
+		return p.AlterTableLocality(ctx, n)
+	case *tree.AlterTableOwner:
+		return p.AlterTableOwner(ctx, n)
+	case *tree.AlterTableSetSchema:
+		return p.AlterTableSetSchema(ctx, n)
+	case *tree.AlterType:
+		return p.AlterType(ctx, n)
+	case *tree.AlterRole:
+		return p.AlterRole(ctx, n)
+	case *tree.AlterSequence:
+		return p.AlterSequence(ctx, n)
+	case *tree.CommentOnColumn:
+		return p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnDatabase:
+		return p.CommentOnDatabase(ctx, n)
+	case *tree.CommentOnIndex:
+		return p.CommentOnIndex(ctx, n)
+	case *tree.CommentOnTable:
+		return p.CommentOnTable(ctx, n)
+	case *tree.CreateDatabase:
+		return p.CreateDatabase(ctx, n)
+	case *tree.CreateIndex:
+		return p.CreateIndex(ctx, n)
+	case *tree.CreateSchema:
+		return p.CreateSchema(ctx, n)
+	case *tree.CreateType:
+		return p.CreateType(ctx, n)
+	case *tree.CreateRole:
+		return p.CreateRole(ctx, n)
+	case *tree.CreateSequence:
+		return p.CreateSequence(ctx, n)
+	case *tree.CreateExtension:
+		return p.CreateExtension(ctx, n)
+	case *tree.Deallocate:
+		return p.Deallocate(ctx, n)
+	case *tree.Discard:
+		return p.Discard(ctx, n)
+	case *tree.DropDatabase:
+		return p.DropDatabase(ctx, n)
+	case *tree.DropIndex:
+		return p.DropIndex(ctx, n)
+	case *tree.DropOwnedBy:
+		return p.DropOwnedBy(ctx)
+	case *tree.DropRole:
+		return p.DropRole(ctx, n)
+	case *tree.DropSchema:
+		return p.DropSchema(ctx, n)
+	case *tree.DropSequence:
+		return p.DropSequence(ctx, n)
+	case *tree.DropTable:
+		return p.DropTable(ctx, n)
+	case *tree.DropType:
+		return p.DropType(ctx, n)
+	case *tree.DropView:
+		return p.DropView(ctx, n)
+	case *tree.Grant:
+		return p.Grant(ctx, n)
+	case *tree.GrantRole:
+		return p.GrantRole(ctx, n)
+	case *tree.ReassignOwnedBy:
+		return p.ReassignOwnedBy(ctx, n)
+	case *tree.RefreshMaterializedView:
+		return p.RefreshMaterializedView(ctx, n)
+	case *tree.RenameColumn:
+		return p.RenameColumn(ctx, n)
+	case *tree.RenameDatabase:
+		return p.RenameDatabase(ctx, n)
+	case *tree.ReparentDatabase:
+		return p.ReparentDatabase(ctx, n)
+	case *tree.RenameIndex:
+		return p.RenameIndex(ctx, n)
+	case *tree.RenameTable:
+		return p.RenameTable(ctx, n)
+	case *tree.Revoke:
+		return p.Revoke(ctx, n)
+	case *tree.RevokeRole:
+		return p.RevokeRole(ctx, n)
+	case *tree.Scatter:
+		return p.Scatter(ctx, n)
+	case *tree.Scrub:
+		return p.Scrub(ctx, n)
+	case *tree.SetClusterSetting:
+		return p.SetClusterSetting(ctx, n)
+	case *tree.SetZoneConfig:
+		return p.SetZoneConfig(ctx, n)
+	case *tree.SetVar:
+		return p.SetVar(ctx, n)
+	case *tree.SetTransaction:
+		return p.SetTransaction(ctx, n)
+	case *tree.SetSessionAuthorizationDefault:
+		return p.SetSessionAuthorizationDefault()
+	case *tree.SetSessionCharacteristics:
+		return p.SetSessionCharacteristics(n)
+	case *tree.ShowClusterSetting:
+		return p.ShowClusterSetting(ctx, n)
+	case *tree.ShowHistogram:
+		return p.ShowHistogram(ctx, n)
+	case *tree.ShowTableStats:
+		return p.ShowTableStats(ctx, n)
+	case *tree.ShowTraceForSession:
+		return p.ShowTrace(ctx, n)
+	case *tree.ShowZoneConfig:
+		return p.ShowZoneConfig(ctx, n)
+	case *tree.ShowFingerprints:
+		return p.ShowFingerprints(ctx, n)
+	case *tree.Truncate:
+		return p.Truncate(ctx, n)
+	case tree.CCLOnlyStatement:
+		plan, err := p.maybePlanHook(ctx, stmt)
+		if plan == nil && err == nil {
+			return nil, pgerror.Newf(pgcode.CCLRequired,
+				"a CCL binary is required to use this statement type: %T", stmt)
+		}
+		return plan, err
+	default:
+		return nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
+	}
 }
 
 func init() {

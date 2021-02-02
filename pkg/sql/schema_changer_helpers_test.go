@@ -25,10 +25,12 @@ func (sc *SchemaChanger) TestingDistIndexBackfill(
 	ctx context.Context,
 	version descpb.DescriptorVersion,
 	targetSpans []roachpb.Span,
+	addedIndexes []descpb.IndexID,
 	filter backfill.MutationFilter,
 	indexBackfillBatchSize int64,
 ) error {
-	return sc.distIndexBackfill(ctx, version, targetSpans, filter, indexBackfillBatchSize)
+	return sc.distIndexBackfill(
+		ctx, version, targetSpans, addedIndexes, filter, indexBackfillBatchSize)
 }
 
 // SetJob sets the job.
