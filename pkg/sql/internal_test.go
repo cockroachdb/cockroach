@@ -62,41 +62,18 @@ func TestInternalExecutor(t *testing.T) {
 		t.Fatalf("expected a DInt == 1, got: %T:%s", r, r)
 	}
 
-	// Test that auto-retries work.
+	// Test that auto-retries work inside an external transaction (the executor
+	// cannot retry internally).
 	if _, err := db.Exec("create database test; create sequence test.seq start with 1"); err != nil {
 		t.Fatal(err)
 	}
-	// The following statement will succeed on the 2nd try.
-	row, err = ie.QueryRowEx(
-		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if row == nil {
-		t.Fatal("empty result")
-	}
-	r, ok = row[0].(*tree.DInt)
-	if !ok || *r != 99 {
-		t.Fatalf("expected a DInt == 99, got: %T:%s", r, r)
-	}
-
-	// Reset the sequence to a clear value. Next nextval() will return 2.
-	if _, err := db.Exec("SELECT setval('test.seq', 1)"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test the auto-retries work inside an external transaction too. In this
-	// case, the executor cannot retry internally.
 	cnt := 0
 	err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
+			"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if cnt == 1 {
 			require.Regexp(t, "crdb_internal.force_retry", err)

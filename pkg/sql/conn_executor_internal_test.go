@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,7 +56,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf, syncResults, finished, stopper, _, err := startConnExecutor(ctx)
+	buf, iteratorCh, finished, stopper, err := startConnExecutor(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,12 +69,10 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// Parse/Bind/Describe/Execute/Describe. We expect the first Describe to
 	// succeed and the 2nd one to fail (since the portal is destroyed after the
 	// Execute).
-	cmdPos := 0
 	if err = buf.Push(ctx, PrepareStmt{Name: "ps_nontxn", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, BindStmt{
 		PreparedStatementName: "ps_nontxn",
 		PortalName:            "portal1",
@@ -81,25 +80,31 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmdPos++
-	successfulDescribePos := cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// No error on the first Describe.
+	select {
+	case result := <-iteratorCh:
+		t.Fatalf("something got sent on the channel: %v", result)
+	case <-time.After(100 * time.Millisecond):
+	}
 
-	cmdPos++
-	successfulDescribePos = cmdPos
 	if err = buf.Push(ctx, ExecPortal{
 		Name: "portal1",
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// The result of the Execute.
+	cols := <-iteratorCh
+	require.Equal(t, 1, len(cols.cols))
+	row := <-iteratorCh
+	require.Equal(t, 1, len(row.row))
+	require.Equal(t, tree.DInt(1), tree.MustBeDInt(row.row[0]))
 
-	cmdPos++
-	failedDescribePos := cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
@@ -107,21 +112,14 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, Sync{}); err != nil {
 		t.Fatal(err)
 	}
 
-	results := <-syncResults
-	numResults := len(results)
-	if numResults != cmdPos+1 {
-		t.Fatalf("expected %d results, got: %d", cmdPos+1, len(results))
-	}
-	if err = results[successfulDescribePos].err; err != nil {
-		t.Fatalf("expected first Describe to succeed, got err: %s", err)
-	}
-	if !testutils.IsError(results[failedDescribePos].err, "unknown portal") {
-		t.Fatalf("expected error \"unknown portal\", got: %v", results[failedDescribePos].err)
+	// An error on the second Describe.
+	itErr := <-iteratorCh
+	if !testutils.IsError(itErr.err, "unknown portal") {
+		t.Fatalf("expected error \"unknown portal\", got: %v", itErr.err)
 	}
 
 	// Now we test the transactional case. We'll send a
@@ -129,17 +127,14 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// Describe to succeed and the 2nd one to fail (since the portal is destroyed
 	// after the COMMIT). The point of the SELECT is to show that the portal
 	// survives execution of a statement.
-	cmdPos++
 	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("BEGIN")}); err != nil {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, PrepareStmt{Name: "ps1", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, BindStmt{
 		PreparedStatementName: "ps1",
 		PortalName:            "portal1",
@@ -147,27 +142,43 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("SELECT 2")}); err != nil {
 		t.Fatal(err)
 	}
+	// The result of the first Execute.
+	cols = <-iteratorCh
+	require.Equal(t, 1, len(cols.cols))
+	row = <-iteratorCh
+	require.Equal(t, 1, len(row.row))
+	require.Equal(t, tree.DInt(2), tree.MustBeDInt(row.row[0]))
 
-	cmdPos++
-	successfulDescribePos = cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// No error on the first Describe.
+	select {
+	case result := <-iteratorCh:
+		t.Fatalf("something got sent on the channel: %v", result)
+	case <-time.After(100 * time.Millisecond):
+	}
 
-	cmdPos++
+	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("SELECT 3")}); err != nil {
+		t.Fatal(err)
+	}
+	// The result of the second Execute.
+	cols = <-iteratorCh
+	require.Equal(t, 1, len(cols.cols))
+	row = <-iteratorCh
+	require.Equal(t, 1, len(row.row))
+	require.Equal(t, tree.DInt(3), tree.MustBeDInt(row.row[0]))
+
 	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("COMMIT")}); err != nil {
 		t.Fatal(err)
 	}
 
-	cmdPos++
-	failedDescribePos = cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
@@ -175,24 +186,14 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmdPos++
 	if err = buf.Push(ctx, Sync{}); err != nil {
 		t.Fatal(err)
 	}
 
-	results = <-syncResults
-
-	exp := cmdPos + 1 - numResults
-	if len(results) != exp {
-		t.Fatalf("expected %d results, got: %d", exp, len(results))
-	}
-	succDescIdx := successfulDescribePos - numResults
-	if err = results[succDescIdx].err; err != nil {
-		t.Fatalf("expected first Describe to succeed, got err: %s", err)
-	}
-	failDescIdx := failedDescribePos - numResults
-	if !testutils.IsError(results[failDescIdx].err, "unknown portal") {
-		t.Fatalf("expected error \"unknown portal\", got: %v", results[failDescIdx].err)
+	// An error on the second Describe.
+	itErr = <-iteratorCh
+	if !testutils.IsError(itErr.err, "unknown portal") {
+		t.Fatalf("expected error \"unknown portal\", got: %v", itErr.err)
 	}
 
 	buf.Close()
@@ -216,17 +217,13 @@ func mustParseOne(s string) parser.Statement {
 // protocol.
 //
 // It returns a StmtBuf which is to be used to providing input to the executor,
-// a channel for getting results after sending Sync commands, a channel that
-// gets the error from closing down the executor once the StmtBuf is closed, a
-// stopper that must be stopped when the test completes (this does not stop the
-// executor but stops other background work).
-//
-// It also returns a channel that AddRow might block on which can buffer up to
-// 16 items (including column types when applicable), so the caller might need
-// to receive from it occasionally.
+// a channel for getting results or errors after sending commands, a channel
+// that gets the error from closing down the executor once the StmtBuf is
+// closed, a stopper that must be stopped when the test completes (this does not
+// stop the executor but stops other background work).
 func startConnExecutor(
 	ctx context.Context,
-) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, <-chan ieIteratorResult, error) {
+) (*StmtBuf, <-chan ieIteratorResult, <-chan error, *stop.Stopper, error) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
@@ -242,7 +239,7 @@ func startConnExecutor(
 	gw := gossip.MakeOptionalGossip(nil)
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
 	cfg := &ExecutorConfig{
@@ -288,19 +285,20 @@ func startConnExecutor(
 
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
-	syncResults := make(chan []resWithPos, 1)
 	iteratorCh := make(chan ieIteratorResult, 16)
 	var cc ClientComm = &internalClientComm{
-		sync: func(res []resWithPos) {
-			syncResults <- res
-		},
 		ch: iteratorCh,
+		sync: func(err error) {
+			if err != nil {
+				iteratorCh <- ieIteratorResult{err: err}
+			}
+		},
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
 	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	finished := make(chan error)
 
@@ -310,7 +308,7 @@ func startConnExecutor(
 	go func() {
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
-	return buf, syncResults, finished, stopper, iteratorCh, nil
+	return buf, iteratorCh, finished, stopper, nil
 }
 
 // Test that a client session can close without deadlocking when the closing
@@ -327,11 +325,9 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 
 	srv := s.SQLServer().(*Server)
 	stmtBuf := NewStmtBuf()
-	flushed := make(chan []resWithPos)
+	iteratorCh := make(chan ieIteratorResult, 16)
 	clientComm := &internalClientComm{
-		sync: func(res []resWithPos) {
-			flushed <- res
-		},
+		ch: iteratorCh,
 	}
 	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{})
 	require.NoError(t, err)
@@ -353,10 +349,12 @@ CREATE TEMPORARY TABLE foo();
 	go func() {
 		done <- srv.ServeConn(ctx, connHandler, mon.BoundAccount{}, nil /* cancel */)
 	}()
-	results := <-flushed
-	require.Len(t, results, 6) // We expect results for 5 statements + sync.
-	for _, res := range results {
-		require.NoError(t, res.err)
+	// We expect that nothing got sent on the channel (indicating successful
+	// execution of the commands).
+	select {
+	case r := <-iteratorCh:
+		t.Fatalf("something got sent on the channel: %v", r)
+	default:
 	}
 
 	// Close the client connection and verify that ServeConn() returns.

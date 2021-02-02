@@ -865,8 +865,11 @@ type streamingCommandResult struct {
 	err          error
 	rowsAffected int
 
+	// setErrorCallback, if set, is called when SetError() is called.
+	setErrorCallback func(err error)
+
 	// closeCallback, if set, is called when Close()/Discard() is called.
-	closeCallback func(*streamingCommandResult, resCloseType)
+	closeCallback func(resCloseType)
 }
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
@@ -915,6 +918,9 @@ func (r *streamingCommandResult) SetError(err error) {
 	// is present) since we might replace the error with another one later which
 	// is allowed by the interface. An example of this is queryDone() closure
 	// in execStmtInOpenState().
+	if r.setErrorCallback != nil {
+		r.setErrorCallback(err)
+	}
 }
 
 // Err is part of the RestrictedCommandResult interface.
@@ -938,14 +944,14 @@ func (r *streamingCommandResult) RowsAffected() int {
 // Close is part of the CommandResultClose interface.
 func (r *streamingCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
-		r.closeCallback(r, closed)
+		r.closeCallback(closed)
 	}
 }
 
 // Discard is part of the CommandResult interface.
 func (r *streamingCommandResult) Discard() {
 	if r.closeCallback != nil {
-		r.closeCallback(r, discarded)
+		r.closeCallback(discarded)
 	}
 }
 

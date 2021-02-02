@@ -136,7 +136,7 @@ func (ie *InternalExecutor) initConnEx(
 	txn *kv.Txn,
 	ch chan ieIteratorResult,
 	sd *sessiondata.SessionData,
-	syncCallback func([]resWithPos),
+	syncCallback func(error),
 	errCallback func(error),
 ) (*StmtBuf, *sync.WaitGroup) {
 	clientComm := &internalClientComm{
@@ -678,28 +678,14 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	// resPos will be set to the position of the command that represents the
-	// statement we care about before that command is sent for execution.
-	var resPos CmdPos
-
 	ch := make(chan ieIteratorResult, ieIteratorChannelBufferSize)
 	var resultsReceived bool
-	syncCallback := func(results []resWithPos) {
+	syncCallback := func(err error) {
 		resultsReceived = true
-		defer close(ch)
-		for _, res := range results {
-			if res.Err() != nil {
-				// If we encounter an error, there's no point in looking
-				// further; the rest of the commands in the batch have been
-				// skipped.
-				ch <- ieIteratorResult{err: res.Err()}
-				return
-			}
-			if res.pos == resPos {
-				return
-			}
+		if err != nil {
+			ch <- ieIteratorResult{err: err}
 		}
-		ch <- ieIteratorResult{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+		close(ch)
 	}
 	errCallback := func(err error) {
 		if resultsReceived {
@@ -716,7 +702,6 @@ func (ie *InternalExecutor) execInternal(
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
 	}
 	if len(qargs) == 0 {
-		resPos = 0
 		if err := stmtBuf.Push(
 			ctx,
 			ExecStmt{
@@ -728,7 +713,6 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 	} else {
-		resPos = 2
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
@@ -768,26 +752,19 @@ func (ie *InternalExecutor) execInternal(
 // internalClientComm is an implementation of ClientComm used by the
 // InternalExecutor. Result rows are buffered in memory.
 type internalClientComm struct {
-	// results will contain the results of the commands executed by an
-	// InternalExecutor.
-	results []resWithPos
-
 	// ch is the channel on which the results of the query execution (ExecStmt
 	// or ExecPortal commands) are propagated to the consumer (the iterator).
 	ch chan ieIteratorResult
 
+	lastSetErr error
+
 	lastDelivered CmdPos
 
 	// sync, if set, is called whenever a Sync is executed.
-	sync func([]resWithPos)
+	sync func(err error)
 }
 
 var _ ClientComm = &internalClientComm{}
-
-type resWithPos struct {
-	*streamingCommandResult
-	pos CmdPos
-}
 
 // CreateStatementResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateStatementResult(
@@ -806,16 +783,19 @@ func (icc *internalClientComm) CreateStatementResult(
 
 // createRes creates a result. onClose, if not nil, is called when the result is
 // closed.
-func (icc *internalClientComm) createRes(pos CmdPos, onClose func()) *streamingCommandResult {
+func (icc *internalClientComm) createRes(pos CmdPos, onClose func(error)) *streamingCommandResult {
 	res := &streamingCommandResult{
 		ch: icc.ch,
-		closeCallback: func(res *streamingCommandResult, typ resCloseType) {
+		setErrorCallback: func(err error) {
+			icc.lastSetErr = err
+		},
+		closeCallback: func(typ resCloseType) {
 			if typ == discarded {
 				return
 			}
-			icc.results = append(icc.results, resWithPos{streamingCommandResult: res, pos: pos})
+			icc.lastDelivered = pos
 			if onClose != nil {
-				onClose()
+				onClose(icc.lastSetErr)
 			}
 		},
 	}
@@ -836,13 +816,7 @@ func (icc *internalClientComm) CreateBindResult(pos CmdPos) BindResult {
 //
 // The returned SyncResult will call the sync callback when its closed.
 func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
-	return icc.createRes(pos, func() {
-		results := make([]resWithPos, len(icc.results))
-		copy(results, icc.results)
-		icc.results = icc.results[:0]
-		icc.sync(results)
-		icc.lastDelivered = pos
-	} /* onClose */)
+	return icc.createRes(pos, icc.sync /* onClose */)
 }
 
 // LockCommunication is part of the ClientComm interface.
@@ -890,8 +864,9 @@ func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 	panic("unimplemented")
 }
 
-// noopClientLock is an implementation of ClientLock that says that no results
-// have been communicated to the client.
+// noopClientLock is an implementation of ClientLock that says that all results
+// that correspond to already closed commands have been communicated to the
+// client.
 type noopClientLock internalClientComm
 
 // Close is part of the ClientLock interface.
@@ -903,13 +878,4 @@ func (ncl *noopClientLock) ClientPos() CmdPos {
 }
 
 // RTrim is part of the ClientLock interface.
-func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
-	var i int
-	var r resWithPos
-	for i, r = range ncl.results {
-		if r.pos >= pos {
-			break
-		}
-	}
-	ncl.results = ncl.results[:i]
-}
+func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {}
