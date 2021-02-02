@@ -912,7 +912,7 @@ func (ot *optTable) isStale(
 		return true
 	}
 	// Check if any of the version of column types have changed.
-	if !ot.desc.UserDefinedTypeColsHaveSameVersion(rawDesc) {
+	if !catalog.UserDefinedTypeColsHaveSameVersion(ot.desc, rawDesc) {
 		return true
 	}
 	return false
@@ -943,7 +943,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	}
 
 	// Verify that all of the user defined types in the table are the same.
-	if !ot.desc.UserDefinedTypeColsHaveSameVersion(otherTable.desc) {
+	if !catalog.UserDefinedTypeColsHaveSameVersion(ot.desc, otherTable.desc) {
 		return false
 	}
 
