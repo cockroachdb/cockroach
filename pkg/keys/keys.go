@@ -27,8 +27,8 @@ func makeKey(keys ...[]byte) []byte {
 // MakeStoreKey creates a store-local key based on the metadata key
 // suffix, and optional detail.
 func MakeStoreKey(suffix, detail roachpb.RKey) roachpb.Key {
-	key := make(roachpb.Key, 0, len(localStorePrefix)+len(suffix)+len(detail))
-	key = append(key, localStorePrefix...)
+	key := make(roachpb.Key, 0, len(LocalStorePrefix)+len(suffix)+len(detail))
+	key = append(key, LocalStorePrefix...)
 	key = append(key, suffix...)
 	key = append(key, detail...)
 	return key
@@ -37,11 +37,11 @@ func MakeStoreKey(suffix, detail roachpb.RKey) roachpb.Key {
 // DecodeStoreKey returns the suffix and detail portions of a local
 // store key.
 func DecodeStoreKey(key roachpb.Key) (suffix, detail roachpb.RKey, err error) {
-	if !bytes.HasPrefix(key, localStorePrefix) {
-		return nil, nil, errors.Errorf("key %s does not have %s prefix", key, localStorePrefix)
+	if !bytes.HasPrefix(key, LocalStorePrefix) {
+		return nil, nil, errors.Errorf("key %s does not have %s prefix", key, LocalStorePrefix)
 	}
 	// Cut the prefix, the Range ID, and the infix specifier.
-	key = key[len(localStorePrefix):]
+	key = key[len(LocalStorePrefix):]
 	if len(key) < localSuffixLength {
 		return nil, nil, errors.Errorf("malformed key does not contain local store suffix")
 	}
@@ -481,12 +481,6 @@ func IsLocal(k roachpb.Key) bool {
 	return bytes.HasPrefix(k, localPrefix)
 }
 
-// IsLocalStoreKey performs a cheap check that returns true iff the parameter
-// is a local store key.
-func IsLocalStoreKey(k roachpb.Key) bool {
-	return bytes.HasPrefix(k, localStorePrefix)
-}
-
 // Addr returns the address for the key, used to lookup the range containing the
 // key. In the normal case, this is simply the key's value. However, for local
 // keys, such as transaction records, the address is the inner encoded key, with
@@ -512,7 +506,7 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	}
 
 	for {
-		if bytes.HasPrefix(k, localStorePrefix) {
+		if bytes.HasPrefix(k, LocalStorePrefix) {
 			return nil, errors.Errorf("store-local key %q is not addressable", k)
 		}
 		if bytes.HasPrefix(k, LocalRangeIDPrefix) {

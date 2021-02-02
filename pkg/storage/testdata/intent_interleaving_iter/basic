@@ -563,3 +563,226 @@ prev: output: meta k=b\0c\0d ts=20.000000000,0 txn=1
 prev: output: value k=abcdefg\0 ts=20.000000000,0 v=a
 prev: output: meta k=abcdefg\0 ts=20.000000000,0 txn=1
 prev: output: .
+
+# Local and global keys with separated locks. This test exercises previously
+# buggy cases where callers were:
+# - iterating over global keys without a lower bound. Since the manufactured
+#   lower bounds on the intentIter and iter, to prevent iter iterating into
+#   the lock table, were not semantically identical, the
+#   intentInterleavingIter would detect an inconsistency and go into error
+#   state.
+# - iterating over local keys without an upper bound. We had the same issue
+#   with the manufactured bounds.
+
+define
+locks
+meta k=Lb ts=20 txn=2
+meta k=Lc ts=30 txn=4
+meta k=b ts=40 txn=5
+meta k=d ts=50 txn=6
+mvcc
+meta k=La ts=10 txn=1
+value k=La ts=10 v=a10
+value k=Lb ts=20 v=b20
+value k=Lc ts=30 v=c30
+value k=b ts=40 v=b40
+value k=d ts=50 v=d50
+----
+
+iter upper=e
+seek-ge k=a
+next
+next
+prev
+prev
+prev
+next
+----
+seek-ge "a"/0,0: output: meta k=b ts=40.000000000,0 txn=5
+next: output: value k=b ts=40.000000000,0 v=b40
+next: output: meta k=d ts=50.000000000,0 txn=6
+prev: output: value k=b ts=40.000000000,0 v=b40
+prev: output: meta k=b ts=40.000000000,0 txn=5
+prev: output: .
+next: output: meta k=b ts=40.000000000,0 txn=5
+
+iter lower=La
+seek-lt k=Ld
+prev
+prev
+next
+next
+next
+prev
+----
+seek-lt "Ld"/0,0: output: value k=Lc ts=30.000000000,0 v=c30
+prev: output: meta k=Lc ts=30.000000000,0 txn=4
+prev: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Lc ts=30.000000000,0 txn=4
+next: output: value k=Lc ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=Lc ts=30.000000000,0 v=c30
+
+iter prefix=true
+seek-ge k=Lb
+next
+next
+seek-ge k=La
+next
+next
+seek-ge k=Laa
+seek-ge k=b
+next
+next
+seek-ge k=d
+next
+next
+seek-ge k=e
+seek-ge k=c
+----
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: .
+seek-ge "La"/0,0: output: meta k=La ts=10.000000000,0 txn=1
+next: output: value k=La ts=10.000000000,0 v=a10
+next: output: .
+seek-ge "Laa"/0,0: output: .
+seek-ge "b"/0,0: output: meta k=b ts=40.000000000,0 txn=5
+next: output: value k=b ts=40.000000000,0 v=b40
+next: output: .
+seek-ge "d"/0,0: output: meta k=d ts=50.000000000,0 txn=6
+next: output: value k=d ts=50.000000000,0 v=d50
+next: output: .
+seek-ge "e"/0,0: output: .
+seek-ge "c"/0,0: output: .
+
+# The meta Sc is bogus since local store keys do not have locks, but it is
+# worthwhile for the intentInterleavingIter to work cleanly here.
+define
+locks
+meta k=Lb ts=20 txn=2
+meta k=Sc ts=30 txn=3
+meta k=d ts=40 txn=4
+mvcc
+value k=Lb ts=20 v=b20
+value k=Sc ts=30 v=c30
+value k=d ts=40 v=d40
+----
+
+# Iterator sees Sc, which it should.
+iter lower=La
+seek-ge k=La
+prev
+next
+prev
+next
+next
+next
+next
+next
+prev
+----
+seek-ge "La"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+prev: output: .
+next: output: meta k=Lb ts=20.000000000,0 txn=2
+prev: output: .
+next: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Sc ts=30.000000000,0 txn=3
+next: output: value k=Sc ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=Sc ts=30.000000000,0 v=c30
+
+# Iterator sees Lb, which it should.
+# error state.
+iter upper=Sd
+seek-lt k=Sd
+prev
+prev
+prev
+prev
+next
+----
+seek-lt "Sd"/0,0: output: value k=Sc ts=30.000000000,0 v=c30
+prev: output: meta k=Sc ts=30.000000000,0 txn=3
+prev: output: value k=Lb ts=20.000000000,0 v=b20
+prev: output: meta k=Lb ts=20.000000000,0 txn=2
+prev: output: .
+next: output: meta k=Lb ts=20.000000000,0 txn=2
+
+# Iterator over local keys, with upper bound equal to LocalMax. The underlying
+# iterator over the MVCC key space will stop itself when it encounters the
+# lock table keys (which are also local keys), without an error.
+iter upper=Z
+seek-ge k=Lb
+next
+next
+next
+next
+prev
+----
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Sc ts=30.000000000,0 txn=3
+next: output: value k=Sc ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=Sc ts=30.000000000,0 v=c30
+
+# Similar to previous test, but with an upper bound less than LocalMax but
+# above the lock table key space. The result is the same
+iter upper=Yc
+seek-ge k=Lb
+next
+next
+next
+next
+prev
+----
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Sc ts=30.000000000,0 txn=3
+next: output: value k=Sc ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=Sc ts=30.000000000,0 v=c30
+
+# Write some keys above the lock table in the local key space, which should
+# not happen in a correct system. Also note that the local store key with
+# non-zero timestamps is bogus, but harmless.
+define
+locks
+meta k=Lb ts=20 txn=2
+meta k=e ts=50 txn=3
+mvcc
+value k=Lb ts=20 v=b20
+value k=Sc ts=30 v=c30
+value k=Yd ts=40 v=d40
+value k=e ts=50 v=e50
+----
+
+# The intentInterleavingIter cannot see the Yd key, when iterating up from
+# keys below the lock table.
+iter upper=Z
+seek-ge k=Lb
+next
+next
+next
+prev
+----
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: value k=Sc ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=Sc ts=30.000000000,0 v=c30
+
+# When iterating backwards from LocalMax, we should see all the local keys,
+# except for the Yd key.
+iter upper=Z
+seek-lt k=Z
+prev
+prev
+next
+----
+seek-lt "Z"/0,0: output: value k=Sc ts=30.000000000,0 v=c30
+prev: output: value k=Lb ts=20.000000000,0 v=b20
+prev: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20

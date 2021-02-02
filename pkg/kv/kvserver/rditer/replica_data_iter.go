@@ -38,9 +38,14 @@ type KeyRange struct {
 // TODO(sumeer): merge with ReplicaEngineDataIterator. We can use an EngineIterator
 // for MVCC key ranges and convert from EngineKey to MVCCKey.
 type ReplicaMVCCDataIterator struct {
+	reader   storage.Reader
 	curIndex int
 	ranges   []KeyRange
-	it       storage.MVCCIterator
+	// When it is non-nil, it represents the iterator for curIndex.
+	// A non-nil it is valid, else it is either done, or err != nil.
+	it      storage.MVCCIterator
+	err     error
+	reverse bool
 }
 
 // ReplicaEngineDataIterator is like ReplicaMVCCDataIterator, but iterates
@@ -213,117 +218,128 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 // NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given
 // replica. It iterates over the replicated key ranges excluding the lock
 // table key range. Separated locks are made to appear as interleaved. The
-// iterator is initially positioned at the end of the last range.
+// iterator can do one of reverse or forward iteration, based on whether
+// seekEnd is true or false, respectively. With reverse iteration, it is
+// initially positioned at the end of the last range, else it is initially
+// positioned at the start of the first range.
 //
-// TODO(sumeer): narrow this interface after changing the test function
-// runGCOld().
+// The iterator requires the reader.ConsistentIterators is true, since it
+// creates a different iterator for each replicated key range. This is because
+// MVCCIterator only allows changing the upper-bound of an existing iterator,
+// and not both upper and lower bound.
 func NewReplicaMVCCDataIterator(
 	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
 ) *ReplicaMVCCDataIterator {
-	// TODO(sumeer): this is broken for separated intents since the upper bound
-	// is a global key, but the ranges include replicated range local keys. So
-	// it underlying iterator used by intentInterleavingIter can iterate up into
-	// the lock table which is not an MVCCKey.
-	it := reader.NewMVCCIterator(
-		storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	if !reader.ConsistentIterators() {
+		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
+	}
 	ri := &ReplicaMVCCDataIterator{
-		ranges: MakeReplicatedKeyRangesExceptLockTable(d),
-		it:     it,
+		reader:  reader,
+		ranges:  MakeReplicatedKeyRangesExceptLockTable(d),
+		reverse: seekEnd,
 	}
-	if seekEnd {
-		ri.seekEnd()
+	if ri.reverse {
+		ri.curIndex = len(ri.ranges) - 1
 	} else {
-		ri.seekStart()
+		ri.curIndex = 0
 	}
+	ri.tryCloseAndCreateIter()
 	return ri
 }
 
-// seekStart seeks the iterator to the start of its data range.
-func (ri *ReplicaMVCCDataIterator) seekStart() {
-	ri.curIndex = 0
-	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
-	ri.advance()
-}
-
-// seekEnd seeks the iterator to the end of its data range.
-func (ri *ReplicaMVCCDataIterator) seekEnd() {
-	ri.curIndex = len(ri.ranges) - 1
-	ri.it.SeekLT(ri.ranges[ri.curIndex].End)
-	ri.retreat()
+func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
+	for {
+		if ri.it != nil {
+			ri.it.Close()
+			ri.it = nil
+		}
+		if ri.curIndex < 0 || ri.curIndex >= len(ri.ranges) {
+			return
+		}
+		ri.it = ri.reader.NewMVCCIterator(
+			storage.MVCCKeyAndIntentsIterKind,
+			storage.IterOptions{
+				LowerBound: ri.ranges[ri.curIndex].Start.Key,
+				UpperBound: ri.ranges[ri.curIndex].End.Key,
+			})
+		if ri.reverse {
+			ri.it.SeekLT(ri.ranges[ri.curIndex].End)
+		} else {
+			ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
+		}
+		if valid, err := ri.it.Valid(); valid || err != nil {
+			ri.err = err
+			return
+		}
+		if ri.reverse {
+			ri.curIndex--
+		} else {
+			ri.curIndex++
+		}
+	}
 }
 
 // Close the underlying iterator.
 func (ri *ReplicaMVCCDataIterator) Close() {
-	ri.curIndex = len(ri.ranges)
-	ri.it.Close()
+	if ri.it != nil {
+		ri.it.Close()
+		ri.it = nil
+	}
 }
 
 // Next advances to the next key in the iteration.
 func (ri *ReplicaMVCCDataIterator) Next() {
+	if ri.reverse {
+		panic("Next called on reverse iterator")
+	}
 	ri.it.Next()
-	ri.advance()
-}
-
-// advance moves the iterator forward through the ranges until a valid
-// key is found or the iteration is done and the iterator becomes
-// invalid.
-func (ri *ReplicaMVCCDataIterator) advance() {
-	for {
-		if ok, _ := ri.Valid(); ok && ri.it.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
-			return
-		}
+	valid, err := ri.it.Valid()
+	if err != nil {
+		ri.err = err
+		return
+	}
+	if !valid {
 		ri.curIndex++
-		if ri.curIndex < len(ri.ranges) {
-			ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
-		} else {
-			return
-		}
+		ri.tryCloseAndCreateIter()
 	}
 }
 
 // Prev advances the iterator one key backwards.
 func (ri *ReplicaMVCCDataIterator) Prev() {
+	if !ri.reverse {
+		panic("Prev called on forward iterator")
+	}
 	ri.it.Prev()
-	ri.retreat()
-}
-
-// retreat is the opposite of advance.
-func (ri *ReplicaMVCCDataIterator) retreat() {
-	for {
-		if ok, _ := ri.Valid(); ok && ri.ranges[ri.curIndex].Start.Less(ri.it.UnsafeKey()) {
-			return
-		}
+	valid, err := ri.it.Valid()
+	if err != nil {
+		ri.err = err
+		return
+	}
+	if !valid {
 		ri.curIndex--
-		if ri.curIndex >= 0 {
-			ri.it.SeekLT(ri.ranges[ri.curIndex].End)
-		} else {
-			return
-		}
+		ri.tryCloseAndCreateIter()
 	}
 }
 
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
-	ok, err := ri.it.Valid()
-	ok = ok && ri.curIndex >= 0 && ri.curIndex < len(ri.ranges)
-	return ok, err
+	if ri.err != nil {
+		return false, ri.err
+	}
+	if ri.it == nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Key returns the current key. Only called in tests.
 func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
-	key := ri.it.UnsafeKey()
-	keyCopy := make([]byte, len(key.Key))
-	copy(keyCopy, key.Key)
-	key.Key = keyCopy
-	return key
+	return ri.it.Key()
 }
 
 // Value returns the current value. Only called in tests.
 func (ri *ReplicaMVCCDataIterator) Value() []byte {
-	value := ri.it.UnsafeValue()
-	valueCopy := make([]byte, len(value))
-	copy(valueCopy, value)
-	return valueCopy
+	return ri.it.Value()
 }
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on

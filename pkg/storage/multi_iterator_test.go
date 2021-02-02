@@ -127,7 +127,7 @@ func TestMultiIterator(t *testing.T) {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
+					for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
 						ok, err := it.Valid()
 						if err != nil {
 							t.Fatalf("unexpected error: %+v", err)

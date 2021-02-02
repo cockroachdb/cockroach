@@ -738,7 +738,7 @@ func TestEngineTimeBound(t *testing.T) {
 			// time bounded iterator instead.
 			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.SeekGE(NilKey)
+			iter.SeekGE(MVCCKey{Key: keys.LocalMax})
 
 			var count int
 			for ; ; iter.Next() {
@@ -853,10 +853,9 @@ func TestEngineScan1(t *testing.T) {
 			}
 			ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
 
-			// Should return all key/value pairs in lexicographic order. Note that ""
-			// is the lowest key possible and is a special case in engine.scan, that's
-			// why we test it here.
-			startKeys := []roachpb.Key{roachpb.Key("cat"), roachpb.Key("")}
+			// Should return all key/value pairs in lexicographic order. Note that
+			// LocalMax is the lowest possible global key.
+			startKeys := []roachpb.Key{roachpb.Key("cat"), keys.LocalMax}
 			for _, startKey := range startKeys {
 				keyvals, err = Scan(engine, startKey, roachpb.KeyMax, 0)
 				if err != nil {
@@ -907,7 +906,7 @@ func TestEngineScan2(t *testing.T) {
 			insertKeys(keys, engine, t)
 
 			// Scan all keys (non-inclusive of final key).
-			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
+			verifyScan(localMax, roachpb.KeyMax, 10, keys[:5], engine, t)
 			verifyScan(roachpb.Key("a"), roachpb.KeyMax, 10, keys[:5], engine, t)
 
 			// Scan sub range.
@@ -915,11 +914,11 @@ func TestEngineScan2(t *testing.T) {
 			verifyScan(roachpb.Key("aa0"), roachpb.Key("abcc"), 10, keys[2:5], engine, t)
 
 			// Scan with max values.
-			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 3, keys[:3], engine, t)
+			verifyScan(localMax, roachpb.KeyMax, 3, keys[:3], engine, t)
 			verifyScan(roachpb.Key("a0"), roachpb.KeyMax, 3, keys[1:4], engine, t)
 
 			// Scan with max value 0 gets all values.
-			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 0, keys[:5], engine, t)
+			verifyScan(localMax, roachpb.KeyMax, 0, keys[:5], engine, t)
 		})
 	}
 }
@@ -942,14 +941,14 @@ func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, e
 			insertKeys(keys, engine, t)
 
 			// Scan all keys (non-inclusive of final key).
-			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
+			verifyScan(localMax, roachpb.KeyMax, 10, keys[:5], engine, t)
 
 			// Delete a range of keys
 			if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
 				t.Fatal(err)
 			}
 			// Verify what's left
-			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10,
+			verifyScan(localMax, roachpb.KeyMax, 10,
 				[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
 		})
 	}
@@ -1088,8 +1087,8 @@ func TestSnapshotMethods(t *testing.T) {
 			}
 
 			// Verify Scan.
-			keyvals, _ := Scan(engine, roachpb.KeyMin, roachpb.KeyMax, 0)
-			keyvalsSnapshot, err := Scan(snap, roachpb.KeyMin, roachpb.KeyMax, 0)
+			keyvals, _ := Scan(engine, localMax, roachpb.KeyMax, 0)
+			keyvalsSnapshot, err := Scan(snap, localMax, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1100,7 +1099,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify MVCCIterate.
 			index := 0
-			if err := snap.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
+			if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)
