@@ -1469,11 +1469,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
 						columnID := index.GetColumnID(i)
 						colIDs = append(colIDs, columnID)
-						col, err := table.FindColumnByID(columnID)
+						col, err := table.FindColumnWithID(columnID)
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(col.Type, h)); err != nil {
+						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
 						}
 						// Currently, nulls always appear first if the order is ascending,

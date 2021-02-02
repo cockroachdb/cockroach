@@ -700,18 +700,18 @@ func ResolveUniqueWithoutIndexConstraint(
 	validationBehavior tree.ValidationBehavior,
 ) error {
 	var colSet catalog.TableColSet
-	cols := make([]*descpb.ColumnDescriptor, len(colNames))
+	cols := make([]catalog.Column, len(colNames))
 	for i, name := range colNames {
 		col, err := tbl.FindActiveOrNewColumnByName(tree.Name(name))
 		if err != nil {
 			return err
 		}
 		// Ensure that the columns don't have duplicates.
-		if colSet.Contains(col.ID) {
+		if colSet.Contains(col.GetID()) {
 			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column %q appears twice in unique constraint", col.Name)
+				"column %q appears twice in unique constraint", col.GetName())
 		}
-		colSet.Add(col.ID)
+		colSet.Add(col.GetID())
 		cols[i] = col
 	}
 
@@ -736,7 +736,7 @@ func ResolveUniqueWithoutIndexConstraint(
 
 	columnIDs := make(descpb.ColumnIDs, len(cols))
 	for i, col := range cols {
-		columnIDs[i] = col.ID
+		columnIDs[i] = col.GetID()
 	}
 
 	validity := descpb.ConstraintValidity_Validated
@@ -801,9 +801,9 @@ func ResolveFK(
 	evalCtx *tree.EvalContext,
 ) error {
 	var originColSet catalog.TableColSet
-	originCols := make([]*descpb.ColumnDescriptor, len(d.FromCols))
-	for i, col := range d.FromCols {
-		col, err := tbl.FindActiveOrNewColumnByName(col)
+	originCols := make([]catalog.Column, len(d.FromCols))
+	for i, fromCol := range d.FromCols {
+		col, err := tbl.FindActiveOrNewColumnByName(fromCol)
 		if err != nil {
 			return err
 		}
@@ -811,11 +811,11 @@ func ResolveFK(
 			return err
 		}
 		// Ensure that the origin columns don't have duplicates.
-		if originColSet.Contains(col.ID) {
+		if originColSet.Contains(col.GetID()) {
 			return pgerror.Newf(pgcode.InvalidForeignKey,
-				"foreign key contains duplicate column %q", col.Name)
+				"foreign key contains duplicate column %q", col.GetName())
 		}
-		originColSet.Add(col.ID)
+		originColSet.Add(col.GetID())
 		originCols[i] = col
 	}
 
@@ -884,7 +884,7 @@ func ResolveFK(
 		}
 	}
 
-	referencedCols, err := target.FindActiveColumnsByNames(referencedColNames)
+	referencedCols, err := tabledesc.FindPublicColumnsWithNames(target, referencedColNames)
 	if err != nil {
 		return err
 	}
@@ -902,10 +902,10 @@ func ResolveFK(
 	}
 
 	for i := range originCols {
-		if s, t := originCols[i], referencedCols[i]; !s.Type.Equivalent(t.Type) {
+		if s, t := originCols[i], referencedCols[i]; !s.GetType().Equivalent(t.GetType()) {
 			return pgerror.Newf(pgcode.DatatypeMismatch,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
-				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
+				s.GetName(), s.GetType().String(), target.Name, t.GetName(), t.GetType().String())
 		}
 	}
 
@@ -935,20 +935,20 @@ func ResolveFK(
 
 	originColumnIDs := make(descpb.ColumnIDs, len(originCols))
 	for i, col := range originCols {
-		originColumnIDs[i] = col.ID
+		originColumnIDs[i] = col.GetID()
 	}
 
 	targetColIDs := make(descpb.ColumnIDs, len(referencedCols))
 	for i := range referencedCols {
-		targetColIDs[i] = referencedCols[i].ID
+		targetColIDs[i] = referencedCols[i].GetID()
 	}
 
 	// Don't add a SET NULL action on an index that has any column that is NOT
 	// NULL.
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, originColumn := range originCols {
-			if !originColumn.Nullable {
-				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl, originColumn.Name)
+			if !originColumn.IsNullable() {
+				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl, originColumn.GetName())
 				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
 				)
@@ -962,8 +962,8 @@ func ResolveFK(
 		for _, originColumn := range originCols {
 			// Having a default expression of NULL, and a constraint of NOT NULL is a
 			// contradiction and should never be allowed.
-			if originColumn.DefaultExpr == nil && !originColumn.Nullable {
-				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl, originColumn.Name)
+			if !originColumn.HasDefault() && !originColumn.IsNullable() {
+				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl, originColumn.GetName())
 				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET DEFAULT cascading action on column %q which has a "+
 						"NOT NULL constraint and a NULL default expression", col,
@@ -989,11 +989,11 @@ func ResolveFK(
 					if i != 0 {
 						colNames.WriteString(`", "`)
 					}
-					col, err := tbl.FindColumnByID(id)
+					col, err := tbl.FindColumnWithID(id)
 					if err != nil {
 						return err
 					}
-					colNames.WriteString(col.Name)
+					colNames.WriteString(col.GetName())
 				}
 				colNames.WriteString(`")`)
 				return pgerror.Newf(pgcode.ForeignKeyViolation,
@@ -1048,7 +1048,7 @@ func ResolveFK(
 func addIndexForFK(
 	ctx context.Context,
 	tbl *tabledesc.Mutable,
-	srcCols []*descpb.ColumnDescriptor,
+	srcCols []catalog.Column,
 	constraintName string,
 	ts TableState,
 ) (descpb.IndexID, error) {
@@ -1066,7 +1066,7 @@ func addIndexForFK(
 	}
 	for i, c := range srcCols {
 		idx.ColumnDirections[i] = descpb.IndexDescriptor_ASC
-		idx.ColumnNames[i] = c.Name
+		idx.ColumnNames[i] = c.GetName()
 	}
 
 	if ts == NewTable {
@@ -1154,15 +1154,15 @@ func addInterleave(
 
 	for i := 0; i < parentIndex.NumColumns(); i++ {
 		targetColID := parentIndex.GetColumnID(i)
-		targetCol, err := parentTable.FindColumnByID(targetColID)
+		targetCol, err := parentTable.FindColumnWithID(targetColID)
 		if err != nil {
 			return err
 		}
-		col, err := desc.FindColumnByID(index.ColumnIDs[i])
+		col, err := desc.FindColumnWithID(index.ColumnIDs[i])
 		if err != nil {
 			return err
 		}
-		if string(interleave.Fields[i]) != col.Name {
+		if string(interleave.Fields[i]) != col.GetName() {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
@@ -1171,7 +1171,7 @@ func addInterleave(
 				strings.Join(index.ColumnNames, ", "),
 			)
 		}
-		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.GetColumnDirection(i) {
+		if !col.GetType().Identical(targetCol.GetType()) || index.ColumnDirections[i] != parentIndex.GetColumnDirection(i) {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
@@ -1803,13 +1803,13 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.InvertedColumnName()))
+				column, err := desc.FindColumnWithName(tree.Name(idx.InvertedColumnName()))
 				if err != nil {
 					return nil, err
 				}
-				switch columnDesc.Type.Family() {
+				switch column.GetType().Family() {
 				case types.GeometryFamily:
-					config, err := geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
+					config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
 					if err != nil {
 						return nil, err
 					}
@@ -2159,11 +2159,11 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col, _, err := desc.FindColumnByName(d.Name)
+				col, err := desc.FindColumnWithName(d.Name)
 				if err != nil {
 					return nil, err
 				}
-				col.ComputeExpr = &serializedExpr
+				col.ColumnDesc().ComputeExpr = &serializedExpr
 			}
 		}
 	}

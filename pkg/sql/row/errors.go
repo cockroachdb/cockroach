@@ -187,11 +187,11 @@ func DecodeRowInfo(
 	cols := make([]descpb.ColumnDescriptor, len(colIDs))
 	for i, colID := range colIDs {
 		colIdxMap.Set(colID, i)
-		col, err := tableDesc.FindColumnByID(colID)
+		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		cols[i] = *col
+		cols[i] = *col.ColumnDesc()
 	}
 
 	tableArgs := FetcherTableArgs{

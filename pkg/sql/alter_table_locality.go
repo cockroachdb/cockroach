@@ -185,7 +185,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	}
 
 	// Ensure column exists and is of the correct type.
-	partCol, _, err := n.tableDesc.FindColumnByName(newLocality.RegionalByRowColumn)
+	partCol, err := n.tableDesc.FindColumnWithName(newLocality.RegionalByRowColumn)
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	if err != nil {
 		return err
 	}
-	if partCol.Type.Oid() != typedesc.TypeIDToOID(enumTypeID) {
+	if partCol.GetType().Oid() != typedesc.TypeIDToOID(enumTypeID) {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot use column %s for REGIONAL BY ROW as it does not have the %s type",

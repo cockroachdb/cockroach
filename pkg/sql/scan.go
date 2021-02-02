@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -253,10 +254,10 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 // schema change.
 func findReadableColumnByID(
 	desc catalog.TableDescriptor, id descpb.ColumnID,
-) (*descpb.ColumnDescriptor, error) {
-	for _, c := range desc.ReadableColumns() {
-		if c.ID == id {
-			return &c, nil
+) (catalog.Column, error) {
+	for _, c := range desc.ReadableColumnsNew() {
+		if c.GetID() == id {
+			return c, nil
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
@@ -283,14 +284,16 @@ func initColsForScan(
 			}
 		} else {
 			// Otherwise, collect the descriptors from the table's columns.
+			var col catalog.Column
 			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-				c, err = desc.FindActiveColumnByID(id)
+				col, err = tabledesc.FindPublicColumnWithID(desc, id)
 			} else {
-				c, err = findReadableColumnByID(desc, id)
+				col, err = findReadableColumnByID(desc, id)
 			}
 			if err != nil {
 				return cols, err
 			}
+			c = col.ColumnDesc()
 
 			// If this is a virtual column, create a new descriptor with the correct
 			// type.

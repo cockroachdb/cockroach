@@ -57,12 +57,12 @@ func MakeDeleter(
 	} else {
 		maybeAddCol := func(colID descpb.ColumnID) error {
 			if _, ok := fetchColIDtoRowIndex.Get(colID); !ok {
-				col, err := tableDesc.FindColumnByID(colID)
+				col, err := tableDesc.FindColumnWithID(colID)
 				if err != nil {
 					return err
 				}
-				fetchColIDtoRowIndex.Set(col.ID, len(fetchCols))
-				fetchCols = append(fetchCols, *col)
+				fetchColIDtoRowIndex.Set(col.GetID(), len(fetchCols))
+				fetchCols = append(fetchCols, *col.ColumnDesc())
 			}
 			return nil
 		}

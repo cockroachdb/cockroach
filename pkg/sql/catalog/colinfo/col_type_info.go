@@ -155,11 +155,14 @@ func GetColumnTypes(
 		outTypes = outTypes[:len(columnIDs)]
 	}
 	for i, id := range columnIDs {
-		col, err := desc.FindActiveColumnByID(id)
+		col, err := desc.FindColumnWithID(id)
 		if err != nil {
 			return nil, err
 		}
-		outTypes[i] = col.Type
+		if !col.Public() {
+			return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+		}
+		outTypes[i] = col.GetType()
 	}
 	return outTypes, nil
 }

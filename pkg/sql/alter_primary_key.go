@@ -82,16 +82,16 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	for _, elem := range alterPKNode.Columns {
-		col, dropped, err := tableDesc.FindColumnByName(elem.Column)
+		col, err := tableDesc.FindColumnWithName(elem.Column)
 		if err != nil {
 			return err
 		}
-		if dropped {
+		if col.Dropped() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"column %q is being dropped", col.Name)
+				"column %q is being dropped", col.GetName())
 		}
-		if col.Nullable {
-			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.Name)
+		if col.IsNullable() {
+			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.GetName())
 		}
 	}
 
@@ -317,11 +317,11 @@ func (p *planner) AlterPrimaryKey(
 		}
 		if idx.Unique {
 			for _, colID := range idx.ColumnIDs {
-				col, err := tableDesc.FindColumnByID(colID)
+				col, err := tableDesc.FindColumnWithID(colID)
 				if err != nil {
 					return false, err
 				}
-				if col.Nullable {
+				if col.IsNullable() {
 					return true, nil
 				}
 			}

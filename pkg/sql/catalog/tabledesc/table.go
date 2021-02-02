@@ -325,12 +325,12 @@ func (desc *wrapper) collectConstraintInfo(
 					"error computing columns used in check constraint %q", c.Name)
 			}
 			for _, colID := range colsUsed {
-				col, err := desc.FindColumnByID(colID)
+				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 						"error finding column %d in table %s", log.Safe(colID), desc.Name)
 				}
-				detail.Columns = append(detail.Columns, col.Name)
+				detail.Columns = append(detail.Columns, col.GetName())
 			}
 		}
 		info[c.Name] = detail
@@ -463,7 +463,7 @@ func InitTableDescriptor(
 
 // FindPublicColumnsWithNames is a convenience function which behaves exactly
 // like FindPublicColumnWithName applied repeatedly to the names in the
-// provided list.
+// provided list, returning early at the first encountered error.
 func FindPublicColumnsWithNames(
 	desc catalog.TableDescriptor, names tree.NameList,
 ) ([]catalog.Column, error) {

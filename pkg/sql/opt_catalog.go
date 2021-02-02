@@ -697,7 +697,7 @@ func newOptTable(
 	// table has a column with this name for some reason.
 	for i := range colinfo.AllSystemColumnDescs {
 		sysCol := &colinfo.AllSystemColumnDescs[i]
-		if c, _ := desc.HasColumnWithName(tree.Name(sysCol.Name)); c == nil {
+		if c, _ := desc.FindColumnWithName(tree.Name(sysCol.Name)); c == nil {
 			col, ord := newColumn()
 			col.InitNonVirtual(
 				ord,
