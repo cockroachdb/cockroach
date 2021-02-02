@@ -239,7 +239,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	// write is prevented, or we run out of in-flight writes to query.
 	for len(queryIntentReqs) > 0 {
 		var b kv.Batch
-		b.Header.Timestamp = m.clock.Now()
+		b.Header.Timestamp = m.batchTimestamp(txn)
 		b.AddRawRequest(&queryTxnReq)
 		for i := 0; i < defaultBatchSize && len(queryIntentReqs) > 0; i++ {
 			b.AddRawRequest(&queryIntentReqs[0])
@@ -292,7 +292,7 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	ctx context.Context, txn *roachpb.Transaction, preventedIntent bool,
 ) (*roachpb.Transaction, error) {
 	var b kv.Batch
-	b.Header.Timestamp = m.clock.Now()
+	b.Header.Timestamp = m.batchTimestamp(txn)
 	b.AddRawRequest(&roachpb.RecoverTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
@@ -308,6 +308,17 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	resps := b.RawResponse().Responses
 	recTxnResp := resps[0].GetInner().(*roachpb.RecoverTxnResponse)
 	return &recTxnResp.RecoveredTxn, nil
+}
+
+// batchTimestamp returns the timestamp that should be used for operations while
+// recovering the provided transaction. The timestamp is at least as high as the
+// local clock, but is also forwarded to the transaction's write timestamp to
+// satisfy the requirement that QueryIntent requests operate at or above the
+// time that they are querying their intent at.
+func (m *manager) batchTimestamp(txn *roachpb.Transaction) hlc.Timestamp {
+	now := m.clock.Now()
+	now.Forward(txn.WriteTimestamp)
+	return now
 }
 
 // Metrics implements the Manager interface.

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -50,6 +51,23 @@ func QueryIntent(
 	h := cArgs.Header
 	reply := resp.(*roachpb.QueryIntentResponse)
 
+	ownTxn := false
+	if h.Txn != nil {
+		// Determine if the request is querying an intent in its own
+		// transaction. If not, the request is rejected as querying one
+		// transaction's intent from within another transaction is unsupported.
+		if h.Txn.ID == args.Txn.ID {
+			ownTxn = true
+		} else {
+			return result.Result{}, ErrTransactionUnsupported
+		}
+	}
+	if h.WriteTimestamp().Less(args.Txn.WriteTimestamp) {
+		// This condition must hold for the timestamp cache update to be safe.
+		return result.Result{}, errors.Errorf("QueryIntent request timestamp %s less than txn WriteTimestamp %s",
+			h.Timestamp, args.Txn.WriteTimestamp)
+	}
+
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.
@@ -65,9 +83,6 @@ func QueryIntent(
 	if err != nil {
 		return result.Result{}, err
 	}
-
-	// Determine if the request is querying an intent in its own transaction.
-	ownTxn := h.Txn != nil && h.Txn.ID == args.Txn.ID
 
 	var curIntentPushed bool
 	if intent != nil {
