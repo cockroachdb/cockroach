@@ -111,27 +111,23 @@ func PushTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-	if h.Timestamp.Less(args.PushTo) {
-		// Verify that the PushTxn's timestamp is not less than the timestamp that
-		// the request intends to push the transaction to. Transactions should not
-		// be pushed into the future or their effect may not be fully reflected in
-		// a future leaseholder's timestamp cache. This is analogous to how reads
-		// should not be performed at a timestamp in the future.
-		return result.Result{}, errors.Errorf("request timestamp %s less than PushTo timestamp %s", h.Timestamp, args.PushTo)
+	if h.WriteTimestamp().Less(args.PushTo) {
+		// Verify that the PushTxn's header timestamp (the one checked against
+		// the lease) is not less than the timestamp that the request intends to
+		// push the transaction to. Transactions should not be pushed into the
+		// future past the leaseholder's lease expiration or their effect may
+		// not be fully reflected in a future leaseholder's timestamp cache.
+		return result.Result{}, errors.Errorf("request timestamp %s less than PushTo timestamp %s",
+			h.Timestamp, args.PushTo)
 	}
-	if h.Timestamp.Less(args.PusheeTxn.WriteTimestamp) {
+	if h.WriteTimestamp().Less(args.PusheeTxn.MinTimestamp) {
 		// This condition must hold for the timestamp cache access/update to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
-	}
-	now := cArgs.EvalCtx.Clock().Now()
-	// TODO(nvanbenschoten): remove this limitation. But when doing so,
-	// keep the h.Timestamp.Less(args.PushTo) check above.
-	if now.Less(h.Timestamp) {
-		// The batch's timestamp should have been used to update the clock.
-		return result.Result{}, errors.Errorf("request timestamp %s less than current clock time %s", h.Timestamp, now)
+		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn MinTimestamp %s",
+			h.Timestamp, args.PusheeTxn.MinTimestamp)
 	}
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s", args.Key, args.PusheeTxn.Key)
+		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s",
+			args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -220,7 +216,7 @@ func PushTxn(
 	var reason string
 
 	switch {
-	case txnwait.IsExpired(now, &reply.PusheeTxn):
+	case txnwait.IsExpired(cArgs.EvalCtx.Clock().Now(), &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).

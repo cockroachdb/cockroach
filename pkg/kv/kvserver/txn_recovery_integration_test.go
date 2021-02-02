@@ -15,10 +15,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -46,6 +47,10 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		// both pushes by the timestamp cache, and by deferred write-too-old
 		// conditions.
 		writeTooOld bool
+		// futureWrites dictates whether the transaction has been writing at the
+		// present time or whether it has been writing into the future with a
+		// synthetic timestamp.
+		futureWrites bool
 	}{
 		{
 			implicitCommit: true,
@@ -58,14 +63,44 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			implicitCommit: false,
 			writeTooOld:    true,
 		},
+		{
+			implicitCommit: true,
+			futureWrites:   true,
+		},
+		{
+			implicitCommit: false,
+			writeTooOld:    false,
+			futureWrites:   true,
+		},
+		{
+			implicitCommit: false,
+			writeTooOld:    true,
+			futureWrites:   true,
+		},
 	} {
-		t.Run(fmt.Sprintf("%d-commit:%t,writeTooOld:%t", i, tc.writeTooOld, tc.implicitCommit), func(t *testing.T) {
+		name := fmt.Sprintf("%d-commit:%t,writeTooOld:%t,futureWrites:%t", i, tc.implicitCommit, tc.writeTooOld, tc.futureWrites)
+		t.Run(name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, manual := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
+			manual := hlc.NewManualClock(123)
+			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+			// Set the RecoverIndeterminateCommitsOnFailedPushes flag to true so
+			// that a push on a STAGING transaction record immediately launches
+			// the transaction recovery process.
+			cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
+			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 			// Create a transaction that will get stuck performing a parallel commit.
 			txn := newTransaction("txn", keyA, 1, store.Clock())
+
+			// If the transaction is writing into the future, bump its write
+			// timestamp. Also, bump its read timestamp to simulate a situation
+			// where it has refreshed up to its write timestamp in preparation
+			// to commit.
+			if tc.futureWrites {
+				txn.WriteTimestamp = txn.ReadTimestamp.Add(50, 0).WithSynthetic(true)
+				txn.ReadTimestamp = txn.WriteTimestamp // simulate refresh
+			}
 
 			// Issue two writes, which will be considered in-flight at the time of
 			// the transaction's EndTxn request.
@@ -78,17 +113,19 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			}
 
 			// If we don't want this transaction to commit successfully, perform a
-			// read on keyB to prevent the transaction's write to keyB from writing
-			// at its desired timestamp. This prevents an implicit commit state.
+			// conflicting operation on keyB to prevent the transaction's write to
+			// keyB from writing at its desired timestamp. This prevents an implicit
+			// commit state.
+			conflictH := roachpb.Header{Timestamp: txn.WriteTimestamp.Next()}
 			if !tc.implicitCommit {
 				if !tc.writeTooOld {
 					gArgs := getArgs(keyB)
-					if _, pErr := kv.SendWrapped(ctx, store.TestSender(), &gArgs); pErr != nil {
+					if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &gArgs); pErr != nil {
 						t.Fatal(pErr)
 					}
 				} else {
 					pArgs = putArgs(keyB, []byte("pusher val"))
-					if _, pErr := kv.SendWrapped(ctx, store.TestSender(), &pArgs); pErr != nil {
+					if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &pArgs); pErr != nil {
 						t.Fatal(pErr)
 					}
 				}
@@ -115,15 +152,15 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 				t.Fatalf("expected STAGING txn, found %v", replyTxn)
 			}
 
-			// Pretend the transaction coordinator for the parallel commit died at this point.
-			// Wait for longer than the TxnLivenessThreshold and then issue a read on one of
-			// the keys that the transaction wrote. This will result in a transaction push and
-			// eventually a full transaction recovery in order to resolve the indeterminate
-			// commit.
-			manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
+			// Pretend the transaction coordinator for the parallel commit died at this
+			// point. Typically, we would have to wait out the TxnLivenessThreshold. But
+			// since we set RecoverIndeterminateCommitsOnFailedPushes, we don't need to
+			// wait. So issue a read on one of the keys that the transaction wrote. This
+			// will result in a transaction push and eventually a full transaction
+			// recovery in order to resolve the indeterminate commit.
 
 			gArgs := getArgs(keyA)
-			gReply, pErr := kv.SendWrapped(ctx, store.TestSender(), &gArgs)
+			gReply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &gArgs)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
