@@ -1979,6 +1979,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	// Check that confluent_schema_registry is only accepted if format is avro.
+	// TODO: This should be testing it as a WITH option and check avro_schema_prefix too
 	sqlDB.ExpectErr(
 		t, `unknown sink query parameter: confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo`,
