@@ -416,6 +416,56 @@ func IsEndTxnTriggeringRetryError(
 
 const lockResolutionBatchSize = 500
 
+// iterManager provides a storage.IterAndBuf appropriate for working with a
+// span of keys that are either all local or all global keys, identified by
+// the start key of the span, that is passed to getIterAndBuf. This is to deal
+// with the constraint that a single MVCCIterator using
+// MVCCKeyAndIntentsIterKind can either iterate over local keys or global
+// keys, but not both. We don't wish to create a new iterator for each span,
+// so iterManager lazily creates a new one when needed.
+type iterManager struct {
+	reader              storage.Reader
+	globalKeyUpperBound roachpb.Key
+	iterAndBuf          storage.IterAndBuf
+
+	iter        storage.MVCCIterator
+	isLocalIter bool
+}
+
+func (im *iterManager) getIterAndBuf(key roachpb.Key) storage.IterAndBuf {
+	isLocal := keys.IsLocal(key)
+	if im.iter != nil {
+		if im.isLocalIter == isLocal {
+			return im.iterAndBuf
+		}
+		im.iterAndBuf.SwitchIter(nil /* iter */)
+		im.iter.Close()
+		im.iter = nil
+	}
+	if isLocal {
+		im.iter = im.reader.NewMVCCIterator(
+			storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				UpperBound: keys.LocalMax,
+			})
+		im.isLocalIter = true
+		im.iterAndBuf.SwitchIter(im.iter)
+	} else {
+		im.iter = im.reader.NewMVCCIterator(
+			storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				UpperBound: im.globalKeyUpperBound,
+			})
+		im.isLocalIter = false
+		im.iterAndBuf.SwitchIter(im.iter)
+	}
+	return im.iterAndBuf
+}
+
+func (im *iterManager) Close() {
+	im.iterAndBuf.Cleanup()
+	im.iterAndBuf = storage.IterAndBuf{}
+	im.iter = nil
+}
+
 // resolveLocalLocks synchronously resolves any locks that are local to this
 // range in the same batch and returns those lock spans. The remainder are
 // collected and returned so that they can be handed off to asynchronous
@@ -439,11 +489,12 @@ func resolveLocalLocks(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-		UpperBound: desc.EndKey.AsRawKey(),
-	})
-	iterAndBuf := storage.GetBufUsingIter(iter)
-	defer iterAndBuf.Cleanup()
+	iterManager := &iterManager{
+		reader:              readWriter,
+		globalKeyUpperBound: desc.EndKey.AsRawKey(),
+		iterAndBuf:          storage.GetBufUsingIter(nil),
+	}
+	defer iterManager.Close()
 
 	var resolveAllowance int64 = lockResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
@@ -466,7 +517,8 @@ func resolveLocalLocks(
 					return nil
 				}
 				resolveMS := ms
-				ok, err := storage.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, update)
+				ok, err := storage.MVCCResolveWriteIntentUsingIter(
+					ctx, readWriter, iterManager.getIterAndBuf(span.Key), resolveMS, update)
 				if err != nil {
 					return err
 				}
@@ -483,7 +535,8 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, update, resolveAllowance)
+				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(
+					ctx, readWriter, iterManager.getIterAndBuf(update.Span.Key), ms, update, resolveAllowance)
 				if err != nil {
 					return err
 				}

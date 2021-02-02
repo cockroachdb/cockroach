@@ -265,7 +265,6 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		localMax = keys.LocalMax
 		keyMax   = roachpb.KeyMax
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
@@ -406,7 +405,6 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		localMax = keys.LocalMax
 		keyMax   = roachpb.KeyMax
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
@@ -987,7 +985,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			var expectedKVs []MVCCKeyValue
 			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{})
+			iter.SeekGE(MVCCKey{Key: localMax})
 			for {
 				ok, err := iter.Valid()
 				if err != nil {

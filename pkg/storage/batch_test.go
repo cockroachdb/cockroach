@@ -110,7 +110,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 				{Key: mvccKey("c"), Value: appender("foo")},
 				{Key: mvccKey("d"), Value: []byte("before")},
 			}
-			kvs, err := Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
+			kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 			if !writeOnly {
 				// Scan values from batch directly.
-				kvs, err = Scan(b, roachpb.KeyMin, roachpb.KeyMax, 0)
+				kvs, err = Scan(b, localMax, roachpb.KeyMax, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -139,7 +139,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			if err := commit(e, b); err != nil {
 				t.Fatal(err)
 			}
-			kvs, err = Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
+			kvs, err = Scan(e, localMax, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -273,7 +273,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				{Key: mvccKey("c"), Value: appender("foobar")},
 			}
 
-			kvs, err := Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
+			kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -723,7 +723,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 			if err := b.ClearUnversioned(mvccKey("a").Key); err != nil {
 				t.Fatal(err)
 			}
-			kvs, err := Scan(b, roachpb.KeyMin, roachpb.KeyMax, 0)
+			kvs, err := Scan(b, localMax, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -761,7 +761,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 				t.Fatal(err)
 			}
 			// A scan with max=1 should scan "b".
-			kvs, err := Scan(b, roachpb.KeyMin, roachpb.KeyMax, 1)
+			kvs, err := Scan(b, localMax, roachpb.KeyMax, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
