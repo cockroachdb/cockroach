@@ -23,6 +23,7 @@ func TestUnmarshal(t *testing.T) {
 		equivInputs []string
 		expected    geom.T
 	}{
+		// POINT tests
 		{
 			desc:        "parse 2D point",
 			equivInputs: []string{"POINT(0 1)", "POINT (0 1)", "point(0 1)", "point ( 0 1 )"},
@@ -63,6 +64,47 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"POINT ZM EMPTY", "POINTZM EMPTY"},
 			expected:    geom.NewPointEmpty(geom.XYZM),
 		},
+		// LINESTRING tests
+		{
+			desc:        "parse 2D linestring",
+			equivInputs: []string{"LINESTRING(0 0, 1 1, 3 4)", "LINESTRING (0 0, 1 1, 3 4)", "linestring ( 0 0, 1 1, 3 4 )"},
+			expected:    geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 3, 4}),
+		},
+		{
+			desc:        "parse 3D linestring",
+			equivInputs: []string{"LINESTRING(0 -1 1, 7 -1 -9)", "LINESTRING Z(0 -1 1, 7 -1 -9)", "LINESTRINGZ(0 -1 1, 7 -1 -9)"},
+			expected:    geom.NewLineStringFlat(geom.XYZ, []float64{0, -1, 1, 7, -1, -9}),
+		},
+		{
+			desc:        "parse 2D+M linestring",
+			equivInputs: []string{"LINESTRING M(0 0 200, 0.1 -1 -20)", "LINESTRINGM(0 0 200, .1 -1 -20)"},
+			expected:    geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 200, 0.1, -1, -20}),
+		},
+		{
+			desc:        "parse 4D linestring",
+			equivInputs: []string{"LINESTRING(0 0 0 0, 1 1 1 1)", "LINESTRING ZM (0 0 0 0, 1 1 1 1)", "LINESTRINGZM (0 0 0 0, 1 1 1 1)"},
+			expected:    geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, 1}),
+		},
+		{
+			desc:        "parse empty 2D linestring",
+			equivInputs: []string{"LINESTRING EMPTY"},
+			expected:    geom.NewLineString(geom.XY),
+		},
+		{
+			desc:        "parse empty 3D linestring",
+			equivInputs: []string{"LINESTRING Z EMPTY", "LINESTRINGZ EMPTY"},
+			expected:    geom.NewLineString(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 2D+M linestring",
+			equivInputs: []string{"LINESTRING M EMPTY", "LINESTRINGM EMPTY"},
+			expected:    geom.NewLineString(geom.XYM),
+		},
+		{
+			desc:        "parse empty 4D linestring",
+			equivInputs: []string{"LINESTRING ZM EMPTY", "LINESTRINGZM EMPTY"},
+			expected:    geom.NewLineString(geom.XYZM),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -83,6 +125,7 @@ func TestUnmarshalError(t *testing.T) {
 		input          string
 		expectedErrStr string
 	}{
+		// LexError
 		{
 			desc:           "unrecognized character",
 			input:          "POINT{0 0}",
@@ -98,10 +141,21 @@ func TestUnmarshalError(t *testing.T) {
 			input:          "POINT(2 2.3.7)",
 			expectedErrStr: "lex error: invalid number at pos 8",
 		},
+		// ParseError
 		{
 			desc:           "2D point with extra comma",
 			input:          "POINT(0, 0)",
 			expectedErrStr: `parse error: could not parse "POINT(0, 0)"`,
+		},
+		{
+			desc:           "2D linestring with only one point",
+			input:          "LINESTRING(0 0)",
+			expectedErrStr: `parse error: could not parse "LINESTRING(0 0)"`,
+		},
+		{
+			desc:           "linestring with mixed dimensionality",
+			input:          "LINESTRING(0 0, 1 1 1)",
+			expectedErrStr: `parse error: could not parse "LINESTRING(0 0, 1 1 1)"`,
 		},
 	}
 

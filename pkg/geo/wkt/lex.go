@@ -86,6 +86,14 @@ func getKeywordToken(tokStr string) int {
 		return POINTM
 	case "POINTZM":
 		return POINTZM
+	case "LINESTRING":
+		return LINESTRING
+	case "LINESTRINGZ":
+		return LINESTRINGZ
+	case "LINESTRINGM":
+		return LINESTRINGM
+	case "LINESTRINGZM":
+		return LINESTRINGZM
 	default:
 		return eof
 	}
