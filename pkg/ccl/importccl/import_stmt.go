@@ -257,6 +257,11 @@ func importPlanHook(
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil, nil, nil, false,
+			errors.New("IMPORT is unsupported in multi-tenancy mode")
+	}
+
 	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, nil, false, err
