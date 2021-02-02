@@ -16,7 +16,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"path"
 	"sort"
@@ -72,13 +71,25 @@ const (
 const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
-	// ZipType is the format of a GZipped compressed file.
-	ZipType = "application/x-gzip"
 
 	dateBasedIncFolderName  = "/20060102/150405.00"
 	dateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
+
+// isGZipped detects whether the given bytes represent GZipped data. This check
+// is used rather than a standard implementation such as http.DetectContentType
+// since some zipped data may be mis-identified by that method. We've seen
+// gzipped data incorrectly identified as "application/vnd.ms-fontobject". The
+// magic bytes are from the MIME sniffing algorithm http.DetectContentType is
+// based which can be found at https://mimesniff.spec.whatwg.org/.
+//
+// This method is only used to detect if protobufs are GZipped, and there are no
+// conflicts between the starting bytes of a protobuf and these magic bytes.
+func isGZipped(dat []byte) bool {
+	gzipPrefix := []byte("\x1F\x8B\x08")
+	return bytes.HasPrefix(dat, gzipPrefix)
+}
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
 type BackupFileDescriptors []BackupManifest_File
@@ -223,8 +234,7 @@ func readBackupManifest(
 		}
 	}
 
-	fileType := http.DetectContentType(descBytes)
-	if fileType == ZipType {
+	if isGZipped(descBytes) {
 		descBytes, err = decompressData(descBytes)
 		if err != nil {
 			return BackupManifest{}, errors.Wrap(
@@ -290,8 +300,7 @@ func readBackupPartitionDescriptor(
 		}
 	}
 
-	fileType := http.DetectContentType(descBytes)
-	if fileType == ZipType {
+	if isGZipped(descBytes) {
 		descBytes, err = decompressData(descBytes)
 		if err != nil {
 			return BackupPartitionDescriptor{}, errors.Wrap(
