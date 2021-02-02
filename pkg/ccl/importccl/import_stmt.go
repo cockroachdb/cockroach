@@ -1658,19 +1658,22 @@ func (r *importResumer) dropTables(
 		}
 	}
 
-	// NB: if a revert fails it will abort the rest of this failure txn, which is
-	// also what brings tables back online. We _could_ change the error handling
-	// or just move the revert into Resume()'s error return path, however it isn't
-	// clear that just bringing a table back online with partially imported data
-	// that may or may not be partially reverted is actually a good idea. It seems
-	// better to do the revert here so that the table comes back if and only if,
-	// it was rolled back to its pre-IMPORT state, and instead provide a manual
-	// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
-	if len(revert) > 0 {
-		// Sanity check Walltime so it doesn't become a TRUNCATE if there's a bug.
-		if details.Walltime == 0 {
-			return errors.Errorf("invalid pre-IMPORT time to rollback")
-		}
+	// The walltime can be 0 if there is a failure between publishing the tables
+	// as OFFLINE and then choosing a ingestion timestamp. This might happen
+	// while waiting for the descriptor version to propagate across the cluster
+	// for example.
+	//
+	// In this case, we don't want to rollback the data since data ingestion has
+	// not yet begun (since we have not chosen a timestamp at which to ingest.)
+	if details.Walltime != 0 && len(revert) > 0 {
+		// NB: if a revert fails it will abort the rest of this failure txn, which is
+		// also what brings tables back online. We _could_ change the error handling
+		// or just move the revert into Resume()'s error return path, however it isn't
+		// clear that just bringing a table back online with partially imported data
+		// that may or may not be partially reverted is actually a good idea. It seems
+		// better to do the revert here so that the table comes back if and only if,
+		// it was rolled back to its pre-IMPORT state, and instead provide a manual
+		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
 		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back partially completed IMPORT")
