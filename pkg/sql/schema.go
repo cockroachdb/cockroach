@@ -81,7 +81,7 @@ func (p *planner) writeSchemaDescChange(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 		if err != nil {
 			return err
 		}

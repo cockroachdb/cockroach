@@ -61,7 +61,7 @@ func (p *planner) writeTypeSchemaChange(
 			// Type change jobs are not cancellable.
 			NonCancelable: true,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 		if err != nil {
 			return err
 		}

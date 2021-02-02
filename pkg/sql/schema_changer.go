@@ -1016,6 +1016,19 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 	return err
 }
 
+// WaitToUpdateLeasesMultiple waits until the entire cluster has been updated to
+// the latest versions of all the specified descriptors.
+func WaitToUpdateLeasesMultiple(
+	ctx context.Context, leaseMgr *lease.Manager, ids []lease.IDVersion,
+) error {
+	for _, idVer := range ids {
+		if err := WaitToUpdateLeases(ctx, leaseMgr, idVer.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of
 // sc.descID and that all nodes are on the new (post-update) version of

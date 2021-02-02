@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -258,33 +257,4 @@ func SetResumeSpansInJob(
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
 	return job.WithTxn(txn).SetDetails(ctx, details)
-}
-
-// WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
-// origSpan is the span of keys that were assigned to be backfilled,
-// resume is the left over work from origSpan.
-func WriteResumeSpan(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	id descpb.ID,
-	mutationID descpb.MutationID,
-	filter backfill.MutationFilter,
-	finished roachpb.Spans,
-	jobsRegistry *jobs.Registry,
-) error {
-	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
-	defer traceSpan.Finish()
-
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resumeSpans, job, mutationIdx, error := GetResumeSpans(
-			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
-		)
-		if error != nil {
-			return error
-		}
-
-		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-		return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
-	})
 }

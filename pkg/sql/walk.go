@@ -235,6 +235,16 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.plan.main.planNode = v.visit(n.plan.main.planNode)
 
+	case *explainDDLNode:
+		// We check whether planNode is nil because the plan might be
+		// represented physically. We don't yet have a walker over such
+		// representation, so we simply short-circuit.
+		// TODO(yuzefovich): implement that walker and use it here.
+		if n.plan.main.planNode == nil {
+			return
+		}
+		n.plan.main.planNode = v.visit(n.plan.main.planNode)
+
 	case *ordinalityNode:
 		n.source = v.visit(n.source)
 
@@ -372,6 +382,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&errorIfRowsNode{}):                "error if rows",
 	reflect.TypeOf(&explainPlanNode{}):                "explain plan",
 	reflect.TypeOf(&explainVecNode{}):                 "explain vectorized",
+	reflect.TypeOf(&explainDDLNode{}):                 "explain ddl",
 	reflect.TypeOf(&exportNode{}):                     "export",
 	reflect.TypeOf(&filterNode{}):                     "filter",
 	reflect.TypeOf(&GrantRoleNode{}):                  "grant role",
@@ -431,4 +442,5 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&windowNode{}):                     "window",
 	reflect.TypeOf(&zeroNode{}):                       "norows",
 	reflect.TypeOf(&zigzagJoinNode{}):                 "zigzag join",
+	reflect.TypeOf(&schemaChangePlanNode{}):           "schema change",
 }

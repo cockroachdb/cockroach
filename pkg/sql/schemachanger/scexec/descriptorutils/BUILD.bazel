@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "descriptorutils",
+    srcs = ["helpers.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
