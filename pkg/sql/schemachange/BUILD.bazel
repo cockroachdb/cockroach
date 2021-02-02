@@ -51,7 +51,9 @@ genrule(
     ],
     outs = ["columnconversionkind_string.go"],
     cmd = """
-       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=ColumnConversionKind -trimprefix ColumnConversion $<
     """,
     tools = [

@@ -73,7 +73,9 @@ go_test(
 #     outs = ["type_string.go"],
 #     cmd = """
 #        cp $(location encoding.go) `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go
-#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+#        GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+#        env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
 #        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
 #        -type=Type `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go $(location //pkg/util/encoding/encodingtype:encoding_type.go)
 #     """,

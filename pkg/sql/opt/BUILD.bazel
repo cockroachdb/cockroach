@@ -105,7 +105,9 @@ genrule(
     outs = ["rule_name_string.go"],
     cmd = """
       cp $(location rule_name.go) `dirname $(location :gen-rulenames)`/rule_name.go
-      env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+      GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+      GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+      env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
       -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,
