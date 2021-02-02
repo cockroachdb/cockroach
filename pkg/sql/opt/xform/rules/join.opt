@@ -233,3 +233,72 @@
         (OutputCols2 $left $right)
     )
 )
+
+# HoistProjectFromInnerJoin lifts a Project from under an InnerJoin; the join
+# can then be subject to other rules, most importantly allowing it to become a
+# lookup join.
+#
+# As long as the projections are non-volatile, it is equivalent to calculate
+# them on every output row.
+#
+# TODO(radu): we could make the rule work even when the ON condition depends on
+# a projection (by inlining the projection).
+[HoistProjectFromInnerJoin, Explore]
+(InnerJoin
+    $left:*
+    $proj:(Project
+        $right:*
+        $projections:* & ^(HasVolatileProjection $projections)
+        $passthrough:*
+    )
+    $on:* &
+        ^(ColsIntersect
+            (ProjectionCols $projections)
+            (FilterOuterCols $on)
+        )
+    $private:*
+)
+=>
+(Project
+    (InnerJoin $left $right $on $private)
+    $projections
+    (UnionCols $passthrough (OutputCols $left))
+)
+
+# HoistProjectFromLeftJoin pulls a project from under an LeftJoin; the join can
+# then be subject to other rules, most importantly allowing it to become a
+# lookup join.
+#
+# This rule is similar to HoistProjectFromInnerJoin, except that we have to
+# handle "outer" rows correctly and make sure we project NULLs, regardless of
+# the expressions.
+#
+# TODO(radu): we could make the rule work even when the ON condition depends on
+# a projection (by inlining the projection).
+#
+# TODO(radu): we could make the rule augment an input Scan with a non-null
+# column from the table.
+[HoistProjectFromLeftJoin, Explore]
+(LeftJoin
+    $left:*
+    (Project
+        $right:*
+        $projections:* & ^(HasVolatileProjection $projections)
+        $passthrough:*
+    )
+    $on:* &
+        ^(ColsIntersect
+            (ProjectionCols $projections)
+            (FilterOuterCols $on)
+        ) &
+        (FoundCanaryColumn
+            $canaryCol:(FindLeftJoinCanaryColumn $right $on)
+        )
+    $private:*
+)
+=>
+(Project
+    (LeftJoin $left $right $on $private)
+    (MakeProjectionsForOuterJoin $canaryCol $projections)
+    (UnionCols $passthrough (OutputCols $left))
+)
