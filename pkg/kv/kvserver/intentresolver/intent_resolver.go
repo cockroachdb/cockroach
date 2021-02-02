@@ -357,8 +357,10 @@ func (ir *IntentResolver) MaybePushTransactions(
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s).
+	pushTo := h.Timestamp.Next()
 	b := &kv.Batch{}
 	b.Header.Timestamp = ir.clock.Now()
+	b.Header.Timestamp.Forward(pushTo)
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&roachpb.PushTxnRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -366,7 +368,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 			},
 			PusherTxn: pusherTxn,
 			PusheeTxn: *pushTxn,
-			PushTo:    h.Timestamp.Next(),
+			PushTo:    pushTo,
 			PushType:  pushType,
 		})
 	}

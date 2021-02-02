@@ -55,10 +55,10 @@ func RecoverTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-	if h.Timestamp.Less(args.Txn.WriteTimestamp) {
+	if h.WriteTimestamp().Less(args.Txn.MinTimestamp) {
 		// This condition must hold for the timestamp cache access/update to be safe.
-		return result.Result{}, errors.Errorf("RecoverTxn request timestamp %s less than txn timestamp %s",
-			h.Timestamp, args.Txn.WriteTimestamp)
+		return result.Result{}, errors.Errorf("RecoverTxn request timestamp %s less than txn MinTimestamp %s",
+			h.Timestamp, args.Txn.MinTimestamp)
 	}
 	if !args.Key.Equal(args.Txn.Key) {
 		return result.Result{}, errors.Errorf("RecoverTxn request key %s does not match txn key %s",

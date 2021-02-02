@@ -323,7 +323,9 @@ func (tc *testContext) Sender() kv.Sender {
 				tc.Fatal(err)
 			}
 		}
-		tc.Clock().Update(ba.Timestamp.UnsafeToClockTimestamp())
+		if baClockTS, ok := ba.Timestamp.TryToClockTimestamp(); ok {
+			tc.Clock().Update(baClockTS)
+		}
 		return ba
 	})
 }
@@ -5818,6 +5820,8 @@ func TestPushTxnPriorities(t *testing.T) {
 		pushee := newTransaction("test", key, 1, tc.Clock())
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
+		pusher.MinTimestamp = test.pusherTS
+		pushee.MinTimestamp = test.pusheeTS
 		pusher.WriteTimestamp = test.pusherTS
 		pushee.WriteTimestamp = test.pusheeTS
 		// Make sure pusher ID is greater; if priorities and timestamps are the same,
@@ -5836,7 +5840,7 @@ func TestPushTxnPriorities(t *testing.T) {
 
 		// Set header timestamp to the maximum of the pusher and pushee timestamps.
 		h := roachpb.Header{Timestamp: args.PushTo}
-		h.Timestamp.Forward(pushee.WriteTimestamp)
+		h.Timestamp.Forward(pushee.MinTimestamp)
 		_, pErr := tc.SendWrappedWith(h, &args)
 
 		if test.expSuccess != (pErr == nil) {
@@ -5856,42 +5860,49 @@ func TestPushTxnPriorities(t *testing.T) {
 func TestPushTxnPushTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		ctx := context.Background()
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.Start(t, stopper)
 
-	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
-	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
-	pusher.Priority = enginepb.MaxTxnPriority
-	pushee.Priority = enginepb.MinTxnPriority // pusher will win
-	now := tc.Clock().Now()
-	pusher.WriteTimestamp = now.Add(50, 25)
-	pushee.WriteTimestamp = now.Add(5, 1)
+		pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
+		pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
+		pusher.Priority = enginepb.MaxTxnPriority
+		pushee.Priority = enginepb.MinTxnPriority // pusher will win
+		now := tc.Clock().Now()
+		pusher.WriteTimestamp = now.Add(50, 25).WithSynthetic(synthetic)
+		pushee.WriteTimestamp = now.Add(5, 1)
 
-	key := roachpb.Key("a")
-	put := putArgs(key, key)
-	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
-		t.Fatal(pErr)
-	}
+		key := roachpb.Key("a")
+		put := putArgs(key, key)
+		assignSeqNumsForReqs(pushee, &put)
+		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// Now, push the transaction using a PUSH_TIMESTAMP push request.
-	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
+		// Now, push the transaction using a PUSH_TIMESTAMP push request.
+		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
 
-	resp, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
-	if pErr != nil {
-		t.Fatalf("unexpected error on push: %s", pErr)
-	}
-	expTS := pusher.WriteTimestamp
-	expTS.Logical++
-	reply := resp.(*roachpb.PushTxnResponse)
-	if reply.PusheeTxn.WriteTimestamp != expTS {
-		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.WriteTimestamp)
-	}
-	if reply.PusheeTxn.Status != roachpb.PENDING {
-		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
-	}
+		resp, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
+		if pErr != nil {
+			t.Fatalf("unexpected error on push: %s", pErr)
+		}
+		expTS := pusher.WriteTimestamp
+		expTS.Logical++
+		reply := resp.(*roachpb.PushTxnResponse)
+		if reply.PusheeTxn.WriteTimestamp != expTS {
+			t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.WriteTimestamp)
+		}
+		if reply.PusheeTxn.Status != roachpb.PENDING {
+			t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
+		}
+
+		// Sanity check clock update, or lack thereof.
+		after := tc.Clock().Now()
+		require.Equal(t, synthetic, after.Less(expTS))
+	})
 }
 
 // TestPushTxnPushTimestampAlreadyPushed verifies that pushing
@@ -6023,7 +6034,6 @@ func TestQueryIntentRequest(t *testing.T) {
 		key1 := roachpb.Key("a")
 		key2 := roachpb.Key("b")
 		txn := newTransaction("test", key1, 1, tc.Clock())
-		txn2 := newTransaction("test2", key2, 1, tc.Clock())
 
 		pArgs := putArgs(key1, []byte("value1"))
 		assignSeqNumsForReqs(txn, &pArgs)
@@ -6038,10 +6048,16 @@ func TestQueryIntentRequest(t *testing.T) {
 			expectIntent bool,
 		) {
 			t.Helper()
+			var h roachpb.Header
+			if baTxn != nil {
+				h.Txn = baTxn
+			} else {
+				h.Timestamp = txnMeta.WriteTimestamp
+			}
 			qiArgs := queryIntentArgs(key, txnMeta, errIfMissing)
-			qiRes, pErr := tc.SendWrappedWith(roachpb.Header{Txn: baTxn}, &qiArgs)
+			qiRes, pErr := tc.SendWrappedWith(h, &qiArgs)
 			if errIfMissing && !expectIntent {
-				ownIntent := baTxn != nil && baTxn.ID == txnMeta.ID
+				ownIntent := baTxn != nil
 				if ownIntent && txnMeta.WriteTimestamp.Less(txn.WriteTimestamp) {
 					if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 						t.Fatalf("expected TransactionRetryError, found %v %v", txnMeta, pErr)
@@ -6061,7 +6077,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			}
 		}
 
-		for i, baTxn := range []*roachpb.Transaction{nil, txn, txn2} {
+		for i, baTxn := range []*roachpb.Transaction{nil, txn} {
 			// Query the intent with the correct txn meta. Should see intent regardless
 			// of whether we're inside the txn or not.
 			queryIntent(key1, txn.TxnMeta, baTxn, true)
@@ -6070,12 +6086,6 @@ func TestQueryIntentRequest(t *testing.T) {
 			// see an intent.
 			keyPrevent := roachpb.Key(fmt.Sprintf("%s-%t-%d", key2, errIfMissing, i))
 			queryIntent(keyPrevent, txn.TxnMeta, baTxn, false)
-
-			// Query an intent on the same key for a different transaction. Should not
-			// see an intent.
-			diffIDMeta := txn.TxnMeta
-			diffIDMeta.ID = txn2.ID
-			queryIntent(key1, diffIDMeta, baTxn, false)
 
 			// Query the intent with a larger epoch. Should not see an intent.
 			largerEpochMeta := txn.TxnMeta
@@ -6092,7 +6102,12 @@ func TestQueryIntentRequest(t *testing.T) {
 			// the request behaves like this.
 			largerTSMeta := txn.TxnMeta
 			largerTSMeta.WriteTimestamp = largerTSMeta.WriteTimestamp.Next()
-			queryIntent(key1, largerTSMeta, baTxn, true)
+			largerBATxn := baTxn
+			if largerBATxn != nil {
+				largerBATxn = largerBATxn.Clone()
+				largerBATxn.WriteTimestamp = largerTSMeta.WriteTimestamp
+			}
+			queryIntent(key1, largerTSMeta, largerBATxn, true)
 
 			// Query the intent with a smaller timestamp. Should not see an
 			// intent unless we're querying our own intent, in which case
