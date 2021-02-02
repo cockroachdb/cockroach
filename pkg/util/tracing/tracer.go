@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/petermattis/goid"
 	"golang.org/x/net/trace"
 )
 
@@ -364,6 +365,7 @@ func (t *Tracer) startSpanGeneric(
 		traceID = uint64(rand.Int63())
 	}
 	spanID := uint64(rand.Int63())
+	goroutineID := uint64(goid.Get())
 
 	// Now allocate the main *Span and contained crdbSpan.
 	// Allocate these together to save on individual allocs.
@@ -380,6 +382,7 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan = crdbSpan{
 		traceID:      traceID,
 		spanID:       spanID,
+		goroutineID:  goroutineID,
 		operation:    opName,
 		startTime:    startTime,
 		parentSpanID: opts.parentSpanID(),

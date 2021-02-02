@@ -76,6 +76,9 @@ message RecordedSpan {
   //
   // TODO(tbg): rename once DeprecatedStats is removed.
   repeated google.protobuf.Any internal_structured = 11;
+
+  // Goroutine ID associated with this span at time of span creation.
+  uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
