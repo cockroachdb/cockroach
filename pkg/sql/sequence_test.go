@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -163,8 +163,8 @@ func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
-	col := tableDesc.GetColumns()[colIdx]
-	var seqDescs []*tabledesc.Immutable
+	col := tableDesc.GetPublicColumns()[colIdx]
+	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
@@ -184,8 +184,8 @@ func assertColumnOwnsSequences(
 			t.Fatalf("unexpected sequence id. expected %d got %d", seqDescs[i].GetID(), seqID)
 		}
 
-		ownerTableID := seqDescs[i].SequenceOpts.SequenceOwner.OwnerTableID
-		ownerColID := seqDescs[i].SequenceOpts.SequenceOwner.OwnerColumnID
+		ownerTableID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerTableID
+		ownerColID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerColumnID
 		if ownerTableID != tableDesc.GetID() || ownerColID != col.ID {
 			t.Fatalf(
 				"unexpected sequence owner. expected table id %d, got: %d; expected column id %d, got :%d",
@@ -363,7 +363,7 @@ func addOwnedSequence(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
-		tableDesc.GetColumns()[colIdx].OwnsSequenceIds, seqDesc.ID)
+		tableDesc.GetColumns()[colIdx].OwnsSequenceIds, seqDesc.GetID())
 
 	err := kvDB.Put(
 		context.Background(),
@@ -385,12 +385,12 @@ func breakOwnershipMapping(
 
 	for colIdx := range tableDesc.GetColumns() {
 		for i := range tableDesc.GetColumns()[colIdx].OwnsSequenceIds {
-			if tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] == seqDesc.ID {
+			if tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] == seqDesc.GetID() {
 				tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] = math.MaxInt32
 			}
 		}
 	}
-	seqDesc.SequenceOpts.SequenceOwner.OwnerTableID = math.MaxInt32
+	seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID = math.MaxInt32
 
 	err := kvDB.Put(
 		context.Background(),

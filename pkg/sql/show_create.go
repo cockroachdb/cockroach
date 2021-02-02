@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -235,12 +234,12 @@ func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
 	allDescs []descpb.Descriptor,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string
 	var err error
-	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
 		stmt, err = ShowCreateView(ctx, &tn, desc)
 	} else if desc.IsSequence() {

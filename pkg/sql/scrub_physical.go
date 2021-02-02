@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,7 +28,7 @@ var _ checkOperation = &physicalCheckOperation{}
 // physicalCheckOperation is a check on an indexes physical data.
 type physicalCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 	indexDesc *descpb.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
@@ -51,7 +50,7 @@ type physicalCheckRun struct {
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName, tableDesc *tabledesc.Immutable, indexDesc *descpb.IndexDescriptor,
+	tableName *tree.TableName, tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
@@ -69,14 +68,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	var columnIDs []tree.ColumnID
 	var colIDToIdx catalog.TableColMap
 	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
-	for i := range o.tableDesc.Columns {
-		colIDToIdx.Set(o.tableDesc.Columns[i].ID, i)
+	for i := range o.tableDesc.GetPublicColumns() {
+		colIDToIdx.Set(o.tableDesc.GetPublicColumns()[i].ID, i)
 	}
 
 	// Collect all of the columns being scanned.
 	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {
-		for i := range o.tableDesc.Columns {
-			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.Columns[i].ID))
+		for i := range o.tableDesc.GetPublicColumns() {
+			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.GetPublicColumns()[i].ID))
 		}
 	} else {
 		for _, id := range o.indexDesc.ColumnIDs {
@@ -92,7 +91,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	for i := range columnIDs {
 		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
-		columns = append(columns, &o.tableDesc.Columns[idx])
+		columns = append(columns, &o.tableDesc.GetPublicColumns()[idx])
 	}
 
 	// Find the row indexes for all of the primary index columns.

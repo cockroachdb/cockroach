@@ -38,7 +38,7 @@ func TestHydratedCache(t *testing.T) {
 		m := c.Metrics()
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 1)
@@ -50,7 +50,7 @@ func TestHydratedCache(t *testing.T) {
 		// Show that the cache returned a new pointer and hydrated the UDT
 		// (user-defined type).
 		require.NotEqual(t, tableDescUDT, hydrated)
-		require.EqualValues(t, hydrated.Columns[0].Type, typ1T)
+		require.EqualValues(t, hydrated.GetPublicColumns()[0].Type, typ1T)
 
 		// Try again and ensure we get pointer-for-pointer the same descriptor.
 		res.calls = 0
@@ -68,7 +68,7 @@ func TestHydratedCache(t *testing.T) {
 		m := c.Metrics()
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		td := tableDescNoUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescNoUDT.ImmutableCopy().(catalog.TableDescriptor)
 		_, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 0)
@@ -78,7 +78,7 @@ func TestHydratedCache(t *testing.T) {
 		m := c.Metrics()
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 1)
@@ -102,7 +102,7 @@ func TestHydratedCache(t *testing.T) {
 		m := c.Metrics()
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 1)
@@ -124,7 +124,7 @@ func TestHydratedCache(t *testing.T) {
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
 		res.unqualifiedName = true
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 1)
@@ -146,7 +146,7 @@ func TestHydratedCache(t *testing.T) {
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
 		res.unqualifiedName = true
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		assertMetrics(t, m, 0, 1)
@@ -176,7 +176,7 @@ func TestHydratedCache(t *testing.T) {
 			calledCh <- errCh
 			return <-errCh
 		}
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 
 		callOneErrCh := make(chan error, 1)
 		go func() {
@@ -202,7 +202,7 @@ func TestHydratedCache(t *testing.T) {
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
 		mut := tabledesc.NewExistingMutable(*dg[tableUDTID].(catalog.TableDescriptor).TableDesc())
 		mut.MaybeIncrementVersion()
-		td := mut.ImmutableCopy().(*tabledesc.Immutable)
+		td := mut.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		require.Nil(t, hydrated)
@@ -226,7 +226,7 @@ func TestHydratedCache(t *testing.T) {
 		// This behavior is a bit bizarre but exists to not waste the work of
 		// hydrating the descriptor if we've already started to do it.
 		// This case should not meaningfully arise in practice.
-		td := tableDescUDT.ImmutableCopy().(*tabledesc.Immutable)
+		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		{
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, resWithMut)
 			require.NoError(t, err)

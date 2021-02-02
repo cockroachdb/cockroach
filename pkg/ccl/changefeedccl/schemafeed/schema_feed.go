@@ -42,12 +42,12 @@ import (
 
 // TableEvent represents a change to a table descriptor.
 type TableEvent struct {
-	Before, After *tabledesc.Immutable
+	Before, After catalog.TableDescriptor
 }
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
 func (e TableEvent) Timestamp() hlc.Timestamp {
-	return e.After.ModificationTime
+	return e.After.GetModificationTime()
 }
 
 // Config configures a SchemaFeed.
@@ -121,7 +121,7 @@ type SchemaFeed struct {
 		// of the table descriptor seen by the poller. This is needed to determine
 		// when a backilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
-		previousTableVersion map[descpb.ID]*tabledesc.Immutable
+		previousTableVersion map[descpb.ID]catalog.TableDescriptor
 
 		// typeDeps tracks dependencies from target tables to user defined types
 		// that they use.
@@ -166,7 +166,7 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 	}
 }
 
-func (t *typeDependencyTracker) purgeTable(tbl *tabledesc.Immutable) {
+func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
 	if !tbl.ContainsUserDefinedTypes() {
 		return
 	}
@@ -176,7 +176,7 @@ func (t *typeDependencyTracker) purgeTable(tbl *tabledesc.Immutable) {
 	}
 }
 
-func (t *typeDependencyTracker) ingestTable(tbl *tabledesc.Immutable) {
+func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
 	if !tbl.ContainsUserDefinedTypes() {
 		return
 	}
@@ -207,7 +207,7 @@ func New(cfg Config) *SchemaFeed {
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
 	}
-	m.mu.previousTableVersion = make(map[descpb.ID]*tabledesc.Immutable)
+	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
 	return m
@@ -276,7 +276,7 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Lock()
 	// Register all types used by the initial set of tables.
 	for _, desc := range initialDescs {
-		tbl := desc.(*tabledesc.Immutable)
+		tbl := desc.(catalog.TableDescriptor)
 		tf.mu.typeDeps.ingestTable(tbl)
 	}
 	tf.mu.Unlock()
@@ -474,8 +474,8 @@ func (e TableEvent) String() string {
 	return formatEvent(e)
 }
 
-func formatDesc(desc *tabledesc.Immutable) string {
-	return fmt.Sprintf("%d:%d@%v", desc.ID, desc.Version, desc.ModificationTime)
+func formatDesc(desc catalog.TableDescriptor) string {
+	return fmt.Sprintf("%d:%d@%v", desc.GetID(), desc.GetVersion(), desc.GetModificationTime())
 }
 
 func formatEvent(e TableEvent) string {
@@ -495,14 +495,14 @@ func (tf *SchemaFeed) validateDescriptor(
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID)
-	case *tabledesc.Immutable:
+	case catalog.TableDescriptor:
 		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 			return err
 		}
 		log.Infof(ctx, "validate %v", formatDesc(desc))
-		if lastVersion, ok := tf.mu.previousTableVersion[desc.ID]; ok {
+		if lastVersion, ok := tf.mu.previousTableVersion[desc.GetID()]; ok {
 			// NB: Writes can occur to a table
-			if desc.ModificationTime.LessEq(lastVersion.ModificationTime) {
+			if desc.GetModificationTime().LessEq(lastVersion.GetModificationTime()) {
 				return nil
 			}
 
@@ -513,7 +513,7 @@ func (tf *SchemaFeed) validateDescriptor(
 			// allowed; without this explicit load, the lease manager might therefore
 			// return the previous version of the table, which is still technically
 			// allowed by the schema change system.
-			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
+			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
 				return err
 			}
 
@@ -534,7 +534,7 @@ func (tf *SchemaFeed) validateDescriptor(
 				// The head could already have been handed out and sorting is not
 				// stable.
 				idxToSort := sort.Search(len(tf.mu.events), func(i int) bool {
-					return !tf.mu.events[i].After.ModificationTime.Less(earliestTsBeingIngested)
+					return !tf.mu.events[i].After.GetModificationTime().Less(earliestTsBeingIngested)
 				})
 				tf.mu.events = append(tf.mu.events, e)
 				toSort := tf.mu.events[idxToSort:]
@@ -545,7 +545,7 @@ func (tf *SchemaFeed) validateDescriptor(
 		}
 		// Add the types used by the table into the dependency tracker.
 		tf.mu.typeDeps.ingestTable(desc)
-		tf.mu.previousTableVersion[desc.ID] = desc
+		tf.mu.previousTableVersion[desc.GetID()] = desc
 		return nil
 	default:
 		return errors.AssertionFailedf("unexpected descriptor type %T", desc)

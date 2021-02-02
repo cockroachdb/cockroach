@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -102,7 +102,7 @@ func makeBuiltinOverride(
 // default expressions which use sequences.
 type SequenceMetadata struct {
 	id              descpb.ID
-	seqDesc         *tabledesc.Immutable
+	seqDesc         catalog.TableDescriptor
 	instancesPerRow int64
 	curChunk        *jobspb.SequenceValChunk
 	curVal          int64
@@ -307,19 +307,19 @@ func (j *SeqChunkProvider) RequestChunk(
 
 func incrementSequenceByVal(
 	ctx context.Context,
-	descriptor *tabledesc.Immutable,
+	descriptor catalog.TableDescriptor,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	incrementBy int64,
 ) (int64, error) {
-	seqOpts := descriptor.SequenceOpts
+	seqOpts := descriptor.GetSequenceOpts()
 	var val int64
 	var err error
 	// TODO(adityamaru): Think about virtual sequences.
 	if seqOpts.Virtual {
 		return 0, errors.New("virtual sequences are not supported by IMPORT INTO")
 	}
-	seqValueKey := codec.SequenceKey(uint32(descriptor.ID))
+	seqValueKey := codec.SequenceKey(uint32(descriptor.GetID()))
 	val, err = kv.IncrementValRetryable(ctx, db, seqValueKey, incrementBy)
 	if err != nil {
 		if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -334,8 +334,8 @@ func incrementSequenceByVal(
 	return val, nil
 }
 
-func boundsExceededError(descriptor *tabledesc.Immutable) error {
-	seqOpts := descriptor.SequenceOpts
+func boundsExceededError(descriptor catalog.TableDescriptor) error {
+	seqOpts := descriptor.GetSequenceOpts()
 	isAscending := seqOpts.Increment > 0
 
 	var word string
@@ -347,10 +347,11 @@ func boundsExceededError(descriptor *tabledesc.Immutable) error {
 		word = "minimum"
 		value = seqOpts.MinValue
 	}
+	name := descriptor.GetName()
 	return pgerror.Newf(
 		pgcode.SequenceGeneratorLimitExceeded,
 		`reached %s value of sequence %q (%d)`, word,
-		tree.ErrString((*tree.Name)(&descriptor.Name)), value)
+		tree.ErrString((*tree.Name)(&name)), value)
 }
 
 // checkForPreviouslyAllocatedChunks checks if a sequence value has already been
@@ -378,7 +379,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 		if chunk.ChunkStartRow <= c.rowID && chunk.NextChunkStartRow > c.rowID {
 			relativeRowIndex := c.rowID - chunk.ChunkStartRow
 			seqMetadata.curVal = chunk.ChunkStartVal +
-				seqMetadata.seqDesc.SequenceOpts.Increment*(seqMetadata.instancesPerRow*relativeRowIndex)
+				seqMetadata.seqDesc.GetSequenceOpts().Increment*(seqMetadata.instancesPerRow*relativeRowIndex)
 			found = true
 			return found, nil
 		}
@@ -409,7 +410,7 @@ func reserveChunkOfSeqVals(
 		newChunkSize = seqMetadata.instancesPerRow
 	}
 
-	incrementValBy := newChunkSize * seqMetadata.seqDesc.SequenceOpts.Increment
+	incrementValBy := newChunkSize * seqMetadata.seqDesc.GetSequenceOpts().Increment
 	// incrementSequenceByVal keeps retrying until it is able to find a slot
 	// of incrementValBy.
 	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, evalCtx.DB,
@@ -420,7 +421,7 @@ func reserveChunkOfSeqVals(
 
 	// Update the sequence metadata to reflect the newly reserved chunk.
 	seqMetadata.curChunk = &jobspb.SequenceValChunk{
-		ChunkStartVal:     seqVal - incrementValBy + seqMetadata.seqDesc.SequenceOpts.Increment,
+		ChunkStartVal:     seqVal - incrementValBy + seqMetadata.seqDesc.GetSequenceOpts().Increment,
 		ChunkSize:         newChunkSize,
 		ChunkStartRow:     c.rowID,
 		NextChunkStartRow: c.rowID + (newChunkSize / seqMetadata.instancesPerRow),
@@ -449,7 +450,7 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	} else {
 		// The current chunk of sequence values can be used for the row being
 		// processed.
-		seqMetadata.curVal += seqMetadata.seqDesc.SequenceOpts.Increment
+		seqMetadata.curVal += seqMetadata.seqDesc.GetSequenceOpts().Increment
 	}
 	return tree.NewDInt(tree.DInt(seqMetadata.curVal)), nil
 }

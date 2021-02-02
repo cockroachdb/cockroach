@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -73,9 +73,9 @@ func TestTableEventFilter(t *testing.T) {
 			name: "don't filter end of add NULL-able computed column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: func() *tabledesc.Immutable {
+				Before: func() catalog.TableDescriptor {
 					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1))
-					col := td.Mutations[0].GetColumn()
+					col := td.GetMutations()[0].GetColumn()
 					col.Nullable = true
 					col.ComputeExpr = proto.String("1")
 					return td

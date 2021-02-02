@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -193,7 +193,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
-		tableDesc := objDesc.(*tabledesc.Immutable)
+		tableDesc := objDesc.(catalog.TableDescriptor)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue
@@ -206,7 +206,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context, p *planner, tableDesc *tabledesc.Immutable, tableName *tree.TableName,
+	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor, tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
@@ -284,7 +284,7 @@ func (n *scrubNode) startScrubTable(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *tabledesc.Immutable, columns []*descpb.ColumnDescriptor,
+	tableDesc catalog.TableDescriptor, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
@@ -344,7 +344,7 @@ func pairwiseOp(left []string, right []string, op string) []string {
 // createPhysicalCheckOperations will return the physicalCheckOperation
 // for all indexes on a table.
 func createPhysicalCheckOperations(
-	tableDesc *tabledesc.Immutable, tableName *tree.TableName,
+	tableDesc catalog.TableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	for _, idx := range tableDesc.ActiveIndexes() {
 		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx.IndexDesc()))
@@ -360,7 +360,7 @@ func createPhysicalCheckOperations(
 // first invalid index.
 func createIndexCheckOperations(
 	indexNames tree.NameList,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -404,7 +404,7 @@ func createIndexCheckOperations(
 		}
 		return nil, pgerror.Newf(pgcode.UndefinedObject,
 			"specified indexes to check that do not exist on table %q: %v",
-			tableDesc.Name, strings.Join(missingIndexNames, ", "))
+			tableDesc.GetName(), strings.Join(missingIndexNames, ", "))
 	}
 	return results, nil
 }
@@ -418,7 +418,7 @@ func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
 	constraintNames tree.NameList,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -437,7 +437,7 @@ func createConstraintCheckOperations(
 				wantedConstraints[string(constraintName)] = v
 			} else {
 				return nil, pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
+					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())
 			}
 		}
 		constraints = wantedConstraints

@@ -500,9 +500,9 @@ func (tc *Collection) getObjectByName(
 	// (i.e., the ones used during authn/authz flows).
 	// TODO (lucy): Reevaluate the above. We have many more system tables now and
 	// should be able to lease most of them.
-	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.Name ||
-		objectName == systemschema.RoleOptionsTable.Name ||
-		objectName == systemschema.UsersTable.Name
+	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.GetName() ||
+		objectName == systemschema.RoleOptionsTable.GetName() ||
+		objectName == systemschema.UsersTable.GetName()
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
@@ -538,12 +538,12 @@ func (tc *Collection) GetMutableTableByName(
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ *tabledesc.Immutable, _ error) {
+) (found bool, _ catalog.TableDescriptor, _ error) {
 	found, desc, err := tc.getTableByName(ctx, txn, name, flags, false /* mutable */)
 	if err != nil || !found {
 		return false, nil, err
 	}
-	return true, desc.(*tabledesc.Immutable), nil
+	return true, desc, nil
 }
 
 // getTableByName returns a table descriptor with properties according to the
@@ -921,12 +921,12 @@ func (tc *Collection) GetMutableTableByID(
 // the ID exists.
 func (tc *Collection) GetImmutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	desc, err := tc.getTableByID(ctx, txn, tableID, flags, false /* mutable */)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*tabledesc.Immutable), nil
+	return desc, nil
 }
 
 func (tc *Collection) getTableByID(
@@ -1190,7 +1190,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
-	case *tabledesc.Immutable:
+	case catalog.TableDescriptor:
 		// ImmutableTableDescriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
 		// defined types in the descriptor, then return early.
@@ -1389,9 +1389,9 @@ func (tc *Collection) GetDescriptorsWithNewVersion() []lease.IDVersion {
 
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
-func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
+func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) {
 	for _, desc := range tc.uncommittedDescriptors {
-		table, ok := desc.immutable.(*tabledesc.Immutable)
+		table, ok := desc.immutable.(catalog.TableDescriptor)
 		if ok && desc.immutable.IsUncommittedVersion() {
 			tables = append(tables, table)
 		}
@@ -1654,7 +1654,8 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			if desc.Dropped() {
 				continue
 			}
-			if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
+			tblDesc, ok := desc.(catalog.TableDescriptor)
+			if ok {
 				if err := typedesc.HydrateTypesInTableDescriptor(
 					ctx,
 					tblDesc.TableDesc(),

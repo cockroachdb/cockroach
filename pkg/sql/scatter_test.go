@@ -136,7 +136,7 @@ func TestScatterResponse(t *testing.T) {
 		}
 		var expectedKey roachpb.Key
 		if i == 0 {
-			expectedKey = keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
+			expectedKey = keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
 		} else {
 			var err error
 			expectedKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, i*10)

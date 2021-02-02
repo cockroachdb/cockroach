@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -94,7 +93,7 @@ func GenerateInsertRow(
 	insertCols []descpb.ColumnDescriptor,
 	computedColsLookup []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
@@ -206,7 +205,7 @@ type DatumRowConverter struct {
 	KvBatch  KVBatch
 	BatchCap int
 
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
@@ -272,12 +271,12 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 				return err
 			}
 
-			seqOpts := seqDesc.SequenceOpts
+			seqOpts := seqDesc.GetSequenceOpts()
 			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.Name)
+				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
 			}
 
-			seqNameToMetadata[seqDesc.Name] = &SequenceMetadata{
+			seqNameToMetadata[seqDesc.GetName()] = &SequenceMetadata{
 				id:      seqID,
 				seqDesc: seqDesc,
 			}
@@ -290,7 +289,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
@@ -415,12 +414,12 @@ func NewDatumRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.Families))
+	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.Columns))
-	for _, col := range c.tableDesc.Columns {
+	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.GetPublicColumns()))
+	for _, col := range c.tableDesc.GetPublicColumns() {
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
 		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.ID)] = col
@@ -433,7 +432,7 @@ func NewDatumRowConverter(
 		colsOrdered,
 		c.tableDesc.GetPublicColumns(),
 		c.tableDesc,
-		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
+		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
 		&semaCtx)
 	if err != nil {
@@ -442,7 +441,7 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.Columns,
+		Cols:    tableDesc.GetPublicColumns(),
 	}
 	return c, nil
 }
@@ -475,7 +474,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	var computedColsLookup []descpb.ColumnDescriptor
 	if len(c.computedExprs) > 0 {
-		computedColsLookup = c.tableDesc.Columns
+		computedColsLookup = c.tableDesc.GetPublicColumns()
 	}
 
 	insertRow, err := GenerateInsertRow(

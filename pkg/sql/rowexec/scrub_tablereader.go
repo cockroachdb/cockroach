@@ -48,7 +48,7 @@ var ScrubTypes = []*types.T{
 
 type scrubTableReader struct {
 	tableReader
-	tableDesc tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -79,7 +79,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = tabledesc.MakeImmutable(spec.Table)
+	tr.tableDesc = tabledesc.NewImmutable(spec.Table)
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(
@@ -125,7 +125,7 @@ func newScrubTableReader(
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
+		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
 		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
 		nil /* systemColumns */, nil, /* virtualColumn */
@@ -153,7 +153,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})
 	for i, colIdx := range tr.fetcherResultToColIdx {
-		col := tr.tableDesc.Columns[colIdx]
+		col := tr.tableDesc.GetPublicColumns()[colIdx]
 		// TODO(joey): We should maybe try to get the underlying type.
 		rowDetails[col.Name] = row[i].String(col.Type)
 	}
@@ -193,7 +193,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	var colIDToRowIdxMap catalog.TableColMap
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
-		colIDToRowIdxMap.Set(tr.tableDesc.Columns[colIdx].ID, rowIdx)
+		colIDToRowIdxMap.Set(tr.tableDesc.GetPublicColumns()[colIdx].ID, rowIdx)
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')

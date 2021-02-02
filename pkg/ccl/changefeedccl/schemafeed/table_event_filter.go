@@ -12,8 +12,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,10 +74,10 @@ func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool,
 	et := classifyTableEvent(e)
 	// Truncation events are not ignored and return an error.
 	if et == tableEventTruncate {
-		return false, errors.Errorf(`"%s" was truncated`, e.Before.Name)
+		return false, errors.Errorf(`"%s" was truncated`, e.Before.GetName())
 	}
 	if et == tableEventPrimaryKeyChange {
-		return false, errors.Errorf(`"%s" primary key changed`, e.Before.Name)
+		return false, errors.Errorf(`"%s" primary key changed`, e.Before.GetName())
 	}
 	shouldFilter, ok := b[et]
 	if !ok {
@@ -92,8 +92,8 @@ func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 	return !dropColumnMutationExists(e.Before) && dropColumnMutationExists(e.After)
 }
 
-func dropColumnMutationExists(desc *tabledesc.Immutable) bool {
-	for _, m := range desc.Mutations {
+func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
+	for _, m := range desc.GetMutations() {
 		if m.GetColumn() == nil {
 			continue
 		}
@@ -108,17 +108,17 @@ func dropColumnMutationExists(desc *tabledesc.Immutable) bool {
 func newColumnBackfillComplete(e TableEvent) (res bool) {
 	// TODO(ajwerner): What is the case where the before has a backfill mutation
 	// and the After doesn't? What about other queued mutations?
-	return len(e.Before.Columns) < len(e.After.Columns) &&
+	return len(e.Before.GetPublicColumns()) < len(e.After.GetPublicColumns()) &&
 		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
 func newColumnNoBackfill(e TableEvent) (res bool) {
-	return len(e.Before.Columns) < len(e.After.Columns) &&
+	return len(e.Before.GetPublicColumns()) < len(e.After.GetPublicColumns()) &&
 		!e.Before.HasColumnBackfillMutation()
 }
 
-func pkChangeMutationExists(desc *tabledesc.Immutable) bool {
-	for _, m := range desc.Mutations {
+func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
+	for _, m := range desc.GetMutations() {
 		if m.Direction == descpb.DescriptorMutation_ADD && m.GetPrimaryKeySwap() != nil {
 			return true
 		}
@@ -134,6 +134,6 @@ func tableTruncated(e TableEvent) bool {
 }
 
 func primaryKeyChanged(e TableEvent) bool {
-	return e.Before.PrimaryIndex.ID != e.After.PrimaryIndex.ID &&
+	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() &&
 		pkChangeMutationExists(e.Before)
 }

@@ -217,7 +217,7 @@ func newDescriptorResolver(descs []catalog.Descriptor) (*descriptorResolver, err
 		var typeToRegister string
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			if desc.TableDesc().Temporary {
+			if desc.IsTemporary() {
 				continue
 			}
 			typeToRegister = "table"

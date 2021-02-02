@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -496,7 +495,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 	if err != nil {
 		return 0, err
 	}
-	return tree.ID(desc.ID), nil
+	return tree.ID(desc.GetID()), nil
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
@@ -506,7 +505,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 //  of having its own logic for lookups.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
 		return entry.desc, nil
 	}

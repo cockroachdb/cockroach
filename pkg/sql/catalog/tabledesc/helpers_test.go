@@ -14,14 +14,43 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/errors"
 )
 
-func (desc *Immutable) ValidateCrossReferences(ctx context.Context, dg catalog.DescGetter) error {
-	return desc.validateCrossReferences(ctx, dg)
+func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
+	imm, ok := immI.(*immutable)
+	if !ok {
+		return errors.Errorf("expected immutable descriptor")
+	}
+	return imm.ValidateTable(ctx)
 }
 
-func (desc *Immutable) ValidatePartitioning() error {
-	return desc.validatePartitioning()
+func ValidateCrossReferences(
+	ctx context.Context, dg catalog.DescGetter, immI catalog.TableDescriptor,
+) error {
+	imm, ok := immI.(*immutable)
+	if !ok {
+		return errors.Errorf("expected immutable descriptor")
+	}
+	return imm.validateCrossReferences(ctx, dg)
+}
+
+func ValidatePartitioning(immI catalog.TableDescriptor) error {
+	imm, ok := immI.(*immutable)
+	if !ok {
+		return errors.Errorf("expected immutable descriptor")
+	}
+	return imm.validatePartitioning()
+}
+
+func GetPostDeserializationChanges(
+	immI catalog.TableDescriptor,
+) (PostDeserializationTableDescriptorChanges, error) {
+	imm, ok := immI.(*immutable)
+	if !ok {
+		return PostDeserializationTableDescriptorChanges{}, errors.Errorf("expected immutable descriptor")
+	}
+	return imm.GetPostDeserializationChanges(), nil
 }
 
 var FitColumnToFamily = fitColumnToFamily

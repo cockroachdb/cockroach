@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// SafeMessage makes Immutable a SafeMessager.
-func (desc *Immutable) SafeMessage() string {
-	return formatSafeTableDesc("tabledesc.Immutable", desc)
+// SafeMessage makes immutable a SafeMessager.
+func (desc *immutable) SafeMessage() string {
+	return formatSafeTableDesc("tabledesc.immutable", desc)
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -108,7 +108,7 @@ func formatSafeColumn(
 
 func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescriptor) {
 	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
-	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
+	w.Printf(", NextIndexID: %d", desc.GetNextIndexID())
 	w.Printf(", Indexes: [")
 	_ = catalog.ForEachActiveIndex(desc, func(idx catalog.Index) error {
 		if !idx.Primary() {
@@ -286,7 +286,7 @@ func formatSafeTableMutationJobs(w *redact.StringBuilder, td catalog.TableDescri
 }
 
 func formatSafeMutations(w *redact.StringBuilder, td catalog.TableDescriptor) {
-	mutations := td.TableDesc().Mutations
+	mutations := td.GetMutations()
 	for i := range mutations {
 		w.Printf(", ")
 		m := &mutations[i]

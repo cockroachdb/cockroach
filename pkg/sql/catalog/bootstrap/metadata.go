@@ -271,7 +271,7 @@ func LookupSystemTableDescriptorID(
 	if settings != nil &&
 		!settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) &&
 		tableName == systemschema.NamespaceTableName {
-		return systemschema.DeprecatedNamespaceTable.ID
+		return systemschema.DeprecatedNamespaceTable.GetID()
 	}
 	systemTenant := boolToInt(codec.ForSystemTenant())
 	dbID, ok := systemTableIDCache[systemTenant][tableName]

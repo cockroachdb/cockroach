@@ -76,7 +76,7 @@ type joinReader struct {
 
 	diskMonitor *mon.BytesMonitor
 
-	desc             tabledesc.Immutable
+	desc             catalog.TableDescriptor
 	index            *descpb.IndexDescriptor
 	colIdxMap        catalog.TableColMap
 	maintainOrdering bool
@@ -188,7 +188,7 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:                              tabledesc.MakeImmutable(spec.Table),
+		desc:                              tabledesc.NewImmutable(spec.Table),
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,
@@ -204,10 +204,13 @@ func newJoinReader(
 	}
 	var err error
 	var isSecondary bool
-	jr.index, isSecondary, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
-	if err != nil {
-		return nil, err
+	indexIdx := int(spec.IndexIdx)
+	if indexIdx >= len(jr.desc.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
+	indexI := jr.desc.ActiveIndexes()[indexIdx]
+	jr.index = indexI.IndexDesc()
+	isSecondary = !indexI.Primary()
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
@@ -289,7 +292,7 @@ func newJoinReader(
 
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
 		spec.LockingWaitPolicy, sysColDescs, nil, /* virtualColumn */
 	)
@@ -319,7 +322,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) {
-	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &jr.desc, jr.index)
+	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
 	var keyToInputRowIndices map[string][]int

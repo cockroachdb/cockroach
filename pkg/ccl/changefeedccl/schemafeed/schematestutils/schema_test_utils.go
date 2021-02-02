@@ -13,6 +13,7 @@ package schematestutils
 import (
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -23,7 +24,7 @@ import (
 // MakeTableDesc makes a generic table descriptor with the provided properties.
 func MakeTableDesc(
 	tableID descpb.ID, version descpb.DescriptorVersion, modTime hlc.Timestamp, cols int,
-) *tabledesc.Immutable {
+) catalog.TableDescriptor {
 	td := descpb.TableDescriptor{
 		Name:             "foo",
 		ID:               tableID,
@@ -49,21 +50,21 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 }
 
 // AddColumnDropBackfillMutation adds a mutation to desc to drop a column.
-// Yes, this does modify an Immutable.
-func AddColumnDropBackfillMutation(desc *tabledesc.Immutable) *tabledesc.Immutable {
-	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
+// Yes, this does modify an immutable.
+func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
 		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_DROP,
-		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID - 1)},
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID() - 1)},
 	})
 	return desc
 }
 
 // AddNewColumnBackfillMutation adds a mutation to desc to add a column.
-// Yes, this does modify an Immutable.
-func AddNewColumnBackfillMutation(desc *tabledesc.Immutable) *tabledesc.Immutable {
-	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
-		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID)},
+// Yes, this does modify an immutable.
+func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID())},
 		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_ADD,
 		MutationID:  0,

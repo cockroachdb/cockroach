@@ -352,14 +352,14 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		require.NoError(t, err)
 
 		// Modify the column name.
-		desc.Columns[0].Name = "bar"
+		desc.TableDesc().Columns[0].Name = "bar"
 		descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc})
 
 		// Resolve the table by name again.
 		found, desc, err = descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
 		require.True(t, found)
 		require.NoError(t, err)
-		require.Equal(t, "bar", desc.Columns[0].Name)
+		require.Equal(t, "bar", desc.GetPublicColumns()[0].Name)
 
 		// Attempting to resolve the table mutably is not allowed.
 		_, _, err = descriptors.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
@@ -369,7 +369,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 		desc, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
 		require.NoError(t, err)
-		require.Equal(t, "bar", desc.Columns[0].Name)
+		require.Equal(t, "bar", desc.GetPublicColumns()[0].Name)
 
 		// Attempting to resolve the table mutably is not allowed.
 		_, err = descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})

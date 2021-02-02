@@ -36,8 +36,8 @@ func processSystemConfigKVs(
 
 	a := &rowenc.DatumAlloc{}
 	codec := keys.TODOSQLCodec
-	settingsTablePrefix := codec.TablePrefix(uint32(tbl.ID))
-	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
+	settingsTablePrefix := codec.TablePrefix(uint32(tbl.GetID()))
+	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.GetPublicColumns())
 
 	var settingsKVs []roachpb.KeyValue
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
@@ -48,7 +48,7 @@ func processSystemConfigKVs(
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []*types.T{tbl.Columns[0].Type}
+			types := []*types.T{tbl.GetPublicColumns()[0].Type}
 			nameRow := make([]rowenc.EncDatum, 1)
 			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
 			if err != nil {
@@ -83,16 +83,16 @@ func processSystemConfigKVs(
 				colID := lastColID + descpb.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap.Get(colID); ok {
-					res, bytes, err = rowenc.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
+					res, bytes, err = rowenc.DecodeTableValue(a, tbl.GetPublicColumns()[idx].Type, bytes)
 					if err != nil {
 						return err
 					}
 					switch colID {
-					case tbl.Columns[1].ID: // value
+					case tbl.GetPublicColumns()[1].ID: // value
 						v = string(tree.MustBeDString(res))
-					case tbl.Columns[3].ID: // valueType
+					case tbl.GetPublicColumns()[3].ID: // valueType
 						t = string(tree.MustBeDString(res))
-					case tbl.Columns[2].ID: // lastUpdated
+					case tbl.GetPublicColumns()[2].ID: // lastUpdated
 						// TODO(dt): we could decode just the len and then seek `bytes` past
 						// it, without allocating/decoding the unused timestamp.
 					default:

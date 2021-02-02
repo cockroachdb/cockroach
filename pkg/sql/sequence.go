@@ -44,7 +44,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	if err != nil {
 		return nil, err
 	}
-	for _, col := range tableDesc.Columns {
+	for _, col := range tableDesc.GetPublicColumns() {
 		if col.ColName() == columnName {
 			// Seems like we have no way of detecting whether this was done using "SERIAL".
 			// Guess by assuming it is SERIAL it it uses only one sequence.
@@ -86,13 +86,13 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, err
 	}
 
-	seqOpts := descriptor.SequenceOpts
+	seqOpts := descriptor.GetSequenceOpts()
 	var val int64
 	if seqOpts.Virtual {
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
 	} else {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
 		val, err = kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
@@ -106,13 +106,13 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		}
 	}
 
-	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
+	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
 
 	return val, nil
 }
 
-func boundsExceededError(descriptor *tabledesc.Immutable) error {
-	seqOpts := descriptor.SequenceOpts
+func boundsExceededError(descriptor catalog.TableDescriptor) error {
+	seqOpts := descriptor.GetSequenceOpts()
 	isAscending := seqOpts.Increment > 0
 
 	var word string
@@ -124,10 +124,11 @@ func boundsExceededError(descriptor *tabledesc.Immutable) error {
 		word = "minimum"
 		value = seqOpts.MinValue
 	}
+	name := descriptor.GetName()
 	return pgerror.Newf(
 		pgcode.SequenceGeneratorLimitExceeded,
 		`reached %s value of sequence %q (%d)`, word,
-		tree.ErrString((*tree.Name)(&descriptor.Name)), value)
+		tree.ErrString((*tree.Name)(&name)), value)
 }
 
 // GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
@@ -140,7 +141,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 		return 0, err
 	}
 
-	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.ID))
+	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.GetID()))
 	if !ok {
 		return 0, pgerror.Newf(
 			pgcode.ObjectNotInPrerequisiteState,
@@ -167,7 +168,7 @@ func (p *planner) SetSequenceValue(
 		return err
 	}
 
-	if descriptor.SequenceOpts.Virtual {
+	if descriptor.GetSequenceOpts().Virtual {
 		// TODO(knz): we currently return an error here, but if/when
 		// CockroachDB grows to automatically make sequences virtual when
 		// clients don't expect it, we may need to make this a no-op
@@ -211,12 +212,12 @@ func MakeSequenceKeyVal(
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, codec keys.SQLCodec, desc *tabledesc.Immutable,
+	ctx context.Context, codec keys.SQLCodec, desc catalog.TableDescriptor,
 ) (int64, error) {
-	if desc.SequenceOpts == nil {
+	if desc.GetSequenceOpts() == nil {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.ID)))
+	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.GetID())))
 	if err != nil {
 		return 0, err
 	}

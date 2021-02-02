@@ -18,19 +18,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var _ catalog.TableDescriptor = (*Immutable)(nil)
+var _ catalog.TableDescriptor = (*immutable)(nil)
 var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
 
 // wrapper is the base implementation of the catalog.Descriptor
-// interface, which is overloaded by Immutable and Mutable.
+// interface, which is overloaded by immutable and Mutable.
 type wrapper struct {
 	descpb.TableDescriptor
 
 	// indexCache, when not nil, points to a struct containing precomputed
 	// catalog.Index slices. This can therefore only be set when creating an
-	// Immutable.
+	// immutable.
 	indexCache *indexCache
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
@@ -132,10 +132,10 @@ func (desc *wrapper) GetColumnOrdinalsWithUserDefinedTypes() []int {
 	return ords
 }
 
-// Immutable is a custom type for TableDescriptors
+// immutable is a custom type for TableDescriptors
 // It holds precomputed values and the underlying TableDescriptor
 // should be const.
-type Immutable struct {
+type immutable struct {
 	wrapper
 
 	// publicAndNonPublicCols is a list of public and non-public columns.
@@ -166,7 +166,7 @@ type Immutable struct {
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
-func (desc *Immutable) IsUncommittedVersion() bool {
+func (desc *immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
 }
 
@@ -199,7 +199,22 @@ func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 
 // ReadableColumns returns a list of columns (including those undergoing a
 // schema change) which can be scanned.
-func (desc *Immutable) ReadableColumns() []descpb.ColumnDescriptor {
+func (desc *wrapper) ReadableColumns() []descpb.ColumnDescriptor {
+	cols := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	cols = append(cols, desc.Columns...)
+	for _, m := range desc.Mutations {
+		if columnMutation := m.GetColumn(); columnMutation != nil {
+			col := *columnMutation
+			col.Nullable = true
+			cols = append(cols, col)
+		}
+	}
+	return cols
+}
+
+// ReadableColumns returns a list of columns (including those undergoing a
+// schema change) which can be scanned.
+func (desc *immutable) ReadableColumns() []descpb.ColumnDescriptor {
 	return desc.readableColumns
 }
 
@@ -208,7 +223,7 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	imm := NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }
 

@@ -412,7 +412,7 @@ func formatValues(colNames []string, values tree.Datums) string {
 }
 
 // checkSet contains a subset of checks, as ordinals into
-// Immutable.ActiveChecks. These checks have boolean columns
+// immutable.ActiveChecks. These checks have boolean columns
 // produced as input to mutations, indicating the result of evaluating the
 // check.
 //

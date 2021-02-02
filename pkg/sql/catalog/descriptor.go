@@ -109,8 +109,11 @@ type TableDescriptor interface {
 
 	GetState() descpb.DescriptorState
 	GetSequenceOpts() *descpb.TableDescriptor_SequenceOpts
+	GetCreateQuery() string
 	GetViewQuery() string
 	GetLease() *descpb.TableDescriptor_SchemaChangeLease
+	GetCreateAsOfTime() hlc.Timestamp
+	GetModificationTime() hlc.Timestamp
 	GetDropTime() int64
 	GetFormatVersion() descpb.FormatVersion
 
@@ -119,6 +122,8 @@ type TableDescriptor interface {
 	IsPartitionAllBy() bool
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	AllIndexSpans(codec keys.SQLCodec) roachpb.Spans
+	TableSpan(codec keys.SQLCodec) roachpb.Span
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 
@@ -190,6 +195,8 @@ type TableDescriptor interface {
 	// canonical order, see Index.Ordinal().
 	FindIndexWithName(name string) (Index, error)
 
+	GetNextIndexID() descpb.IndexID
+
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
 
@@ -211,6 +218,16 @@ type TableDescriptor interface {
 	ContainsUserDefinedTypes() bool
 	GetColumnOrdinalsWithUserDefinedTypes() []int
 	UserDefinedTypeColsHaveSameVersion(otherDesc TableDescriptor) bool
+	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
+	WritableColumns() []descpb.ColumnDescriptor
+	ReadableColumns() []descpb.ColumnDescriptor
+	GetNextColumnID() descpb.ColumnID
+	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)
+	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error)
+	ColumnTypes() []*types.T
+	ColumnTypesWithMutations(mutations bool) []*types.T
+	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
+	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	NumFamilies() int
@@ -225,7 +242,12 @@ type TableDescriptor interface {
 	IsPhysicalTable() bool
 	IsInterleaved() bool
 	MaterializedView() bool
+	IsAs() bool
 
+	HasColumnBackfillMutation() bool
+	MakeFirstMutationPublic(includeConstraints bool) (TableDescriptor, error)
+	GetMutations() []descpb.DescriptorMutation
+	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
 	GetReplacementOf() descpb.TableDescriptor_Replacement
@@ -245,8 +267,10 @@ type TableDescriptor interface {
 	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
 	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
-	WritableColumns() []descpb.ColumnDescriptor
+	GetConstraintInfo(ctx context.Context, dg DescGetter) (map[string]descpb.ConstraintDetail, error)
+	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
+	GetInboundFKs() []descpb.ForeignKeyConstraint
+	GetOutboundFKs() []descpb.ForeignKeyConstraint
 
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
 	IsLocalityRegionalByRow() bool

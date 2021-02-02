@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -83,7 +83,7 @@ func TestKVFeed(t *testing.T) {
 		spans              []roachpb.Span
 		events             []roachpb.RangeFeedEvent
 
-		descs []*tabledesc.Immutable
+		descs []catalog.TableDescriptor
 
 		expScans  []hlc.Timestamp
 		expEvents int
@@ -193,7 +193,7 @@ func TestKVFeed(t *testing.T) {
 				ts(2),
 				ts(3),
 			},
-			descs: []*tabledesc.Immutable{
+			descs: []catalog.TableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -217,7 +217,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*tabledesc.Immutable{
+			descs: []catalog.TableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -242,7 +242,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*tabledesc.Immutable{
+			descs: []catalog.TableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
 			},
@@ -268,21 +268,21 @@ type rawTableFeed struct {
 	events []schemafeed.TableEvent
 }
 
-func newRawTableFeed(descs []*tabledesc.Immutable, initialHighWater hlc.Timestamp) rawTableFeed {
+func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp) rawTableFeed {
 	sort.Slice(descs, func(i, j int) bool {
-		if descs[i].ID != descs[j].ID {
-			return descs[i].ID < descs[j].ID
+		if descs[i].GetID() != descs[j].GetID() {
+			return descs[i].GetID() < descs[j].GetID()
 		}
-		return descs[i].ModificationTime.Less(descs[j].ModificationTime)
+		return descs[i].GetModificationTime().Less(descs[j].GetModificationTime())
 	})
 	f := rawTableFeed{}
 	curID := descpb.ID(math.MaxUint32)
 	for i, d := range descs {
-		if d.ID != curID {
-			curID = d.ID
+		if d.GetID() != curID {
+			curID = d.GetID()
 			continue
 		}
-		if d.ModificationTime.Less(initialHighWater) {
+		if d.GetModificationTime().Less(initialHighWater) {
 			continue
 		}
 		f.events = append(f.events, schemafeed.TableEvent{

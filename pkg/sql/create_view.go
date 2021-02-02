@@ -78,7 +78,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	// Check that the view does not contain references to other databases.
 	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
 		for _, dep := range n.planDeps {
-			if dbID := dep.desc.ParentID; dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
+			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
 				return errors.WithHintf(
 					pgerror.Newf(pgcode.FeatureNotSupported,
 						"the view cannot refer to other databases; (see the '%s' cluster setting)",
@@ -246,7 +246,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating view reference %q in table %s(%d)", n.viewName,
-				updated.desc.Name, updated.desc.ID,
+				updated.desc.GetName(), updated.desc.GetID(),
 			),
 		); err != nil {
 			return err

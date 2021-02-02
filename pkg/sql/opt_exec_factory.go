@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -135,7 +134,7 @@ func (ef *execFactory) ConstructScan(
 func generateScanSpans(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	tabDesc *tabledesc.Immutable,
+	tabDesc catalog.TableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
@@ -658,7 +657,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		return nil, err
 	}
 	tableScan.index = indexDesc
-	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.ID, tableDesc.Columns)
+	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.GetPublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
 	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
 	outputCols = append(outputCols, inputCols...)
@@ -750,7 +749,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
 	indexDesc *descpb.IndexDescriptor,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
 
@@ -759,7 +758,7 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.Columns[c].ID))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.GetPublicColumns()[c].ID))
 	}
 
 	scan := ef.planner.Scan()
@@ -1194,7 +1193,7 @@ func (ef *execFactory) ConstructInsert(
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1269,7 +1268,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1486,7 +1485,7 @@ func (ef *execFactory) ConstructUpsert(
 		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
 		// non-mutation columns specified, in the same order they are defined
 		// in the table.
-		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.GetPublicColumns(), returnColDescs)
 		ups.run.tw.returnCols = returnColDescs
 		ups.run.tw.rowsNeeded = true
 	}
@@ -1597,7 +1596,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	if len(interleavedTables) > 0 {
 		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]*tabledesc.Immutable, len(interleavedTables))
+		dr.interleavedDesc = make([]catalog.TableDescriptor, len(interleavedTables))
 		for i := range dr.interleavedDesc {
 			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
 		}
@@ -1676,13 +1675,13 @@ func (ef *execFactory) ConstructCreateView(
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.Columns[ord].ID)
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.GetPublicColumns()[ord].ID)
 			})
 		}
-		entry := planDeps[desc.ID]
+		entry := planDeps[desc.GetID()]
 		entry.desc = desc
 		entry.deps = append(entry.deps, ref)
-		planDeps[desc.ID] = entry
+		planDeps[desc.GetID()] = entry
 	}
 
 	return &createViewNode{
