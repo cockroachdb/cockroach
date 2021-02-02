@@ -1,0 +1,10 @@
+# This file contains telemetry tests for the hashed.* counter.
+
+feature-allowlist
+sql.hashed.*
+----
+
+feature-usage
+SELECT crdb_internal.increment_feature_counter('abc');
+----
+sql.hashed.ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
