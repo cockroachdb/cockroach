@@ -4960,7 +4960,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16!null
       ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -4985,7 +4985,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16!null
       ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -5123,7 +5123,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.j:3 t2.j:10
+      ├── columns: t1.k:1!null t1.j:3!null t2.j:10!null
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -5149,7 +5149,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.a:4 t2.a:11
+      ├── columns: t1.k:1!null t1.a:4!null t2.a:11!null
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -5222,7 +5222,7 @@ JOIN json_arr2 AS t2
 ON t1.j @> t2.j AND t1.j @> '{"foo": "bar"}'::jsonb AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null i:2 j:3!null a:4 k:8!null l:9 j:10 a:11
+ ├── columns: k:1!null i:2 j:3!null a:4 k:8!null l:9 j:10!null a:11
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -5252,7 +5252,7 @@ JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null i:2 j:3 a:4!null k:8!null l:9 j:10 a:11
+ ├── columns: k:1!null i:2 j:3 a:4!null k:8!null l:9 j:10 a:11!null
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -5391,7 +5391,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (cross)
-      ├── columns: t1.k:1!null t1.a:4 t2.a:13
+      ├── columns: t1.k:1!null t1.a:4!null t2.a:13!null
       ├── immutable
       ├── fd: (1)-->(4)
       ├── scan json_arr1 [as=t1]
@@ -5415,7 +5415,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.j:3 t2.j:12
+      ├── columns: t1.k:1!null t1.j:3!null t2.j:12!null
       ├── key columns: [15] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -5567,7 +5567,7 @@ project
  ├── immutable
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.a:4 t1.k:6!null t1.a:9
+      ├── columns: t2.a:4!null t1.k:6!null t1.a:9!null
       ├── key columns: [19] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5602,7 +5602,7 @@ project
  ├── immutable
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.j:8
+      ├── columns: t2.j:3!null t1.k:6!null t1.j:8!null
       ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5637,7 +5637,7 @@ project
  ├── immutable
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.j:8 t1.a:9!null
+      ├── columns: t2.j:3!null t1.k:6!null t1.j:8!null t1.a:9!null
       ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5672,7 +5672,7 @@ project
  ├── columns: k:6!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.j:8
+      ├── columns: t2.j:3!null t1.k:6!null t1.j:8!null
       ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5712,7 +5712,7 @@ project
  ├── immutable
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null t2.j:3 t1.k:6!null t1.j:8
+      ├── columns: t2.k:1!null t2.j:3!null t1.k:6!null t1.j:8!null
       ├── key columns: [17] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5745,7 +5745,7 @@ project
  ├── columns: k:6!null
  ├── immutable
  └── inner-join (lookup json_check [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.j:8
+      ├── columns: t2.j:3!null t1.k:6!null t1.j:8!null
       ├── key columns: [12] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5784,7 +5784,7 @@ project
  ├── columns: k:6!null
  ├── immutable
  └── inner-join (lookup json_comp [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
+      ├── columns: t2.j:3!null t1.k:6!null t1.a:7!null t1.j:9!null
       ├── key columns: [13] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5829,7 +5829,7 @@ project
  ├── columns: k:6!null
  ├── immutable
  └── inner-join (lookup json_comp [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
+      ├── columns: t2.j:3!null t1.k:6!null t1.a:7!null t1.j:9!null
       ├── key columns: [14] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5901,7 +5901,7 @@ project
  ├── columns: k:6!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.j:3 t1.k:6!null i:7!null t1.j:8
+      ├── columns: t2.j:3!null t1.k:6!null i:7!null t1.j:8!null
       ├── key columns: [21] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5950,7 +5950,7 @@ project
  ├── immutable
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null t2.j:3 t1.k:6!null i:7!null t1.j:8
+      ├── columns: t2.k:1!null t2.j:3!null t1.k:6!null i:7!null t1.j:8!null
       ├── key columns: [19] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -5994,7 +5994,7 @@ project
  ├── immutable
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2!null t2.j:3 t1.k:6!null i:7!null t1.j:8
+      ├── columns: t2.k:1!null l:2!null t2.j:3!null t1.k:6!null i:7!null t1.j:8!null
       ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
@@ -6293,7 +6293,7 @@ SELECT * FROM json_arr2 AS t2 INNER INVERTED JOIN json_arr1 AS t1
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 500
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null l:2 j:3 a:4 k:6!null i:7 j:8 a:9
+ ├── columns: k:1!null l:2 j:3!null a:4 k:6!null i:7 j:8!null a:9
  ├── key columns: [20] = [6]
  ├── lookup columns are key
  ├── immutable
@@ -6351,7 +6351,7 @@ SELECT * FROM json_arr2 AS t2 INNER INVERTED JOIN json_arr1 AS t1
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 400
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null l:2 j:3 a:4 k:6!null i:7 j:8 a:9
+ ├── columns: k:1!null l:2 j:3!null a:4 k:6!null i:7 j:8!null a:9
  ├── key columns: [20] = [6]
  ├── lookup columns are key
  ├── immutable
@@ -6472,7 +6472,7 @@ SELECT * FROM json_arr1 AS t1 JOIN json_arr2 AS t2
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 1000
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2 j:3 a:4 k:15!null l:16 j:17 a:18
+ ├── columns: k:1!null i:2 j:3!null a:4 k:15!null l:16 j:17!null a:18
  ├── immutable
  ├── key: (1,15)
  ├── fd: (1)-->(2-4), (15)-->(16-18)

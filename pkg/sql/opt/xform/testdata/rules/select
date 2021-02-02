@@ -3151,7 +3151,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)

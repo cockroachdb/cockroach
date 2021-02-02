@@ -1723,17 +1723,53 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 	return card
 }
 
-// rejectNullCols returns the set of all columns that are inferred to be not-
-// null, based on the filter conditions.
-func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
+// ConditionRejectsNullInputs returns true if the given condition cannot
+// evaluate to True if any of its (direct) inputs are NULL.
+func ConditionRejectsNullInputs(condition opt.ScalarExpr) bool {
+	switch condition.Op() {
+	case opt.EqOp, opt.LtOp, opt.GtOp, opt.LeOp, opt.GeOp, opt.NeOp,
+		opt.LikeOp, opt.NotLikeOp, opt.ILikeOp, opt.NotILikeOp, opt.SimilarToOp, opt.NotSimilarToOp,
+		opt.RegMatchOp, opt.NotRegMatchOp, opt.RegIMatchOp, opt.NotRegIMatchOp,
+		opt.ContainsOp, opt.JsonExistsOp, opt.JsonAllExistsOp, opt.JsonSomeExistsOp,
+		opt.OverlapsOp, opt.BBoxCoversOp, opt.BBoxIntersectsOp:
+		return true
+
+	case opt.IsNotOp:
+		if condition.(*IsNotExpr).Right.Op() == opt.NullOp {
+			// x IS NOT NULL
+			return true
+		}
+	}
+	return false
+}
+
+// NullColsRejectedByFilter returns a set of columns that are "null rejected"
+// by the filters. An input row with a NULL value on any of these columns will
+// not pass the filter.
+func NullColsRejectedByFilter(evalCtx *tree.EvalContext, filters FiltersExpr) opt.ColSet {
 	var notNullCols opt.ColSet
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints != nil {
-			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(b.evalCtx))
+			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(evalCtx))
+		}
+		// If the operator returns NULL on NULL inputs, we can null-reject all its
+		// inputs.
+		if cond := filters[i].Condition; ConditionRejectsNullInputs(cond) {
+			for i, n := 0, cond.ChildCount(); i < n; i++ {
+				if v, ok := cond.Child(i).(*VariableExpr); ok {
+					notNullCols.Add(v.Col)
+				}
+			}
 		}
 	}
 	return notNullCols
+}
+
+// rejectNullCols returns the set of all columns that are inferred to be not-
+// null, based on the filter conditions.
+func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
+	return NullColsRejectedByFilter(b.evalCtx, filters)
 }
 
 // addFiltersToFuncDep returns the union of all functional dependencies from

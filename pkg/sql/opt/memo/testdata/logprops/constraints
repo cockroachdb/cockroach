@@ -1449,7 +1449,7 @@ opt
 SELECT * from f where a @> ARRAY[NULL]::INT[]
 ----
 select
- ├── columns: k:1(int!null) j:2(jsonb) a:3(int[])
+ ├── columns: k:1(int!null) j:2(jsonb) a:3(int[]!null)
  ├── cardinality: [0 - 0]
  ├── immutable
  ├── key: (1)

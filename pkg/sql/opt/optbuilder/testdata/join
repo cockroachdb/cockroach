@@ -1201,9 +1201,9 @@ build
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
 project
- ├── columns: a:1 b:2 n:5!null sq:6
+ ├── columns: a:1 b:2 n:5!null sq:6!null
  └── select
-      ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 n:5!null sq:6 square.crdb_internal_mvcc_timestamp:7
+      ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 n:5!null sq:6!null square.crdb_internal_mvcc_timestamp:7
       ├── inner-join (cross)
       │    ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 n:5!null sq:6 square.crdb_internal_mvcc_timestamp:7
       │    ├── scan pairs
