@@ -31,8 +31,8 @@ type azureConfig struct {
 func (a azureConfig) filePath(f string) string {
 	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 		a.bucket, f,
-		cloudimpl.AzureAccountNameParam, url.QueryEscape(a.account),
-		cloudimpl.AzureAccountKeyParam, url.QueryEscape(a.key))
+		cloudimpl.AzureAccountKeyParam, url.QueryEscape(a.key),
+		cloudimpl.AzureAccountNameParam, url.QueryEscape(a.account))
 }
 
 func getAzureConfig() (azureConfig, error) {
