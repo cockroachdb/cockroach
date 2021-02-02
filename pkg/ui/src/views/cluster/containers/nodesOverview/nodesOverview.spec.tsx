@@ -16,6 +16,7 @@ import Long from "long";
 
 import {
   decommissionedNodesTableDataSelector,
+  getLivenessStatusName,
   liveNodesTableDataSelector,
   NodeList,
   NodeStatusRow,
@@ -25,7 +26,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
-import { livenessByNodeIDSelector } from "src/redux/nodes";
+import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 
@@ -464,6 +465,24 @@ describe("Nodes Overview page", () => {
           assert.equal(record.nodeName, expectedName);
         });
       });
+    });
+  });
+
+  describe("getLivenessStatusName", () => {
+    it("return node liveness names without prefix", () => {
+      assert.equal(
+        getLivenessStatusName(LivenessStatus.NODE_STATUS_LIVE),
+        "LIVE",
+      );
+      assert.equal(
+        getLivenessStatusName(LivenessStatus.NODE_STATUS_DECOMMISSIONED),
+        "DECOMMISSIONED",
+      );
+      assert.equal(
+        getLivenessStatusName(LivenessStatus.NODE_STATUS_DEAD),
+        "DEAD",
+      );
+      assert.equal(getLivenessStatusName(3), "LIVE");
     });
   });
 });

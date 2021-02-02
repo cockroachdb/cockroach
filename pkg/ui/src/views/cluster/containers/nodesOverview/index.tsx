@@ -155,6 +155,14 @@ const getBadgeTypeByNodeStatus = (
   }
 };
 
+// getLivenessStatusName truncates the prefix for status name to keep only
+// status name ("NODE_STATUS_LIVE" -> "LIVE").
+export const getLivenessStatusName = (status: LivenessStatus): string => {
+  const prefix = "NODE_STATUS_";
+  const statusKey = LivenessStatus[status];
+  return statusKey.replace(prefix, "");
+};
+
 const NodeNameColumn: React.FC<{
   record: NodeStatusRow | DecommissionedNodeStatusRow;
 }> = ({ record }) => {
@@ -322,7 +330,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             tooltipText = getStatusDescription(record.status);
             break;
           default:
-            badgeText = LivenessStatus[record.status];
+            badgeText = getLivenessStatusName(record.status);
             tooltipText = getStatusDescription(record.status);
             break;
         }
