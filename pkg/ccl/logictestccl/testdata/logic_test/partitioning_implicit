@@ -137,6 +137,82 @@ CREATE TABLE public.t (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4, 5)
+
+# Tests for FK references against the implicit columns.
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c)
+)
+
+query T
+EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: fk_using_implicit_columns_against_t(pk, ref_t_pk, ref_t_c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (pk) = (column2)
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right anti)
+            │ equality: (c) = (column3)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t@t_c_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+
+statement error Key \(ref_t_pk\)=\(2\) is not present in table "t"
+INSERT INTO fk_using_implicit_columns_against_t VALUES (2, 2, 4)
+
+# Error if we reference the implicit partitioning in the foreign key.
+statement error there is no unique constraint matching given keys for referenced table t
+CREATE TABLE fk_including_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_a INT,
+  ref_t_pk INT,
+  ref_t_c INT,
+  CONSTRAINT a_pk FOREIGN KEY(ref_t_a, ref_t_pk) REFERENCES t(a, pk)
+)
+
 statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
 ALTER TABLE t PARTITION BY LIST(d) (
   PARTITION pk_implicit VALUES IN (1)
@@ -216,7 +292,7 @@ ALTER TABLE t PARTITION ALL BY LIST (a) (
 )
 
 statement ok
-DROP TABLE t
+DROP TABLE t CASCADE
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE TABLE public.t (
