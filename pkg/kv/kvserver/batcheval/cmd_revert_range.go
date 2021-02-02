@@ -57,6 +57,8 @@ func isEmptyKeyTimeRange(
 	return !ok, err
 }
 
+const maxRevertRangeBatchBytes = 32 << 20
+
 // RevertRange wipes all MVCC versions more recent than TargetTime (up to the
 // command timestamp) of the keys covered by the specified span, adjusting the
 // MVCC stats accordingly.
@@ -88,6 +90,7 @@ func RevertRange(
 
 	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
 		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
+		maxRevertRangeBatchBytes,
 		args.EnableTimeBoundIteratorOptimization)
 	if err != nil {
 		return result.Result{}, err
