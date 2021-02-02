@@ -868,11 +868,15 @@ func ResolveFK(
 	}
 
 	referencedColNames := d.ToCols
-	// If no columns are specified, attempt to default to PK.
+	// If no columns are specified, attempt to default to PK, ignoring implicit columns.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, target.GetPrimaryIndex().NumColumns())
-		for i := range referencedColNames {
-			referencedColNames[i] = tree.Name(target.GetPrimaryIndex().GetColumnName(i))
+		numImplicitCols := target.GetPrimaryIndex().GetPartitioning().NumImplicitColumns
+		referencedColNames = make(tree.NameList, 0, target.GetPrimaryIndex().NumColumns())
+		for i := int(numImplicitCols); i < target.GetPrimaryIndex().NumColumns(); i++ {
+			referencedColNames = append(
+				referencedColNames,
+				tree.Name(target.GetPrimaryIndex().GetColumnName(i)),
+			)
 		}
 	}
 
