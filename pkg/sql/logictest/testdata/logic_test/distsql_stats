@@ -684,7 +684,7 @@ statement ok
 CREATE STATISTICS s FROM users
 
 # Ensure that the trace includes the job by observing the job move through
-# the 'succeeded' state in the trace.
+# the 'succeeded' state in the trace. XXX:
 
 query I
 SELECT count(*)

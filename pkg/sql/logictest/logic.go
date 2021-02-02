@@ -1385,6 +1385,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 			require.Lenf(t.rootT, cfg.localities, 0, "node %d does not have a locality set", i+1)
 		}
 
+		var settings *cluster.Settings
 		if cfg.binaryVersion != (roachpb.Version{}) {
 			binaryMinSupportedVersion := cfg.binaryVersion
 			if cfg.bootstrapVersion != (roachpb.Version{}) {
@@ -1392,12 +1393,17 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				// supports at least the bootstrap version.
 				binaryMinSupportedVersion = cfg.bootstrapVersion
 			}
-			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
+			settings = cluster.MakeTestingClusterSettingsWithVersions(
 				cfg.binaryVersion,
 				binaryMinSupportedVersion,
 				false, /* initializeVersion */
 			)
+		} else {
+			settings = cluster.MakeTestingClusterSettings()
 		}
+		settings.Tracer.LinkForkedSpans()
+		nodeParams.Settings = settings
+
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode

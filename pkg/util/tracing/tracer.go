@@ -138,6 +138,9 @@ type Tracer struct {
 
 	_mode int32 // modeLegacy or modeBackground, accessed atomically
 
+	// XXX:
+	linkForkedSpans bool
+
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
@@ -154,8 +157,7 @@ type Tracer struct {
 	// The map can be introspected by `Tracer.VisitSpans`.
 	activeSpans struct {
 		// NB: it might be tempting to use a sync.Map here, but
-		// this incurs an allocation per Span (sync.Map does
-		// not use a sync.Pool for its internal *entry type).
+		// this incurs an allocation per Span (sync.Map does // not use a sync.Pool for its internal *entry type).
 		//
 		// The bare map approach is essentially allocation-free once the map
 		// has grown to accommodate the usual number of active local root spans,
@@ -621,6 +623,11 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	return nil
 }
 
+// XXX:
+func (t *Tracer) LinkForkedSpans() {
+	t.linkForkedSpans = true
+}
+
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
 // that "follows from" the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.
@@ -635,9 +642,13 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(
-		ctx, opName, WithParentAndManualCollection(sp.Meta()), WithFollowsFrom(),
-	)
+	// XXX: When forking, if parent span was told to link child span, we should
+	// do it.
+	collection := WithParentAndManualCollection(sp.Meta())
+	if sp.Tracer().linkForkedSpans {
+		collection = WithParentAndAutoCollection(sp)
+	}
+	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collection)
 }
 
 // ChildSpan opens a Span as a child of the current Span in the context (if
@@ -715,10 +726,17 @@ func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.
 //
 // Note that to convert the recorded spans into text, you can use
 // Recording.String(). Tests can also use FindMsgInRecording().
+// XXX: Check usages - we're now dropping forked span data.
 func ContextWithRecordingSpan(
 	ctx context.Context, opName string,
 ) (_ context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
+	return ContextWithRecordingSpanUsing(ctx, tr, opName)
+}
+
+func ContextWithRecordingSpanUsing(
+	ctx context.Context, tr *Tracer, opName string,
+) (_ context.Context, getRecording func() Recording, cancel func()) {
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithForceRealSpan())
 	sp.SetVerbose(true)
 	ctx, cancelCtx := context.WithCancel(ctx)

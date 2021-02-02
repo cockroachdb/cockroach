@@ -725,6 +725,7 @@ func (ds *DistSender) Send(
 		return nil, pErr
 	}
 
+	// XXX: We're creating a different tracer here?
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()

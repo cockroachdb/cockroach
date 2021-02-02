@@ -428,6 +428,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
+	// XXX: Should we use a server arg that specifies the option to link forked spans?
 	srv, err := serverutils.NewServer(serverArgs)
 	if err != nil {
 		return nil, err
