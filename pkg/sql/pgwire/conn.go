@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -173,7 +174,6 @@ func newConn(
 	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
-	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
 	c.msgBuilder.init(metrics.BytesOutCount)
 
 	return c
@@ -1088,18 +1088,23 @@ type flushInfo struct {
 	// flushed. The command may have further results in the buffer that haven't
 	// been flushed.
 	lastFlushed sql.CmdPos
-	// map from CmdPos to the index of the buffer where the results for the
-	// respective result begins.
-	cmdStarts map[sql.CmdPos]int
+	// These two rings maintain the state about where the results for the
+	// respective positions begin. We utilize an assumption that positions are
+	// monotonically increasing sequences, but they might have gaps (i.e.
+	// CmdPos(0) can be followed by CmdPos(2)), so we need two rings.
+	cmdStartsPos ring.Buffer
+	cmdStartsIdx ring.Buffer
 }
 
-// registerCmd updates cmdStarts when the first result for a new command is
-// received.
+// registerCmd updates cmdStarts* buffers when the first result for a new
+// command is received.
 func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
-	if _, ok := fi.cmdStarts[pos]; ok {
+	if fi.cmdStartsPos.Len() > 0 && fi.cmdStartsPos.GetLast().(sql.CmdPos) >= pos {
+		// Not a new command, nothing to do.
 		return
 	}
-	fi.cmdStarts[pos] = fi.buf.Len()
+	fi.cmdStartsPos.AddLast(pos)
+	fi.cmdStartsIdx.AddLast(fi.buf.Len())
 }
 
 func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffected int) []byte {
@@ -1359,7 +1364,8 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 	}
 
 	c.writerState.fi.lastFlushed = pos
-	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
+	c.writerState.fi.cmdStartsPos.Reset()
+	c.writerState.fi.cmdStartsIdx.Reset()
 
 	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
 	if err != nil {
@@ -1410,20 +1416,16 @@ func (cl *clientConnLock) RTrim(ctx context.Context, pos sql.CmdPos) {
 	if pos <= cl.lastFlushed {
 		panic(errors.AssertionFailedf("asked to trim to pos: %d, below the last flush: %d", pos, cl.lastFlushed))
 	}
-	idx, ok := cl.cmdStarts[pos]
-	if !ok {
-		// If we don't have a start index for pos yet, it must be that no results
-		// for it yet have been produced yet.
-		idx = cl.buf.Len()
+	// If we don't have a start index for pos yet, it must be that no results
+	// for it yet have been produced yet.
+	truncateIdx := cl.buf.Len()
+	// Update cmdStarts* buffers: delete commands that were trimmed.
+	for cl.cmdStartsPos.Len() > 0 && cl.cmdStartsPos.GetLast().(sql.CmdPos) >= pos {
+		truncateIdx = cl.cmdStartsIdx.GetLast().(int)
+		cl.cmdStartsPos.RemoveLast()
+		cl.cmdStartsIdx.RemoveLast()
 	}
-	// Remove everything from the buffer after idx.
-	cl.buf.Truncate(idx)
-	// Update cmdStarts: delete commands that were trimmed.
-	for p := range cl.cmdStarts {
-		if p >= pos {
-			delete(cl.cmdStarts, p)
-		}
-	}
+	cl.buf.Truncate(truncateIdx)
 }
 
 // CreateStatementResult is part of the sql.ClientComm interface.
