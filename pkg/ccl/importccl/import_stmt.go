@@ -1435,6 +1435,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Now that we know all the tables are offline, pick a walltime at which we
 		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
+		// Update the job details as soon as we've chosen a timestamp. We don't wait
+		// until below to be defensive against hard-to-reason state where the
+		// details' timestamp is not set.
+		// We have seen the scan below hang in some states, which may cause and
+		// import failure.
+		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
+			return err
+		}
 
 		// Check if the tables being imported into are starting empty, in which
 		// case we can cheaply clear-range instead of revert-range to cleanup.
@@ -1448,7 +1456,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				details.Tables[i].WasEmpty = len(res) == 0
 			}
 		}
-
 		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
 			return err
 		}
