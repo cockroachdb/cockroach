@@ -1162,9 +1162,54 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// index swap occurs. The logic that generates spans for subzone
 				// configurations removes spans for indexes in the dropping state,
 				// which we don't want. So, set up the zone configs before we swap.
-				if err := maybeUpdateZoneConfigsForPKChange(
-					ctx, txn, sc.execCfg, scTable, pkSwap); err != nil {
-					return err
+				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
+					dbDesc, err := descsCol.GetImmutableDatabaseByID(
+						ctx,
+						txn,
+						scTable.GetParentID(),
+						tree.DatabaseLookupFlags{Required: true},
+					)
+					if err != nil {
+						return err
+					}
+
+					// For locality configs, we need to update the zone configs to match
+					// the new multi-region locality configuration, instead of
+					// copying the old zone configs over.
+					switch lcSwap.NewLocalityConfig.Locality.(type) {
+					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+						// Apply new zone configurations for all newly partitioned indexes,
+						// including the primary key and the table itself.
+						if err := applyZoneConfigForMultiRegionTable(
+							ctx,
+							txn,
+							sc.execCfg,
+							*dbDesc.RegionConfig,
+							scTable,
+							applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+								lcSwap.NewLocalityConfig,
+							),
+							applyZoneConfigForMultiRegionTableOptionNewIndexes(
+								append(
+									[]descpb.IndexID{pkSwap.NewPrimaryIndexId},
+									pkSwap.NewIndexes...,
+								)...,
+							),
+						); err != nil {
+							return err
+						}
+					default:
+						return errors.AssertionFailedf(
+							"unknown locality on PK swap: %T",
+							lcSwap.NewLocalityConfig.Locality,
+						)
+					}
+				} else {
+					// For the normal case, copy the zone configs over.
+					if err := maybeUpdateZoneConfigsForPKChange(
+						ctx, txn, sc.execCfg, scTable, pkSwap); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -1222,6 +1267,29 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
 					fn()
 				}
+				// For locality swaps, ensure the table descriptor fields are correctly filled.
+				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
+					scTable.LocalityConfig = &lcSwap.NewLocalityConfig
+					switch lcSwap.NewLocalityConfig.Locality.(type) {
+					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+						scTable.PartitionAllBy = true
+					default:
+						return errors.AssertionFailedf(
+							"unknown locality on PK swap: %T",
+							lcSwap.NewLocalityConfig.Locality,
+						)
+					}
+
+					// Validate the new locality before updating the table descriptor.
+					dg := catalogkv.NewOneLevelUncachedDescGetter(txn, sc.execCfg.Codec)
+					if err := scTable.ValidateTableLocalityConfig(
+						ctx,
+						dg,
+					); err != nil {
+						return err
+					}
+				}
+
 				// If any old index had an interleaved parent, remove the
 				// backreference from the parent.
 				// N.B. This logic needs to be kept up to date with the

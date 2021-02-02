@@ -1562,9 +1562,11 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			backref.Name, desc.Name, originTable.GetName())
 	}
 
-	for _, indexI := range desc.NonDropIndexes() {
+	for _, indexI := range desc.ActiveIndexes() {
 		index := indexI.IndexDesc()
 		// Check partitioning is correctly set.
+		// We only check these for active indexes, as inactive indexes may be in the process
+		// of being backfilled without PartitionAllBy.
 		if desc.PartitionAllBy {
 			primaryIndexPartitioning := desc.PrimaryIndex.ColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
 			indexPartitioning := index.ColumnIDs[:index.Partitioning.NumColumns]
@@ -1585,6 +1587,10 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 				)
 			}
 		}
+	}
+
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		// Check interleaves.
 		if len(index.Interleave.Ancestors) > 0 {
 			// Only check the most recent ancestor, the rest of them don't point
@@ -1755,7 +1761,11 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 	}
 
 	switch lc := desc.LocalityConfig.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_, *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		if !desc.IsPartitionAllBy() {
+			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
+		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
@@ -4238,7 +4248,12 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 // (or its alias PrimaryRegionLocalityName) denotes that the table has affinity
 // to the primary region.
 func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	lc := LocalityConfigRegionalByTable(region)
+	desc.LocalityConfig = &lc
+}
+
+// LocalityConfigRegionalByTable returns a config for a REGIONAL BY TABLE table.
+func LocalityConfigRegionalByTable(region tree.Name) descpb.TableDescriptor_LocalityConfig {
 	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
 	}
@@ -4246,28 +4261,42 @@ func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
 		regionName := descpb.RegionName(region)
 		l.RegionalByTable.Region = &regionName
 	}
-	desc.LocalityConfig.Locality = l
+	return descpb.TableDescriptor_LocalityConfig{Locality: l}
 }
 
 // SetTableLocalityRegionalByRow sets the descriptor's locality config to
 // regional at the row level. An empty regionColName denotes the default
 // crdb_region partitioning column.
 func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	lc := LocalityConfigRegionalByRow(regionColName)
+	desc.LocalityConfig = &lc
+}
+
+// LocalityConfigRegionalByRow returns a config for a REGIONAL BY ROW table.
+func LocalityConfigRegionalByRow(regionColName tree.Name) descpb.TableDescriptor_LocalityConfig {
 	rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
-	if regionColName != "" {
+	if regionColName != tree.RegionalByRowRegionNotSpecifiedName {
 		rbr.As = proto.String(string(regionColName))
 	}
-	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-		RegionalByRow: rbr,
+	return descpb.TableDescriptor_LocalityConfig{
+		Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+			RegionalByRow: rbr,
+		},
 	}
 }
 
 // SetTableLocalityGlobal sets the descriptor's locality config to a global
 // table.
 func (desc *Mutable) SetTableLocalityGlobal() {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
-	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
-		Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+	lc := LocalityConfigGlobal()
+	desc.LocalityConfig = &lc
+}
+
+// LocalityConfigGlobal returns a config for a GLOBAL table.
+func LocalityConfigGlobal() descpb.TableDescriptor_LocalityConfig {
+	return descpb.TableDescriptor_LocalityConfig{
+		Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
+			Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+		},
 	}
 }
