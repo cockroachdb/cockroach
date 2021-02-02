@@ -55,7 +55,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 }
 
 func (n *commentOnColumnNode) startExec(params runParams) error {
-	col, _, err := n.tableDesc.FindColumnByName(n.n.ColumnItem.ColumnName)
+	col, err := n.tableDesc.FindColumnWithName(n.n.ColumnItem.ColumnName)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
 			n.tableDesc.GetID(),
-			col.ID,
+			col.GetID(),
 			*n.n.Comment)
 		if err != nil {
 			return err
@@ -83,7 +83,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
 			n.tableDesc.GetID(),
-			col.ID)
+			col.GetID())
 		if err != nil {
 			return err
 		}

@@ -278,7 +278,7 @@ func (b *Builder) validateColumnName(
 	col *descpb.ColumnDescriptor,
 	ifNotExists bool,
 ) error {
-	_, err := table.FindActiveColumnByName(string(d.Name))
+	_, err := tabledesc.FindPublicColumnWithName(table, d.Name)
 	if err == nil {
 		if ifNotExists {
 			return nil
@@ -360,7 +360,7 @@ func (b *Builder) alterTableDropColumn(
 
 	// TODO(ajwerner): Deal with drop column for columns which are being added
 	// currently.
-	colToDrop, _, err := table.FindColumnByName(t.Column)
+	colToDrop, err := table.FindColumnWithName(t.Column)
 	if err != nil {
 		if t.IfExists {
 			// Noop.
@@ -398,10 +398,10 @@ func (b *Builder) alterTableDropColumn(
 	// TODO(ajwerner): Add family information to the column.
 	b.addNode(scpb.Target_DROP, &scpb.Column{
 		TableID: table.GetID(),
-		Column:  *colToDrop,
+		Column:  *colToDrop.ColumnDesc(),
 	})
 
-	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.ID)
+	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.GetID())
 	return nil
 }
 

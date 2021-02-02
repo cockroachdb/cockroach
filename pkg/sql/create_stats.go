@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,20 +209,20 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, err
 		}
 	} else {
-		columns, err := tableDesc.FindActiveColumnsByNames(n.ColumnNames)
+		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
 		if err != nil {
 			return nil, err
 		}
 
 		columnIDs := make([]descpb.ColumnID, len(columns))
 		for i := range columns {
-			columnIDs[i] = columns[i].ID
+			columnIDs[i] = columns[i].GetID()
 		}
-		col, err := tableDesc.FindColumnByID(columnIDs[0])
+		col, err := tableDesc.FindColumnWithID(columnIDs[0])
 		if err != nil {
 			return nil, err
 		}
-		isInvIndex := colinfo.ColumnTypeIsInvertedIndexable(col.Type)
+		isInvIndex := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
@@ -421,11 +422,11 @@ func createStatsDefaultColumns(
 
 			// Generate stats for each column individually.
 			for _, colID := range colIDs.Ordered() {
-				col, err := desc.FindColumnByID(colID)
+				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, err
 				}
-				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.Type)
+				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
 				addIndexColumnStatsIfNotExists(colID, isInverted)
 			}
 		}

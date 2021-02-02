@@ -191,10 +191,10 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) string {
 	id := descpb.ColumnID(*colID.(*tree.DInt))
-	colDesc, err := desc.FindColumnByID(id)
+	colDesc, err := desc.FindColumnWithID(id)
 	if err != nil {
 		// This can happen if a column was removed.
 		return "<unknown>"
 	}
-	return colDesc.Name
+	return colDesc.GetName()
 }

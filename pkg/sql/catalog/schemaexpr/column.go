@@ -176,13 +176,13 @@ func iterColDescriptors(
 			return true, expr, nil
 		}
 
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
+		col, err := desc.FindColumnWithName(c.ColumnName)
+		if err != nil || col.Dropped() {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
 
-		if err := f(col); err != nil {
+		if err := f(col.ColumnDesc()); err != nil {
 			return false, nil, err
 		}
 		return false, expr, err
@@ -261,15 +261,15 @@ func replaceColumnVars(
 			return true, expr, nil
 		}
 
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
+		col, err := desc.FindColumnWithName(c.ColumnName)
+		if err != nil || col.Dropped() {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
-		colIDs.Add(col.ID)
+		colIDs.Add(col.GetID())
 
 		// Convert to a dummyColumn of the correct type.
-		return false, &dummyColumn{typ: col.Type, name: c.ColumnName}, nil
+		return false, &dummyColumn{typ: col.GetType(), name: c.ColumnName}, nil
 	})
 
 	return newExpr, colIDs, err

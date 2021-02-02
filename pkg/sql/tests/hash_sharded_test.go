@@ -34,11 +34,11 @@ func getShardColumnID(
 	if err != nil {
 		t.Fatal(err)
 	}
-	shardCol, _, err := tableDesc.FindColumnByName(tree.Name(idx.GetShardColumnName()))
+	shardCol, err := tableDesc.FindColumnWithName(tree.Name(idx.GetShardColumnName()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return shardCol.ID
+	return shardCol.GetID()
 }
 
 // verifyTableDescriptorStates ensures that the given table descriptor fulfills the

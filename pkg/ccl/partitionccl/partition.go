@@ -183,12 +183,16 @@ func createPartitioningImpl(
 		}
 		// Search by name because some callsites of this method have not
 		// allocated ids yet (so they are still all the 0 value).
-		col, err := tableDesc.FindActiveColumnByName(indexDesc.ColumnNames[colOffset+i])
+		name := indexDesc.ColumnNames[colOffset+i]
+		col, err := tableDesc.FindColumnWithName(tree.Name(name))
 		if err != nil {
 			return partDesc, err
 		}
-		cols = append(cols, *col)
-		if string(partBy.Fields[i]) != col.Name {
+		if !col.Public() {
+			return partDesc, colinfo.NewUndefinedColumnError(name)
+		}
+		cols = append(cols, *col.ColumnDesc())
+		if string(partBy.Fields[i]) != col.GetName() {
 			// This used to print the first `colOffset + len(partBy.Fields)` fields
 			// but there might not be this many columns in the index. See #37682.
 			n := colOffset + i + 1
@@ -276,20 +280,23 @@ func detectImplicitPartitionColumns(
 			break
 		}
 
-		col, err := tableDesc.FindActiveColumnByName(string(field))
+		col, err := tableDesc.FindColumnWithName(field)
 		if err != nil {
 			return indexDesc, 0, err
 		}
-		if _, ok := seenImplicitColumnNames[col.Name]; ok {
+		if !col.Public() {
+			return indexDesc, 0, colinfo.NewUndefinedColumnError(string(field))
+		}
+		if _, ok := seenImplicitColumnNames[col.GetName()]; ok {
 			return indexDesc, 0, pgerror.Newf(
 				pgcode.InvalidObjectDefinition,
 				`found multiple definitions in partition using column "%s"`,
-				col.Name,
+				col.GetName(),
 			)
 		}
-		seenImplicitColumnNames[col.Name] = struct{}{}
-		implicitColumns = append(implicitColumns, col.Name)
-		implicitColumnIDs = append(implicitColumnIDs, col.ID)
+		seenImplicitColumnNames[col.GetName()] = struct{}{}
+		implicitColumns = append(implicitColumns, col.GetName())
+		implicitColumnIDs = append(implicitColumnIDs, col.GetID())
 		implicitColumnDirections = append(implicitColumnDirections, descpb.IndexDescriptor_ASC)
 	}
 
@@ -378,11 +385,11 @@ func selectPartitionExprs(
 	// dummy IndexVars. Swap them out for actual column references.
 	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, _ error) {
 		if ivar, ok := e.(*tree.IndexedVar); ok {
-			col, err := tableDesc.FindColumnByID(descpb.ColumnID(ivar.Idx))
+			col, err := tableDesc.FindColumnWithID(descpb.ColumnID(ivar.Idx))
 			if err != nil {
 				return false, nil, err
 			}
-			return false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}, nil
+			return false, &tree.ColumnItem{ColumnName: tree.Name(col.GetName())}, nil
 		}
 		return true, e, nil
 	})
@@ -442,11 +449,11 @@ func selectPartitionExprsByName(
 		// the column ordinal references, so reconstruct them here.
 		colVars = make(tree.Exprs, len(prefixDatums)+int(partDesc.NumColumns))
 		for i := range colVars {
-			col, err := tableDesc.FindActiveColumnByID(idxDesc.ColumnIDs[i])
+			col, err := tabledesc.FindPublicColumnWithID(tableDesc, idxDesc.ColumnIDs[i])
 			if err != nil {
 				return err
 			}
-			colVars[i] = tree.NewTypedOrdinalReference(int(col.ID), col.Type)
+			colVars[i] = tree.NewTypedOrdinalReference(int(col.GetID()), col.GetType())
 		}
 	}
 

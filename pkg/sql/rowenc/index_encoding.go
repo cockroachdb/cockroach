@@ -1035,11 +1035,11 @@ func EncodePrimaryIndex(
 			// We want to include this column if its value is non-null or
 			// we were requested to include all of the columns.
 			if datum != tree.DNull || includeEmpty {
-				col, err := tableDesc.FindColumnByID(family.DefaultColumnID)
+				col, err := tableDesc.FindColumnWithID(family.DefaultColumnID)
 				if err != nil {
 					return err
 				}
-				value, err := MarshalColumnValue(col, datum)
+				value, err := MarshalColumnValue(col.ColumnDesc(), datum)
 				if err != nil {
 					return err
 				}

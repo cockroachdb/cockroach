@@ -102,19 +102,19 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 func (mt mutationTest) writeColumnMutation(
 	ctx context.Context, column string, m descpb.DescriptorMutation,
 ) {
-	col, _, err := mt.tableDesc.FindColumnByName(tree.Name(column))
+	col, err := mt.tableDesc.FindColumnWithName(tree.Name(column))
 	if err != nil {
 		mt.Fatal(err)
 	}
 	for i := range mt.tableDesc.Columns {
-		if col.ID == mt.tableDesc.Columns[i].ID {
+		if col.GetID() == mt.tableDesc.Columns[i].ID {
 			// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
 			// to ColumnDescriptors may unexpectedly change.
 			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i:i], mt.tableDesc.Columns[i+1:]...)
 			break
 		}
 	}
-	m.Descriptor_ = &descpb.DescriptorMutation_Column{Column: col}
+	m.Descriptor_ = &descpb.DescriptorMutation_Column{Column: col.ColumnDesc()}
 	mt.writeMutation(ctx, m)
 }
 

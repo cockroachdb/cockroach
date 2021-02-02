@@ -213,9 +213,6 @@ type TableDescriptor interface {
 
 	GetPublicColumns() []descpb.ColumnDescriptor // deprecated
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
-	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)   // deprecated
-	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error) // deprecated
-	FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)       // deprecated
 	ColumnIdxMap() TableColMap
 	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor                      // deprecated
 	AllNonDropColumns() []descpb.ColumnDescriptor                         // deprecated
@@ -225,12 +222,9 @@ type TableDescriptor interface {
 	DeletableColumns() []descpb.ColumnDescriptor // deprecated
 	MutationColumns() []descpb.ColumnDescriptor  // deprecated
 	ContainsUserDefinedTypes() bool
-	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error) // deprecated
-	WritableColumns() []descpb.ColumnDescriptor                        // deprecated
-	ReadableColumns() []descpb.ColumnDescriptor                        // deprecated
+	WritableColumns() []descpb.ColumnDescriptor // deprecated
+	ReadableColumns() []descpb.ColumnDescriptor // deprecated
 	GetNextColumnID() descpb.ColumnID
-	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)               // deprecated
-	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error) // deprecated
 	ColumnTypes() []*types.T
 	ColumnTypesWithMutations(mutations bool) []*types.T
 	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T

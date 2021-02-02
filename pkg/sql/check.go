@@ -87,11 +87,11 @@ func matchFullUnacceptableKeyQuery(
 
 	returnedCols := srcCols
 	for i := 0; i < nCols; i++ {
-		col, err := srcTbl.FindColumnByID(fk.OriginColumnIDs[i])
+		col, err := srcTbl.FindColumnWithID(fk.OriginColumnIDs[i])
 		if err != nil {
 			return "", nil, err
 		}
-		srcCols[i] = tree.NameString(col.Name)
+		srcCols[i] = tree.NameString(col.GetName())
 		srcNullExistsClause[i] = fmt.Sprintf("%s IS NULL", srcCols[i])
 		srcNotNullExistsClause[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
 	}
@@ -106,11 +106,11 @@ func matchFullUnacceptableKeyQuery(
 			}
 		}
 		if !alreadyPresent {
-			col, err := srcTbl.FindActiveColumnByID(id)
+			col, err := tabledesc.FindPublicColumnWithID(srcTbl, id)
 			if err != nil {
 				return "", nil, err
 			}
-			returnedCols = append(returnedCols, col.Name)
+			returnedCols = append(returnedCols, col.GetName())
 		}
 	}
 
@@ -171,11 +171,11 @@ func nonMatchingRowQuery(
 			}
 		}
 		if !found {
-			column, err := srcTbl.FindActiveColumnByID(pkColID)
+			column, err := tabledesc.FindPublicColumnWithID(srcTbl, pkColID)
 			if err != nil {
 				return "", nil, err
 			}
-			originColNames = append(originColNames, column.Name)
+			originColNames = append(originColNames, column.GetName())
 		}
 	}
 	srcCols := make([]string, len(originColNames))
