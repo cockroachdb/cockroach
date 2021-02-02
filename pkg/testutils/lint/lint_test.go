@@ -87,14 +87,7 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 	}
 }
 
-// TestLint runs a suite of linters on the codebase. This file is
-// organized into two sections. First are the global linters, which
-// run on the entire repo every time. Second are the package-scoped
-// linters, which can be restricted to a specific package with the PKG
-// makefile variable. Linters that require anything more than a `git
-// grep` should preferably be added to the latter group (and within
-// that group, adding to Megacheck is better than creating a new
-// test).
+// TestLint runs a suite of linters on the codebase.
 //
 // Linters may be skipped for two reasons: The "short" flag (i.e.
 // `make lintshort`), which skips the most expensive linters (more for
@@ -107,17 +100,7 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 //
 // Linters which run in a single process without internal
 // parallelization, and which have reasonable memory consumption
-// should be marked with t.Parallel(). As a rule of thumb anything
-// that requires type-checking the go code needs too much memory to
-// parallelize here (although it's fine for such tests to run multiple
-// goroutines internally using a shared loader object).
-//
-// Performance notes: This needs a lot of memory and CPU time. As of
-// 2018-07-13, the largest consumers of memory are
-// TestMegacheck/staticcheck (9GB) and TestUnused (6GB). Memory
-// consumption of staticcheck could be reduced by running it on a
-// subset of the packages at a time, although this comes at the
-// expense of increased running time.
+// should be marked with t.Parallel().
 func TestLint(t *testing.T) {
 	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
