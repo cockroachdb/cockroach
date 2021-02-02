@@ -130,11 +130,9 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// [1]: cleanupSessionTempObjects
 		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
 		testutils.SucceedsSoon(tc.t, func() error {
-			var err error
-			tracer.VisitSpans(func(span *tracing.Span) {
-				err = errors.Newf("expected to find no active spans, found %s", span.Meta())
+			return tracer.VisitSpans(func(span *tracing.Span) error {
+				return errors.Newf("expected to find no active spans, found %s", span.Meta())
 			})
-			return err
 		})
 	}
 }
