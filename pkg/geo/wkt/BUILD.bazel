@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "wkt",
+    srcs = [
+        "lex.go",
+        "wkt.go",
+        "wkt_generated.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/wkt",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_twpayne_go_geom//:go-geom"],
+)
+
+go_test(
+    name = "wkt_test",
+    srcs = ["wkt_test.go"],
+    embed = [":wkt"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
