@@ -1229,8 +1229,11 @@ func (r *Replica) checkExecutionCanProceed(
 		}
 	} else {
 		// If the request is a write or a consistent read, it requires the
-		// replica serving it to hold the range lease.
-		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.Timestamp)
+		// replica serving it to hold the range lease. We pass the write
+		// timestamp of the request because this is the maximum timestamp that
+		// the request will operate at, ignoring the uncertainty interval, which
+		// is already accounted for in LeaseStatus's stasis period handling.
+		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
 		if err != nil {
 			// If not, can we serve this request on a follower?
 			// TODO(nvanbenschoten): once we make this check cheaper
