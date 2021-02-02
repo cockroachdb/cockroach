@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:generate goyacc -o wkt_generated.go -p "wkt" wkt.y
+//go:generate sh generate.sh
 
 package wkt
 
@@ -17,12 +17,9 @@ import "github.com/twpayne/go-geom"
 // Unmarshal accepts a string and parses it to a geom.T.
 func Unmarshal(wkt string) (geom.T, error) {
 	wktlex := &wktLex{line: wkt}
-	ret := wktParse(wktlex)
+	wktParse(wktlex)
 	if wktlex.lastErr != nil {
 		return nil, wktlex.lastErr
-	}
-	if ret != 0 {
-		return nil, &ParseError{line: wkt}
 	}
 	return wktlex.ret, nil
 }

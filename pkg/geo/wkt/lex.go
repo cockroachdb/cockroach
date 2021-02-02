@@ -21,21 +21,25 @@ import (
 
 // LexError is an error that occurs during lexing.
 type LexError struct {
-	problem string
-	pos     int
+	expectedTokType string
+	pos             int
+	str             string
 }
 
 func (e *LexError) Error() string {
-	return fmt.Sprintf("lex error: %s at pos %d", e.problem, e.pos)
+	return fmt.Sprintf("lex error: invalid %s at pos %d\n%s\n%s^",
+		e.expectedTokType, e.pos, e.str, strings.Repeat(" ", e.pos))
 }
 
 // ParseError is an error that occurs during parsing, which happens after lexing.
 type ParseError struct {
-	line string
+	problem string
+	pos     int
+	str     string
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("parse error: could not parse %q", e.line)
+	return fmt.Sprintf("%s at pos %d\n%s\n%s^", e.problem, e.pos, e.str, strings.Repeat(" ", e.pos))
 }
 
 // Constant expected by parser when lexer reaches EOF.
@@ -44,6 +48,7 @@ const eof = 0
 type wktLex struct {
 	line    string
 	pos     int
+	lastPos int
 	ret     geom.T
 	lastErr error
 }
@@ -52,6 +57,7 @@ type wktLex struct {
 func (l *wktLex) Lex(yylval *wktSymType) int {
 	// Skip leading spaces.
 	l.trimLeft()
+	l.lastPos = l.pos
 
 	// Lex a token.
 	switch c := l.peek(); c {
@@ -65,10 +71,8 @@ func (l *wktLex) Lex(yylval *wktSymType) int {
 		} else if isNumRune(c) {
 			return l.num(yylval)
 		} else {
-			l.lastErr = &LexError{
-				problem: "unrecognized character",
-				pos:     l.pos,
-			}
+			l.next()
+			l.setLexError("character")
 			return eof
 		}
 	}
@@ -86,6 +90,14 @@ func getKeywordToken(tokStr string) int {
 		return POINTM
 	case "POINTZM":
 		return POINTZM
+	case "LINESTRING":
+		return LINESTRING
+	case "LINESTRINGM":
+		return LINESTRINGM
+	case "LINESTRINGZ":
+		return LINESTRINGZ
+	case "LINESTRINGZM":
+		return LINESTRINGZM
 	default:
 		return eof
 	}
@@ -93,7 +105,6 @@ func getKeywordToken(tokStr string) int {
 
 // keyword lexes a string keyword.
 func (l *wktLex) keyword() int {
-	startPos := l.pos
 	var b strings.Builder
 
 	for {
@@ -120,10 +131,7 @@ func (l *wktLex) keyword() int {
 
 	ret := getKeywordToken(b.String())
 	if ret == eof {
-		l.lastErr = &LexError{
-			problem: "invalid keyword",
-			pos:     startPos,
-		}
+		l.setLexError("keyword")
 	}
 
 	return ret
@@ -140,7 +148,6 @@ func isNumRune(r rune) bool {
 
 // num lexes a number.
 func (l *wktLex) num(yylval *wktSymType) int {
-	startPos := l.pos
 	var b strings.Builder
 
 	for {
@@ -153,10 +160,7 @@ func (l *wktLex) num(yylval *wktSymType) int {
 
 	fl, err := strconv.ParseFloat(b.String(), 64)
 	if err != nil {
-		l.lastErr = &LexError{
-			problem: "invalid number",
-			pos:     startPos,
-		}
+		l.setLexError("number")
 		return eof
 	}
 	yylval.coord = fl
@@ -188,8 +192,13 @@ func (l *wktLex) trimLeft() {
 	}
 }
 
+func (l *wktLex) setLexError(expectedTokType string) {
+	l.lastErr = &LexError{expectedTokType: expectedTokType, pos: l.lastPos, str: l.line}
+}
+
 func (l *wktLex) Error(s string) {
-	// Lex errors are set in the Lex function.
-	// todo (ayang) improve parse error messages
-	/* EMPTY */
+	// NB: Lex errors are set in the Lex function.
+	if l.lastErr == nil {
+		l.lastErr = &ParseError{problem: s, pos: l.lastPos, str: l.line}
+	}
 }
