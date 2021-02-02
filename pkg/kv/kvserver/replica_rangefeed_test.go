@@ -158,7 +158,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	checkForExpEvents := func(expEvents []*roachpb.RangeFeedEvent) {
 		t.Helper()
-		for i, stream := range streams {
+		for _, stream := range streams {
 			var events []*roachpb.RangeFeedEvent
 			testutils.SucceedsSoon(t, func() error {
 				if len(streamErrC) > 0 {
@@ -176,9 +176,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			if len(streamErrC) > 0 {
 				t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 			}
-			if !reflect.DeepEqual(events, expEvents) {
-				t.Fatalf("incorrect events on stream %d, found %v, want %v", i, events, expEvents)
-			}
+			require.Equal(t, expEvents, events)
 		}
 	}
 
