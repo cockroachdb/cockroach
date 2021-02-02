@@ -239,7 +239,7 @@ func readBackupManifest(
 				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
 				backupOptEncPassphrase, backupOptEncKMS)
 		}
-		return BackupManifest{}, err
+		return BackupManifest{}, errors.Wrapf(err, "failed to unmarshal bytes %x", descBytes)
 	}
 	for _, d := range backupManifest.Descriptors {
 		// Calls to GetTable are generally frowned upon.
