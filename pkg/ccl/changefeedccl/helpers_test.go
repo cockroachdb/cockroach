@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -144,6 +145,25 @@ func assertPayloadsAvro(
 
 	// The tests that use this aren't concerned with order, just that these are
 	// the next len(expected) messages.
+	sort.Strings(expected)
+	sort.Strings(actual)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("expected\n  %s\ngot\n  %s",
+			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
+	}
+}
+
+func assertRegisteredSubjects(t testing.TB, reg *testSchemaRegistry, expected []string) {
+	t.Helper()
+
+	scrubIds := regexp.MustCompile(`\d+`)
+
+	actual := make([]string, 0, len(reg.mu.subjects))
+
+	for subject := range reg.mu.subjects {
+		actual = append(actual, scrubIds.ReplaceAllString(subject, "#"))
+	}
+
 	sort.Strings(expected)
 	sort.Strings(actual)
 	if !reflect.DeepEqual(expected, actual) {
