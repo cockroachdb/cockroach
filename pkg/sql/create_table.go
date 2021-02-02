@@ -1569,19 +1569,11 @@ func NewTableDesc(
 		}
 
 		// Construct the partitioning for the PARTITION ALL BY.
-		listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
-		for i, region := range dbDesc.RegionConfig.Regions {
-			listPartition[i] = tree.ListPartition{
-				Name:  tree.UnrestrictedName(region.Name),
-				Exprs: tree.Exprs{tree.NewStrVal(string(region.Name))},
-			}
-		}
-
 		desc.PartitionAllBy = true
-		partitionAllBy = &tree.PartitionBy{
-			Fields: tree.NameList{regionalByRowCol},
-			List:   listPartition,
-		}
+		partitionAllBy = partitionByForRegionalByRow(
+			*dbDesc.RegionConfig,
+			regionalByRowCol,
+		)
 	}
 
 	if n.PartitionByTable.ContainsPartitioningClause() && n.PartitionByTable.All {

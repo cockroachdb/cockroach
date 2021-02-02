@@ -560,6 +560,15 @@ message PrimaryKeySwap {
   // new constraint to a table without a primary key. In other cases, it is
   // the empty string.
   optional string new_primary_index_name = 5 [(gogoproto.nullable) = false];
+
+  message LocalityConfigSwap {
+    option (gogoproto.equal) = true;
+    optional TableDescriptor.LocalityConfig old_locality_config = 1;
+    optional TableDescriptor.LocalityConfig new_locality_config = 2;
+  }
+  // LocalityConfigSwap is set for ALTER TABLE SET LOCALITY when the command requires PK changes.
+  // If set, additional zone configurations are set to match the new locality config.
+  optional LocalityConfigSwap locality_config_swap = 6;
 }
 
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
