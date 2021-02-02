@@ -270,9 +270,9 @@ query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
 "serial_MixedCase"  CREATE TABLE public."serial_MixedCase" (
-                    a INT8 NOT NULL DEFAULT nextval('"test.public.serial_MixedCase_a_seq"':::STRING),
+                    a INT8 NOT NULL DEFAULT nextval('test.public."serial_MixedCase_a_seq"':::STRING),
                     b INT8 NULL DEFAULT 7:::INT8,
-                    c INT8 NOT NULL DEFAULT nextval('"test.public.serial_MixedCase_c_seq"':::STRING),
+                    c INT8 NOT NULL DEFAULT nextval('test.public."serial_MixedCase_c_seq"':::STRING),
                     CONSTRAINT "primary" PRIMARY KEY (a ASC),
                     UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
                     FAMILY "primary" (a, b, c)

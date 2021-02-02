@@ -15,7 +15,7 @@ SHOW CREATE TABLE test_table
 ----
 test_table  CREATE TABLE public.test_table (
             a INT8 NOT NULL,
-            b INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING::REGCLASS),
+            b INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING),
             CONSTRAINT "primary" PRIMARY KEY (a ASC),
             FAMILY fam_0_b_a (b, a)
 )

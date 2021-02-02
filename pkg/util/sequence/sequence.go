@@ -18,10 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
+type SeqIdentifier struct {
+	SeqName string
+	SeqID int64
+}
+
 // GetSequenceFromFunc extracts a sequence name from a FuncExpr if the function
 // takes a sequence name as an arg. Returns the name of the sequence or nil
 // if no sequence was found.
-func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*string, error) {
+func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 	searchPath := sessiondata.SearchPath{}
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
@@ -53,7 +58,14 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*string, error) {
 						switch a := arg.(type) {
 						case *tree.DString:
 							seqName := string(*a)
-							return &seqName, nil
+							return &SeqIdentifier{
+								SeqName: seqName,
+							}, nil
+						case *tree.DOid:
+							id := int64(a.DInt)
+							return &SeqIdentifier{
+								SeqID: id,
+							}, nil
 						}
 					}
 				}
@@ -69,12 +81,12 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*string, error) {
 	return nil, nil
 }
 
-// GetUsedSequenceNames returns the name of the sequence passed to
+// GetUsedSequences returns the name of the sequence passed to
 // a call to sequence function in the given expression or nil if no sequence
 // names are found.
 // e.g. nextval('foo') => "foo"; <some other expression> => nil
-func GetUsedSequenceNames(defaultExpr tree.TypedExpr) ([]string, error) {
-	var names []string
+func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
+	var names []SeqIdentifier
 	_, err := tree.SimpleVisit(
 		defaultExpr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {

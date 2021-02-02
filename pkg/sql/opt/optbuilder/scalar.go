@@ -516,12 +516,12 @@ func (b *Builder) buildFunction(
 
 	// Add a dependency on sequences that are used as a string argument.
 	if b.trackViewDeps {
-		name, err := sequence.GetSequenceFromFunc(f)
+		seqIdentifier, err := sequence.GetSequenceFromFunc(f)
 		if err != nil {
 			panic(err)
 		}
-		if name != nil {
-			tn := tree.MakeUnqualifiedTableName(tree.Name(*name))
+		if seqIdentifier != nil {
+			tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
 			ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
 
 			b.viewDeps = append(b.viewDeps, opt.ViewDep{

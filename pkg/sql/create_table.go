@@ -2263,7 +2263,7 @@ func newTableDesc(
 		}
 		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if seqName != nil {
-			id, err := doCreateSequence(
+			seqID, err := doCreateSequence(
 				params,
 				n.String(),
 				seqDbDesc,
@@ -2286,7 +2286,7 @@ func newTableDesc(
 						Type:       types.RegClass,
 						SyntaxMode: tree.AnnotateShort,
 						Expr: &tree.CastExpr{
-							Expr:       tree.NewNumVal(constant.MakeInt64(int64(id)), "", false),
+							Expr:       tree.NewNumVal(constant.MakeInt64(int64(seqID)), "", false),
 							Type:       types.RegClass,
 							SyntaxMode: tree.CastShort,
 						},

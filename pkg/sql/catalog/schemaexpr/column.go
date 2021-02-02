@@ -299,7 +299,7 @@ func replaceSequenceNames(
 		}
 
 		// If it's not a regclass, don't do anything to this node.
-		if typ, ok := tree.GetStaticallyKnownType(annotateTypeExpr.Type); !ok || typ.Oid() != oid.T_regclass {
+		if typ, safe := tree.GetStaticallyKnownType(annotateTypeExpr.Type); !safe || typ.Oid() != oid.T_regclass {
 			return true, expr, nil
 		}
 
@@ -310,13 +310,13 @@ func replaceSequenceNames(
 		}
 		id, err := numVal.AsInt64()
 		if err != nil {
-			return true, expr, nil
+			return true, expr, nil //nolint:returnerrcheck
 		}
 
 		// If it's not a sequence or the resolution fails, don't do anything to this node.
 		seqName, err := semaCtx.TableNameResolver.GetQualifiedTableNameByID(ctx, id, tree.ResolveRequireSequenceDesc)
 		if err != nil {
-			return true, expr, nil
+			return true, expr, nil //nolint:returnerrcheck
 		}
 
 		// Swap out this node to use the qualified table name for the sequence.

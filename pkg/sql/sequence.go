@@ -560,17 +560,26 @@ func maybeAddSequenceDependencies(
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 ) ([]*tabledesc.Mutable, error) {
-	seqNames, err := sequence.GetUsedSequenceNames(expr)
+	seqIdentifiers, err := sequence.GetUsedSequences(expr)
 	if err != nil {
 		return nil, err
 	}
 	var seqDescs []*tabledesc.Mutable
-	for _, seqName := range seqNames {
-		parsedSeqName, err := parser.ParseTableName(seqName)
-		if err != nil {
-			return nil, err
+	for _, seqIdentifier := range seqIdentifiers {
+		var tn tree.TableName
+		if seqIdentifier.SeqName != "" {
+			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+			if err != nil {
+				return nil, err
+			}
+			tn = parsedSeqName.ToTableName()
+		} else {
+			name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
+			tn = *name
 		}
-		tn := parsedSeqName.ToTableName()
 
 		var seqDesc *tabledesc.Mutable
 		p, ok := sc.(*planner)
