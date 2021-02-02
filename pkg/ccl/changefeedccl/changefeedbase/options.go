@@ -26,6 +26,7 @@ type SchemaChangePolicy string
 
 // Constants for the options.
 const (
+	OptAvroSchemaPrefix         = `avro_schema_prefix`
 	OptConfluentSchemaRegistry  = `confluent_schema_registry`
 	OptCursor                   = `cursor`
 	OptEnvelope                 = `envelope`
@@ -97,6 +98,7 @@ const (
 // ChangefeedOptionExpectValues is used to parse changefeed options using
 // PlanHookState.TypeAsStringOpts().
 var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
+	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
 	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
 	OptCursor:                   sql.KVStringOptRequireValue,
 	OptEnvelope:                 sql.KVStringOptRequireValue,

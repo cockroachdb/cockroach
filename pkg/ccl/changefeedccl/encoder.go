@@ -275,6 +275,7 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 // columns in a record.
 type confluentAvroEncoder struct {
 	registryURL                                          string
+	schemaPrefix                                         string
 	updatedField, beforeField, keyOnly, useFullTableName bool
 
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
@@ -303,6 +304,8 @@ var _ Encoder = &confluentAvroEncoder{}
 
 func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
+
+	e.schemaPrefix = opts[changefeedbase.OptAvroSchemaPrefix]
 
 	switch opts[changefeedbase.OptEnvelope] {
 	case string(changefeedbase.OptEnvelopeKeyOnly):
@@ -339,7 +342,8 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 	return e, nil
 }
 
-//Get the raw SQL-formatted string for a table name and apply full_table_name option
+// Get the raw SQL-formatted string for a table name
+// and apply full_table_name and avro_schema_prefix options
 func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string {
 	tableName := desc.GetName()
 	if e.useFullTableName {
@@ -352,7 +356,7 @@ func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string
 			desc.GetParentSchemaID(),
 			tableName)
 	}
-	return tableName
+	return e.schemaPrefix + tableName
 }
 
 // EncodeKey implements the Encoder interface.
