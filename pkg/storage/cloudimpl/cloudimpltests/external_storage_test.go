@@ -398,6 +398,7 @@ func testListFiles(
 	}
 
 	t.Run("ListFiles", func(t *testing.T) {
+		var noResults []string = nil
 
 		for _, tc := range []struct {
 			name       string
@@ -445,7 +446,7 @@ func testListFiles(
 				"list-letter-csv-dotdot-suffix",
 				appendPath(t, storeURI, "file/abc/xzy"),
 				"../../?.csv",
-				nil,
+				noResults,
 			},
 			{
 				"list-data-num-csv",
@@ -471,54 +472,44 @@ func testListFiles(
 				// So this pattern would not actually match anything.
 				appendPath(t, storeURI, "file/*.csv"),
 				"",
-				[]string{},
+				noResults,
 			},
 			{
 				"list-no-matches",
 				appendPath(t, storeURI, "file/letters/dataD.csv"),
 				"",
-				[]string{},
+				noResults,
 			},
 			{
 				"list-escaped-star",
 				appendPath(t, storeURI, "file/*/\\*.csv"),
 				"",
-				[]string{},
+				noResults,
 			},
 			{
 				"list-escaped-star-suffix",
 				appendPath(t, storeURI, "file"),
 				"*/\\*.csv",
-				[]string{},
+				noResults,
 			},
 			{
 				"list-escaped-range",
 				appendPath(t, storeURI, "file/*/data\\[0-9\\].csv"),
 				"",
-				[]string{},
+				noResults,
 			},
 			{
 				"list-escaped-range-suffix",
 				appendPath(t, storeURI, "file"),
 				"*/data\\[0-9\\].csv",
-				[]string{},
+				noResults,
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, ie, kvDB)
 				filesList, err := s.ListFiles(ctx, tc.suffix)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if len(filesList) != len(tc.resultList) {
-					t.Fatal(`listed incorrect number of files`, filesList)
-				}
-				for i, got := range filesList {
-					if expected := tc.resultList[i]; got != expected {
-						t.Fatal(`resulting list is incorrect. got: `, got, `expected: `, expected, "\n", filesList)
-					}
-				}
+				require.NoError(t, err)
+				require.Equal(t, filesList, tc.resultList)
 			})
 		}
 	})
