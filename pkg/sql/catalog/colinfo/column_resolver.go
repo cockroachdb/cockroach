@@ -45,23 +45,20 @@ func ProcessTargetColumns(
 	var colIDSet catalog.TableColSet
 	cols := make([]descpb.ColumnDescriptor, len(nameList))
 	for i, colName := range nameList {
-		var col *descpb.ColumnDescriptor
-		var err error
-		if allowMutations {
-			col, _, err = tableDesc.FindColumnByName(colName)
-		} else {
-			col, err = tableDesc.FindActiveColumnByName(string(colName))
-		}
+		col, err := tableDesc.FindColumnWithName(colName)
 		if err != nil {
 			return nil, err
 		}
+		if !allowMutations && !col.Public() {
+			return nil, NewUndefinedColumnError(string(colName))
+		}
 
-		if colIDSet.Contains(col.ID) {
+		if colIDSet.Contains(col.GetID()) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
-		colIDSet.Add(col.ID)
-		cols[i] = *col
+		colIDSet.Add(col.GetID())
+		cols[i] = *col.ColumnDesc()
 	}
 
 	return cols, nil

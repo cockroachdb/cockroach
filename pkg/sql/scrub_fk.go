@@ -159,11 +159,11 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	// pretty JSON dictionary for row_data.
 	for _, id := range o.constraint.FK.OriginColumnIDs {
 		idx := o.colIDToRowIdx.GetDefault(id)
-		col, err := o.tableDesc.FindActiveColumnByID(id)
+		col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 		if err != nil {
 			return nil, err
 		}
-		rowDetails[col.Name] = row[idx].String()
+		rowDetails[col.GetName()] = row[idx].String()
 	}
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		id := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
@@ -176,11 +176,11 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		}
 		if !found {
 			idx := o.colIDToRowIdx.GetDefault(id)
-			col, err := o.tableDesc.FindActiveColumnByID(id)
+			col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 			if err != nil {
 				return nil, err
 			}
-			rowDetails[col.Name] = row[idx].String()
+			rowDetails[col.GetName()] = row[idx].String()
 		}
 	}
 

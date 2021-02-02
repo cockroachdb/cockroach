@@ -937,7 +937,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
-			_, _, err := desc.FindColumnByName(tree.Name(name))
+			_, err := desc.FindColumnWithName(tree.Name(name))
 			return err == nil
 		}
 		s := "unique_rowid()"
@@ -1016,27 +1016,27 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				col, _, err := desc.FindColumnByName(tree.Name(colName))
+				col, err := desc.FindColumnWithName(tree.Name(colName))
 				if err != nil {
 					return err
 				}
-				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
+				if desc.PrimaryIndex.ContainsColumnID(col.GetID()) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
 					err = pgerror.Newf(
-						pgcode.DuplicateColumn, "index %q already contains column %q", index.Name, col.Name)
-					err = errors.WithDetailf(err, "column %q is part of the primary index and therefore implicit in all indexes", col.Name)
+						pgcode.DuplicateColumn, "index %q already contains column %q", index.Name, col.GetName())
+					err = errors.WithDetailf(err, "column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
 					return err
 				}
-				if index.ContainsColumnID(col.ID) {
+				if index.ContainsColumnID(col.GetID()) {
 					return pgerror.Newf(
 						pgcode.DuplicateColumn,
-						"index %q already contains column %q", index.Name, col.Name)
+						"index %q already contains column %q", index.Name, col.GetName())
 				}
 				if indexHasOldStoredColumns {
-					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.GetID())
 				} else {
-					index.StoreColumnIDs = append(index.StoreColumnIDs, col.ID)
+					index.StoreColumnIDs = append(index.StoreColumnIDs, col.GetID())
 				}
 			}
 		}
@@ -2267,7 +2267,7 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 // based on another computed column B).
 func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor) error {
 	for _, colName := range index.Sharded.ColumnNames {
-		col, _, err := desc.FindColumnByName(tree.Name(colName))
+		col, err := desc.FindColumnWithName(tree.Name(colName))
 		if err != nil {
 			return err
 		}
@@ -2355,11 +2355,11 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			if i >= len(idxDesc.ColumnIDs) {
 				continue
 			}
-			col, err := desc.FindColumnByID(idxDesc.ColumnIDs[i])
+			col, err := desc.FindColumnWithID(idxDesc.ColumnIDs[i])
 			if err != nil {
 				return err
 			}
-			if col.Type.UserDefined() && !col.Type.IsHydrated() {
+			if col.GetType().UserDefined() && !col.GetType().IsHydrated() {
 				return nil
 			}
 		}
@@ -2698,86 +2698,18 @@ func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, new
 	}
 }
 
-// FindActiveColumnsByNames finds all requested columns (in the requested order)
-// or returns an error.
-func (desc *wrapper) FindActiveColumnsByNames(
-	names tree.NameList,
-) ([]descpb.ColumnDescriptor, error) {
-	cols := make([]descpb.ColumnDescriptor, len(names))
-	for i := range names {
-		c, err := desc.FindActiveColumnByName(string(names[i]))
-		if err != nil {
-			return nil, err
-		}
-		cols[i] = *c
-	}
-	return cols, nil
-}
-
-// HasColumnWithName finds the column with the specified name. It returns
-// nil if there is no such column, and true if the column is being dropped.
-func (desc *wrapper) HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool) {
-	for i := range desc.Columns {
-		c := &desc.Columns[i]
-		if c.Name == string(name) {
-			return c, false
-		}
-	}
-	for i := range desc.Mutations {
-		m := &desc.Mutations[i]
-		if c := m.GetColumn(); c != nil {
-			if c.Name == string(name) {
-				return c, m.Direction == descpb.DescriptorMutation_DROP
-			}
-		}
-	}
-	return nil, false
-}
-
-// FindColumnByName finds the column with the specified name. It returns
-// an active column or a column from the mutation list. It returns true
-// if the column is being dropped.
-func (desc *wrapper) FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error) {
-	ret, ok := desc.HasColumnWithName(name)
-	if ret == nil {
-		return nil, false, colinfo.NewUndefinedColumnError(string(name))
-	}
-	return ret, ok, nil
-}
-
 // FindActiveOrNewColumnByName finds the column with the specified name.
 // It returns either an active column or a column that was added in the
 // same transaction that is currently running.
-func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (*descpb.ColumnDescriptor, error) {
-	for i := range desc.Columns {
-		c := &desc.Columns[i]
-		if c.Name == string(name) {
-			return c, nil
-		}
-	}
+func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column, error) {
 	currentMutationID := desc.ClusterVersion.NextMutationID
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		if col := mut.GetColumn(); col != nil &&
-			mut.MutationID == currentMutationID &&
-			mut.Direction == descpb.DescriptorMutation_ADD {
+	for _, col := range desc.AllColumnsNew() {
+		if (col.Public() && col.ColName() == name) ||
+			(col.Adding() && col.(*column).mutationID == currentMutationID) {
 			return col, nil
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(name))
-}
-
-// FindColumnMutationByName finds the mutation on the specified column.
-func (desc *wrapper) FindColumnMutationByName(name tree.Name) *descpb.DescriptorMutation {
-	for i := range desc.Mutations {
-		m := &desc.Mutations[i]
-		if c := m.GetColumn(); c != nil {
-			if c.Name == string(name) {
-				return m
-			}
-		}
-	}
-	return nil
 }
 
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
@@ -2797,46 +2729,6 @@ func (desc *wrapper) ColumnIdxMapWithMutations(mutations bool) catalog.TableColM
 		}
 	}
 	return colIdxMap
-}
-
-// FindActiveColumnByName finds an active column with the specified name.
-func (desc *wrapper) FindActiveColumnByName(name string) (*descpb.ColumnDescriptor, error) {
-	for i := range desc.Columns {
-		c := &desc.Columns[i]
-		if c.Name == name {
-			return c, nil
-		}
-	}
-	return nil, colinfo.NewUndefinedColumnError(name)
-}
-
-// FindColumnByID finds the column with specified ID.
-func (desc *wrapper) FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error) {
-	for i := range desc.Columns {
-		c := &desc.Columns[i]
-		if c.ID == id {
-			return c, nil
-		}
-	}
-	for i := range desc.Mutations {
-		if c := desc.Mutations[i].GetColumn(); c != nil {
-			if c.ID == id {
-				return c, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-}
-
-// FindActiveColumnByID finds the active column with specified ID.
-func (desc *wrapper) FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error) {
-	for i := range desc.Columns {
-		c := &desc.Columns[i]
-		if c.ID == id {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // ContainsUserDefinedTypes returns whether or not this table descriptor has
@@ -2862,11 +2754,11 @@ func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDes
 func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
 	names := make([]string, len(ids))
 	for i, id := range ids {
-		col, err := desc.FindColumnByID(id)
+		col, err := desc.FindColumnWithID(id)
 		if err != nil {
 			return nil, err
 		}
-		names[i] = col.Name
+		names[i] = col.GetName()
 	}
 	return names, nil
 }
@@ -3142,12 +3034,12 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 	if len(desc.PrimaryIndex.ColumnIDs) != 1 {
 		return false
 	}
-	col, err := desc.FindColumnByID(desc.PrimaryIndex.ColumnIDs[0])
+	col, err := desc.FindColumnWithID(desc.PrimaryIndex.ColumnIDs[0])
 	if err != nil {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.Hidden
+	return col.IsHidden()
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
@@ -3238,11 +3130,11 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 					}
 				}
-				col, err := desc.FindColumnByID(t.Constraint.NotNullColumn)
+				col, err := desc.FindColumnWithID(t.Constraint.NotNullColumn)
 				if err != nil {
 					return err
 				}
-				col.Nullable = false
+				col.ColumnDesc().Nullable = false
 			default:
 				return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 			}
@@ -3362,46 +3254,46 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) error {
 	// Get the old and new columns from the descriptor.
-	oldCol, err := desc.FindColumnByID(swap.OldColumnId)
+	oldCol, err := desc.FindColumnWithID(swap.OldColumnId)
 	if err != nil {
 		return err
 	}
-	newCol, err := desc.FindColumnByID(swap.NewColumnId)
+	newCol, err := desc.FindColumnWithID(swap.NewColumnId)
 	if err != nil {
 		return err
 	}
 
 	// Mark newCol as no longer a computed column.
-	newCol.ComputeExpr = nil
+	newCol.ColumnDesc().ComputeExpr = nil
 
 	// Make the oldCol a computed column by setting its computed expression.
-	oldCol.ComputeExpr = &swap.InverseExpr
+	oldCol.ColumnDesc().ComputeExpr = &swap.InverseExpr
 
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {
-		_, _, err := desc.FindColumnByName(tree.Name(name))
+		_, err := desc.FindColumnWithName(tree.Name(name))
 		return err == nil
 	}
 
-	uniqueName := GenerateUniqueConstraintName(newCol.Name, nameExists)
+	uniqueName := GenerateUniqueConstraintName(newCol.GetName(), nameExists)
 
 	// Remember the name of oldCol, because newCol will take it.
-	oldColName := oldCol.Name
+	oldColName := oldCol.GetName()
 
 	// Rename old column to this new name, and rename newCol to oldCol's name.
-	desc.RenameColumnDescriptor(oldCol, uniqueName)
-	desc.RenameColumnDescriptor(newCol, oldColName)
+	desc.RenameColumnDescriptor(oldCol.ColumnDesc(), uniqueName)
+	desc.RenameColumnDescriptor(newCol.ColumnDesc(), oldColName)
 
 	// Swap Column Family ordering for oldCol and newCol.
 	// Both columns must be in the same family since the new column is
 	// created explicitly with the same column family as the old column.
 	// This preserves the ordering of column families when querying
 	// for column families.
-	oldColColumnFamily, err := desc.GetFamilyOfColumn(oldCol.ID)
+	oldColColumnFamily, err := desc.GetFamilyOfColumn(oldCol.GetID())
 	if err != nil {
 		return err
 	}
-	newColColumnFamily, err := desc.GetFamilyOfColumn(newCol.ID)
+	newColColumnFamily, err := desc.GetFamilyOfColumn(newCol.GetID())
 	if err != nil {
 		return err
 	}
@@ -3413,35 +3305,35 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 	}
 
 	for i := range oldColColumnFamily.ColumnIDs {
-		if oldColColumnFamily.ColumnIDs[i] == oldCol.ID {
-			oldColColumnFamily.ColumnIDs[i] = newCol.ID
-			oldColColumnFamily.ColumnNames[i] = newCol.Name
-		} else if oldColColumnFamily.ColumnIDs[i] == newCol.ID {
-			oldColColumnFamily.ColumnIDs[i] = oldCol.ID
-			oldColColumnFamily.ColumnNames[i] = oldCol.Name
+		if oldColColumnFamily.ColumnIDs[i] == oldCol.GetID() {
+			oldColColumnFamily.ColumnIDs[i] = newCol.GetID()
+			oldColColumnFamily.ColumnNames[i] = newCol.GetName()
+		} else if oldColColumnFamily.ColumnIDs[i] == newCol.GetID() {
+			oldColColumnFamily.ColumnIDs[i] = oldCol.GetID()
+			oldColColumnFamily.ColumnNames[i] = oldCol.GetName()
 		}
 	}
 
 	// Set newCol's PGAttributeNum to oldCol's ID. This makes
 	// newCol display like oldCol in catalog tables.
-	newCol.PGAttributeNum = oldCol.GetPGAttributeNum()
-	oldCol.PGAttributeNum = 0
+	newCol.ColumnDesc().PGAttributeNum = oldCol.GetPGAttributeNum()
+	oldCol.ColumnDesc().PGAttributeNum = 0
 
 	// Mark oldCol as being the result of an AlterColumnType. This allows us
 	// to generate better errors for failing inserts.
-	oldCol.AlterColumnTypeInProgress = true
+	oldCol.ColumnDesc().AlterColumnTypeInProgress = true
 
 	// Clone oldColDesc so that we can queue it up as a mutation.
 	// Use oldColCopy to queue mutation in case oldCol's memory address
 	// gets overwritten during mutation.
-	oldColCopy := protoutil.Clone(oldCol).(*descpb.ColumnDescriptor)
-	newColCopy := protoutil.Clone(newCol).(*descpb.ColumnDescriptor)
-	desc.AddColumnMutation(oldColCopy, descpb.DescriptorMutation_DROP)
+	oldColCopy := oldCol.ColumnDescDeepCopy()
+	newColCopy := newCol.ColumnDescDeepCopy()
+	desc.AddColumnMutation(&oldColCopy, descpb.DescriptorMutation_DROP)
 
 	// Remove the new column from the TableDescriptor first so we can reinsert
 	// it into the position where the old column is.
 	for i := range desc.Columns {
-		if desc.Columns[i].ID == newCol.ID {
+		if desc.Columns[i].ID == newCol.GetID() {
 			desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
 			break
 		}
@@ -3449,8 +3341,8 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 
 	// Replace the old column with the new column.
 	for i := range desc.Columns {
-		if desc.Columns[i].ID == oldCol.ID {
-			desc.Columns[i] = *newColCopy
+		if desc.Columns[i].ID == oldCol.GetID() {
+			desc.Columns[i] = newColCopy
 		}
 	}
 
@@ -3889,13 +3781,13 @@ func (desc *wrapper) ColumnsUsed(
 				return false, nil, err
 			}
 			if c, ok := v.(*tree.ColumnItem); ok {
-				col, dropped, err := desc.FindColumnByName(c.ColumnName)
-				if err != nil || dropped {
+				col, err := desc.FindColumnWithName(c.ColumnName)
+				if err != nil || col.Dropped() {
 					return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 						"column %q not found for constraint %q",
 						c.ColumnName, parsed.String())
 				}
-				colIDsUsed.Add(col.ID)
+				colIDsUsed.Add(col.GetID())
 			}
 			return false, v, nil
 		}

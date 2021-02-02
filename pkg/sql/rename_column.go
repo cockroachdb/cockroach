@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/errors"
 )
 
 var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
@@ -105,7 +103,7 @@ func (p *planner) renameColumn(
 		return false, errEmptyColumnName
 	}
 
-	col, _, err := tableDesc.FindColumnByName(*oldName)
+	col, err := tableDesc.FindColumnWithName(*oldName)
 	if err != nil {
 		return false, err
 	}
@@ -113,7 +111,7 @@ func (p *planner) renameColumn(
 	for _, tableRef := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
-			if colID == col.ID {
+			if colID == col.GetID() {
 				found = true
 			}
 		}
@@ -127,33 +125,16 @@ func (p *planner) renameColumn(
 		// Noop.
 		return false, nil
 	}
-	isShardColumn := tableDesc.IsShardColumn(col)
+	isShardColumn := tableDesc.IsShardColumn(col.ColumnDesc())
 	if isShardColumn && !allowRenameOfShardColumn {
 		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
 	}
 	// Understand if the active column already exists before checking for column
 	// mutations to detect assertion failure of empty mutation and no column.
 	// Otherwise we would have to make the above call twice.
-	_, columnNotFoundErr := tableDesc.FindActiveColumnByName(string(*newName))
-	if m := tableDesc.FindColumnMutationByName(*newName); m != nil {
-		switch m.Direction {
-		case descpb.DescriptorMutation_ADD:
-			return false, pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public",
-				col.Name)
-		case descpb.DescriptorMutation_DROP:
-			return false, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"column %q being dropped, try again later", col.Name)
-		default:
-			if columnNotFoundErr != nil {
-				return false, errors.AssertionFailedf(
-					"mutation in state %s, direction %s, and no column descriptor",
-					errors.Safe(m.State), errors.Safe(m.Direction))
-			}
-		}
-	}
-	if columnNotFoundErr == nil {
-		return false, sqlerrors.NewColumnAlreadyExistsError(tree.ErrString(newName), tableDesc.Name)
+	_, err = checkColumnDoesNotExist(tableDesc, *newName)
+	if err != nil {
+		return false, err
 	}
 
 	// Rename the column in CHECK constraints.
@@ -254,7 +235,7 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, string(*newName))
+	tableDesc.RenameColumnDescriptor(col.ColumnDesc(), string(*newName))
 
 	// Rename any shard columns which need to be renamed because their name was
 	// based on this column.

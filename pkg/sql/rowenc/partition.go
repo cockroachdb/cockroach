@@ -121,7 +121,7 @@ func DecodePartitionTuple(
 
 	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
 	for _, colID := range colIDs {
-		col, err := tableDesc.FindColumnByID(colID)
+		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -143,7 +143,7 @@ func DecodePartitionTuple(
 			t.SpecialCount++
 		} else {
 			var datum tree.Datum
-			datum, valueEncBuf, err = DecodeTableValue(a, col.Type, valueEncBuf)
+			datum, valueEncBuf, err = DecodeTableValue(a, col.GetType(), valueEncBuf)
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "decoding")
 			}

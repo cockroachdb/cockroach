@@ -101,12 +101,12 @@ func ExtractColumnIDs(
 			return true, expr, nil
 		}
 
-		col, _, err := desc.FindColumnByName(c.ColumnName)
+		col, err := desc.FindColumnWithName(c.ColumnName)
 		if err != nil {
 			return false, nil, err
 		}
 
-		colIDs.Add(col.ID)
+		colIDs.Add(col.GetID())
 		return false, expr, nil
 	})
 
@@ -138,7 +138,7 @@ func HasValidColumnReferences(desc catalog.TableDescriptor, rootExpr tree.Expr) 
 			return true, expr, nil
 		}
 
-		_, _, err = desc.FindColumnByName(c.ColumnName)
+		_, err = desc.FindColumnWithName(c.ColumnName)
 		if err != nil {
 			return false, expr, returnFalsePseudoError
 		}

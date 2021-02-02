@@ -195,19 +195,19 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 func (n *dropIndexNode) maybeDropShardColumn(
 	params runParams, tableDesc *tabledesc.Mutable, shardColName string,
 ) error {
-	shardColDesc, dropped, err := tableDesc.FindColumnByName(tree.Name(shardColName))
+	shardColDesc, err := tableDesc.FindColumnWithName(tree.Name(shardColName))
 	if err != nil {
 		return err
 	}
-	if dropped {
+	if shardColDesc.Dropped() {
 		return nil
 	}
 	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
-		return otherIdx.ContainsColumnID(shardColDesc.ID)
+		return otherIdx.ContainsColumnID(shardColDesc.GetID())
 	}) != nil {
 		return nil
 	}
-	return n.dropShardColumnAndConstraint(params, tableDesc, shardColDesc)
+	return n.dropShardColumnAndConstraint(params, tableDesc, shardColDesc.ColumnDesc())
 }
 
 func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }

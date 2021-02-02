@@ -398,13 +398,14 @@ func removeSequenceOwnerIfExists(
 	if tableDesc.Dropped() {
 		return nil
 	}
-	col, err := tableDesc.FindColumnByID(opts.SequenceOwner.OwnerColumnID)
+	col, err := tableDesc.FindColumnWithID(opts.SequenceOwner.OwnerColumnID)
 	if err != nil {
 		return err
 	}
 	// Find an item in colDesc.OwnsSequenceIds which references SequenceID.
 	refIdx := -1
-	for i, id := range col.OwnsSequenceIds {
+	for i := 0; i < col.NumOwnsSequences(); i++ {
+		id := col.GetOwnsSequenceID(i)
 		if id == sequenceID {
 			refIdx = i
 		}
@@ -412,7 +413,7 @@ func removeSequenceOwnerIfExists(
 	if refIdx == -1 {
 		return errors.AssertionFailedf("couldn't find reference from column to this sequence")
 	}
-	col.OwnsSequenceIds = append(col.OwnsSequenceIds[:refIdx], col.OwnsSequenceIds[refIdx+1:]...)
+	col.ColumnDesc().OwnsSequenceIds = append(col.ColumnDesc().OwnsSequenceIds[:refIdx], col.ColumnDesc().OwnsSequenceIds[refIdx+1:]...)
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID,
 		fmt.Sprintf("removing sequence owner %s(%d) for sequence %d",
@@ -438,11 +439,11 @@ func resolveColumnItemToDescriptors(
 	if err != nil {
 		return nil, nil, err
 	}
-	col, _, err := tableDesc.FindColumnByName(columnItem.ColumnName)
+	col, err := tableDesc.FindColumnWithName(columnItem.ColumnName)
 	if err != nil {
 		return nil, nil, err
 	}
-	return tableDesc, col, nil
+	return tableDesc, col.ColumnDesc(), nil
 }
 
 func addSequenceOwner(

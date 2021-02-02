@@ -324,12 +324,12 @@ func (desc *wrapper) collectConstraintInfo(
 					"error computing columns used in check constraint %q", c.Name)
 			}
 			for _, colID := range colsUsed {
-				col, err := desc.FindColumnByID(colID)
+				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 						"error finding column %d in table %s", log.Safe(colID), desc.Name)
 				}
-				detail.Columns = append(detail.Columns, col.Name)
+				detail.Columns = append(detail.Columns, col.GetName())
 			}
 		}
 		info[c.Name] = detail

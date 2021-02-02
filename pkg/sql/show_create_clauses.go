@@ -120,7 +120,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnByID(descpb.ColumnID(columnComment.subID))
+		col, err := table.FindColumnWithID(descpb.ColumnID(columnComment.subID))
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func showComments(
 		f.FormatNode(&tree.CommentOnColumn{
 			ColumnItem: &tree.ColumnItem{
 				TableName:  tn.ToUnresolvedObjectName(),
-				ColumnName: tree.Name(col.Name),
+				ColumnName: tree.Name(col.GetName()),
 			},
 			Comment: &columnComment.comment,
 		})
@@ -250,7 +250,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range desc.GetFamilies() {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
-			if _, err := desc.FindActiveColumnByID(colID); err == nil {
+			if col, _ := desc.FindColumnWithID(colID); col != nil && col.Public() {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}

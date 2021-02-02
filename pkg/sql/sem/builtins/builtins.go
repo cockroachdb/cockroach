@@ -3702,19 +3702,19 @@ may increase either contention or retry errors, or both.`,
 					if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
 						var extraColNames []string
 						for _, id := range indexDesc.ExtraColumnIDs {
-							col, colErr := tableDesc.FindColumnByID(id)
+							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
 							}
-							extraColNames = append(extraColNames, col.Name)
+							extraColNames = append(extraColNames, col.GetName())
 						}
 						var allColNames []string
 						for _, id := range indexColIDs {
-							col, colErr := tableDesc.FindColumnByID(id)
+							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
 							}
-							allColNames = append(allColNames, col.Name)
+							allColNames = append(allColNames, col.GetName())
 						}
 						return nil, errors.WithHintf(
 							err,
@@ -3736,17 +3736,17 @@ may increase either contention or retry errors, or both.`,
 					// types of the index columns. So, try to cast the input datums to
 					// the types of the index columns here.
 					var newDatum tree.Datum
-					col, err := tableDesc.FindColumnByID(indexColIDs[i])
+					col, err := tableDesc.FindColumnWithID(indexColIDs[i])
 					if err != nil {
 						return nil, err
 					}
 					if d.ResolvedType() == types.Unknown {
-						if !col.Nullable {
+						if !col.IsNullable() {
 							return nil, pgerror.Newf(pgcode.NotNullViolation, "NULL provided as a value for a non-nullable column")
 						}
 						newDatum = tree.DNull
 					} else {
-						expectedTyp := col.Type
+						expectedTyp := col.GetType()
 						newDatum, err = tree.PerformCast(ctx, d, expectedTyp)
 						if err != nil {
 							return nil, errors.WithHint(err, "try to explicitly cast each value to the corresponding column type")
