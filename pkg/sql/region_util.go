@@ -385,7 +385,7 @@ func zoneConfigForMultiRegionTable(
 	return ret, nil
 }
 
-// TODO(#multiregion): everything using this should instead use getZoneConfigRaw
+// TODO(#59631): everything using this should instead use getZoneConfigRaw
 // and writeZoneConfig instead of calling SQL for each query.
 // This removes the requirement to only call this function after writeSchemaChange
 // is called on creation of tables, and potentially removes the need for ReadingOwnWrites
@@ -394,9 +394,6 @@ func zoneConfigForMultiRegionTable(
 func (p *planner) applyZoneConfigForMultiRegion(
 	ctx context.Context, zs tree.ZoneSpecifier, zc *zonepb.ZoneConfig, desc string,
 ) error {
-	// TODO(#multiregion): We should check to see if the zone configuration has been updated
-	// by the user. If it has, we need to warn, and only proceed if sql_safe_updates is disabled.
-
 	// Convert the partially filled zone config to re-run as a SQL command.
 	// This avoid us having to modularize planNode logic from set_zone_config
 	// and the optimizer.
