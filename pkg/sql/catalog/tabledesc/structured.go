@@ -109,63 +109,15 @@ func NewFilledInExistingMutable(
 
 // makeImmutable returns an immutable from the given TableDescriptor.
 func makeImmutable(tbl descpb.TableDescriptor) immutable {
-	publicAndNonPublicCols := tbl.Columns
-
-	readableCols := tbl.Columns
-
-	desc := immutable{wrapper: wrapper{TableDescriptor: tbl, indexCache: newIndexCache(&tbl)}}
-
-	if len(tbl.Mutations) > 0 {
-		publicAndNonPublicCols = make([]descpb.ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
-		readableCols = make([]descpb.ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
-
-		publicAndNonPublicCols = append(publicAndNonPublicCols, tbl.Columns...)
-		readableCols = append(readableCols, tbl.Columns...)
-
-		// Fill up mutations into the column/index lists by placing the writable columns/indexes
-		// before the delete only columns/indexes.
-		for _, m := range tbl.Mutations {
-			switch m.State {
-			case descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY:
-				if col := m.GetColumn(); col != nil {
-					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
-					desc.writeOnlyColCount++
-				}
-			}
-		}
-
-		for _, m := range tbl.Mutations {
-			switch m.State {
-			case descpb.DescriptorMutation_DELETE_ONLY:
-				if col := m.GetColumn(); col != nil {
-					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
-				}
-			}
-		}
-
-		// Iterate through all mutation columns.
-		for _, c := range publicAndNonPublicCols[len(tbl.Columns):] {
-			// Mutation column may need to be fetched, but may not be completely backfilled
-			// and have be null values (even though they may be configured as NOT NULL).
-			c.Nullable = true
-			readableCols = append(readableCols, c)
-		}
-	}
-
-	desc.readableColumns = readableCols
-	desc.publicAndNonPublicCols = publicAndNonPublicCols
+	desc := immutable{wrapper: wrapper{
+		TableDescriptor: tbl,
+		indexCache:      newIndexCache(&tbl),
+		columnCache:     newColumnCache(&tbl),
+	}}
 
 	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
 	for i, c := range tbl.Checks {
 		desc.allChecks[i] = *c
-	}
-
-	// Remember what columns have user defined types.
-	for i := range desc.publicAndNonPublicCols {
-		typ := desc.publicAndNonPublicCols[i].Type
-		if typ != nil && typ.UserDefined() {
-			desc.columnsWithUDTs = append(desc.columnsWithUDTs, i)
-		}
 	}
 
 	return desc
@@ -2868,18 +2820,9 @@ func (desc *wrapper) ColumnIdxMap() catalog.TableColMap {
 // bool is true.
 func (desc *wrapper) ColumnIdxMapWithMutations(mutations bool) catalog.TableColMap {
 	var colIdxMap catalog.TableColMap
-	for i := range desc.Columns {
-		id := desc.Columns[i].ID
-		colIdxMap.Set(id, i)
-	}
-	if mutations {
-		idx := len(desc.Columns)
-		for i := range desc.Mutations {
-			col := desc.Mutations[i].GetColumn()
-			if col != nil {
-				colIdxMap.Set(col.ID, idx)
-				idx++
-			}
+	for _, col := range desc.AllColumnsNew() {
+		if col.Public() || mutations {
+			colIdxMap.Set(col.GetID(), col.Ordinal())
 		}
 	}
 	return colIdxMap
@@ -2928,56 +2871,7 @@ func (desc *wrapper) FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDes
 // ContainsUserDefinedTypes returns whether or not this table descriptor has
 // any columns of user defined types.
 func (desc *wrapper) ContainsUserDefinedTypes() bool {
-	return len(desc.GetColumnOrdinalsWithUserDefinedTypes()) > 0
-}
-
-// ContainsUserDefinedTypes returns whether or not this table descriptor has
-// any columns of user defined types.
-// This method is re-implemented for immutable only for the purpose of calling
-// the correct GetColumnOrdinalsWithUserDefinedTypes() method on desc.
-func (desc *immutable) ContainsUserDefinedTypes() bool {
-	return len(desc.GetColumnOrdinalsWithUserDefinedTypes()) > 0
-}
-
-// GetColumnOrdinalsWithUserDefinedTypes returns a slice of column ordinals
-// of columns that contain user defined types.
-func (desc *immutable) GetColumnOrdinalsWithUserDefinedTypes() []int {
-	return desc.columnsWithUDTs
-}
-
-// UserDefinedTypeColsHaveSameVersion returns whether this descriptor's columns
-// with user defined type metadata have the same versions of metadata as in the
-// other descriptor. Note that this function is only valid on two descriptors
-// representing the same table at the same version.
-func (desc *wrapper) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.TableDescriptor) bool {
-	thisCols := desc.DeletableColumns()
-	otherCols := otherDesc.DeletableColumns()
-	for _, idx := range desc.GetColumnOrdinalsWithUserDefinedTypes() {
-		this, other := thisCols[idx].Type, otherCols[idx].Type
-		if this.TypeMeta.Version != other.TypeMeta.Version {
-			return false
-		}
-	}
-	return true
-}
-
-// UserDefinedTypeColsHaveSameVersion returns whether this descriptor's columns
-// with user defined type metadata have the same versions of metadata as in the
-// other descriptor. Note that this function is only valid on two descriptors
-// representing the same table at the same version.
-// This method is re-implemented for immutable only for the purpose of calling
-// the correct DeletableColumns() and GetColumnOrdinalsWithUserDefinedTypes()
-// methods on desc.
-func (desc *immutable) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.TableDescriptor) bool {
-	thisCols := desc.DeletableColumns()
-	otherCols := otherDesc.DeletableColumns()
-	for _, idx := range desc.GetColumnOrdinalsWithUserDefinedTypes() {
-		this, other := thisCols[idx].Type, otherCols[idx].Type
-		if this.TypeMeta.Version != other.TypeMeta.Version {
-			return false
-		}
-	}
-	return true
+	return len(desc.ColumnsWithUserDefinedTypesNew()) > 0
 }
 
 // FindFamilyByID finds the family with specified ID.
@@ -4145,21 +4039,6 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 // referenced by the returned checks are writable, but not necessarily public.
 func (desc *immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 	return desc.allChecks
-}
-
-// WritableColumns returns a list of public and write-only mutation columns.
-func (desc *immutable) WritableColumns() []descpb.ColumnDescriptor {
-	return desc.publicAndNonPublicCols[:len(desc.Columns)+desc.writeOnlyColCount]
-}
-
-// DeletableColumns returns a list of public and non-public columns.
-func (desc *immutable) DeletableColumns() []descpb.ColumnDescriptor {
-	return desc.publicAndNonPublicCols
-}
-
-// MutationColumns returns a list of mutation columns.
-func (desc *immutable) MutationColumns() []descpb.ColumnDescriptor {
-	return desc.publicAndNonPublicCols[len(desc.Columns):]
 }
 
 // IsShardColumn returns true if col corresponds to a non-dropped hash sharded
