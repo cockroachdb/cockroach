@@ -31,11 +31,13 @@ func (e *LexError) Error() string {
 
 // ParseError is an error that occurs during parsing, which happens after lexing.
 type ParseError struct {
-	line string
+	problem string
+	pos     int
+	str     string
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("parse error: could not parse %q", e.line)
+	return fmt.Sprintf("%s at pos %d\n%s\n%s^", e.problem, e.pos, e.str, strings.Repeat(" ", e.pos))
 }
 
 // Constant expected by parser when lexer reaches EOF.
@@ -44,6 +46,7 @@ const eof = 0
 type wktLex struct {
 	line    string
 	pos     int
+	lastPos int
 	ret     geom.T
 	lastErr error
 }
@@ -52,6 +55,7 @@ type wktLex struct {
 func (l *wktLex) Lex(yylval *wktSymType) int {
 	// Skip leading spaces.
 	l.trimLeft()
+	l.lastPos = l.pos
 
 	// Lex a token.
 	switch c := l.peek(); c {
@@ -86,6 +90,14 @@ func getKeywordToken(tokStr string) int {
 		return POINTM
 	case "POINTZM":
 		return POINTZM
+	case "LINESTRING":
+		return LINESTRING
+	case "LINESTRINGM":
+		return LINESTRINGM
+	case "LINESTRINGZ":
+		return LINESTRINGZ
+	case "LINESTRINGZM":
+		return LINESTRINGZM
 	default:
 		return eof
 	}
@@ -189,7 +201,8 @@ func (l *wktLex) trimLeft() {
 }
 
 func (l *wktLex) Error(s string) {
-	// Lex errors are set in the Lex function.
-	// todo (ayang) improve parse error messages
-	/* EMPTY */
+	// NB: Lex errors are set in the Lex function.
+	if l.lastErr == nil {
+		l.lastErr = &ParseError{problem: s, pos: l.lastPos, str: l.line}
+	}
 }
