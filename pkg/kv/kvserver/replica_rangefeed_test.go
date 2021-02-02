@@ -167,6 +167,14 @@ func TestReplicaRangefeed(t *testing.T) {
 				}
 
 				events = stream.Events()
+				var filteredEvents []*roachpb.RangeFeedEvent
+				for _, e := range events {
+					if e.Checkpoint != nil {
+						continue
+					}
+					filteredEvents = append(filteredEvents, e)
+				}
+				events = filteredEvents
 				if len(events) < len(expEvents) {
 					return errors.Errorf("too few events: %v", events)
 				}
@@ -187,10 +195,6 @@ func TestReplicaRangefeed(t *testing.T) {
 	expEvents := []*roachpb.RangeFeedEvent{
 		{Val: &roachpb.RangeFeedValue{
 			Key: roachpb.Key("b"), Value: expVal1,
-		}},
-		{Checkpoint: &roachpb.RangeFeedCheckpoint{
-			Span:       rangefeedSpan,
-			ResolvedTS: hlc.Timestamp{},
 		}},
 	}
 	checkForExpEvents(expEvents)
