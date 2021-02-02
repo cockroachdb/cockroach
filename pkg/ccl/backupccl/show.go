@@ -248,6 +248,7 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 	}
 	if _, shouldShowPrivleges := opts[backupOptWithPrivileges]; shouldShowPrivleges {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
+		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}
 	return baseHeaders
 }
@@ -369,6 +370,8 @@ func backupShowerDefault(
 					}
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
 						row = append(row, tree.NewDString(showPrivileges(descriptor)))
+						owner := desc.GetPrivileges().Owner().SQLIdentifier()
+						row = append(row, tree.NewDString(owner))
 					}
 					rows = append(rows, row)
 				}
