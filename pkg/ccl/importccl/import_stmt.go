@@ -256,6 +256,11 @@ func importPlanHook(
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil, nil, nil, false,
+			errors.Errorf("IMPORT is not yet supported in the free tier version of CockroachCloud.")
+	}
+
 	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, nil, false, err
