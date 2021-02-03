@@ -95,7 +95,7 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 	if node.ZoneSpecifier == (ZoneSpecifier{}) {
 		ctx.WriteString("SHOW ZONE CONFIGURATIONS")
 	} else {
-		ctx.WriteString("SHOW ZONE CONFIGURATION FOR ")
+		ctx.WriteString("SHOW ZONE CONFIGURATION FROM ")
 		ctx.FormatNode(&node.ZoneSpecifier)
 	}
 }
