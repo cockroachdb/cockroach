@@ -418,7 +418,7 @@ func allocateDescriptorRewrites(
 						return nil, err
 					}
 					// Write a schema descriptor rewrite so that we can remap all
-					// temporary table descs which were under the original session
+					// temporary table Descs which were under the original session
 					// specific pg_temp schema to point to this synthesized schema when we
 					// are performing the table rewrites.
 					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.RestoreDetails_DescriptorRewrite{ID: synthesizedSchemaID}
@@ -1539,7 +1539,7 @@ func doRestorePlan(
 	}
 
 	// Ensure that no user table descriptors exist for a full cluster restore.
-	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
+	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-Descs")
 	descCount, err := catalogkv.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
 	if err != nil {
 		return errors.Wrap(err, "looking up user descriptors during restore")

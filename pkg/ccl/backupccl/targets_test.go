@@ -15,6 +15,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -255,7 +256,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.AST.(*tree.Grant).Targets
 
-			matched, err := descriptorsMatchingTargets(context.Background(),
+			matched, err := backupbase.DescriptorsMatchingTargets(context.Background(),
 				test.sessionDatabase, searchPath, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
@@ -265,11 +266,11 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				t.Fatal(err)
 			} else {
 				var matchedNames []string
-				for _, m := range matched.descs {
+				for _, m := range matched.Descs {
 					matchedNames = append(matchedNames, m.GetName())
 				}
 				var matchedDBNames []string
-				for _, m := range matched.requestedDBs {
+				for _, m := range matched.RequestedDBs {
 					matchedDBNames = append(matchedDBNames, m.GetName())
 				}
 				sort.Strings(test.expected)
