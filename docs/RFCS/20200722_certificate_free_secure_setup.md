@@ -99,7 +99,7 @@ cockroach start --certs-dir=certs \
 
 # Reference-level explanation
 
-It is assumed that any customer-facing TLS configuration is separate from inter-node config in this approach. This will require additional TLS work within CRDB. The RPC service is also given it's own certificate which presupposes that it may be offered on a separate port from SQL. The latter is temporary until the RPC service's features are fully migrated to SQL.
+It is assumed that any customer-facing TLS configuration is separate from inter-node config in this approach. This will require additional TLS work within CRDB. The RPC service is also given its own certificate which presupposes that it may be offered on a separate port from SQL. The latter is temporary until the RPC service's features are fully migrated to SQL.
 
 **Documentation aids:**
 The following names to refer to node certificate authorities.
