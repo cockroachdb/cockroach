@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -36,8 +37,14 @@ import (
 // generated).
 // The datadriven test contains string representations of this struct which make
 // it easier to visualize.
-// TODO(asubiotto): Make this thread-safe once it's used.
 type Registry struct {
+	// globalLock is a coarse-grained lock over the registry which allows for
+	// concurrent calls to AddContentionEvent. Note that this is not optimal since
+	// all calls to AddContentionEvent will need to acquire this global lock.
+	// This can be but is not optimized since this mutex only has the potential to
+	// be a bottleneck if there is a lot of contention. In this case, there are
+	// probably bigger problems to worry about.
+	globalLock syncutil.Mutex
 	// indexMap is an LRU cache that keeps track of up to indexMapMaxSize
 	// contended indexes.
 	indexMap *indexMap
@@ -199,6 +206,8 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) error {
 	}
 	tableID := descpb.ID(rawTableID)
 	indexID := descpb.IndexID(rawIndexID)
+	r.globalLock.Lock()
+	defer r.globalLock.Unlock()
 	if v, ok := r.indexMap.get(tableID, indexID); !ok {
 		// This is the first contention event seen for the given tableID/indexID
 		// pair.
@@ -211,6 +220,8 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) error {
 
 // String returns a string representation of the Registry.
 func (r *Registry) String() string {
+	r.globalLock.Lock()
+	defer r.globalLock.Unlock()
 	var b strings.Builder
 	r.indexMap.internalCache.Do(func(e *cache.Entry) {
 		key := e.Key.(indexMapKey)
