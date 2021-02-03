@@ -235,10 +235,11 @@ func runPlanInsidePlan(
 	rowResultWriter := NewRowResultWriter(rowContainer)
 	recv := MakeDistSQLReceiver(
 		params.ctx, rowResultWriter, tree.Rows,
-		params.extendedEvalCtx.ExecCfg.RangeDescriptorCache,
+		params.ExecCfg().RangeDescriptorCache,
 		params.p.Txn(),
-		params.extendedEvalCtx.ExecCfg.Clock,
+		params.ExecCfg().Clock,
 		params.p.extendedEvalCtx.Tracing,
+		params.p.ExecCfg().ContentionRegistry,
 	)
 	defer recv.Release()
 
