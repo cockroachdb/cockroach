@@ -194,10 +194,21 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
-	// The start key of a Range remains constant throughout its lifetime. This is
-	// not set for uninitialized replicas, and must not be accessed for them
-	// (reading startKey is racy). For initialized replicas, this is set (written
-	// under r.mu) and can be accessed without a lock.
+	// The start key of a Range remains constant throughout its lifetime (it does
+	// not change through splits or merges). This field carries a copy of
+	// r.mu.state.Desc.StartKey (and nil if the replica is not initialized). The
+	// copy is maintained to allow inserting locked Replicas into
+	// Store.mu.replicasByKey (keyed on start key) without the risk of deadlock.
+	// The synchronization for this field works as follows:
+	//
+	// - the field must not be accessed for uninitialized replicas, except:
+	// - when setting the field (i.e. when initializing the replica), under `mu`.
+	//
+	// Due to the first rule, any access to the field is preceded by an
+	// acquisition of `mu` (Replica.IsInitialized) which serializes the write and
+	// any subsequent reads of the field.
+	//
+	// The writes to this key happen in Replica.setStartKeyLocked.
 	startKey roachpb.RKey
 
 	store     *Store

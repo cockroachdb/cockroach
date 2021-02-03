@@ -320,8 +320,6 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	}
 
 	rangeID := lockedRepl.RangeID
-	lockedRepl.startKey = desc.StartKey
-
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
 		return nil
@@ -332,6 +330,9 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 		return errors.Errorf("%s: cannot initialize replica; %s has overlapping range %s",
 			s, desc, it.Desc())
 	}
+
+	// Copy of the start key needs to be set before inserting into replicasByKey.
+	lockedRepl.setStartKeyLocked(desc.StartKey)
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree: %+v",
 			it.item.key(), it)
