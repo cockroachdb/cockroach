@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/binary"
 	gojson "encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -83,12 +83,12 @@ type Encoder interface {
 	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
-func getEncoder(opts map[string]string) (Encoder, error) {
+func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro:
-		return newConfluentAvroEncoder(opts)
+		return newConfluentAvroEncoder(opts, targets)
 	default:
 		return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
 	}
@@ -274,9 +274,10 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	registryURL                                          string
-	schemaPrefix                                         string
-	updatedField, beforeField, keyOnly, useFullTableName bool
+	registryURL                        string
+	schemaPrefix                       string
+	updatedField, beforeField, keyOnly bool
+	targets                            jobspb.ChangefeedTargets
 
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -302,10 +303,13 @@ type confluentRegisteredEnvelopeSchema struct {
 
 var _ Encoder = &confluentAvroEncoder{}
 
-func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, error) {
+func newConfluentAvroEncoder(
+	opts map[string]string, targets jobspb.ChangefeedTargets,
+) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
 
 	e.schemaPrefix = opts[changefeedbase.OptAvroSchemaPrefix]
+	e.targets = targets
 
 	switch opts[changefeedbase.OptEnvelope] {
 	case string(changefeedbase.OptEnvelopeKeyOnly):
@@ -330,7 +334,6 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	_, e.useFullTableName = opts[changefeedbase.OptFullTableName]
 
 	if len(e.registryURL) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
@@ -345,18 +348,7 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 // Get the raw SQL-formatted string for a table name
 // and apply full_table_name and avro_schema_prefix options
 func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string {
-	tableName := desc.GetName()
-	if e.useFullTableName {
-		//We can't use the statement time name here because schemas are version specific
-		//And the fully-qualified table name is either hard to get or undefined
-		//without a current transaction and execution context.
-		//But this just needs to avoid collisions, so we can use ids in place of names.
-		tableName = fmt.Sprintf("db%d.schema%d.%s",
-			desc.GetParentID(),
-			desc.GetParentSchemaID(),
-			tableName)
-	}
-	return e.schemaPrefix + tableName
+	return e.schemaPrefix + e.targets[desc.GetID()].StatementTimeName
 }
 
 // EncodeKey implements the Encoder interface.
