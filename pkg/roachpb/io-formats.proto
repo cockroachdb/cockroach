@@ -113,6 +113,11 @@ message PgDumpOptions {
   // Indicates if all unparseable and parseable, but unimplemented PGDUMP stmts
   // should be ignored during IMPORT.
   optional bool ignore_unsupported = 3 [(gogoproto.nullable) = false];
+  // Points to the destination where unsupported statements during a PGDUMP
+  // import should be logged. This can only be used when ignore_unsupported is
+  // specified, otherwise the IMPORT errors out on encountering an unsupported
+  // stmt.
+  optional string ignore_unsupported_log = 4 [(gogoproto.nullable) = false];
 }
 
 message MysqldumpOptions {

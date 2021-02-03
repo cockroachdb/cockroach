@@ -19,6 +19,20 @@ SET default_tablespace = '';
 
 SET default_with_oids = false;
 
+
+--
+-- Name: simple; Type: EXTENSION; Schema: -; Owner:
+--
+
+CREATE EXTENSION IF NOT EXISTS simple WITH SCHEMA pg_catalog;
+
+
+--
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner:
+--
+
+COMMENT ON EXTENSION simple IS 'simple extension';
+
 --
 -- Name: simple; Type: TABLE; Schema: public; Owner: postgres
 --
