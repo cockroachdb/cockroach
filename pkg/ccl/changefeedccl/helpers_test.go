@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -156,12 +155,10 @@ func assertPayloadsAvro(
 func assertRegisteredSubjects(t testing.TB, reg *testSchemaRegistry, expected []string) {
 	t.Helper()
 
-	scrubIds := regexp.MustCompile(`\d+`)
-
 	actual := make([]string, 0, len(reg.mu.subjects))
 
 	for subject := range reg.mu.subjects {
-		actual = append(actual, scrubIds.ReplaceAllString(subject, "#"))
+		actual = append(actual, subject)
 	}
 
 	sort.Strings(expected)
