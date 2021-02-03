@@ -13,6 +13,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -72,4 +74,44 @@ func execute(ctx context.Context, name string, args ...string) error {
 	}
 
 	return nil
+}
+
+func getPathToBin(target string) (string, error) {
+	// actionQueryResult is used to unmarshal the results of the bazel action
+	// query.
+	type actionQueryResult struct {
+		Artifacts []struct {
+			ID       string `json:"id"`
+			ExecPath string `json:"execPath"`
+		} `json:"artifacts"`
+
+		Actions []struct {
+			Mnemonic  string   `json:"mnemonic"`
+			OutputIds []string `json:"outputIds"`
+		} `json:"actions"`
+	}
+
+	buf, err := exec.Command("bazel", "aquery", target, "--output=jsonproto").Output()
+	if err != nil {
+		return "", err
+	}
+
+	var result actionQueryResult
+	if err := json.Unmarshal(buf, &result); err != nil {
+		return "", err
+	}
+
+	const binaryMnemomic = "GoLink"
+	for _, action := range result.Actions {
+		if action.Mnemonic == binaryMnemomic {
+			id := action.OutputIds[0]
+			for _, artifact := range result.Artifacts {
+				if artifact.ID == id {
+					return artifact.ExecPath, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("could not find path to binary %q", target)
 }
