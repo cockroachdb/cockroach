@@ -212,7 +212,7 @@ func (*AlterTable) hiddenFromShowQueries() {}
 func (*AlterTableLocality) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE REGIONAL AFFINITY" }
+func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE SET LOCALITY" }
 
 func (*AlterTableLocality) hiddenFromShowQueries() {}
 
