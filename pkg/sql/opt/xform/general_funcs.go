@@ -229,9 +229,9 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // The values of both columns in that index are known, enabling a single value
 // constraint to be generated.
 func (c *CustomFuncs) computedColFilters(
-	tabID opt.TableID, requiredFilters, optionalFilters memo.FiltersExpr,
+	scanPrivate *memo.ScanPrivate, requiredFilters, optionalFilters memo.FiltersExpr,
 ) memo.FiltersExpr {
-	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	if len(tabMeta.ComputedCols) == 0 {
 		return nil
 	}
@@ -239,8 +239,8 @@ func (c *CustomFuncs) computedColFilters(
 	// Start with set of constant columns, as derived from the list of filter
 	// conditions.
 	constCols := make(map[opt.ColumnID]opt.ScalarExpr)
-	c.findConstantFilterCols(constCols, tabID, requiredFilters)
-	c.findConstantFilterCols(constCols, tabID, optionalFilters)
+	c.findConstantFilterCols(constCols, scanPrivate, requiredFilters)
+	c.findConstantFilterCols(constCols, scanPrivate, optionalFilters)
 	if len(constCols) == 0 {
 		// No constant values could be derived from filters, so assume that there
 		// are also no constant computed columns.
