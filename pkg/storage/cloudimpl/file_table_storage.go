@@ -120,11 +120,15 @@ func MakeSQLConnFileTableStorage(
 	if err != nil {
 		return nil, err
 	}
+	prefix := cfg.Path
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
 	return &fileTableStorage{
 		fs:       fileToTableSystem,
 		cfg:      cfg,
 		ioConf:   base.ExternalIODirConfig{},
-		prefix:   cfg.Path,
+		prefix:   prefix,
 		settings: nil,
 	}, nil
 }
@@ -258,66 +262,85 @@ func (f *fileTableStorage) WriteFile(
 	return err
 }
 
-// This method is different from the utility method getPrefixBeforeWildcard() in
-// external_storage.go in that it does not invoke path.Dir on the return value.
-func getPrefixBeforeWildcardForFileTable(p string) string {
-	globIndex := strings.IndexAny(p, "*?[")
-	if globIndex < 0 {
-		return p
+// getPrefixAndPattern takes a prefix and optionally suffix of a path pattern
+// and derives the constant prefix which would be shared by all matching files
+// and potentially a glob-pattern to match against any remaining suffix of names
+// within that prefix. For example, given "/a/b" and "c/*.go", it returns the
+// constant prefix "/a/b/c" and the pattern "*.go" while given "/a/b/c/*.go" and
+// the pattern "" returns the same. This is intended to be used in tandem with
+// matchesPrefixAndPattern, transforming a storage prefix and pattern suffix as
+// passed to a ListFiles call into the arguments it needs to check a match.
+// This function also does validation of the prefix and pattern, ensuring that
+// if the prefix contains globs patterns there is no pattern suffix and that
+// neither the prefix or pattern change after path normalization, to reject ../
+// or similar invalid paths (though an exception is made for trailing slash.)
+func getPrefixAndPattern(prefix, pattern string) (string, string, error) {
+	if trimmed := strings.TrimSuffix(prefix, "/"); trimmed != "" {
+		if clean := path.Clean(trimmed); clean != trimmed {
+			return "", "", errors.Newf("invalid path %s changes to %s after normalization", prefix, clean)
+		}
 	}
-	return p[:globIndex]
+
+	globInPrefix := strings.IndexAny(prefix, "*?[")
+	if globInPrefix >= 0 {
+		if pattern != "" {
+			return "", "", errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
+		return prefix[:globInPrefix], prefix[globInPrefix:], nil
+	}
+
+	if pattern == "" {
+		return prefix, "", nil
+	}
+
+	if clean := path.Clean(pattern); clean != pattern {
+		return "", "", errors.Newf("invalid path %s changes to %s after normalization", pattern, clean)
+	}
+
+	globIndex := strings.IndexAny(pattern, "*?[")
+	if globIndex < 0 {
+		return path.Join(prefix, pattern), "", nil
+	}
+	constSuffix, patternSuffix := pattern[:globIndex], pattern[globIndex:]
+	return path.Join(prefix, constSuffix), patternSuffix, nil
+}
+
+func matchesPrefixAndPattern(name, prefix, pattern string) (bool, error) {
+	if !strings.HasPrefix(name, prefix) {
+		return false, nil
+	}
+	// If filtering matches within this prefix by a pattern, check remainder of
+	// name after prefix against that pattern.
+	if pattern != "" {
+		rest := strings.TrimPrefix(name[len(prefix):], "/")
+		return path.Match(pattern, rest)
+	}
+	return true, nil
 }
 
 // ListFiles implements the ExternalStorage interface and lists the files stored
 // in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+	prefix, pattern, err := getPrefixAndPattern(f.prefix, patternSuffix)
+	if err != nil {
+		return nil, err
+	}
+
 	var fileList []string
-	matches, err := f.fs.ListFiles(ctx, getPrefixBeforeWildcardForFileTable(f.prefix))
+	matches, err := f.fs.ListFiles(ctx, prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
 
-	pattern := f.prefix
-	if patternSuffix != "" {
-		if containsGlob(f.prefix) {
-			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
-		}
-		pattern, err = checkBaseAndJoinFilePath(pattern, patternSuffix)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	for _, match := range matches {
-		// If there is no glob pattern, then the user wishes to list all the uploaded
-		// files stored in the userfile table storage.
-		if pattern == "" {
-			match = strings.TrimPrefix(match, "/")
-			unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.
-				QualifiedTableName, match))
-			if err != nil {
-				return nil, err
-			}
-			fileList = append(fileList, unescapedURI)
-			continue
-		}
-
-		doesMatch, matchErr := path.Match(pattern, match)
-		if matchErr != nil {
-			continue
-		}
-
-		if doesMatch {
-			if patternSuffix != "" {
-				if !strings.HasPrefix(match, f.prefix) {
-					return nil, errors.New("pattern matched file outside of path")
-				}
-				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(match, f.prefix),
-					"/"))
+		if matches, err := matchesPrefixAndPattern(match, prefix, pattern); err != nil {
+			return nil, err
+		} else if matches {
+			if strings.HasPrefix(match, f.prefix) {
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(match, f.prefix), "/"))
 			} else {
 				match = strings.TrimPrefix(match, "/")
-				unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.
-					QualifiedTableName, match))
+				unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.QualifiedTableName, match))
 				if err != nil {
 					return nil, err
 				}
