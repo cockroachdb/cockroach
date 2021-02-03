@@ -3,14 +3,6 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "targets",
-    srcs = ["targets.go"],
-    embed = [":targets_go_proto"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets",
-    visibility = ["//visibility:public"],
-)
-
-go_library(
     name = "scpb",
     srcs = ["elements.go"],
     embed = [":scpb_go_proto"],
