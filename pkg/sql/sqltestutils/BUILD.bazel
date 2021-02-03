@@ -7,8 +7,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
+        "//pkg/jobs",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
