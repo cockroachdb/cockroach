@@ -567,18 +567,21 @@ func maybeAddSequenceDependencies(
 	var seqDescs []*tabledesc.Mutable
 	for _, seqIdentifier := range seqIdentifiers {
 		var tn tree.TableName
+		var seqByID bool
 		if seqIdentifier.SeqName != "" {
 			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
 			if err != nil {
 				return nil, err
 			}
 			tn = parsedSeqName.ToTableName()
+			seqByID = false
 		} else {
 			name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
 			tn = *name
+			seqByID = true
 		}
 
 		var seqDesc *tabledesc.Mutable
@@ -613,6 +616,7 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
+				ByID:      seqByID,
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)

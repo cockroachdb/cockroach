@@ -323,8 +323,7 @@ func replaceSequenceNames(
 		return false, &tree.AnnotateTypeExpr{
 			Type:       types.String,
 			SyntaxMode: tree.AnnotateShort,
-			Expr: tree.NewStrVal(seqName.FQString()),
-
+			Expr:       tree.NewStrVal(seqName.FQString()),
 		}, nil
 	}
 

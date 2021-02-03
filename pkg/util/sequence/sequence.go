@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
+// SeqIdentifier wraps together different ways of identifying a sequence.
+// The sequence can either be identified via either its name, or its ID.
 type SeqIdentifier struct {
 	SeqName string
-	SeqID int64
+	SeqID   int64
 }
 
 // GetSequenceFromFunc extracts a sequence name from a FuncExpr if the function
