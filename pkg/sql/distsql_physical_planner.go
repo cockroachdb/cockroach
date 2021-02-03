@@ -1061,7 +1061,7 @@ func tableOrdinal(
 }
 
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.GetPublicColumns()) - 1
+	highest := len(desc.PublicColumnsNew()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		highest = len(desc.AllColumnsNew()) - 1
 	}
@@ -2261,7 +2261,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 
-		numStreamCols += len(side.scan.desc.GetPublicColumns())
+		numStreamCols += len(side.scan.desc.PublicColumnsNew())
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
@@ -2318,7 +2318,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			i++
 		}
 
-		colOffset += len(side.scan.desc.GetPublicColumns())
+		colOffset += len(side.scan.desc.PublicColumnsNew())
 	}
 
 	// Set the ON condition.

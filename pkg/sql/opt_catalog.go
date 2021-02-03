@@ -507,12 +507,12 @@ func (ov *optView) Query() string {
 
 // ColumnNameCount is part of the cat.View interface.
 func (ov *optView) ColumnNameCount() int {
-	return len(ov.desc.GetPublicColumns())
+	return len(ov.desc.PublicColumnsNew())
 }
 
 // ColumnName is part of the cat.View interface.
 func (ov *optView) ColumnName(i int) tree.Name {
-	return tree.Name(ov.desc.GetPublicColumns()[i].Name)
+	return ov.desc.PublicColumnsNew()[i].ColName()
 }
 
 // optSequence is a wrapper around catalog.TableDescriptor that
@@ -1698,7 +1698,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.GetPublicColumns())+1)
+	ot.columns = make([]cat.Column, len(desc.PublicColumnsNew())+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
 		0,
@@ -1711,18 +1711,17 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 	)
-	for i := range desc.GetPublicColumns() {
-		d := desc.GetPublicColumns()[i]
+	for i, d := range desc.PublicColumnsNew() {
 		ot.columns[i+1].InitNonVirtual(
 			i+1,
-			cat.StableID(d.ID),
-			tree.Name(d.Name),
+			cat.StableID(d.GetID()),
+			tree.Name(d.GetName()),
 			cat.Ordinary,
-			d.Type,
-			d.Nullable,
-			cat.MaybeHidden(d.Hidden),
-			d.DefaultExpr,
-			d.ComputeExpr,
+			d.GetType(),
+			d.IsNullable(),
+			cat.MaybeHidden(d.IsHidden()),
+			d.ColumnDesc().DefaultExpr,
+			d.ColumnDesc().ComputeExpr,
 		)
 	}
 
@@ -1823,8 +1822,8 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i > 0 && i <= len(ot.desc.GetPublicColumns()) {
-		return &ot.desc.GetPublicColumns()[i-1]
+	if i > 0 && i <= len(ot.desc.PublicColumnsNew()) {
+		return ot.desc.PublicColumnsNew()[i-1].ColumnDesc()
 	}
 	return nil
 }

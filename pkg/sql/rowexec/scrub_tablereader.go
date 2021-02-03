@@ -153,9 +153,9 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})
 	for i, colIdx := range tr.fetcherResultToColIdx {
-		col := tr.tableDesc.GetPublicColumns()[colIdx]
+		col := tr.tableDesc.PublicColumnsNew()[colIdx]
 		// TODO(joey): We should maybe try to get the underlying type.
-		rowDetails[col.Name] = row[i].String(col.Type)
+		rowDetails[col.GetName()] = row[i].String(col.GetType())
 	}
 	details["row_data"] = rowDetails
 	details["index_name"] = index.GetName()
@@ -193,7 +193,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	var colIDToRowIdxMap catalog.TableColMap
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
-		colIDToRowIdxMap.Set(tr.tableDesc.GetPublicColumns()[colIdx].ID, rowIdx)
+		colIDToRowIdxMap.Set(tr.tableDesc.PublicColumnsNew()[colIdx].GetID(), rowIdx)
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')

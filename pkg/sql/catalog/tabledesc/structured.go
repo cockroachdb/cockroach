@@ -3614,11 +3614,11 @@ func (desc *Mutable) IsNew() bool {
 }
 
 // ColumnsSelectors generates Select expressions for cols.
-func ColumnsSelectors(cols []descpb.ColumnDescriptor) tree.SelectExprs {
+func ColumnsSelectors(cols []catalog.Column) tree.SelectExprs {
 	exprs := make(tree.SelectExprs, len(cols))
 	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
-		colItems[i].ColumnName = tree.Name(col.Name)
+		colItems[i].ColumnName = col.ColName()
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs

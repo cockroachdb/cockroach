@@ -308,11 +308,10 @@ func initColsForScan(
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for i := range desc.GetPublicColumns() {
-			c := &desc.GetPublicColumns()[i]
+		for _, c := range desc.PublicColumnsNew() {
 			found := false
 			for _, wc := range colCfg.wantedColumns {
-				if descpb.ColumnID(wc) == c.ID {
+				if descpb.ColumnID(wc) == c.GetID() {
 					found = true
 					break
 				}
@@ -321,7 +320,7 @@ func initColsForScan(
 				// NB: we could amortize this allocation using a second slice,
 				// but addUnwantedAsHidden is only used by scrub, so doing so
 				// doesn't seem worth it.
-				col := *c
+				col := *c.ColumnDesc()
 				col.Hidden = true
 				cols = append(cols, &col)
 			}

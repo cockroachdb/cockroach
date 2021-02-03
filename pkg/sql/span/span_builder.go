@@ -76,12 +76,10 @@ func MakeBuilder(
 	columnIDs, s.indexColDirs = index.FullColumnIDs()
 	s.indexColTypes = make([]*types.T, len(columnIDs))
 	for i, colID := range columnIDs {
+		col, _ := table.FindColumnWithID(colID)
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
-		for _, col := range table.GetPublicColumns() {
-			if col.ID == colID {
-				s.indexColTypes[i] = col.Type
-				break
-			}
+		if col != nil && col.Public() {
+			s.indexColTypes[i] = col.GetType()
 		}
 	}
 

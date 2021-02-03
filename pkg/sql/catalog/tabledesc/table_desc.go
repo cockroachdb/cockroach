@@ -105,11 +105,6 @@ func (desc *wrapper) IsTemporary() bool {
 	return desc.GetTemporary()
 }
 
-// GetPublicColumns return the public columns in the descriptor.
-func (desc *wrapper) GetPublicColumns() []descpb.ColumnDescriptor {
-	return desc.Columns
-}
-
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
