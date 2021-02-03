@@ -910,6 +910,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
+	ex.extraTxnState.rowsRead += stats.rowsRead
+	ex.extraTxnState.bytesRead += stats.bytesRead
+
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
@@ -1478,6 +1481,8 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.numRows = 0
 	ex.extraTxnState.shouldCollectExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+	ex.extraTxnState.rowsRead = 0
+	ex.extraTxnState.bytesRead = 0
 	if execStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); execStatsSampleRate > 0 {
 		ex.extraTxnState.shouldCollectExecutionStats = execStatsSampleRate > ex.rng.Float64()
 	}
@@ -1496,6 +1501,8 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		// accumulatedStats are cleared, but shouldCollectExecutionStats is
 		// unchanged.
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.rowsRead = 0
+		ex.extraTxnState.bytesRead = 0
 	}
 	return onTxnFinish, onTxnRestart
 }
@@ -1521,6 +1528,10 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 		txnRetryLat,
 		commitLat,
 		ex.extraTxnState.numRows,
+		ex.extraTxnState.shouldCollectExecutionStats,
+		ex.extraTxnState.accumulatedStats,
+		ex.extraTxnState.rowsRead,
+		ex.extraTxnState.bytesRead,
 	)
 }
 
