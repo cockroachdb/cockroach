@@ -549,7 +549,7 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Stats)
 }
 
-// AlterTableLocality represents an ALTER TABLE SET REGIONAL AFFINITY command.
+// AlterTableLocality represents an ALTER TABLE LOCALITY command.
 type AlterTableLocality struct {
 	Name     *UnresolvedObjectName
 	IfExists bool
