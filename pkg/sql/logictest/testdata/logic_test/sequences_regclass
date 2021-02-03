@@ -1,11 +1,15 @@
 statement ok
 SET DATABASE = test
 
+# Test that sequences referenced via their IDs are printed properly,
+# and the sequence still works as expected.
+subtest show_sequences
+
 statement ok
-CREATE SEQUENCE test_seq
+CREATE SEQUENCE test_seq START 2 INCREMENT 5
 
 let $test_seq_id
-SELECT id FROM system.namespace WHERE name='test_seq'
+SELECT 'test_seq'::regclass::int
 
 statement ok
 CREATE TABLE test_table (a INT PRIMARY KEY, b INT NOT NULL DEFAULT nextval($test_seq_id::regclass), FAMILY (b, a))
@@ -24,14 +28,19 @@ statement ok
 INSERT INTO test_table values (0)
 
 statement ok
-INSERT INTO test_table values (88)
+INSERT INTO test_table values (1)
 
 query II
 SELECT a, b FROM test_table
 ORDER BY a ASC
 ----
-0  1
-88 2
+0  2
+1  7
+
+
+# Test that sequences created by SERIAL are referenced
+# via their IDs and are displayed properly.
+subtest serial_sequences
 
 statement ok
 SET serial_normalization = 'sql_sequence'
@@ -65,7 +74,7 @@ statement ok
 SET serial_normalization = 'virtual_sequence'
 
 statement ok
-ALTER TABLE foo add COLUMN baz SERIAL
+ALTER TABLE foo ADD COLUMN baz SERIAL
 
 query TT
 SHOW CREATE TABLE foo
@@ -77,3 +86,75 @@ foo  CREATE TABLE public.foo (
      CONSTRAINT "primary" PRIMARY KEY (i ASC),
      FAMILY "primary" (i, bar, baz)
 )
+
+
+# Test that references are still correctly created for
+# sequences referenced via their IDs.
+subtest sequence_references
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE dep_seq
+
+let $dep_seq_id
+SELECT 'dep_seq'::regclass::int
+
+statement ok
+CREATE TABLE seq_table (i SERIAL PRIMARY KEY, j INT NOT NULL DEFAULT nextval($dep_seq_id::regclass))
+
+query TT
+SELECT pg_get_serial_sequence('seq_table', 'i'), pg_get_serial_sequence('seq_table', 'j')
+----
+public.seq_table_i_seq  public.dep_seq
+
+
+# Test that sequences referenced via their IDs can be renamed.
+subtest sequence_renames
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE TABLE bar (i SERIAL PRIMARY KEY)
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL DEFAULT nextval('test.public.bar_i_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i)
+)
+
+statement ok
+ALTER SEQUENCE bar_i_seq RENAME TO new_bar_seq
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL DEFAULT nextval('test.public.new_bar_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i)
+)
+
+statement ok
+CREATE SEQUENCE s
+
+let $s_id
+SELECT 's'::regclass::int
+
+statement ok
+CREATE TABLE baz (i INT NOT NULL DEFAULT nextval($s_id::regclass))
+
+statement ok
+ALTER SEQUENCE s RENAME TO s2
+
+# Reference s2 via its name, not its ID.
+statement ok
+CREATE TABLE qux (i INT NOT NULL DEFAULT nextval('s2'))
+
+statement error pq: cannot rename relation "s2" because view "baz" depends on it
+ALTER SEQUENCE s2 RENAME TO s3
