@@ -257,9 +257,6 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
-	// We don't expect to spill to disk and we want to give the whole memory
-	// limit to the spilling queue's in-memory batch buffer.
-	queueCfg.BufferSizeBytes = 1
 
 	rng, _ := randutil.NewPseudoRand()
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
@@ -277,7 +274,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	// Choose a memory limit such that at most two batches can be kept in the
 	// in-memory buffer at a time (single batch is not enough because the queue
 	// delays the release of the memory by one batch).
-	memoryLimit := int64(2*colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()) + queueCfg.BufferSizeBytes)
+	memoryLimit := int64(2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
 	if memoryLimit < mon.DefaultPoolAllocationSize {
 		memoryLimit = mon.DefaultPoolAllocationSize
 	}
@@ -417,5 +414,110 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 0, len(directories))
 		}
+	}
+}
+
+// TestSpillingQueueMovingTailWhenSpilling verifies that the spilling queue
+// correctly moves the tail of the in-memory buffer onto the disk queue when the
+// memory limit is exceeded. It sets such a memory limit and buffer size bytes
+// that all enqueued batches have to be moved, so the in-memory buffer becomes
+// empty.
+func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	typs := []*types.T{types.Int}
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	numInputBatches := 1 + rng.Intn(int(spillingQueueInitialItemsLen))
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize())
+	batchSize := colmem.GetBatchMemSize(batch)
+	memoryLimit := int64(numInputBatches) * batchSize
+	if memoryLimit < mon.DefaultPoolAllocationSize {
+		memoryLimit = mon.DefaultPoolAllocationSize
+		numInputBatches = int(memoryLimit / batchSize)
+	}
+	queueCfg.BufferSizeBytes = int(memoryLimit)
+
+	// Our memory accounting is delayed by one batch, so we need to append an
+	// extra to exceed the memory limit.
+	numInputBatches++
+
+	for _, enqueueExtra := range []bool{false, true} {
+		// We need to create a separate unlimited allocator for the spilling
+		// queue so that it could measure only its own memory usage
+		// (testAllocator might account for other things, thus confusing the
+		// spilling queue).
+		memAcc := testMemMonitor.MakeBoundAccount()
+		defer memAcc.Close(ctx)
+		spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+		newQueueArgs := &NewSpillingQueueArgs{
+			UnlimitedAllocator: spillingQueueUnlimitedAllocator,
+			Types:              typs,
+			MemoryLimit:        memoryLimit,
+			DiskQueueCfg:       queueCfg,
+			FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+			DiskAcc:            testDiskAcc,
+		}
+		q := newSpillingQueue(newQueueArgs)
+
+		var expectedBatchSequence []int64
+
+		for i := 0; i < numInputBatches; i++ {
+			// enqueue deeply copies the batch, so we can reuse the same
+			// one.
+			sequenceValue := rng.Int63()
+			batch.ColVec(0).Int64()[0] = sequenceValue
+			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
+			require.NoError(t, q.enqueue(ctx, batch))
+		}
+		// All enqueued batches should fit under the memory limit (to be
+		// precise, the last enqueued batch has just crossed the limit, but
+		// the spilling hasn't occurred yet).
+		require.False(t, q.spilled())
+
+		numExtraInputBatches := 0
+		if enqueueExtra {
+			sequenceValue := rng.Int63()
+			batch.ColVec(0).Int64()[0] = sequenceValue
+			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
+			require.NoError(t, q.enqueue(ctx, batch))
+			numExtraInputBatches = 1
+		} else {
+			require.NoError(t, q.maybeSpillToDisk(ctx))
+		}
+
+		// Now the spilling must have occurred with all batches moved to the
+		// disk queue.
+		require.True(t, q.spilled())
+		require.Equal(t, 0, q.numInMemoryItems)
+		require.Equal(t, int64(0), q.unlimitedAllocator.Used())
+		require.Equal(t, numInputBatches+numExtraInputBatches, q.numOnDiskItems)
+
+		require.NoError(t, q.enqueue(ctx, coldata.ZeroBatch))
+
+		// Now check that all the batches are in the correct order.
+		batchCount := 0
+		for {
+			b, err := q.dequeue(ctx)
+			require.NoError(t, err)
+			if b.Length() == 0 {
+				break
+			}
+			require.Equal(t, expectedBatchSequence[batchCount], b.ColVec(0).Int64()[0])
+			batchCount++
+		}
+		require.Equal(t, batchCount, numInputBatches+numExtraInputBatches)
+
+		// Some sanity checks.
+		require.NoError(t, q.close(ctx))
+		directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
+		require.NoError(t, err)
+		require.Equal(t, 0, len(directories))
 	}
 }
