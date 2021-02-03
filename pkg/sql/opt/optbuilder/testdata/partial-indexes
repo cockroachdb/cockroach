@@ -13,7 +13,7 @@ CREATE TABLE partial_indexes (
 ----
 
 exec-ddl
-CREATE TABLE unique_partial_indexes (
+CREATE TABLE uniq (
     a INT PRIMARY KEY,
     b INT,
     c STRING,
@@ -847,9 +847,9 @@ upsert partial_index_virtual
            └── d:13 = 'foo' [as=partial_index_del1:17]
 
 build
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
-insert unique_partial_indexes
+insert uniq
  ├── columns: <none>
  ├── arbiter indexes: primary secondary
  ├── insert-mapping:
@@ -876,7 +876,7 @@ insert unique_partial_indexes
       │         │    │    │    │    ├── values
       │         │    │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │    │    │    └── (1, 1, 'bar')
-      │         │    │    │    │    ├── scan unique_partial_indexes
+      │         │    │    │    │    ├── scan uniq
       │         │    │    │    │    │    ├── columns: a:8!null b:9 c:10
       │         │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │         └── secondary: filters
@@ -885,7 +885,7 @@ insert unique_partial_indexes
       │         │    │    │    │         └── column1:5 = a:8
       │         │    │    │    ├── select
       │         │    │    │    │    ├── columns: a:12!null b:13 c:14!null
-      │         │    │    │    │    ├── scan unique_partial_indexes
+      │         │    │    │    │    ├── scan uniq
       │         │    │    │    │    │    ├── columns: a:12!null b:13 c:14
       │         │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │         └── secondary: filters
@@ -911,14 +911,14 @@ insert unique_partial_indexes
            └── column3:7 = 'foo' [as=partial_index_put1:17]
 
 exec-ddl
-CREATE UNIQUE INDEX u2 ON unique_partial_indexes (b) WHERE c = 'bar'
+CREATE UNIQUE INDEX u2 ON uniq (b) WHERE c = 'bar'
 ----
 
 # Build scans for both partial indexes when the arbiter predicate implies them.
 build
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
-insert unique_partial_indexes
+insert uniq
  ├── columns: <none>
  ├── arbiter indexes: secondary u2
  ├── insert-mapping:
@@ -951,7 +951,7 @@ insert unique_partial_indexes
       │         │    │         │    │    │    │    └── (1, 1, 'bar')
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: a:8!null b:9 c:10!null
-      │         │    │         │    │    │    │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │    │    ├── scan uniq
       │         │    │         │    │    │    │    │    ├── columns: a:8!null b:9 c:10
       │         │    │         │    │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │    │         ├── secondary: filters
@@ -965,7 +965,7 @@ insert unique_partial_indexes
       │         │    │         │    │    │         └── column3:7 = 'foo'
       │         │    │         │    │    ├── select
       │         │    │         │    │    │    ├── columns: a:12!null b:13 c:14!null
-      │         │    │         │    │    │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │    ├── scan uniq
       │         │    │         │    │    │    │    ├── columns: a:12!null b:13 c:14
       │         │    │         │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │         ├── secondary: filters
@@ -996,14 +996,14 @@ insert unique_partial_indexes
            └── column3:7 = 'bar' [as=partial_index_put2:19]
 
 exec-ddl
-CREATE UNIQUE INDEX u3 ON unique_partial_indexes (b)
+CREATE UNIQUE INDEX u3 ON uniq (b)
 ----
 
 # If there is a non-partial unique index, then it is the only arbiter.
 build
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
-insert unique_partial_indexes
+insert uniq
  ├── columns: <none>
  ├── arbiter indexes: u3
  ├── insert-mapping:
@@ -1021,7 +1021,7 @@ insert unique_partial_indexes
       │    │    ├── values
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    │    └── (1, 1, 'bar')
-      │    │    ├── scan unique_partial_indexes
+      │    │    ├── scan uniq
       │    │    │    ├── columns: a:8!null b:9 c:10
       │    │    │    └── partial index predicates
       │    │    │         ├── secondary: filters
@@ -1044,7 +1044,7 @@ DROP INDEX u3
 ----
 
 exec-ddl
-CREATE UNIQUE INDEX u4 ON unique_partial_indexes (b) WHERE 1 = 1
+CREATE UNIQUE INDEX u4 ON uniq (b) WHERE 1 = 1
 ----
 
 # If there is a pseudo-partial unique index, then it is the only arbiter. Note
@@ -1057,9 +1057,9 @@ CREATE UNIQUE INDEX u4 ON unique_partial_indexes (b) WHERE 1 = 1
 # representation of real-world behavior and allowing the output of this test to
 # reflect that the pseudo-partial index is the only arbiter.
 opt
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
-insert unique_partial_indexes
+insert uniq
  ├── columns: <none>
  ├── arbiter indexes: u4
  ├── insert-mapping:
@@ -1076,7 +1076,7 @@ insert unique_partial_indexes
       │    │    └── (1, 1, 'bar')
       │    ├── select
       │    │    ├── columns: b:9!null
-      │    │    ├── scan unique_partial_indexes@u4,partial
+      │    │    ├── scan uniq@u4,partial
       │    │    │    └── columns: b:9
       │    │    └── filters
       │    │         └── b:9 = 1
@@ -1092,14 +1092,14 @@ DROP INDEX u4
 
 # Error when two arbiter indexes are found for ON CONFLICT DO UPDATE.
 build
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO UPDATE SET b = 10
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO UPDATE SET b = 10
 ----
 error (0A000): unimplemented: there are multiple unique or exclusion constraints matching the ON CONFLICT specification
 
 build
-INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE SET b = 10
+INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE SET b = 10
 ----
-upsert unique_partial_indexes
+upsert uniq
  ├── columns: <none>
  ├── arbiter indexes: secondary
  ├── canary column: a:9
@@ -1139,7 +1139,7 @@ upsert unique_partial_indexes
       │    │    │    │                   └── column3:7
       │    │    │    ├── select
       │    │    │    │    ├── columns: a:9!null b:10 c:11!null crdb_internal_mvcc_timestamp:12
-      │    │    │    │    ├── scan unique_partial_indexes
+      │    │    │    │    ├── scan uniq
       │    │    │    │    │    ├── columns: a:9!null b:10 c:11 crdb_internal_mvcc_timestamp:12
       │    │    │    │    │    └── partial index predicates
       │    │    │    │    │         ├── secondary: filters
