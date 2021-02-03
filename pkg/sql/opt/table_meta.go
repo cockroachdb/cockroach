@@ -52,10 +52,8 @@ func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
 // NOTE: This method cannot do complete bounds checking, so it's up to the
 //       caller to ensure that this column is really in the given base table.
 func (t TableID) ColumnOrdinal(id ColumnID) int {
-	if util.RaceEnabled {
-		if id < t.firstColID() {
-			panic(errors.AssertionFailedf("ordinal cannot be negative"))
-		}
+	if util.CrdbTestBuild && id < t.firstColID() {
+		panic(errors.AssertionFailedf("ordinal cannot be negative"))
 	}
 	return int(id - t.firstColID())
 }

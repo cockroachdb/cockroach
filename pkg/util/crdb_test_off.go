@@ -12,9 +12,9 @@
 
 package util
 
-// crdbTestBuild is a flag that is set to true if the binary was compiled
+// CrdbTestBuild is a flag that is set to true if the binary was compiled
 // with the 'crdb_test' build tag (which is the case for all test targets). This
 // flag can be used to enable expensive checks, test randomizations, or other
 // metamorphic-style perturbations that will not affect test results but will
 // exercise different parts of the code.
-const crdbTestBuild = false
+const CrdbTestBuild = false
