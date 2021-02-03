@@ -14,6 +14,8 @@
 package main
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
+	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
 	"golang.org/x/tools/go/analysis/passes/assign"
 	"golang.org/x/tools/go/analysis/passes/atomic"
@@ -46,45 +49,60 @@ import (
 	"golang.org/x/tools/go/analysis/passes/unsafeptr"
 	"golang.org/x/tools/go/analysis/passes/unusedresult"
 	"golang.org/x/tools/go/analysis/unitchecker"
+	"honnef.co/go/tools/staticcheck"
 )
 
+var analyzers = []*analysis.Analyzer{
+	// First-party analyzers:
+	descriptormarshal.Analyzer,
+	hash.Analyzer,
+	nocopy.Analyzer,
+	returnerrcheck.Analyzer,
+	timer.Analyzer,
+	unconvert.Analyzer,
+	fmtsafe.Analyzer,
+	errcmp.Analyzer,
+
+	// Standard go vet analyzers:
+	asmdecl.Analyzer,
+	assign.Analyzer,
+	atomic.Analyzer,
+	bools.Analyzer,
+	buildtag.Analyzer,
+	cgocall.Analyzer,
+	composite.Analyzer,
+	copylock.Analyzer,
+	errorsas.Analyzer,
+	httpresponse.Analyzer,
+	loopclosure.Analyzer,
+	lostcancel.Analyzer,
+	nilfunc.Analyzer,
+	printf.Analyzer,
+	shift.Analyzer,
+	stdmethods.Analyzer,
+	structtag.Analyzer,
+	tests.Analyzer,
+	unmarshal.Analyzer,
+	unreachable.Analyzer,
+	unsafeptr.Analyzer,
+	unusedresult.Analyzer,
+
+	// Additional analyzers:
+	shadow.Analyzer,
+}
+
+func init() {
+	// Add the staticcheck analyzers.
+	names := make([]string, 0, len(staticcheck.Analyzers))
+	for name := range staticcheck.Analyzers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		analyzers = append(analyzers, staticcheck.Analyzers[name])
+	}
+}
+
 func main() {
-	unitchecker.Main(
-		// First-party analyzers:
-		descriptormarshal.Analyzer,
-		hash.Analyzer,
-		nocopy.Analyzer,
-		returnerrcheck.Analyzer,
-		timer.Analyzer,
-		unconvert.Analyzer,
-		fmtsafe.Analyzer,
-		errcmp.Analyzer,
-
-		// Standard go vet analyzers:
-		asmdecl.Analyzer,
-		assign.Analyzer,
-		atomic.Analyzer,
-		bools.Analyzer,
-		buildtag.Analyzer,
-		cgocall.Analyzer,
-		composite.Analyzer,
-		copylock.Analyzer,
-		errorsas.Analyzer,
-		httpresponse.Analyzer,
-		loopclosure.Analyzer,
-		lostcancel.Analyzer,
-		nilfunc.Analyzer,
-		printf.Analyzer,
-		shift.Analyzer,
-		stdmethods.Analyzer,
-		structtag.Analyzer,
-		tests.Analyzer,
-		unmarshal.Analyzer,
-		unreachable.Analyzer,
-		unsafeptr.Analyzer,
-		unusedresult.Analyzer,
-
-		// Additional analyzers:
-		shadow.Analyzer,
-	)
+	unitchecker.Main(analyzers...)
 }
