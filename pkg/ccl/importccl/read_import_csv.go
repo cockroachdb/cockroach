@@ -46,7 +46,7 @@ func newCSVInputReader(
 ) *csvInputReader {
 	numExpectedDataCols := len(targetCols)
 	if numExpectedDataCols == 0 {
-		numExpectedDataCols = len(tableDesc.VisibleColumns())
+		numExpectedDataCols = len(tableDesc.VisibleColumnsNew())
 	}
 
 	return &csvInputReader{

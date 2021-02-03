@@ -188,12 +188,12 @@ func newCopyMachine(
 		return nil, err
 	}
 	c.resultColumns = make(colinfo.ResultColumns, len(cols))
-	for i := range cols {
+	for i, col := range cols {
 		c.resultColumns[i] = colinfo.ResultColumn{
-			Name:           cols[i].Name,
-			Typ:            cols[i].Type,
+			Name:           col.GetName(),
+			Typ:            col.GetType(),
 			TableID:        tableDesc.GetID(),
-			PGAttributeNum: cols[i].GetPGAttributeNum(),
+			PGAttributeNum: col.GetPGAttributeNum(),
 		}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
