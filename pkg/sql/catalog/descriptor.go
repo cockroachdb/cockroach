@@ -214,16 +214,9 @@ type TableDescriptor interface {
 	GetPublicColumns() []descpb.ColumnDescriptor // deprecated
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	ColumnIdxMap() TableColMap
-	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor                      // deprecated
-	AllNonDropColumns() []descpb.ColumnDescriptor                         // deprecated
-	VisibleColumns() []descpb.ColumnDescriptor                            // deprecated
-	ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor // deprecated
+	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor // deprecated
 	ColumnIdxMapWithMutations(includeMutations bool) TableColMap
-	DeletableColumns() []descpb.ColumnDescriptor // deprecated
-	MutationColumns() []descpb.ColumnDescriptor  // deprecated
 	ContainsUserDefinedTypes() bool
-	WritableColumns() []descpb.ColumnDescriptor // deprecated
-	ReadableColumns() []descpb.ColumnDescriptor // deprecated
 	GetNextColumnID() descpb.ColumnID
 	ColumnTypes() []*types.T
 	ColumnTypesWithMutations(mutations bool) []*types.T

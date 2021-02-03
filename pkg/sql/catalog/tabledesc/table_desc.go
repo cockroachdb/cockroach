@@ -55,36 +55,6 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 	return desc.postDeserializationChanges
 }
 
-// DeletableColumns returns a list of public and non-public columns.
-func (desc *wrapper) DeletableColumns() []descpb.ColumnDescriptor {
-	cols := desc.DeletableColumnsNew()
-	colDescs := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range cols {
-		colDescs[i] = *col.ColumnDesc()
-	}
-	return colDescs
-}
-
-// WritableColumns returns a list of public and write-only mutation columns.
-func (desc *wrapper) WritableColumns() []descpb.ColumnDescriptor {
-	cols := desc.WritableColumnsNew()
-	colDescs := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range cols {
-		colDescs[i] = *col.ColumnDesc()
-	}
-	return colDescs
-}
-
-// MutationColumns returns a list of mutation columns.
-func (desc *wrapper) MutationColumns() []descpb.ColumnDescriptor {
-	cols := desc.DeletableColumnsNew()[len(desc.PublicColumnsNew()):]
-	colDescs := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range cols {
-		colDescs[i] = *col.ColumnDesc()
-	}
-	return colDescs
-}
-
 // ActiveChecks returns a list of all check constraints that should be enforced
 // on writes (including constraints being added/validated). The columns
 // referenced by the returned checks are writable, but not necessarily public.
@@ -143,32 +113,6 @@ func (desc *wrapper) GetPublicColumns() []descpb.ColumnDescriptor {
 // GetColumnAtIdx returns the column at the specified index.
 func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 	return &desc.Columns[idx]
-}
-
-// ReadableColumns returns a list of columns (including those undergoing a
-// schema change) which can be scanned.
-func (desc *wrapper) ReadableColumns() []descpb.ColumnDescriptor {
-	cols := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-	cols = append(cols, desc.Columns...)
-	for _, m := range desc.Mutations {
-		if columnMutation := m.GetColumn(); columnMutation != nil {
-			col := *columnMutation
-			col.Nullable = true
-			cols = append(cols, col)
-		}
-	}
-	return cols
-}
-
-// ReadableColumns returns a list of columns (including those undergoing a
-// schema change) which can be scanned.
-func (desc *immutable) ReadableColumns() []descpb.ColumnDescriptor {
-	cols := desc.ReadableColumnsNew()
-	colDescs := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range cols {
-		colDescs[i] = *col.ColumnDesc()
-	}
-	return colDescs
 }
 
 // ImmutableCopy implements the MutableDescriptor interface.

@@ -1041,17 +1041,10 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for i := range desc.GetPublicColumns() {
-		if desc.GetPublicColumns()[i].ID == colID {
-			return i
-		}
-	}
-	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		offset := len(desc.GetPublicColumns())
-		mutationColumns := desc.MutationColumns()
-		for i := range mutationColumns {
-			if mutationColumns[i].ID == colID {
-				return offset + i
+	for _, col := range desc.AllColumnsNew() {
+		if col.Public() || visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+			if col.GetID() == colID {
+				return col.Ordinal()
 			}
 		}
 	}
@@ -1061,7 +1054,7 @@ func tableOrdinal(
 	// different for each system column kind. MVCCTimestampColumnID is the
 	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.GetPublicColumns()) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
+		return len(desc.AllColumnsNew()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
@@ -1070,7 +1063,7 @@ func tableOrdinal(
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
 	highest := len(desc.GetPublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.GetPublicColumns()) + len(desc.MutationColumns()) - 1
+		highest = len(desc.AllColumnsNew()) - 1
 	}
 	return highest
 }
@@ -1323,14 +1316,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planToStreamColMap := make([]int, len(info.cols))
 	var descColumnIDs util.FastIntMap
 	colID := 0
-	for i := range info.desc.GetPublicColumns() {
-		descColumnIDs.Set(colID, int(info.desc.GetPublicColumns()[i].ID))
-		colID++
-	}
-	if returnMutations {
-		mutationColumns := info.desc.MutationColumns()
-		for i := range mutationColumns {
-			descColumnIDs.Set(colID, int(mutationColumns[i].ID))
+	for _, col := range info.desc.AllColumnsNew() {
+		if col.Public() || returnMutations {
+			descColumnIDs.Set(colID, int(col.GetID()))
 			colID++
 		}
 	}

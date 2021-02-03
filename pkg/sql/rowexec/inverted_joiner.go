@@ -207,8 +207,7 @@ func newInvertedJoiner(
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
 	indexColumnIDs, _ := ij.index.FullColumnIDs()
 	// Inverted joins are not used for mutations.
-	tableColumns := ij.desc.ColumnsWithMutations(false /* mutations */)
-	ij.tableRow = make(rowenc.EncDatumRow, len(tableColumns))
+	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumnsNew()))
 	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
 	ij.indexRowTypes = make([]*types.T, len(ij.indexRow))
 	ij.indexRowToTableRowMap = make([]int, len(ij.indexRow))

@@ -227,21 +227,6 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	return len(desc.Families), nil
 }
 
-// AllNonDropColumns returns all the columns, including those being added
-// in the mutations.
-func (desc *wrapper) AllNonDropColumns() []descpb.ColumnDescriptor {
-	cols := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-	cols = append(cols, desc.Columns...)
-	for _, m := range desc.Mutations {
-		if col := m.GetColumn(); col != nil {
-			if m.Direction == descpb.DescriptorMutation_ADD {
-				cols = append(cols, *col)
-			}
-		}
-	}
-	return cols
-}
-
 // buildIndexName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
@@ -1918,47 +1903,45 @@ func (desc *wrapper) ValidateTable(ctx context.Context) error {
 func (desc *wrapper) validateColumns(
 	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
 ) error {
-	colDescs := desc.AllNonDropColumns()
-	for colIdx := range colDescs {
-		column := &colDescs[colIdx]
+	for _, column := range desc.NonDropColumnsNew() {
 
-		if err := catalog.ValidateName(column.Name, "column"); err != nil {
+		if err := catalog.ValidateName(column.GetName(), "column"); err != nil {
 			return err
 		}
-		if column.ID == 0 {
-			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
+		if column.GetID() == 0 {
+			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.GetID()))
 		}
 
-		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
+		if _, columnNameExists := columnNames[column.GetName()]; columnNameExists {
 			for i := range desc.Columns {
-				if desc.Columns[i].Name == column.Name {
+				if desc.Columns[i].Name == column.GetName() {
 					return pgerror.Newf(pgcode.DuplicateColumn,
-						"duplicate column name: %q", column.Name)
+						"duplicate column name: %q", column.GetName())
 				}
 			}
 			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public", column.Name)
+				"duplicate: column %q in the middle of being added, not yet public", column.GetName())
 		}
-		if colinfo.IsSystemColumnName(column.Name) {
+		if colinfo.IsSystemColumnName(column.GetName()) {
 			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column name %q conflicts with a system column name", column.Name)
+				"column name %q conflicts with a system column name", column.GetName())
 		}
-		columnNames[column.Name] = column.ID
+		columnNames[column.GetName()] = column.GetID()
 
-		if other, ok := columnIDs[column.ID]; ok {
+		if other, ok := columnIDs[column.GetID()]; ok {
 			return fmt.Errorf("column %q duplicate ID of column %q: %d",
-				column.Name, other.Name, column.ID)
+				column.GetName(), other.Name, column.GetID())
 		}
-		columnIDs[column.ID] = column
+		columnIDs[column.GetID()] = column.ColumnDesc()
 
-		if column.ID >= desc.NextColumnID {
+		if column.GetID() >= desc.NextColumnID {
 			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
-				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
+				column.GetName(), errors.Safe(column.GetID()), errors.Safe(desc.NextColumnID))
 		}
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
-			expr, err := parser.ParseExpr(*column.ComputeExpr)
+			expr, err := parser.ParseExpr(column.GetComputeExpr())
 			if err != nil {
 				return err
 			}
@@ -1968,10 +1951,10 @@ func (desc *wrapper) validateColumns(
 			}
 			if !valid {
 				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
-					column.Name, *column.ComputeExpr)
+					column.GetName(), column.GetComputeExpr())
 			}
-		} else if column.Virtual {
-			return fmt.Errorf("virtual column %q is not computed", column.Name)
+		} else if column.IsVirtual() {
+			return fmt.Errorf("virtual column %q is not computed", column.GetName())
 		}
 	}
 	return nil
@@ -2519,10 +2502,10 @@ func notIndexableError(cols []descpb.ColumnDescriptor) error {
 func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error {
 	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.AllNonDropColumns() {
-			if col.Name == indexCol {
-				if !colinfo.ColumnTypeIsIndexable(col.Type) {
-					invalidColumns = append(invalidColumns, col)
+		for _, col := range tableDesc.NonDropColumnsNew() {
+			if col.GetName() == indexCol {
+				if !colinfo.ColumnTypeIsIndexable(col.GetType()) {
+					invalidColumns = append(invalidColumns, *col.ColumnDesc())
 				}
 			}
 		}
@@ -2536,30 +2519,30 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
-		for _, col := range tableDesc.AllNonDropColumns() {
-			if col.Name == indexCol {
+		for _, col := range tableDesc.NonDropColumnsNew() {
+			if col.GetName() == indexCol {
 				// The last column indexed by an inverted index must be
 				// inverted indexable.
-				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.Type) {
+				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
 					return errors.WithHint(
 						pgerror.Newf(
 							pgcode.FeatureNotSupported,
 							"column %s of type %s is not allowed as the last column in an inverted index",
-							col.Name,
-							col.Type.Name(),
+							col.GetName(),
+							col.GetType().Name(),
 						),
 						"see the documentation for more information about inverted indexes",
 					)
 
 				}
 				// Any preceding columns must not be inverted indexable.
-				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.Type) {
+				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
 					return errors.WithHint(
 						pgerror.Newf(
 							pgcode.FeatureNotSupported,
 							"column %s of type %s is only allowed as the last column in an inverted index",
-							col.Name,
-							col.Type.Name(),
+							col.GetName(),
+							col.GetType().Name(),
 						),
 						"see the documentation for more information about inverted indexes",
 					)
@@ -3639,45 +3622,21 @@ func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion.ID == descpb.InvalidID
 }
 
-// VisibleColumns returns all non hidden columns.
-func (desc *wrapper) VisibleColumns() []descpb.ColumnDescriptor {
-	var cols []descpb.ColumnDescriptor
-	for i := range desc.Columns {
-		col := &desc.Columns[i]
-		if !col.Hidden {
-			cols = append(cols, *col)
-		}
-	}
-	return cols
-}
-
 // ColumnTypes returns the types of all columns.
 func (desc *wrapper) ColumnTypes() []*types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
-// ColumnsWithMutations returns all column descriptors, optionally including
-// mutation columns.
-func (desc *wrapper) ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor {
-	n := len(desc.Columns)
-	columns := desc.Columns[:n:n] // immutable on append
-	if includeMutations {
-		for i := range desc.Mutations {
-			if col := desc.Mutations[i].GetColumn(); col != nil {
-				columns = append(columns, *col)
-			}
-		}
-	}
-	return columns
-}
-
 // ColumnTypesWithMutations returns the types of all columns, optionally
 // including mutation columns, which will be returned if the input bool is true.
 func (desc *wrapper) ColumnTypesWithMutations(mutations bool) []*types.T {
-	columns := desc.ColumnsWithMutations(mutations)
+	columns := desc.PublicColumnsNew()
+	if mutations {
+		columns = desc.AllColumnsNew()
+	}
 	types := make([]*types.T, len(columns))
 	for i := range columns {
-		types[i] = columns[i].Type
+		types[i] = columns[i].GetType()
 	}
 	return types
 }
@@ -3689,13 +3648,16 @@ func (desc *wrapper) ColumnTypesWithMutations(mutations bool) []*types.T {
 func (desc *wrapper) ColumnTypesWithMutationsAndVirtualCol(
 	mutations bool, virtualCol *descpb.ColumnDescriptor,
 ) []*types.T {
-	columns := desc.ColumnsWithMutations(mutations)
+	columns := desc.PublicColumnsNew()
+	if mutations {
+		columns = desc.AllColumnsNew()
+	}
 	types := make([]*types.T, len(columns))
 	for i := range columns {
-		if virtualCol != nil && columns[i].ID == virtualCol.ID {
+		if virtualCol != nil && columns[i].GetID() == virtualCol.ID {
 			types[i] = virtualCol.Type
 		} else {
-			types[i] = columns[i].Type
+			types[i] = columns[i].GetType()
 		}
 	}
 	return types
@@ -3881,8 +3843,9 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 		}
 	}
 
-	for _, c := range desc.AllNonDropColumns() {
-		for _, id := range c.UsesSequenceIds {
+	for _, c := range desc.NonDropColumnsNew() {
+		for i := 0; i < c.NumUsesSequences(); i++ {
+			id := c.GetUsesSequenceID(i)
 			refs[id] = struct{}{}
 		}
 	}

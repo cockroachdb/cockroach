@@ -253,7 +253,7 @@ func NeededColumnFamilyIDs(
 	}
 
 	// Build some necessary data structures for column metadata.
-	columns := table.ColumnsWithMutations(true /* includeMutations */)
+	columns := table.AllColumnsNew()
 	colIdxMap := table.ColumnIdxMapWithMutations(true)
 	var indexedCols util.FastIntSet
 	var compositeCols util.FastIntSet
@@ -343,7 +343,7 @@ func NeededColumnFamilyIDs(
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
-			if !columns[columnOrdinal].Nullable && (!indexedCols.Contains(columnOrdinal) ||
+			if !columns[columnOrdinal].IsNullable() && (!indexedCols.Contains(columnOrdinal) ||
 				compositeCols.Contains(columnOrdinal) && !hasSecondaryEncoding) {
 				// The column is non-nullable and cannot be decoded from a different
 				// family, so this column family must have a KV entry for every row.
