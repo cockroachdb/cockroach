@@ -27,7 +27,6 @@ func registerAcceptance(r *testRegistry) {
 		// Sorted. Please keep it that way.
 		{
 			name: "bank/cluster-recovery", fn: runBankClusterRecovery,
-			skip: "https://github.com/cockroachdb/cockroach/issues/57342",
 		},
 		{name: "bank/node-restart", fn: runBankNodeRestart},
 		{
