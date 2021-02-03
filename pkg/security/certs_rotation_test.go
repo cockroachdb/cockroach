@@ -187,34 +187,41 @@ func TestRotateCerts(t *testing.T) {
 		})
 
 	// Check that the structured event was logged.
-	log.Flush()
-	entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
-		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundEntry := false
-	for _, e := range entries {
-		if !strings.Contains(e.Message, "certs_reload") {
-			continue
+	// We use SucceedsSoon here because there may be a delay between
+	// the moment SIGHUP is processed and certs are reloaded, and
+	// the moment the structured logging event is actually
+	// written to the log file.
+	testutils.SucceedsSoon(t, func() error {
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
+			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+		if err != nil {
+			t.Fatal(err)
 		}
-		foundEntry = true
-		// TODO(knz): Remove this when crdb-v2 becomes the new format.
-		e.Message = strings.TrimPrefix(e.Message, "Structured entry:")
-		// crdb-v2 starts json with an equal sign.
-		e.Message = strings.TrimPrefix(e.Message, "=")
-		jsonPayload := []byte(e.Message)
-		var ev eventpb.CertsReload
-		if err := json.Unmarshal(jsonPayload, &ev); err != nil {
-			t.Errorf("unmarshalling %q: %v", e.Message, err)
+		foundEntry := false
+		for _, e := range entries {
+			if !strings.Contains(e.Message, "certs_reload") {
+				continue
+			}
+			foundEntry = true
+			// TODO(knz): Remove this when crdb-v2 becomes the new format.
+			e.Message = strings.TrimPrefix(e.Message, "Structured entry:")
+			// crdb-v2 starts json with an equal sign.
+			e.Message = strings.TrimPrefix(e.Message, "=")
+			jsonPayload := []byte(e.Message)
+			var ev eventpb.CertsReload
+			if err := json.Unmarshal(jsonPayload, &ev); err != nil {
+				t.Errorf("unmarshalling %q: %v", e.Message, err)
+			}
+			if ev.Success != true || ev.ErrorMessage != "" {
+				t.Errorf("incorrect event: expected success with no error, got %+v", ev)
+			}
 		}
-		if ev.Success != true || ev.ErrorMessage != "" {
-			t.Errorf("incorrect event: expected success with no error, got %+v", ev)
+		if !foundEntry {
+			return errors.New("structured entry for certs_reload not found in log")
 		}
-	}
-	if !foundEntry {
-		t.Error("structured entry for certs_reload not found in log")
-	}
+		return nil
+	})
 
 	// Nothing changed in the first SQL client: the connection is already established.
 	if _, err := firstSQLClient.Exec("SELECT 1"); err != nil {
