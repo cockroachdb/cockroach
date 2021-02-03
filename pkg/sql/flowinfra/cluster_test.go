@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -652,14 +651,16 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	// Relocate the table to a remote node.
-	_, err := db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)")
-	require.NoError(t, err)
+	// Relocate the table to a remote node. We use SucceedsSoon since in very
+	// rare circumstances the relocation query can result in an error (e.g.
+	// "cannot up-replicate to s2; missing gossiped StoreDescriptor") which
+	// shouldn't fail the test.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)")
+		return err
+	})
 
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
-		if vectorize {
-			skip.IgnoreLint(t, "skipped because we can't yet vectorize queries using DECIMALs")
-		}
 		// We're going to use the first node as the gateway and expect everything to
 		// be planned remotely.
 		db := tc.ServerConn(0)
