@@ -1794,3 +1794,9 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 	}
 	return "", nil
 }
+
+func printlnUnlessEmbedded(args ...interface{}) {
+	if !sqlCtx.embeddedMode {
+		fmt.Println(args...)
+	}
+}

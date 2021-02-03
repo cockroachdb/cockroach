@@ -270,6 +270,11 @@ var sqlCtx = struct {
 	// more verbose (sets echo).
 	debugMode bool
 
+	// embeddedMode, when set, reduces the amount of informational
+	// messages printed out to exclude details that are not
+	// under user's control when the shell is run by a playground environment.
+	embeddedMode bool
+
 	// Determines whether to display server execution timings in the CLI.
 	enableServerExecutionTimings bool
 

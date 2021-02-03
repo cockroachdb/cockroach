@@ -66,3 +66,10 @@
     terminal: `terminalOutput && !isInteractive`
   - human runs the SQL shell but filters the output, e.g. `cockroach sql | grep XXX`
     `!terminalOutput && isInteractive`.
+
+- Be mindful of the `--embedded` flag, for use in "playground" environments.
+
+  If `sqlCtx.embeddedMode` is set, the (human) user has no control
+  over the command line and the configuration. In that case, help
+  texts about the configuration should be avoided because they are
+  non-actionable.

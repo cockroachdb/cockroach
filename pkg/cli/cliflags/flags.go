@@ -291,6 +291,23 @@ transaction state. Equivalent to --echo-sql, \unset check_syntax and
 \set prompt1 %n@%M>.`,
 	}
 
+	EmbeddedMode = FlagInfo{
+		Name: "embedded",
+		Description: `
+Simplify and reduce the SQL CLI output to make it appropriate for
+embedding in a 'playground'-type environment.
+
+This causes the shell to omit informational message about
+aspects that can only be changed with command-line flags
+or environment variables: in an embedded environment, the user
+has no control over these and the messages would thus be
+confusing.
+
+It also causes the shell to omit informational messages about
+networking details (e.g. server address), as it is assumed
+that the embedding environment will report those instead.`,
+	}
+
 	SafeUpdates = FlagInfo{
 		Name: "safe-updates",
 		Description: `

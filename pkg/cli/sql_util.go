@@ -281,6 +281,11 @@ func (c *sqlConn) checkServerMetadata() error {
 		// change their mind upon seeing the information.
 		return nil
 	}
+	if sqlCtx.embeddedMode {
+		// Version reporting is non-actionable if the user does
+		// not have control over how the server and client are run.
+		return nil
+	}
 
 	_, newServerVersion, newClusterID, err := c.getServerMetadata()
 	if errors.Is(err, driver.ErrBadConn) {
