@@ -1226,6 +1226,7 @@ func TestLint(t *testing.T) {
 			"mitre",     // PostGIS commands spell these as mitre.
 			"analyse",   // required by SQL grammar
 			"seperator", // pkg/ui depends on 3rd party package (rc-calendar) with spelling
+			"strat",     // PostgreSQL has table: pg_amop_fam_strat_index
 		}
 
 		if err := stream.ForEach(stream.Sequence(
