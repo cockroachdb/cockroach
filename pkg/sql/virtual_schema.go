@@ -511,7 +511,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.
-			columnIdxMap := table.ColumnIdxMap()
+			columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumnsNew())
 			indexKeyDatums := make([]tree.Datum, len(index.ColumnIDs))
 
 			generator, cleanup := setupGenerator(ctx, e.makeConstrainedRowsGenerator(

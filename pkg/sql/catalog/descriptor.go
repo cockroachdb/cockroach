@@ -213,14 +213,8 @@ type TableDescriptor interface {
 
 	GetPublicColumns() []descpb.ColumnDescriptor // deprecated
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
-	ColumnIdxMap() TableColMap
-	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor // deprecated
-	ColumnIdxMapWithMutations(includeMutations bool) TableColMap
 	ContainsUserDefinedTypes() bool
 	GetNextColumnID() descpb.ColumnID
-	ColumnTypes() []*types.T
-	ColumnTypesWithMutations(mutations bool) []*types.T
-	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor
@@ -730,4 +724,33 @@ func UserDefinedTypeColsHaveSameVersion(desc TableDescriptor, otherDesc TableDes
 		}
 	}
 	return true
+}
+
+// ColumnIDToOrdinalMap returns a map from Column ID to the ordinal
+// position of that column.
+func ColumnIDToOrdinalMap(columns []Column) TableColMap {
+	var m TableColMap
+	for _, col := range columns {
+		m.Set(col.GetID(), col.Ordinal())
+	}
+	return m
+}
+
+// ColumnTypes returns the types of the given columns
+func ColumnTypes(columns []Column) []*types.T {
+	return ColumnTypesWithVirtualCol(columns, nil)
+}
+
+// ColumnTypesWithVirtualCol returns the types of all given columns,
+// If virtualCol is non-nil, substitutes the type of the virtual
+// column instead of the column with the same ID.
+func ColumnTypesWithVirtualCol(columns []Column, virtualCol *descpb.ColumnDescriptor) []*types.T {
+	t := make([]*types.T, len(columns))
+	for i, col := range columns {
+		t[i] = col.GetType()
+		if virtualCol != nil && col.GetID() == virtualCol.ID {
+			t[i] = virtualCol.Type
+		}
+	}
+	return t
 }

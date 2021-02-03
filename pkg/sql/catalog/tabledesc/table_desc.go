@@ -110,11 +110,6 @@ func (desc *wrapper) GetPublicColumns() []descpb.ColumnDescriptor {
 	return desc.Columns
 }
 
-// GetColumnAtIdx returns the column at the specified index.
-func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
-	return &desc.Columns[idx]
-}
-
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
