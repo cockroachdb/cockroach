@@ -250,10 +250,10 @@ SELECT * FROM crdb_internal.zones WHERE false
 zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
 raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
 
-query IIITTT colnames
+query IIIITTT colnames
 SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
-trace_id  parent_span_id  span_id  start_time  duration  operation
+trace_id  parent_span_id  span_id  goroutine_id  start_time  duration  operation
 
 query ITTTTTTTTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
