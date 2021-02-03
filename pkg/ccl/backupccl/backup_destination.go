@@ -166,7 +166,7 @@ func getBackupManifests(
 	for i := range backupURIs {
 		i := i
 		g.GoCtx(func(ctx context.Context) error {
-			// TODO(lucy): We may want to upgrade the table descs to the newer
+			// TODO(lucy): We may want to upgrade the table Descs to the newer
 			// foreign key representation here, in case there are backups from an
 			// older cluster. Keeping the descriptors as they are works for now
 			// since all we need to do is get the past backups' table/index spans,
