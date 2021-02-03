@@ -76,7 +76,7 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 var rng *rand.Rand
 
 func init() {
-	if crdbTestBuild {
+	if CrdbTestBuild {
 		rng, _ = randutil.NewPseudoRand()
 		metamorphicBuild = rng.Float64() < metamorphicBuildProbability
 	}
