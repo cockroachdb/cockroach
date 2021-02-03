@@ -721,12 +721,12 @@ show_users_stmt ::=
 	'SHOW' 'USERS'
 
 show_zone_stmt ::=
-	'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'RANGE' zone_name
-	| 'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'DATABASE' database_name
-	| 'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'TABLE' table_name opt_partition
-	| 'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'PARTITION' partition_name 'OF' 'TABLE' table_name
-	| 'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'INDEX' table_index_name opt_partition
-	| 'SHOW' 'ZONE' 'CONFIGURATION' for_or_from 'PARTITION' partition_name 'OF' 'INDEX' table_index_name
+	'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'RANGE' zone_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'DATABASE' database_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'TABLE' table_name opt_partition
+	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'PARTITION' partition_name 'OF' 'TABLE' table_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'INDEX' table_index_name opt_partition
+	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'PARTITION' partition_name 'OF' 'INDEX' table_index_name
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
 
@@ -1535,9 +1535,8 @@ opt_compact ::=
 	'COMPACT'
 	| 
 
-for_or_from ::=
-	'FOR'
-	| 'FROM'
+from_with_implicit_for_alias ::=
+	'FROM'
 
 zone_name ::=
 	unrestricted_name
