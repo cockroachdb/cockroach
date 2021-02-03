@@ -2,3 +2,4 @@ artifacts
 bin
 build/builder_home
 lib
+vendor
