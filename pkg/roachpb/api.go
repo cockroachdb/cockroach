@@ -1509,6 +1509,11 @@ func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
 	return sIdent, nil
 }
 
+// EmptyContentionEvent can be used by visitor for
+// tracingpb.RecordedSpan.Structured function call to find all objects of
+// ContentionEvent type.
+var EmptyContentionEvent = &ContentionEvent{}
+
 // SafeFormat implements redact.SafeFormatter.
 func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("conflicted with %s on %s for %.2fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())

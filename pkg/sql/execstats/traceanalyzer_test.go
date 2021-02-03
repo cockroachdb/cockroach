@@ -169,8 +169,7 @@ func TestTraceAnalyzerProcessComponentStats(t *testing.T) {
 				1, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime:         optional.MakeTimeValue(node1Time),
-				ContentionTime: optional.MakeTimeValue(node1Time),
+				KVTime: optional.MakeTimeValue(node1Time),
 			},
 		},
 	))
@@ -182,15 +181,13 @@ func TestTraceAnalyzerProcessComponentStats(t *testing.T) {
 				2, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime:         optional.MakeTimeValue(node2Time),
-				ContentionTime: optional.MakeTimeValue(node2Time),
+				KVTime: optional.MakeTimeValue(node2Time),
 			},
 		},
 	))
 
 	expected := execstats.QueryLevelStats{
-		KVTime:         cumulativeTime,
-		ContentionTime: cumulativeTime,
+		KVTime: cumulativeTime,
 	}
 
 	if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {

@@ -13,9 +13,11 @@ package execstats
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // QueryLevelStats returns all the query level stats that correspond to the
@@ -44,7 +46,29 @@ func (a *TraceAnalyzer) Analyze(trace []tracingpb.RecordedSpan, makeDeterministi
 	for _, componentStats := range m {
 		errs = errors.CombineErrors(errs, a.ProcessComponentStats(componentStats))
 	}
+	a.queryLevelStats.ContentionTime = calculateContentionTime(trace, makeDeterministic)
 	return errs
+}
+
+func calculateContentionTime(trace []tracingpb.RecordedSpan, makeDeterministic bool) time.Duration {
+	if makeDeterministic {
+		// Use 1ns, similar to execstats.ExtractStatsFromSpans.
+		return time.Nanosecond
+	}
+	var contentionTime time.Duration
+	var ev roachpb.ContentionEvent
+	for i := range trace {
+		trace[i].Structured(func(any *pbtypes.Any) {
+			if !pbtypes.Is(any, roachpb.EmptyContentionEvent) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			contentionTime += ev.Duration
+		})
+	}
+	return contentionTime
 }
 
 func (a *TraceAnalyzer) ProcessComponentStats(componentStats *execinfrapb.ComponentStats) error {
@@ -54,7 +78,6 @@ func (a *TraceAnalyzer) ProcessComponentStats(componentStats *execinfrapb.Compon
 		a.queryLevelStats.KVBytesRead += int64(componentStats.KV.BytesRead.Value())
 		a.queryLevelStats.KVRowsRead += int64(componentStats.KV.TuplesRead.Value())
 		a.queryLevelStats.KVTime += componentStats.KV.KVTime.Value()
-		a.queryLevelStats.ContentionTime += componentStats.KV.ContentionTime.Value()
 
 	case execinfrapb.ComponentID_STREAM:
 		bytes, err := getNetworkBytesFromComponentStats(componentStats)

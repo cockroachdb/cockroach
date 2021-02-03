@@ -10,8 +10,6 @@
 
 package execinfra
 
-import "time"
-
 // OpNode is an interface to operator-like structures with children.
 type OpNode interface {
 	// ChildCount returns the number of children (inputs) of the operator.
@@ -27,7 +25,4 @@ type KVReader interface {
 	GetBytesRead() int64
 	// GetRowsRead returns the number of rows read from KV by this operator.
 	GetRowsRead() int64
-	// GetCumulativeContentionTime returns the amount of time KV reads spent
-	// contending.
-	GetCumulativeContentionTime() time.Duration
 }

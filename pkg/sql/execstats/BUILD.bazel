@@ -6,9 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 

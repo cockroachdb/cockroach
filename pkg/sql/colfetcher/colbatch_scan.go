@@ -13,7 +13,6 @@ package colfetcher
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -116,12 +115,7 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
-	trailingMeta = append(trailingMeta, *meta)
-
-	if contentionEvents := s.rf.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
-	}
-	return trailingMeta
+	return append(trailingMeta, *meta)
 }
 
 // GetBytesRead is part of the execinfra.KVReader interface.
@@ -132,15 +126,6 @@ func (s *ColBatchScan) GetBytesRead() int64 {
 // GetRowsRead is part of the execinfra.KVReader interface.
 func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
-	var totalContentionTime time.Duration
-	for _, e := range s.rf.fetcher.GetContentionEvents() {
-		totalContentionTime += e.Duration
-	}
-	return totalContentionTime
 }
 
 var colBatchScanPool = sync.Pool{
@@ -207,10 +192,6 @@ func NewColBatchScan(
 		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
 	); err != nil {
 		return nil, err
-	}
-
-	if flowCtx.Cfg.TestingKnobs.GenerateMockContentionEvents {
-		fetcher.testingGenerateMockContentionEvents = true
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)

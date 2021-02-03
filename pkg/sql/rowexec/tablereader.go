@@ -280,10 +280,9 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
-			TuplesRead:     is.NumTuples,
-			BytesRead:      optional.MakeUint(uint64(tr.GetBytesRead())),
-			KVTime:         is.WaitTime,
-			ContentionTime: optional.MakeTimeValue(tr.GetCumulativeContentionTime()),
+			TuplesRead: is.NumTuples,
+			BytesRead:  optional.MakeUint(uint64(tr.GetBytesRead())),
+			KVTime:     is.WaitTime,
 		},
 		Output: tr.Out.Stats(),
 	}
@@ -297,11 +296,6 @@ func (tr *tableReader) GetBytesRead() int64 {
 // GetRowsRead is part of the execinfra.KVReader interface.
 func (tr *tableReader) GetRowsRead() int64 {
 	return tr.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (tr *tableReader) GetCumulativeContentionTime() time.Duration {
-	return getCumulativeContentionTime(tr.fetcher.GetContentionEvents())
 }
 
 func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
@@ -322,12 +316,7 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.GetBytesRead(), tr.GetRowsRead()
-	trailingMeta = append(trailingMeta, *meta)
-
-	if contentionEvents := tr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
-	}
-	return trailingMeta
+	return append(trailingMeta, *meta)
 }
 
 // DrainMeta is part of the MetadataSource interface.

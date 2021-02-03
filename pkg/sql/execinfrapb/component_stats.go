@@ -162,9 +162,6 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.KVTime.HasValue() {
 		fn("KV time", humanizeutil.Duration(s.KV.KVTime.Value()))
 	}
-	if s.KV.ContentionTime.HasValue() {
-		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
-	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV tuples read", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
@@ -233,9 +230,6 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	// KV stats.
 	if !result.KV.KVTime.HasValue() {
 		result.KV.KVTime = other.KV.KVTime
-	}
-	if !result.KV.ContentionTime.HasValue() {
-		result.KV.ContentionTime = other.KV.ContentionTime
 	}
 	if !result.KV.TuplesRead.HasValue() {
 		result.KV.TuplesRead = other.KV.TuplesRead
@@ -322,7 +316,6 @@ func (s *ComponentStats) MakeDeterministic() {
 
 	// KV.
 	timeVal(&s.KV.KVTime)
-	timeVal(&s.KV.ContentionTime)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())

@@ -189,7 +189,6 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 		// themselves).
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
-		s.KV.ContentionTime.Set(vsc.kvReader.GetCumulativeContentionTime())
 	} else {
 		s.Exec.ExecTime.Set(time)
 	}

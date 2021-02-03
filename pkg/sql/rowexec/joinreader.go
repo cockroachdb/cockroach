@@ -13,7 +13,6 @@ package rowexec
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
 
@@ -694,9 +692,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			TuplesRead:     fis.NumTuples,
-			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(jr.GetCumulativeContentionTime()),
+			TuplesRead: fis.NumTuples,
+			KVTime:     fis.WaitTime,
 		},
 		Output: jr.Out.Stats(),
 	}
@@ -712,11 +709,6 @@ func (jr *joinReader) GetRowsRead() int64 {
 	return jr.rowsRead
 }
 
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
-	return getCumulativeContentionTime(jr.fetcher.GetContentionEvents())
-}
-
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
 	meta := &trailingMeta[0]
@@ -724,13 +716,7 @@ func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMe
 	meta.Metrics.RowsRead = jr.GetRowsRead()
 	meta.Metrics.BytesRead = jr.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
-		trailingMeta = append(trailingMeta,
-			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},
-		)
-	}
-
-	if contentionEvents := jr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }
