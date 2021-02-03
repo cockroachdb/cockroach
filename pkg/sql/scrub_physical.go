@@ -66,11 +66,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
-	var colIDToIdx catalog.TableColMap
+	colIDToIdx := catalog.ColumnIDToOrdinalMap(o.tableDesc.PublicColumnsNew())
 	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
-	for i := range o.tableDesc.GetPublicColumns() {
-		colIDToIdx.Set(o.tableDesc.GetPublicColumns()[i].ID, i)
-	}
 
 	// Collect all of the columns being scanned.
 	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {

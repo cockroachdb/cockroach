@@ -1300,8 +1300,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
+	cols := info.desc.PublicColumnsNew()
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-	typs := info.desc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
+	if returnMutations {
+		cols = info.desc.AllColumnsNew()
+	}
+	typs := catalog.ColumnTypesWithVirtualCol(cols, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)

@@ -211,12 +211,17 @@ func newJoinReader(
 	indexI := jr.desc.ActiveIndexes()[indexIdx]
 	jr.index = indexI.IndexDesc()
 	isSecondary = !indexI.Primary()
-	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
+	var columnTypes []*types.T
+	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		jr.colIdxMap = catalog.ColumnIDToOrdinalMap(jr.desc.AllColumnsNew())
+		columnTypes = catalog.ColumnTypes(jr.desc.AllColumnsNew())
+	} else {
+		jr.colIdxMap = catalog.ColumnIDToOrdinalMap(jr.desc.PublicColumnsNew())
+		columnTypes = catalog.ColumnTypes(jr.desc.PublicColumnsNew())
+	}
 
 	columnIDs, _ := jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
-	columnTypes := jr.desc.ColumnTypesWithMutations(returnMutations)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 	}

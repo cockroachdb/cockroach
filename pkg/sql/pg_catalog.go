@@ -445,13 +445,13 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for each index.
-		columnIdxMap := table.ColumnIdxMap()
+		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumnsNew())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			for i := 0; i < index.NumColumns(); i++ {
 				colID := index.GetColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
-				column := table.GetColumnAtIdx(columnIdxMap.GetDefault(colID))
-				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
+				column := table.PublicColumnsNew()[columnIdxMap.GetDefault(colID)]
+				if err := addColumn(column.ColumnDesc(), idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}
 			}

@@ -113,7 +113,7 @@ func newScrubTableReader(
 			tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
 		}
 	} else {
-		colIdxMap := tr.tableDesc.ColumnIdxMap()
+		colIdxMap := catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumnsNew())
 		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
 			neededColumns.Add(colIdxMap.GetDefault(id))
 			return nil
@@ -125,7 +125,7 @@ func newScrubTableReader(
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
+		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumnsNew()),
 		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
 		nil /* systemColumns */, nil, /* virtualColumn */

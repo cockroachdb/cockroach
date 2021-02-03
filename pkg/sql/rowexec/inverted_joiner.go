@@ -193,7 +193,7 @@ func newInvertedJoiner(
 		joinType:             spec.Type,
 		batchSize:            invertedJoinerBatchSize,
 	}
-	ij.colIdxMap = ij.desc.ColumnIdxMap()
+	ij.colIdxMap = catalog.ColumnIDToOrdinalMap(ij.desc.PublicColumnsNew())
 
 	var err error
 	indexIdx := int(spec.IndexIdx)
@@ -225,7 +225,7 @@ func newInvertedJoiner(
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.ColumnTypes()
+	rightColTypes := catalog.ColumnTypes(ij.desc.PublicColumnsNew())
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)

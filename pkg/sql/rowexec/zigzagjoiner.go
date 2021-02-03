@@ -288,8 +288,8 @@ func newZigzagJoiner(
 	for i := range spec.Tables {
 		tables[i] = tabledesc.NewImmutable(spec.Tables[i])
 	}
-	leftColumnTypes := tables[0].ColumnTypes()
-	rightColumnTypes := tables[1].ColumnTypes()
+	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumnsNew())
+	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumnsNew())
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
@@ -425,8 +425,8 @@ func (z *zigzagJoiner) setupInfo(
 	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
 	info.indexTypes = make([]*types.T, len(columnIDs))
-	columnTypes := info.table.ColumnTypes()
-	colIdxMap := info.table.ColumnIdxMap()
+	columnTypes := catalog.ColumnTypes(info.table.PublicColumnsNew())
+	colIdxMap := catalog.ColumnIDToOrdinalMap(info.table.PublicColumnsNew())
 	for i, columnID := range columnIDs {
 		if info.index.Type == descpb.IndexDescriptor_INVERTED &&
 			columnID == info.index.InvertedColumnID() {
@@ -466,7 +466,7 @@ func (z *zigzagJoiner) setupInfo(
 		&info.fetcher,
 		info.table,
 		int(indexOrdinal),
-		info.table.ColumnIdxMap(),
+		catalog.ColumnIDToOrdinalMap(info.table.PublicColumnsNew()),
 		false, /* reverse */
 		neededCols,
 		false, /* check */
@@ -642,7 +642,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 // Returns the column types of the equality columns.
 func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 	eqColTypes := make([]*types.T, len(zi.eqColumns))
-	colTypes := zi.table.ColumnTypes()
+	colTypes := catalog.ColumnTypes(zi.table.PublicColumnsNew())
 	for i := range eqColTypes {
 		eqColTypes[i] = colTypes[zi.eqColumns[i]]
 	}
