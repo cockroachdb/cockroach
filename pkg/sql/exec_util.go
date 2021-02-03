@@ -1624,6 +1624,7 @@ func (st *SessionTracing) StopTracing() error {
 	if st.firstTxnSpan != nil {
 		spans = append(spans, st.firstTxnSpan.GetRecording()...)
 		st.firstTxnSpan.SetVerbose(false)
+		st.firstTxnSpan.SetBackground(true)
 	}
 	st.connSpan.Finish()
 	spans = append(spans, st.connSpan.GetRecording()...)
@@ -1631,6 +1632,7 @@ func (st *SessionTracing) StopTracing() error {
 	// is not inherited by children. If we are inside of a txn, that span will
 	// continue recording, even though nobody will collect its recording again.
 	st.connSpan.SetVerbose(false)
+	st.connSpan.SetBackground(true)
 	st.ex.ctxHolder.unhijack()
 
 	var err error

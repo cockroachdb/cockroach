@@ -89,9 +89,6 @@ type SpanMeta struct {
 	shadowCtx        opentracing.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
-	//
-	// NB: at the time of writing, this is only ever set to RecordingVerbose
-	// and only if Baggage[verboseTracingBaggageKey] is set.
 	recordingType RecordingType
 
 	// The Span's associated baggage.
@@ -109,6 +106,17 @@ func (s *Span) isNoop() bool {
 // IsVerbose returns true if the Span is verbose. See SetVerbose for details.
 func (s *Span) IsVerbose() bool {
 	return s.crdb.recordingType() == RecordingVerbose
+}
+
+func (s *Span) SetBackground(to bool) {
+	if to {
+		recType := RecordingBackground
+		if recType != s.crdb.recordingType() {
+			s.crdb.enableRecording(nil /* parent */, recType)
+		}
+		return
+	}
+	// TODO implement turning this off
 }
 
 // SetVerbose toggles verbose recording on the Span, which must not be a noop
@@ -268,7 +276,7 @@ func (s *Span) Meta() *SpanMeta {
 		spanID == 0 &&
 		shadowTrTyp == "" &&
 		shadowCtx == nil &&
-		recordingType == 0 &&
+		recordingType == RecordingOff &&
 		baggage == nil {
 		return nil
 	}

@@ -168,6 +168,8 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetVerbose(true)
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
+	} else if !alreadyRecording {
+		sp.SetBackground(true)
 	}
 
 	ts.sp = sp

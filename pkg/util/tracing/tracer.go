@@ -570,6 +570,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 	var recordingType RecordingType
 	if baggage[verboseTracingBaggageKey] != "" {
 		recordingType = RecordingVerbose
+	} else {
+		recordingType = RecordingBackground
 	}
 
 	var shadowCtx opentracing.SpanContext

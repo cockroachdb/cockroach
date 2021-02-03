@@ -37,8 +37,7 @@ const (
 	// RecordingVerbose means that the Span is adding events passed in via LogKV
 	// and LogData to its recording and that derived spans will do so as well.
 	RecordingVerbose
-
-	// TODO(tbg): add RecordingBackground for always-on tracing.
+	RecordingBackground
 )
 
 type traceLogData struct {

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	ptypes "github.com/gogo/protobuf/types"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -593,6 +594,8 @@ func (r *DistSQLReceiver) SetError(err error) {
 	r.resultWriter.SetError(err)
 }
 
+var cmpContentionEvent = &roachpb.ContentionEvent{}
+
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
@@ -657,7 +660,25 @@ func (r *DistSQLReceiver) Push(
 			}
 			meta.Metrics.Release()
 		}
-		if r.contendedQueryMetric != nil && len(meta.ContentionEvents) > 0 {
+		var contentionEvents []roachpb.ContentionEvent
+		for _, td := range meta.TraceData {
+			td.Structured(func(any *ptypes.Any) {
+				if !ptypes.Is(any, cmpContentionEvent) {
+					return
+				}
+				var ev roachpb.ContentionEvent
+				if ptypes.UnmarshalAny(any, &ev) == nil {
+					contentionEvents = append(contentionEvents, ev)
+				}
+			})
+		}
+		if len(contentionEvents) == 0 {
+			// TODO(asubiotto): is meta.ContentionEvents needed? It doesn't look like
+			// it but in theory we could detach the contention events on the other
+			// side and populate meta.ContentionEvents with it.
+			contentionEvents = meta.ContentionEvents
+		}
+		if r.contendedQueryMetric != nil && len(contentionEvents) > 0 {
 			// Increment the contended query metric at most once if the query sees at
 			// least one contention event.
 			r.contendedQueryMetric.Inc(1)
