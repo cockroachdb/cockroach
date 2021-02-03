@@ -48,7 +48,7 @@ sudo tar -C /usr -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 trap 'rm -f /tmp/go.tgz' EXIT
 curl -fsSL https://dl.google.com/go/go1.15.6.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-890bba73c5e2b19ffb1180e385ea225059eb008eb91b694875dd86ea48675817 /tmp/go.tgz
+3918e6cc85e7eaaa6f859f1bdbaac772e7a825b0eb423c63d3ae68b21f84b844 /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
