@@ -13,7 +13,6 @@ package xform
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -368,67 +367,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		sb.build(grp)
 	})
-}
-
-// findConstantFilterCols adds to constFilterCols mappings from table column ID
-// to the constant value of that column. It does this by iterating over the
-// given lists of filters and finding expressions that constrain columns to a
-// single constant value. For example:
-//
-//   x = 5 AND y = 'foo'
-//
-// This would add a mapping from x => 5 and y => 'foo', which constants can
-// then be used to prove that dependent computed columns are also constant.
-func (c *CustomFuncs) findConstantFilterCols(
-	constFilterCols map[opt.ColumnID]opt.ScalarExpr,
-	scanPrivate *memo.ScanPrivate,
-	filters memo.FiltersExpr,
-) {
-	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
-	for i := range filters {
-		// If filter constraints are not tight, then no way to derive constant
-		// values.
-		props := filters[i].ScalarProps()
-		if !props.TightConstraints {
-			continue
-		}
-
-		// Iterate over constraint conjuncts with a single column and single
-		// span having a single key.
-		for i, n := 0, props.Constraints.Length(); i < n; i++ {
-			cons := props.Constraints.Constraint(i)
-			if cons.Columns.Count() != 1 || cons.Spans.Count() != 1 {
-				continue
-			}
-
-			// Skip columns that aren't in the scanned table.
-			colID := cons.Columns.Get(0).ID()
-			if !scanPrivate.Cols.Contains(colID) {
-				continue
-			}
-
-			// Skip columns with a data type that uses a composite key encoding.
-			// Each of these data types can have multiple distinct values that
-			// compare equal. For example, 0 == -0 for the FLOAT data type. It's
-			// not safe to treat these as constant inputs to computed columns,
-			// since the computed expression may differentiate between the
-			// different forms of the same value.
-			colTyp := tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).DatumType()
-			if colinfo.HasCompositeKeyEncoding(colTyp) {
-				continue
-			}
-
-			span := cons.Spans.Get(0)
-			if !span.HasSingleKey(c.e.evalCtx) {
-				continue
-			}
-
-			datum := span.StartKey().Value(0)
-			if datum != tree.DNull {
-				constFilterCols[colID] = c.e.f.ConstructConstVal(datum, colTyp)
-			}
-		}
-	}
 }
 
 // tryFoldComputedCol tries to reduce the computed column with the given column
