@@ -3717,6 +3717,7 @@ func TestMergeQueue(t *testing.T) {
 
 func TestMergeQueueSeesNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type test struct {
 		name                                                   string
