@@ -9,6 +9,7 @@
 package importccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -99,7 +100,10 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
-	pgDumpIgnoreAllUnsupported = "ignore_unsupported"
+	pgDumpIgnoreAllUnsupported     = "ignore_unsupported"
+	pgDumpIgnoreShuntFileDest      = "ignored_stmt_log"
+	pgDumpUnsupportedSchemaStmtLog = "unsupported-schema-stmts"
+	pgDumpUnsupportedDataStmtLog   = "unsupported-data-stmts"
 
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
@@ -137,6 +141,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	avroJSONRecords:        sql.KVStringOptRequireNoValue,
 
 	pgDumpIgnoreAllUnsupported: sql.KVStringOptRequireNoValue,
+	pgDumpIgnoreShuntFileDest:  sql.KVStringOptRequireValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -167,7 +172,7 @@ var mysqlOutAllowedOptions = makeStringSet(
 var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
-	pgDumpIgnoreAllUnsupported)
+	pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -614,6 +619,13 @@ func importPlanHook(
 			format.PgDump.MaxRowSize = maxRowSize
 			if _, ok := opts[pgDumpIgnoreAllUnsupported]; ok {
 				format.PgDump.IgnoreUnsupported = true
+			}
+
+			if dest, ok := opts[pgDumpIgnoreShuntFileDest]; ok {
+				if !format.PgDump.IgnoreUnsupported {
+					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported` option")
+				}
+				format.PgDump.IgnoreUnsupportedLog = dest
 			}
 
 			if override, ok := opts[csvRowLimit]; ok {
@@ -1257,6 +1269,18 @@ func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}
 }
 
+// unsupportedStmtConfig stores information that controls how we handle
+// unsupported PGDUMP SQL statements seen during the import.
+type unsupportedStmtConfig struct {
+	// Values are initialized based on the options specified in the IMPORT PGDUMP
+	// stmt.
+	ignoreUnsupported        bool
+	ignoreUnsupportedLogDest string
+
+	// logBuffer holds the string to be flushed to the ignoreUnsupportedLogDest.
+	logBuffer *bytes.Buffer
+}
+
 // parseAndCreateBundleTableDescs parses and creates the table
 // descriptors for bundle formats.
 func parseAndCreateBundleTableDescs(
@@ -1306,8 +1330,29 @@ func parseAndCreateBundleTableDescs(
 		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
+
+		// Setup config to handle unsupported DDL statements in the PGDUMP file.
+		unsupportedCfg := unsupportedStmtConfig{ignoreUnsupported: format.PgDump.IgnoreUnsupported,
+			logBuffer: new(bytes.Buffer), ignoreUnsupportedLogDest: format.PgDump.IgnoreUnsupportedLog}
+		unsupportedCfg.logBuffer.WriteString("Unsupported statements during schema parse phase:\n\n")
+
 		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID,
-			walltime, fks, int(format.PgDump.MaxRowSize), owner, format.PgDump.IgnoreUnsupported)
+			walltime, fks, int(format.PgDump.MaxRowSize), owner, &unsupportedCfg)
+
+		// Flush unsupported stmts to log file if required.
+		if unsupportedCfg.ignoreUnsupportedLogDest != "" {
+			dest, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx,
+				unsupportedCfg.ignoreUnsupportedLogDest, p.User())
+			if err != nil {
+				return nil, errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
+			}
+			defer dest.Close()
+			err = dest.WriteFile(ctx, pgDumpUnsupportedSchemaStmtLog,
+				bytes.NewReader(unsupportedCfg.logBuffer.Bytes()))
+			if err != nil {
+				return nil, errors.New("failed to log unsupported during IMPORT PGDUMP")
+			}
+		}
 	default:
 		return tableDescs, errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 	}

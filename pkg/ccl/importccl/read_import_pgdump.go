@@ -10,7 +10,9 @@ package importccl
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -32,27 +34,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
 type postgreStream struct {
-	s                      *bufio.Scanner
-	copy                   *postgreStreamCopy
-	ignoreUnsupportedStmts bool
+	ctx            context.Context
+	s              *bufio.Scanner
+	copy           *postgreStreamCopy
+	unsupportedCfg *unsupportedStmtConfig
 }
 
 // newPostgreStream returns a struct that can stream statements from an
 // io.Reader.
-func newPostgreStream(r io.Reader, max int, ignoreUnsupportedStmts bool) *postgreStream {
+func newPostgreStream(
+	ctx context.Context, r io.Reader, max int, unsupportedCfg *unsupportedStmtConfig,
+) *postgreStream {
 	s := bufio.NewScanner(r)
 	s.Buffer(nil, max)
-	p := &postgreStream{s: s, ignoreUnsupportedStmts: ignoreUnsupportedStmts}
+	p := &postgreStream{ctx: ctx, s: s, unsupportedCfg: unsupportedCfg}
 	s.Split(p.split)
 	return p
 }
@@ -100,11 +107,18 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 		stmts, err := parser.Parse(t)
 		if err != nil {
-			// There are some statements which CRDB is unable to parse but we have
-			// explicitly marked as "to be skipped" during a PGDUMP import.
-			// TODO(adityamaru): Write these to a shunt file to see what has been
-			// skipped.
-			if p.ignoreUnsupportedStmts && errors.HasType(err, (*tree.UnsupportedError)(nil)) {
+			// There are some statements that CRDB is unable to parse. If the user has
+			// indicated that they want to skip these stmts during the IMPORT, then do
+			// so here.
+			if p.unsupportedCfg.ignoreUnsupported && errors.HasType(err, (*tree.UnsupportedError)(nil)) {
+				// Write the unsupported statement we have skipped if a log destination
+				// has been provided.
+				if p.unsupportedCfg.ignoreUnsupportedLogDest != "" {
+					if unsupportedErr := (*tree.UnsupportedError)(nil); errors.As(err, &unsupportedErr) {
+						logUnsupported := fmt.Sprintf("%s: could not be parsed\n", unsupportedErr.FeatureName)
+						p.unsupportedCfg.logBuffer.Write([]byte(logUnsupported))
+					}
+				}
 				continue
 			}
 			return nil, err
@@ -216,7 +230,7 @@ func readPostgresCreateTable(
 	fks fkHandler,
 	max int,
 	owner security.SQLUsername,
-	ignoreUnsupportedStmts bool,
+	unsupportedCfg *unsupportedStmtConfig,
 ) ([]*tabledesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -227,7 +241,7 @@ func readPostgresCreateTable(
 	createTbl := make(map[string]*tree.CreateTable)
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
-	ps := newPostgreStream(input, max, ignoreUnsupportedStmts)
+	ps := newPostgreStream(ctx, input, max, unsupportedCfg)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -299,8 +313,20 @@ func readPostgresCreateTable(
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
 		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt, p,
-			parentID, ignoreUnsupportedStmts); err != nil {
+			parentID, unsupportedCfg); err != nil {
 			return nil, err
+		}
+	}
+}
+
+func maybeWriteUnsupportedToLogFile(
+	ctx context.Context, unsupportedCfg *unsupportedStmtConfig, stmt string,
+) {
+	if unsupportedCfg.ignoreUnsupportedLogDest != "" {
+		unsupportedLog := fmt.Sprintf("%s: unsupported by IMPORT\n", stmt)
+		_, err := unsupportedCfg.logBuffer.WriteString(unsupportedLog)
+		if err != nil {
+			log.Warning(ctx, "failed to log unsupported stmt during IMPORT PGDUMP")
 		}
 	}
 }
@@ -316,8 +342,9 @@ func readPostgresStmt(
 	stmt interface{},
 	p sql.JobExecContext,
 	parentID descpb.ID,
-	ignoreUnsupportedStmts bool,
+	unsupportedCfg *unsupportedStmtConfig,
 ) error {
+	ignoreUnsupportedStmts := unsupportedCfg.ignoreUnsupported
 	switch stmt := stmt.(type) {
 	case *tree.CreateTable:
 		name, err := getTableName(&stmt.Table)
@@ -393,7 +420,7 @@ func readPostgresStmt(
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
 					if ignoreUnsupportedStmts {
-						// Write to shunt.
+						maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, stmt.String())
 						continue
 					}
 					return errors.Errorf("unsupported statement: %s", stmt)
@@ -418,14 +445,18 @@ func readPostgresStmt(
 				}
 			default:
 				if ignoreUnsupportedStmts {
-					// Write to shunt.
+					maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, stmt.String())
 					continue
 				}
 				return errors.Errorf("unsupported statement: %s", stmt)
 			}
 		}
 	case *tree.AlterTableOwner:
-		// ignore
+		if ignoreUnsupportedStmts {
+			maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, stmt.String())
+			return nil
+		}
+		return errors.Errorf("unsupported statement: %s", stmt)
 	case *tree.CreateSequence:
 		name, err := getTableName(&stmt.Name)
 		if err != nil {
@@ -436,7 +467,7 @@ func readPostgresStmt(
 		}
 	case *tree.AlterSequence:
 		if ignoreUnsupportedStmts {
-			// Write to shunt file.
+			maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, stmt.String())
 			return nil
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
@@ -463,11 +494,13 @@ func readPostgresStmt(
 					// Search for a SQLFn, which returns a SQL string to execute.
 					fn := ov.SQLFn
 					if fn == nil {
+						errStr := fmt.Sprintf("unsupported function call: %s in stmt: %s",
+							expr.Func.String(), stmt.String())
 						if ignoreUnsupportedStmts {
-							// Write to shunt file.
+							maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, errStr)
 							continue
 						}
-						return errors.Errorf("unsupported function call: %s", expr.Func.String())
+						return errors.New(errStr)
 					}
 					// Attempt to convert all func exprs to datums.
 					datums := make(tree.Datums, len(expr.Exprs))
@@ -495,7 +528,7 @@ func readPostgresStmt(
 						switch ast := fnStmt.AST.(type) {
 						case *tree.AlterTable:
 							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq,
-								tableFKs, ast, p, parentID, ignoreUnsupportedStmts); err != nil {
+								tableFKs, ast, p, parentID, unsupportedCfg); err != nil {
 								return err
 							}
 						default:
@@ -504,19 +537,21 @@ func readPostgresStmt(
 						}
 					}
 				default:
+					errStr := fmt.Sprintf("unsupported %T SELECT expr: %s", expr, expr)
 					if ignoreUnsupportedStmts {
-						// Write unsupported select expressions to the SHUNT file.
+						maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, errStr)
 						continue
 					}
-					return errors.Errorf("unsupported %T SELECT expr: %s", expr, expr)
+					return errors.New(errStr)
 				}
 			}
 		default:
+			errStr := fmt.Sprintf("unsupported %T SELECT %s", sel, sel)
 			if ignoreUnsupportedStmts {
-				// Write to shunt file.
+				maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, errStr)
 				return nil
 			}
-			return errors.Errorf("unsupported %T SELECT: %s", sel, sel)
+			return errors.New(errStr)
 		}
 	case *tree.DropTable:
 		names := stmt.Names
@@ -559,7 +594,7 @@ func readPostgresStmt(
 		// - ANALYZE is syntactic sugar for CreateStatistics. It can be ignored
 		// because the auto stats stuff will pick up the changes and run if needed.
 		if ignoreUnsupportedStmts {
-			// Write to shunt if the user has asked us to skip.
+			maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, fmt.Sprintf("%s", stmt))
 			return nil
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
@@ -569,7 +604,7 @@ func readPostgresStmt(
 		}
 	default:
 		if ignoreUnsupportedStmts {
-			// Write to shunt file.
+			maybeWriteUnsupportedToLogFile(ctx, unsupportedCfg, fmt.Sprintf("%s", stmt))
 			return nil
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
@@ -601,15 +636,15 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tableDescs             map[string]catalog.TableDescriptor
-	tables                 map[string]*row.DatumRowConverter
-	descs                  map[string]*execinfrapb.ReadImportDataSpec_ImportTable
-	kvCh                   chan row.KVBatch
-	opts                   roachpb.PgDumpOptions
-	walltime               int64
-	colMap                 map[*row.DatumRowConverter](map[string]int)
-	ignoreUnsupportedStmts bool
-	evalCtx                *tree.EvalContext
+	tableDescs         map[string]catalog.TableDescriptor
+	tables             map[string]*row.DatumRowConverter
+	descs              map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	kvCh               chan row.KVBatch
+	opts               roachpb.PgDumpOptions
+	walltime           int64
+	colMap             map[*row.DatumRowConverter](map[string]int)
+	unsupportedStmtCfg *unsupportedStmtConfig
+	evalCtx            *tree.EvalContext
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -621,7 +656,6 @@ func newPgDumpReader(
 	opts roachpb.PgDumpOptions,
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	ignoreUnsupportedStmts bool,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
@@ -652,15 +686,14 @@ func newPgDumpReader(
 		}
 	}
 	return &pgDumpReader{
-		kvCh:                   kvCh,
-		tableDescs:             tableDescs,
-		tables:                 converters,
-		descs:                  descs,
-		opts:                   opts,
-		walltime:               walltime,
-		colMap:                 colMap,
-		ignoreUnsupportedStmts: ignoreUnsupportedStmts,
-		evalCtx:                evalCtx,
+		kvCh:       kvCh,
+		tableDescs: tableDescs,
+		tables:     converters,
+		descs:      descs,
+		opts:       opts,
+		walltime:   walltime,
+		colMap:     colMap,
+		evalCtx:    evalCtx,
 	}, nil
 }
 
@@ -675,7 +708,37 @@ func (m *pgDumpReader) readFiles(
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user security.SQLUsername,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
+	// Setup config to handle unsupported DML statements seen in the PGDUMP file.
+	m.unsupportedStmtCfg = &unsupportedStmtConfig{
+		ignoreUnsupported: format.PgDump.IgnoreUnsupported, logBuffer: new(bytes.Buffer),
+		ignoreUnsupportedLogDest: format.PgDump.IgnoreUnsupportedLog,
+	}
+	m.unsupportedStmtCfg.logBuffer.WriteString(
+		"Unsupported statements during data ingestion phase:\n\n")
+	err := readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
+	if err != nil {
+		return err
+	}
+
+	// Flush unsupported stmts to log file if required.
+	if m.unsupportedStmtCfg.ignoreUnsupportedLogDest != "" {
+		conf, err := cloudimpl.ExternalStorageConfFromURI(m.unsupportedStmtCfg.ignoreUnsupportedLogDest,
+			user)
+		if err != nil {
+			return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
+		}
+		var s cloud.ExternalStorage
+		if s, err = makeExternalStorage(ctx, conf); err != nil {
+			return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
+		}
+		defer s.Close()
+		err = s.WriteFile(ctx, pgDumpUnsupportedDataStmtLog,
+			bytes.NewReader(m.unsupportedStmtCfg.logBuffer.Bytes()))
+		if err != nil {
+			return errors.New("failed to log unsupported stmts to log during IMPORT PGDUMP")
+		}
+	}
+	return nil
 }
 
 func (m *pgDumpReader) readFile(
@@ -684,7 +747,7 @@ func (m *pgDumpReader) readFile(
 	tableNameToRowsProcessed := make(map[string]int64)
 	var inserts, count int64
 	rowLimit := m.opts.RowLimit
-	ps := newPostgreStream(input, int(m.opts.MaxRowSize), m.opts.IgnoreUnsupported)
+	ps := newPostgreStream(ctx, input, int(m.opts.MaxRowSize), m.unsupportedStmtCfg)
 	semaCtx := tree.MakeSemaContext()
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
@@ -729,8 +792,8 @@ func (m *pgDumpReader) readFile(
 			timestamp := timestampAfterEpoch(m.walltime)
 			values, ok := i.Rows.Select.(*tree.ValuesClause)
 			if !ok {
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt.
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, i.Rows.Select.String())
 					continue
 				}
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
@@ -879,42 +942,49 @@ func (m *pgDumpReader) readFile(
 			// by pg_dump, and thus if it isn't, we don't try to figure out what to do.
 			sc, ok := i.Select.(*tree.SelectClause)
 			if !ok {
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt file.
+				errStr := fmt.Sprintf("unsupported %T Select: %v", i.Select, i.Select)
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 					continue
 				}
-				return errors.Errorf("unsupported %T Select: %v", i.Select, i.Select)
+				return errors.New(errStr)
 			}
 			if len(sc.Exprs) != 1 {
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt file.
+				errStr := fmt.Sprintf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 					continue
 				}
-				return errors.Errorf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
+				return errors.New(errStr)
 			}
 			fn, ok := sc.Exprs[0].Expr.(*tree.FuncExpr)
 			if !ok {
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt file.
+				errStr := fmt.Sprintf("unsupported select arg %T: %v", sc.Exprs[0].Expr, sc.Exprs[0].Expr)
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 					continue
 				}
-				return errors.Errorf("unsupported select arg %T: %v", sc.Exprs[0].Expr, sc.Exprs[0].Expr)
+				return errors.New(errStr)
 			}
 
 			switch funcName := strings.ToLower(fn.Func.String()); funcName {
 			case "search_path", "pg_catalog.set_config":
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt file.
+				errStr := fmt.Sprintf("unsupported %d fn args in select: %v",
+					len(fn.Exprs), fn.Exprs)
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 					continue
 				}
-				return errors.Errorf("unsupported %d fn args: %v", len(fn.Exprs), fn.Exprs)
+				return errors.New(errStr)
 			case "setval", "pg_catalog.setval":
 				if args := len(fn.Exprs); args < 2 || args > 3 {
-					if m.ignoreUnsupportedStmts {
-						// Write to shunt file.
+					errStr := fmt.Sprintf("unsupported %d fn args in select: %v", len(fn.Exprs),
+						fn.Exprs)
+					if m.unsupportedStmtCfg.ignoreUnsupported {
+						maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 						continue
 					}
-					return errors.Errorf("unsupported %d fn args: %v", len(fn.Exprs), fn.Exprs)
+					return errors.New(errStr)
 				}
 				seqname, ok := fn.Exprs[0].(*tree.StrVal)
 				if !ok {
@@ -930,11 +1000,12 @@ func (m *pgDumpReader) readFile(
 				}
 				seqval, ok := fn.Exprs[1].(*tree.NumVal)
 				if !ok {
-					if m.ignoreUnsupportedStmts {
-						// Write to shunt file.
+					errStr := fmt.Sprintf("unsupported setval %T arg: %v", fn.Exprs[1], fn.Exprs[1])
+					if m.unsupportedStmtCfg.ignoreUnsupported {
+						maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 						continue
 					}
-					return errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[1], fn.Exprs[1])
+					return errors.New(errStr)
 				}
 				val, err := seqval.AsInt64()
 				if err != nil {
@@ -944,11 +1015,12 @@ func (m *pgDumpReader) readFile(
 				if len(fn.Exprs) == 3 {
 					called, ok := fn.Exprs[2].(*tree.DBool)
 					if !ok {
-						if m.ignoreUnsupportedStmts {
-							// Write to shunt file.
+						errStr := fmt.Sprintf("unsupported setval %T arg: %v", fn.Exprs[2], fn.Exprs[2])
+						if m.unsupportedStmtCfg.ignoreUnsupported {
+							maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 							continue
 						}
-						return errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[2], fn.Exprs[2])
+						return errors.New(errStr)
 					}
 					isCalled = bool(*called)
 				}
@@ -972,11 +1044,12 @@ func (m *pgDumpReader) readFile(
 			case "addgeometrycolumn":
 				// handled during schema extraction.
 			default:
-				if m.ignoreUnsupportedStmts {
-					// Write to shunt file.
+				errStr := fmt.Sprintf("unsupported function %s in stmt %s", funcName, i.Select.String())
+				if m.unsupportedStmtCfg.ignoreUnsupported {
+					maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 					continue
 				}
-				return errors.Errorf("unsupported function: %s", funcName)
+				return errors.New(errStr)
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence:
@@ -986,18 +1059,13 @@ func (m *pgDumpReader) readFile(
 		case *tree.CreateTable, *tree.AlterTable, *tree.AlterTableOwner, *tree.CreateIndex,
 			*tree.CreateSequence, *tree.DropTable:
 			// handled during schema extraction.
-		case *tree.Delete:
-			if m.ignoreUnsupportedStmts {
-				// Write to shunt file.
-				continue
-			}
-			return errors.Errorf("unsupported DELETE FROM %T statement: %s", stmt, stmt)
 		default:
-			if m.ignoreUnsupportedStmts {
-				// Write to shunt file.
+			errStr := fmt.Sprintf("unsupported %T statement: %v", i, i)
+			if m.unsupportedStmtCfg.ignoreUnsupported {
+				maybeWriteUnsupportedToLogFile(ctx, m.unsupportedStmtCfg, errStr)
 				continue
 			}
-			return errors.Errorf("unsupported %T statement: %v", i, i)
+			return errors.New(errStr)
 		}
 	}
 	for _, conv := range m.tables {

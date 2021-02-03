@@ -818,6 +818,7 @@ END;
 			name: "fk",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
+			with: "WITH ignore_unsupported",
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -896,7 +897,7 @@ END;
 			name: "fk-skip",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys`,
+			with: `WITH skip_foreign_keys, ignore_unsupported`,
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -911,13 +912,14 @@ END;
 			name: "fk unreferenced",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
+			with: "WITH ignore_unsupported",
 			err:  `table "cities" not found`,
 		},
 		{
 			name: "fk unreferenced skipped",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys`,
+			with: `WITH skip_foreign_keys, ignore_unsupported`,
 			query: map[string][][]string{
 				getTablesQuery: {{"public", "weather", "table"}},
 			},
@@ -5667,13 +5669,20 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	data := `
+				-- Statements that CRDB cannot parse.
 				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+
 				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
 				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
+
 				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
 				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
 
-        CREATE TABLE foo (id INT);
+				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+				-- Valid statement.
+				CREATE TABLE foo (id INT);
 
 				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
 				    LANGUAGE sql
@@ -5682,15 +5691,21 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 				$_$;
 				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
 
-        INSERT INTO foo VALUES (1), (2), (3);
-
+				-- Valid statements.
+				INSERT INTO foo VALUES (1), (2), (3);
 				CREATE TABLE t (i INT8);
+
+				-- Statements that CRDB can parse, but IMPORT does not support.
+				-- These are processed during the schema pass of IMPORT.
 				COMMENT ON TABLE t IS 'This should be skipped';
 				COMMENT ON DATABASE t IS 'This should be skipped';
 				COMMENT ON COLUMN t IS 'This should be skipped';
-				COMMENT ON EXTENSION;
-				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
-				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+
+				-- Statements that CRDB can parse, but IMPORT does not support.
+				-- These are processed during the data ingestion pass of IMPORT.
+				SELECT pg_catalog.set_config('search_path', '', false);
+				DELETE FROM geometry_columns WHERE f_table_name = 'nyc_census_blocks' AND f_table_schema = 'public';
 			`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5700,15 +5715,85 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Run("ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo; USE foo;")
 		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", srv.URL)
 		// Check that statements which are not expected to be ignored, are still
 		// processed.
 		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
-		sqlDB.Exec(t, "DROP TABLE foo")
 	})
 
 	t.Run("dont-ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo1; USE foo1;")
 		sqlDB.ExpectErr(t, "syntax error", "IMPORT PGDUMP ($1)", srv.URL)
+	})
+
+	t.Run("require-both-unsupported-options", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo2; USE foo2;")
+		ignoredLog := `userfile:///ignore.log`
+		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported` option",
+			"IMPORT PGDUMP ($1) WITH ignored_stmt_log=$2", srv.URL, ignoredLog)
+	})
+
+	t.Run("log-unsupported-stmts", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo3; USE foo3;")
+		ignoredLog := `userfile:///ignore.log`
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported, ignored_stmt_log=$2",
+			srv.URL, ignoredLog)
+		// Check that statements which are not expected to be ignored, are still
+		// processed.
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
+
+		// Read the unsupported log and verify its contents.
+		store, err := cloudimpl.ExternalStorageFromURI(ctx, ignoredLog,
+			base.ExternalIODirConfig{},
+			tc.Servers[0].ClusterSettings(),
+			blobs.TestEmptyBlobClientFactory,
+			security.RootUserName(),
+			tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
+		require.NoError(t, err)
+		defer store.Close()
+		content, err := store.ReadFile(ctx, pgDumpUnsupportedSchemaStmtLog)
+		require.NoError(t, err)
+		descBytes, err := ioutil.ReadAll(content)
+		require.NoError(t, err)
+		expectedSchemaLog := `Unsupported statements during schema parse phase:
+
+create trigger: could not be parsed
+revoke privileges on sequence: could not be parsed
+revoke privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+comment on extension: could not be parsed
+create extension if not exists with: could not be parsed
+create function: could not be parsed
+alter function: could not be parsed
+COMMENT ON TABLE t IS 'This should be skipped': unsupported by IMPORT
+COMMENT ON DATABASE t IS 'This should be skipped': unsupported by IMPORT
+COMMENT ON COLUMN t IS 'This should be skipped': unsupported by IMPORT
+unsupported function call: set_config in stmt: SELECT set_config('search_path', '', false): unsupported by IMPORT
+`
+		require.Equal(t, []byte(expectedSchemaLog), descBytes)
+
+		expectedDataLog := `Unsupported statements during data ingestion phase:
+
+create trigger: could not be parsed
+revoke privileges on sequence: could not be parsed
+revoke privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+comment on extension: could not be parsed
+create extension if not exists with: could not be parsed
+create function: could not be parsed
+alter function: could not be parsed
+unsupported 3 fn args in select: ['search_path' '' false]: unsupported by IMPORT
+unsupported *tree.Delete statement: DELETE FROM geometry_columns WHERE (f_table_name = 'nyc_census_blocks') AND (f_table_schema = 'public'): unsupported by IMPORT
+`
+
+		content, err = store.ReadFile(ctx, pgDumpUnsupportedDataStmtLog)
+		require.NoError(t, err)
+		descBytes, err = ioutil.ReadAll(content)
+		require.NoError(t, err)
+		require.Equal(t, []byte(expectedDataLog), descBytes)
 	})
 }
 
