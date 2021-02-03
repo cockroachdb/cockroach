@@ -211,9 +211,7 @@ type TableDescriptor interface {
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
 	FindColumnWithName(name tree.Name) (Column, error)
 
-	GetPublicColumns() []descpb.ColumnDescriptor                           // deprecated
-	ForeachPublicColumn(f func(col *descpb.ColumnDescriptor) error) error  // deprecated
-	ForeachNonDropColumn(f func(col *descpb.ColumnDescriptor) error) error // deprecated
+	GetPublicColumns() []descpb.ColumnDescriptor // deprecated
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)   // deprecated
 	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error) // deprecated

@@ -361,12 +361,11 @@ INSERT INTO foo VALUES (1), (10), (100);
 		colIdxMap := table.ColumnIdxMap()
 		var valsNeeded util.FastIntSet
 		if idx.Primary() {
-			_ = table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
-				if !column.Virtual {
-					valsNeeded.Add(colIdxMap.GetDefault(column.ID))
+			for _, column := range table.PublicColumnsNew() {
+				if !column.IsVirtual() {
+					valsNeeded.Add(colIdxMap.GetDefault(column.GetID()))
 				}
-				return nil
-			})
+			}
 		} else {
 			_ = idx.ForEachColumnID(func(id descpb.ColumnID) error {
 				valsNeeded.Add(colIdxMap.GetDefault(id))
