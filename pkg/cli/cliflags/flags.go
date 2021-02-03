@@ -1333,4 +1333,19 @@ When set, the command prints only the build tag for the executable,
 without any other details.
 `,
 	}
+
+	IdleExitAfter = FlagInfo{
+		Name: "idle-exit-after",
+		Description: `
+If nonzero, will cause the server to run normally for the 
+indicated amount of time, wait for all SQL connections to terminate, 
+start a 30s countdown and exit upon countdown reaching zero if no new 
+connections occur. New connections will be accepted at all times and 
+will effectively delay the exit (indefinitely if there is always at least 
+one connection or there are no connection for less than 30 sec.
+A new 30s countdown will start when no more SQL connections 
+exist. The interval is specified with a suffix of 's' for seconds, 
+'m' for minutes, and 'h' for hours.
+`,
+	}
 )
