@@ -307,6 +307,20 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
+// DropEnumValue removes an enum member from the type.
+// DropEnumValue assumes that the type is an enum and that the value being
+// removed is in the prerequisite state to remove.
+func (desc *Mutable) DropEnumValue(value tree.EnumValue) {
+	for i := range desc.EnumMembers {
+		member := &desc.EnumMembers[i]
+		if member.LogicalRepresentation == string(value) {
+			member.Capability = descpb.TypeDescriptor_EnumMember_READ_ONLY
+			member.Direction = descpb.TypeDescriptor_EnumMember_REMOVE
+			break
+		}
+	}
+}
+
 // AddEnumValue adds an enum member to the type.
 // AddEnumValue assumes that the type is an enum, and that the new value
 // doesn't exist already in the enum.
@@ -352,6 +366,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 		LogicalRepresentation:  string(node.NewVal),
 		PhysicalRepresentation: newPhysicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
+		Direction:              descpb.TypeDescriptor_EnumMember_ADD,
 	}
 
 	// Now, insert the new member.
@@ -462,6 +477,23 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 				return errors.AssertionFailedf("duplicate enum member %q", desc.EnumMembers[i].LogicalRepresentation)
 			}
 			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
+		}
+
+		// Ensure the sanity of enum capabilities and transition directions.
+		for _, member := range desc.EnumMembers {
+			switch member.Capability {
+			case descpb.TypeDescriptor_EnumMember_READ_ONLY:
+				if member.Direction == descpb.TypeDescriptor_EnumMember_NONE {
+					return errors.AssertionFailedf(
+						"read only capability member must have transition direction set")
+				}
+			case descpb.TypeDescriptor_EnumMember_ALL:
+				if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+					return errors.AssertionFailedf("public enum member can not have transition direction set")
+				}
+			default:
+				return errors.AssertionFailedf("invalid member capability %s", member.Capability)
+			}
 		}
 
 		// Validate the Privileges of the descriptor.

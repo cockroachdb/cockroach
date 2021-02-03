@@ -265,3 +265,204 @@ DROP TYPE store
 
 statement error pq: type "store" does not exist
 SELECT 'lru'::store
+
+statement ok
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'hi'
+
+statement error pq: invalid input value for enum greetings: "hi"
+SELECT 'hi'::greetings
+
+statement ok
+CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings)
+
+statement ok
+INSERT INTO use_greetings VALUES(1, 'yo')
+
+statement ok
+SET sql_safe_updates = true;
+
+# ALTER TYPE DROP VALUE is gated behind sql_safe_updates
+statement error pq: rejected \(sql_safe_updates = true\)
+ALTER TYPE greetings DROP VALUE 'yo'
+
+statement ok
+SET sql_safe_updates = false
+
+statement error pq: could not remove enum value "yo" as it is being used by "use_greetings"
+ALTER TYPE greetings DROP VALUE 'yo'
+
+query T
+SELECT 'yo'::greetings
+----
+yo
+
+# As only 'yo' is used by the table above, we should still be able to drop 'howdy'
+statement ok
+ALTER TYPE greetings DROP VALUE 'howdy'
+
+query TTTT
+SELECT * FROM [SHOW ENUMS] WHERE name = 'greetings'
+----
+public  greetings  {hello,yo}                  root
+
+statement error pq: invalid input value for enum greetings: "howdy"
+SELECT 'howdy'::greetings
+
+statement ok
+CREATE TABLE use_greetings2(k INT PRIMARY KEY, v greetings);
+INSERT INTO use_greetings2 VALUES (1, 'hello')
+
+statement error pq: could not remove enum value "hello" as it is being used by "use_greetings2"
+ALTER TYPE greetings DROP VALUE 'hello'
+
+query T
+SELECT 'hello'::greetings
+----
+hello
+
+# Once the use of "yo" has been removed, we should be able to remove it from the
+# enum
+statement ok
+DELETE FROM use_greetings WHERE use_greetings.v = 'yo'
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'yo'
+
+statement error pq: invalid input value for enum greetings: "yo"
+SELECT 'yo'::greetings
+
+query TTTT
+SELECT * FROM [SHOW ENUMS] WHERE name = 'greetings'
+----
+public  greetings  {hello}  root
+
+statement ok
+CREATE TYPE alphabets AS ENUM('a', 'b', 'c', 'd', 'e', 'f');
+CREATE TABLE uses_alphabets (k INT PRIMARY KEY, v1 alphabets, v2 alphabets);
+INSERT INTO uses_alphabets VALUES (1, 'a', 'a'), (2, 'b', 'c')
+
+statement error pq: could not remove enum value "a" as it is being used by "uses_alphabets"
+ALTER TYPE alphabets DROP VALUE 'a'
+
+statement error pq: could not remove enum value "b" as it is being used by "uses_alphabets"
+ALTER TYPE alphabets DROP VALUE 'b'
+
+statement error pq: could not remove enum value "c" as it is being used by "uses_alphabets"
+ALTER TYPE alphabets DROP VALUE 'c'
+
+statement ok
+DELETE FROM uses_alphabets WHERE k = 1
+
+statement ok
+ALTER TYPE alphabets DROP VALUE 'a'
+
+# b and c are still in use, and should continue to fail.
+statement error pq: could not remove enum value "b" as it is being used by "uses_alphabets"
+ALTER TYPE alphabets DROP VALUE 'b'
+
+statement error pq: could not remove enum value "c" as it is being used by "uses_alphabets"
+ALTER TYPE alphabets DROP VALUE 'c'
+
+# Test enum value dropping with view/default column expres.
+statement ok
+CREATE VIEW v as SELECT 'd':::alphabets;
+CREATE TABLE uses_alphabets_2(k INT PRIMARY KEY, v alphabets DEFAULT 'e');
+
+statement error pq: could not validate enum value removal for "d": count-value-usage: enum label "d" is not yet public
+ALTER TYPE alphabets DROP VALUE 'd'
+
+statement ok
+INSERT INTO uses_alphabets_2 VALUES(1);
+
+# e was inserted as the default value, so we shouldn't be able to remove it.
+statement error pq: could not remove enum value "e" as it is being used by "uses_alphabets_2"
+ALTER TYPE alphabets DROP VALUE 'e'
+
+statement ok
+TRUNCATE uses_alphabets_2
+
+statement ok
+ALTER TYPE alphabets DROP VALUE 'e'
+
+statement error pq: could not find \[160\] in enum "public.alphabets"
+INSERT INTO uses_alphabets_2 VALUES(1);
+
+# Even though the default expr no longer works, we should be able to explicitly
+# insert a value.
+statement ok
+INSERT INTO uses_alphabets_2 VALUES (1, 'f')
+
+# Dropping the column should work.
+statement ok
+ALTER TABLE uses_alphabets_2 DROP COLUMN v
+
+statement ok
+ALTER TYPE alphabets DROP VALUE 'f'
+
+
+subtest add_drop_same_value_in_txn
+
+statement ok
+CREATE TYPE a AS ENUM('a')
+
+statement error enum label "b" is being added, try again later
+BEGIN;
+ALTER TYPE a ADD VALUE 'b';
+ALTER TYPE a DROP VALUE 'b';
+
+statement ok
+ROLLBACK
+
+statement error enum label "a" is being dropped, try again later
+BEGIN;
+ALTER TYPE a DROP VALUE 'a';
+ALTER TYPE a ADD VALUE 'a';
+
+statement ok
+ROLLBACK
+
+
+statement error pq: enum label "a" is already being dropped
+BEGIN;
+ALTER TYPE a DROP VALUE 'a';
+ALTER TYPE a DROP VALUE 'a'
+
+statement ok
+ROLLBACK
+
+subtest if_not_exists_in_same_txn
+
+statement error enum label "a" is being dropped, try again later
+BEGIN;
+ALTER TYPE a DROP VALUE 'a';
+ALTER TYPE a ADD VALUE IF NOT EXISTS 'a';
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER TYPE a ADD VALUE 'b';
+ALTER TYPE a ADD VALUE IF NOT EXISTS 'b';
+COMMIT
+
+subtest add_rename_in_same_txn
+
+statement error enum label "c" is being added, try again later
+BEGIN;
+ALTER TYPE a ADD VALUE 'c';
+ALTER TYPE a RENAME VALUE 'c' TO 'new_name';
+
+statement ok
+ROLLBACK
+
+subtest drop_rename_in_same_txn
+
+statement error enum label "a" is being dropped
+BEGIN;
+ALTER TYPE a DROP VALUE 'a';
+ALTER TYPE a RENAME VALUE 'a' TO 'new_name';
+ROLLBACK;
