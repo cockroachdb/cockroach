@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1901,15 +1902,15 @@ func (r *restoreResumer) restoreSystemTables(
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			config, ok := systemTableBackupConfiguration[systemTableName]
+			config, ok := backupbase.SystemTableBackupConfiguration[systemTableName]
 			if !ok {
 				log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
 					systemTableName)
 			}
 
-			restoreFunc := defaultSystemTableRestoreFunc
-			if config.customRestoreFunc != nil {
-				restoreFunc = config.customRestoreFunc
+			restoreFunc := backupbase.DefaultSystemTableRestoreFunc
+			if config.CustomRestoreFunc != nil {
+				restoreFunc = config.CustomRestoreFunc
 				log.Eventf(ctx, "using custom restore function for table %s", systemTableName)
 			}
 
