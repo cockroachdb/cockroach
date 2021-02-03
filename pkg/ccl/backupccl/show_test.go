@@ -350,20 +350,42 @@ GRANT UPDATE ON top_secret TO agent_bond;
 
 		want := [][]string{
 			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CREATE, DELETE, DROP, GRANT, INSERT, ` +
-				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `},
+				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
-				`GRANT ALL ON locator TO root; `},
-			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT ALL ON continent TO root; `},
-			{`_continent`, `type`, `GRANT ALL ON _continent TO admin; GRANT ALL ON _continent TO root; `},
+				`GRANT ALL ON locator TO root; `, `root`},
+			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT ALL ON continent TO root; `, `root`},
+			{`_continent`, `type`, `GRANT ALL ON _continent TO admin; GRANT ALL ON _continent TO root; `, `root`},
 			{`agent_locations`, `table`, `GRANT ALL ON agent_locations TO admin; ` +
 				`GRANT SELECT ON agent_locations TO agent_bond; GRANT UPDATE ON agent_locations TO agents; ` +
-				`GRANT ALL ON agent_locations TO m; GRANT ALL ON agent_locations TO root; `},
+				`GRANT ALL ON agent_locations TO m; GRANT ALL ON agent_locations TO root; `, `root`},
 			{`top_secret`, `table`, `GRANT ALL ON top_secret TO admin; ` +
 				`GRANT SELECT, UPDATE ON top_secret TO agent_bond; GRANT INSERT ON top_secret TO agents; ` +
-				`GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `},
+				`GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `, `root`},
 		}
 
-		showQuery := fmt.Sprintf(`SELECT object_name, object_type, privileges FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs)
+		showQuery := fmt.Sprintf(`SELECT object_name, object_type, privileges, owner FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs)
+		sqlDBRestore.CheckQueryResults(t, showQuery, want)
+
+		// Change the owner and expect the changes to be reflected in a new backup
+		showOwner := LocalFoo + "/show_owner"
+		sqlDB.Exec(t, `
+ALTER DATABASE mi5 OWNER TO agent_thomas;
+ALTER SCHEMA locator OWNER TO agent_thomas;
+ALTER TYPE locator.continent OWNER TO agent_bond;
+ALTER TABLE locator.agent_locations OWNER TO agent_bond;
+`)
+		sqlDB.Exec(t, `BACKUP DATABASE mi5 TO $1;`, showOwner)
+
+		want = [][]string{
+			{`agent_thomas`},
+			{`agent_thomas`},
+			{`agent_bond`},
+			{`agent_bond`},
+			{`agent_bond`},
+			{`root`},
+		}
+
+		showQuery = fmt.Sprintf(`SELECT owner FROM [SHOW BACKUP '%s' WITH privileges]`, showOwner)
 		sqlDBRestore.CheckQueryResults(t, showQuery, want)
 	}
 }
