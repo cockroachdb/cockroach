@@ -604,7 +604,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence,  // relPersistence
 			tree.DBoolFalse, // relistemp
 			relKind,         // relkind
-			tree.NewDInt(tree.DInt(len(table.GetPublicColumns()))), // relnatts
+			tree.NewDInt(tree.DInt(len(table.PublicColumnsNew()))), // relnatts
 			tree.NewDInt(tree.DInt(len(table.GetChecks()))),        // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey

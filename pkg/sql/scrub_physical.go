@@ -71,8 +71,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	// Collect all of the columns being scanned.
 	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {
-		for i := range o.tableDesc.GetPublicColumns() {
-			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.GetPublicColumns()[i].ID))
+		for _, c := range o.tableDesc.PublicColumnsNew() {
+			columnIDs = append(columnIDs, tree.ColumnID(c.GetID()))
 		}
 	} else {
 		for _, id := range o.indexDesc.ColumnIDs {
@@ -88,7 +88,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	for i := range columnIDs {
 		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
-		columns = append(columns, &o.tableDesc.GetPublicColumns()[idx])
+		columns = append(columns, o.tableDesc.PublicColumnsNew()[idx].ColumnDesc())
 	}
 
 	// Find the row indexes for all of the primary index columns.

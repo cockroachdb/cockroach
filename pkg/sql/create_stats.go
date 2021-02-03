@@ -428,9 +428,9 @@ func createStatsDefaultColumns(
 
 	// Add all remaining columns in the table, up to maxNonIndexCols.
 	nonIdxCols := 0
-	for i := 0; i < len(desc.GetPublicColumns()) && nonIdxCols < maxNonIndexCols; i++ {
-		col := &desc.GetPublicColumns()[i]
-		colList := []descpb.ColumnID{col.ID}
+	for i := 0; i < len(desc.PublicColumnsNew()) && nonIdxCols < maxNonIndexCols; i++ {
+		col := desc.PublicColumnsNew()[i]
+		colList := []descpb.ColumnID{col.GetID()}
 
 		if !trackStatsIfNotExists(colList) {
 			continue
@@ -441,12 +441,12 @@ func createStatsDefaultColumns(
 		// enum types only have a few values anyway, include all possible values
 		// for those types, up to defaultHistogramBuckets.
 		maxHistBuckets := uint32(nonIndexColHistogramBuckets)
-		if col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily {
+		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
 			maxHistBuckets = defaultHistogramBuckets
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colList,
-			HasHistogram:        !colinfo.ColumnTypeIsInvertedIndexable(col.Type),
+			HasHistogram:        !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++

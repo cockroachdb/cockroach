@@ -56,8 +56,11 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 			Index:            index.IndexDesc(),
 			ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumnsNew()),
 			IsSecondaryIndex: !index.Primary(),
-			Cols:             entry.tableDesc.GetPublicColumns(),
+			Cols:             make([]descpb.ColumnDescriptor, len(entry.tableDesc.PublicColumnsNew())),
 			ValNeededForCol:  entry.valNeededForCol,
+		}
+		for j, col := range entry.tableDesc.PublicColumnsNew() {
+			fetcherArgs[i].Cols[j] = *col.ColumnDesc()
 		}
 	}
 	return fetcherArgs
