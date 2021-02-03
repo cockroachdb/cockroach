@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1158,7 +1159,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 
 				startTime, err := tree.MakeDTimestampTZ(rec.StartTime, time.Microsecond)
 				if err != nil {
-					return err
+					return iterutil.StopIteration()
 				}
 
 				spanDuration := rec.Duration
@@ -1176,7 +1177,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 					),
 					tree.NewDString(operation),
 				); err != nil {
-					return err
+					return iterutil.StopIteration()
 				}
 			}
 			return nil
