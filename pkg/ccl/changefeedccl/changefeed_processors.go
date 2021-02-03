@@ -139,7 +139,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	var err error
-	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts); err != nil {
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.Targets); err != nil {
 		return nil, err
 	}
 
@@ -520,7 +520,7 @@ func newChangeFrontierProcessor(
 	}
 
 	var err error
-	if cf.encoder, err = getEncoder(spec.Feed.Opts); err != nil {
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets); err != nil {
 		return nil, err
 	}
 
