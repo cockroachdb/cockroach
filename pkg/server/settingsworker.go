@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,7 +37,7 @@ func processSystemConfigKVs(
 	a := &rowenc.DatumAlloc{}
 	codec := keys.TODOSQLCodec
 	settingsTablePrefix := codec.TablePrefix(uint32(tbl.GetID()))
-	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.GetPublicColumns())
+	colIdxMap := catalog.ColumnIDToOrdinalMap(tbl.PublicColumnsNew())
 
 	var settingsKVs []roachpb.KeyValue
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {

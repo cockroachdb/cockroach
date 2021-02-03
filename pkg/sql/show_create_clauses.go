@@ -94,7 +94,8 @@ func ShowCreateView(
 		if i > 0 {
 			f.WriteString(", ")
 		}
-		f.FormatNameP(&desc.GetColumnAtIdx(i).Name)
+		name := desc.PublicColumnsNew()[i].GetName()
+		f.FormatNameP(&name)
 	}
 	f.WriteString(") AS ")
 	f.WriteString(desc.GetViewQuery())

@@ -54,7 +54,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
 			Index:            index.IndexDesc(),
-			ColIdxMap:        entry.tableDesc.ColumnIdxMap(),
+			ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumnsNew()),
 			IsSecondaryIndex: !index.Primary(),
 			Cols:             entry.tableDesc.GetPublicColumns(),
 			ValNeededForCol:  entry.valNeededForCol,

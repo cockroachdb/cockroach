@@ -2705,25 +2705,6 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
-// ColumnIdxMap returns a map from Column ID to the ordinal position of that
-// column.
-func (desc *wrapper) ColumnIdxMap() catalog.TableColMap {
-	return desc.ColumnIdxMapWithMutations(false)
-}
-
-// ColumnIdxMapWithMutations returns a map from Column ID to the ordinal
-// position of that column, optionally including mutation columns if the input
-// bool is true.
-func (desc *wrapper) ColumnIdxMapWithMutations(mutations bool) catalog.TableColMap {
-	var colIdxMap catalog.TableColMap
-	for _, col := range desc.AllColumnsNew() {
-		if col.Public() || mutations {
-			colIdxMap.Set(col.GetID(), col.Ordinal())
-		}
-	}
-	return colIdxMap
-}
-
 // ContainsUserDefinedTypes returns whether or not this table descriptor has
 // any columns of user defined types.
 func (desc *wrapper) ContainsUserDefinedTypes() bool {
@@ -3630,47 +3611,6 @@ func (desc *wrapper) HasColumnBackfillMutation() bool {
 // transaction.
 func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion.ID == descpb.InvalidID
-}
-
-// ColumnTypes returns the types of all columns.
-func (desc *wrapper) ColumnTypes() []*types.T {
-	return desc.ColumnTypesWithMutations(false)
-}
-
-// ColumnTypesWithMutations returns the types of all columns, optionally
-// including mutation columns, which will be returned if the input bool is true.
-func (desc *wrapper) ColumnTypesWithMutations(mutations bool) []*types.T {
-	columns := desc.PublicColumnsNew()
-	if mutations {
-		columns = desc.AllColumnsNew()
-	}
-	types := make([]*types.T, len(columns))
-	for i := range columns {
-		types[i] = columns[i].GetType()
-	}
-	return types
-}
-
-// ColumnTypesWithMutationsAndVirtualCol returns the types of all columns,
-// optionally including mutation columns, which will be returned if the input
-// bool is true. If virtualCol is non-nil, substitutes the type of the virtual
-// column instead of the table column with the same ID.
-func (desc *wrapper) ColumnTypesWithMutationsAndVirtualCol(
-	mutations bool, virtualCol *descpb.ColumnDescriptor,
-) []*types.T {
-	columns := desc.PublicColumnsNew()
-	if mutations {
-		columns = desc.AllColumnsNew()
-	}
-	types := make([]*types.T, len(columns))
-	for i := range columns {
-		if virtualCol != nil && columns[i].GetID() == virtualCol.ID {
-			types[i] = virtualCol.Type
-		} else {
-			types[i] = columns[i].GetType()
-		}
-	}
-	return types
 }
 
 // ColumnsSelectors generates Select expressions for cols.

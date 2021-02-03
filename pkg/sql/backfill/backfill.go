@@ -124,7 +124,7 @@ func (cb *ColumnBackfiller) init(
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
 		Index:           desc.GetPrimaryIndex().IndexDesc(),
-		ColIdxMap:       desc.ColumnIdxMap(),
+		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumnsNew()),
 		Cols:            desc.GetPublicColumns(),
 		ValNeededForCol: valNeededForCol,
 	}
