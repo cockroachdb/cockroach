@@ -625,8 +625,8 @@ func newOptTable(
 	}
 
 	// First, determine how many columns we will potentially need.
-	colDescs := ot.desc.DeletableColumns()
-	numCols := len(colDescs) + len(colinfo.AllSystemColumnDescs)
+	cols := ot.desc.AllColumnsNew()
+	numCols := len(cols) + len(colinfo.AllSystemColumnDescs)
 	// One for each inverted index virtual column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
@@ -635,51 +635,47 @@ func newOptTable(
 		}
 	}
 
-	ot.columns = make([]cat.Column, len(colDescs), numCols)
-	numOrdinary := len(ot.desc.GetPublicColumns())
-	numWritable := len(ot.desc.WritableColumns())
-	for ordinal := range colDescs {
-		desc := colDescs[ordinal]
-
+	ot.columns = make([]cat.Column, len(cols), numCols)
+	for _, col := range cols {
 		var kind cat.ColumnKind
 		visibility := cat.Visible
 		switch {
-		case ordinal < numOrdinary:
+		case col.Public():
 			kind = cat.Ordinary
-			if desc.Hidden {
+			if col.IsHidden() {
 				visibility = cat.Hidden
 			}
-		case ordinal < numWritable:
+		case col.WriteAndDeleteOnly():
 			kind = cat.WriteOnly
 			visibility = cat.Inaccessible
 		default:
 			kind = cat.DeleteOnly
 			visibility = cat.Inaccessible
 		}
-		if !desc.Virtual {
-			ot.columns[ordinal].InitNonVirtual(
-				ordinal,
-				cat.StableID(desc.ID),
-				tree.Name(desc.Name),
+		if !col.IsVirtual() {
+			ot.columns[col.Ordinal()].InitNonVirtual(
+				col.Ordinal(),
+				cat.StableID(col.GetID()),
+				col.ColName(),
 				kind,
-				desc.Type,
-				desc.Nullable,
+				col.GetType(),
+				col.IsNullable(),
 				visibility,
-				desc.DefaultExpr,
-				desc.ComputeExpr,
+				col.ColumnDesc().DefaultExpr,
+				col.ColumnDesc().ComputeExpr,
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
 			// special treatment inside the optimizer, other than having the correct
 			// visibility.
-			ot.columns[ordinal].InitVirtualComputed(
-				ordinal,
-				cat.StableID(desc.ID),
-				tree.Name(desc.Name),
-				desc.Type,
-				desc.Nullable,
+			ot.columns[col.Ordinal()].InitVirtualComputed(
+				col.Ordinal(),
+				cat.StableID(col.GetID()),
+				col.ColName(),
+				col.GetType(),
+				col.IsNullable(),
 				visibility,
-				*desc.ComputeExpr,
+				col.GetComputeExpr(),
 			)
 		}
 	}
@@ -993,8 +989,8 @@ func (ot *optTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i < len(ot.desc.DeletableColumns()) {
-		return &ot.desc.DeletableColumns()[i]
+	if i < len(ot.desc.AllColumnsNew()) {
+		return ot.desc.AllColumnsNew()[i].ColumnDesc()
 	}
 	// Check if the column matches any registered system columns.
 	for j := range colinfo.AllSystemColumnDescs {

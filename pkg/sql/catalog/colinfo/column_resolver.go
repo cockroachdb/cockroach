@@ -16,7 +16,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,20 +29,20 @@ import (
 // mutations are added.
 func ProcessTargetColumns(
 	tableDesc catalog.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
-) ([]descpb.ColumnDescriptor, error) {
+) ([]catalog.Column, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
 			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
 			// hidden columns. At present, the only hidden column is the implicit rowid
 			// primary key column.
-			return tableDesc.VisibleColumns(), nil
+			return tableDesc.VisibleColumnsNew(), nil
 		}
 		return nil, nil
 	}
 
 	var colIDSet catalog.TableColSet
-	cols := make([]descpb.ColumnDescriptor, len(nameList))
+	cols := make([]catalog.Column, len(nameList))
 	for i, colName := range nameList {
 		col, err := tableDesc.FindColumnWithName(colName)
 		if err != nil {
@@ -58,7 +57,7 @@ func ProcessTargetColumns(
 				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet.Add(col.GetID())
-		cols[i] = *col.ColumnDesc()
+		cols[i] = col
 	}
 
 	return cols, nil

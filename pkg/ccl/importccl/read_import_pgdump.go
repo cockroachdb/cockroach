@@ -607,8 +607,8 @@ func newPgDumpReader(
 			for i, colName := range table.TargetCols {
 				targetCols[i] = tree.Name(colName)
 			}
-			for i, col := range tableDesc.VisibleColumns() {
-				colSubMap[col.Name] = i
+			for i, col := range tableDesc.VisibleColumnsNew() {
+				colSubMap[col.GetName()] = i
 			}
 			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh,
 				nil /* seqChunkProvider */)

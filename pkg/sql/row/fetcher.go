@@ -166,27 +166,19 @@ func (fta *FetcherTableArgs) InitCols(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) {
-	cols := desc.GetPublicColumns()
+	cols := desc.PublicColumnsNew()
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
+		cols = desc.ReadableColumnsNew()
 	}
-	if virtualColumn != nil {
-		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
-		copy(tempCols, cols)
-		for i := range tempCols {
-			if tempCols[i].ID == virtualColumn.ID {
-				tempCols[i] = *virtualColumn
-			}
+	fta.Cols = make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
+	for i, col := range cols {
+		if virtualColumn != nil && col.GetID() == virtualColumn.ID {
+			fta.Cols[i] = *virtualColumn
+		} else {
+			fta.Cols[i] = *col.ColumnDesc()
 		}
-		cols = tempCols
-		// Add on any requested system columns.
-		cols = append(cols, systemColumns...)
-	} else {
-		// Add on any requested system columns. We slice cols to avoid modifying
-		// the underlying table descriptor.
-		cols = append(cols[:len(cols):len(cols)], systemColumns...)
 	}
-	fta.Cols = cols
+	fta.Cols = append(fta.Cols, systemColumns...)
 }
 
 // Fetcher handles fetching kvs and forming table rows for an
@@ -1149,7 +1141,7 @@ func (rf *Fetcher) processValueSingle(
 	if rf.traceKV || table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumnsNew()[idx].GetName())
 			}
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
@@ -1224,7 +1216,7 @@ func (rf *Fetcher) processValueBytes(
 		idx := table.colIdxMap.GetDefault(colID)
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumnsNew()[idx].GetName())
 		}
 
 		var encValue rowenc.EncDatum

@@ -162,10 +162,10 @@ func GenerateInsertRow(
 	// favor of the (simpler, correct) code in the CBO.
 
 	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.WritableColumns() {
-		if !col.Nullable {
-			if i, ok := rowContainerForComputedVals.Mapping.Get(col.ID); !ok || rowVals[i] == tree.DNull {
-				return nil, sqlerrors.NewNonNullViolationError(col.Name)
+	for _, col := range tableDesc.WritableColumnsNew() {
+		if !col.IsNullable() {
+			if i, ok := rowContainerForComputedVals.Mapping.Get(col.GetID()); !ok || rowVals[i] == tree.DNull {
+				return nil, sqlerrors.NewNonNullViolationError(col.GetName())
 			}
 		}
 	}
@@ -301,24 +301,26 @@ func NewDatumRowConverter(
 		EvalCtx:   evalCtx.Copy(),
 	}
 
-	var targetColDescriptors []descpb.ColumnDescriptor
+	var targetCols []catalog.Column
 	var err error
 	// IMPORT INTO allows specifying target columns which could be a subset of
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
+		if targetCols, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
 	} else {
-		targetColDescriptors = tableDesc.VisibleColumns()
+		targetCols = tableDesc.VisibleColumnsNew()
 	}
 
+	targetColDescriptors := make([]descpb.ColumnDescriptor, len(targetCols))
 	var targetColIDs catalog.TableColSet
-	for i, col := range targetColDescriptors {
+	for i, col := range targetCols {
 		c.TargetColOrds.Add(i)
-		targetColIDs.Add(col.ID)
+		targetColIDs.Add(col.GetID())
+		targetColDescriptors[i] = *col.ColumnDesc()
 	}
 
 	var txCtx transform.ExprTransformContext

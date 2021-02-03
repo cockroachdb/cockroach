@@ -45,10 +45,16 @@ func DequalifyAndValidateExpr(
 	tn *tree.TableName,
 ) (string, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
+	nonDropColumns := desc.NonDropColumnsNew()
+	nonDropColumnDescs := make([]descpb.ColumnDescriptor, len(nonDropColumns))
+	for i, col := range nonDropColumns {
+		nonDropColumnDescs[i] = *col.ColumnDesc()
+	}
+
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
 		*tn, colinfo.ResultColumnsFromColDescs(
 			desc.GetID(),
-			desc.AllNonDropColumns(),
+			nonDropColumnDescs,
 		),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)

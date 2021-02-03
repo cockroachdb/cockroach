@@ -204,7 +204,7 @@ func makeInputConverter(
 		// suffix of the columns are computed, and then expect the data file to have
 		// #(visible columns) - #(computed columns).
 		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
-			for _, col := range singleTable.VisibleColumns() {
+			for _, col := range singleTable.VisibleColumnsNew() {
 				if col.IsComputed() {
 					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
 						"to use computed columns, use IMPORT INTO")
