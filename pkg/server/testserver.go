@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -25,6 +26,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -633,6 +635,34 @@ func (t *TestTenant) DiagnosticsReporter() interface{} {
 	return t.diagnosticsReporter
 }
 
+// SetupIdleMonitor will monitor the active connections and if there are none,
+// will activate a 30sec countdown timer and terminate the application. The
+// monitoring will start after a warmup period specified by warmupDuration. If
+// the warmupDuration is zero, the idle detection will be turned off.
+func SetupIdleMonitor(
+	ctx context.Context, warmupDuration time.Duration, server netutil.Server,
+) *IdleMonitor {
+	if warmupDuration != 0 {
+		log.VEventf(ctx, 2, "Idle exit will activate after warmup duration of %s\n", warmupDuration)
+		oldConnStateHandler := server.ConnState
+		idleMonitor := MakeIdleMonitor(ctx, warmupDuration, func() {
+			log.VEventf(ctx, 2, "Idle exiting")
+			exit.WithCode(exit.Success())
+		})
+		server.ConnState = func(conn net.Conn, state http.ConnState) {
+			if state == http.StateNew {
+				idleMonitor.NewConnection(ctx)
+				oldConnStateHandler(conn, state)
+			} else if state == http.StateClosed {
+				oldConnStateHandler(conn, state)
+				idleMonitor.CloseConnection(ctx)
+			}
+		}
+		return idleMonitor
+	}
+	return nil
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	params base.TestTenantArgs,
@@ -699,6 +729,8 @@ func StartTenant(
 		nil, // tlsConfig
 		nil, // handler
 	)
+
+	SetupIdleMonitor(ctx, baseCfg.IdleExitAfter, connManager)
 
 	pgL, err := listen(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {

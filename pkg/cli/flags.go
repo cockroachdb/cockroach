@@ -836,6 +836,8 @@ func init() {
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
+
+		durationFlag(f, &serverCfg.IdleExitAfter, cliflags.IdleExitAfter)
 	}
 }
 
