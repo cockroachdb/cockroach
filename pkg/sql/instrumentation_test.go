@@ -38,13 +38,13 @@ func TestSampledStatsCollection(t *testing.T) {
 
 	const query = "SELECT * FROM test.test ORDER BY x"
 
-	collectStmtStatsSampleRate.Override(&st.SV, 0)
+	collectTxnStatsSampleRate.Override(&st.SV, 0)
 
 	r, err := db.Query(query)
 	require.NoError(t, err)
 	require.NoError(t, r.Close())
 
-	collectStmtStatsSampleRate.Override(&st.SV, 1)
+	collectTxnStatsSampleRate.Override(&st.SV, 1)
 
 	r, err = db.Query(query)
 	require.NoError(t, err)

@@ -229,3 +229,49 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 		t.Errorf("ProcessStats() = %v, want %v", got, expected)
 	}
 }
+
+func TestQueryLevelStatsAccumulate(t *testing.T) {
+	a := execstats.QueryLevelStats{
+		NetworkBytesSent: 1,
+		MaxMemUsage:      2,
+		KVBytesRead:      3,
+		KVRowsRead:       4,
+		KVTime:           5 * time.Second,
+		NetworkMessages:  6,
+		ContentionTime:   7 * time.Second,
+	}
+	b := execstats.QueryLevelStats{
+		NetworkBytesSent: 8,
+		MaxMemUsage:      9,
+		KVBytesRead:      10,
+		KVRowsRead:       11,
+		KVTime:           12 * time.Second,
+		NetworkMessages:  13,
+		ContentionTime:   14 * time.Second,
+	}
+	expected := execstats.QueryLevelStats{
+		NetworkBytesSent: 9,
+		MaxMemUsage:      9,
+		KVBytesRead:      13,
+		KVRowsRead:       15,
+		KVTime:           17 * time.Second,
+		NetworkMessages:  19,
+		ContentionTime:   21 * time.Second,
+	}
+
+	aCopy := a
+	a.Accumulate(b)
+	require.Equal(t, expected, a)
+
+	reflectedAccumulatedStats := reflect.ValueOf(a)
+	reflectedOriginalStats := reflect.ValueOf(aCopy)
+	for i := 0; i < reflectedAccumulatedStats.NumField(); i++ {
+		require.NotEqual(
+			t,
+			reflectedAccumulatedStats.Field(i).Interface(),
+			reflectedOriginalStats.Field(i).Interface(),
+			"no struct field should be the same after accumulation in this test but %s was unchanged, did you forget to update Accumulate?",
+			reflectedAccumulatedStats.Type().Field(i).Name,
+		)
+	}
+}
