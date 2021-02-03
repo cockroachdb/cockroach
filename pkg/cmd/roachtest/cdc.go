@@ -12,8 +12,17 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	gosql "database/sql"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
+	"math/big"
+	"net"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -480,6 +489,70 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	}
 }
 
+func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
+	lastCrdbNode := c.spec.NodeCount - 1
+	if lastCrdbNode == 0 {
+		lastCrdbNode = 1
+	}
+
+	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.spec.NodeCount)
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Start(ctx, t, crdbNodes)
+
+	kafka := kafkaManager{
+		c:     c,
+		nodes: kafkaNode,
+	}
+	kafka.install(ctx)
+	testCerts := kafka.configureAuth(ctx)
+	kafka.start(ctx, "kafka")
+	defer kafka.stop(ctx)
+
+	db := c.Conn(ctx, 1)
+	defer stopFeeds(db)
+
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE auth_test_table (a INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	var jobID int
+	if err := db.QueryRow(
+		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
+		fmt.Sprintf("%s?tls_enabled=true&insecure_tls_skip_verify=true", kafka.sinkURLTLS(ctx)),
+	).Scan(&jobID); err != nil {
+		t.Fatalf("create changefeed with insecure TLS transport: %s", err.Error())
+	}
+
+	if err := db.QueryRow(
+		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
+		fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s", kafka.sinkURLTLS(ctx), testCerts.CACertBase64()),
+	).Scan(&jobID); err != nil {
+		t.Fatalf("create changefeed with TLS transport: %s", err.Error())
+	}
+
+	if err := db.QueryRow(
+		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
+		fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=plain&sasl_password=plain-secret", kafka.sinkURLSASL(ctx), testCerts.CACertBase64()),
+	).Scan(&jobID); err != nil {
+		t.Fatalf("create changefeed with TLS transport and SASL/PLAIN auth: %s", err.Error())
+	}
+}
+
 func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "cdc/tpcc-1000",
@@ -595,6 +668,14 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
+		Name:    "cdc/kafka-auth",
+		Owner:   `cdc`,
+		Cluster: makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCDCKafkaAuth(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
 		Name:    "cdc/bank",
 		Owner:   `cdc`,
 		Cluster: makeClusterSpec(4),
@@ -612,6 +693,267 @@ func registerCDC(r *testRegistry) {
 	})
 }
 
+const (
+	certLifetime = 30 * 24 * time.Hour
+	keyLength    = 2048
+
+	// keystorePassword is the password for any Java KeyStore
+	// files we create. The tooling around keystores does not play
+	// nicely with passwordless keystores, so we use a wellknown
+	// password for testing.
+	keystorePassword = "storepassword"
+)
+
+type testCerts struct {
+	CACert    string
+	CAKey     string
+	KafkaCert string
+	KafkaKey  string
+}
+
+func (t *testCerts) CACertBase64() string {
+	return base64.StdEncoding.EncodeToString([]byte(t.CACert))
+}
+
+func makeTestCerts(kafkaNodeIP string) (*testCerts, error) {
+	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return nil, errors.Wrap(err, "CA private key")
+	}
+
+	KafkaKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return nil, errors.Wrap(err, "kafka private key")
+	}
+
+	CACert, CACertSpec, err := generateCACert(CAKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "CA cert gen")
+	}
+
+	KafkaCert, err := generateKafkaCert(kafkaNodeIP, KafkaKey, CACertSpec, CAKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "kafka cert gen")
+	}
+
+	CAKeyPEM, err := pemEncodePrivateKey(CAKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "pem encode CA key")
+	}
+
+	CACertPEM, err := pemEncodeCert(CACert)
+	if err != nil {
+		return nil, errors.Wrap(err, "pem encode CA cert")
+	}
+
+	KafkaKeyPEM, err := pemEncodePrivateKey(KafkaKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "pem encode kafka key")
+	}
+
+	KafkaCertPEM, err := pemEncodeCert(KafkaCert)
+	if err != nil {
+		return nil, errors.Wrap(err, "pem encode kafka cert")
+	}
+
+	return &testCerts{
+		CACert:    CACertPEM,
+		CAKey:     CAKeyPEM,
+		KafkaCert: KafkaCertPEM,
+		KafkaKey:  KafkaKeyPEM,
+	}, nil
+}
+
+func generateKafkaCert(
+	kafkaIP string, priv *rsa.PrivateKey, CACert *x509.Certificate, CAKey *rsa.PrivateKey,
+) ([]byte, error) {
+	ip := net.ParseIP(kafkaIP)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", kafkaIP)
+	}
+
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, err
+	}
+
+	certSpec := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Country:            []string{"US"},
+			Organization:       []string{"Cockroach Labs"},
+			OrganizationalUnit: []string{"Engineering"},
+			CommonName:         "kafka-node",
+		},
+		NotBefore:   timeutil.Now(),
+		NotAfter:    timeutil.Now().Add(certLifetime),
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		DNSNames:    []string{"localhost"},
+		IPAddresses: []net.IP{ip},
+	}
+
+	return x509.CreateCertificate(rand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
+}
+
+func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certSpec := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Country:            []string{"US"},
+			Organization:       []string{"Cockroach Labs"},
+			OrganizationalUnit: []string{"Engineering"},
+			CommonName:         "Roachtest Temporary Insecure CA",
+		},
+		NotBefore:             timeutil.Now(),
+		NotAfter:              timeutil.Now().Add(certLifetime),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		MaxPathLenZero:        true,
+	}
+	cert, err := x509.CreateCertificate(rand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
+	return cert, certSpec, err
+}
+
+func pemEncode(dataType string, data []byte) (string, error) {
+	ret := new(strings.Builder)
+	err := pem.Encode(ret, &pem.Block{Type: dataType, Bytes: data})
+	if err != nil {
+		return "", err
+	}
+
+	return ret.String(), nil
+}
+
+func pemEncodePrivateKey(key *rsa.PrivateKey) (string, error) {
+	return pemEncode("RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(key))
+}
+
+func pemEncodeCert(cert []byte) (string, error) {
+	return pemEncode("CERTIFICATE", cert)
+}
+
+func randomSerial() (*big.Int, error) {
+	limit := new(big.Int).Lsh(big.NewInt(1), 128)
+	ret, err := rand.Int(rand.Reader, limit)
+	if err != nil {
+		return nil, errors.Wrap(err, "generate random serial")
+	}
+	return ret, nil
+}
+
+const (
+	conluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz"
+	confluentSHA256     = "5cfa68b4368f28bd9231786bb710431394dc14a2b37eecf360e820271ee84f43"
+
+	// TODO(ssd): Perhaps something like this could be a roachprod command?
+	confluentDownloadScript = `#!/usr/bin/env bash
+set -euo pipefail
+
+CONFLUENT_URL="$1"
+CONFLUENT_SHA256="$2"
+CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
+CONFLUENT_DIR="$3"
+
+checkFile() {
+  local file_name="${1}"
+  local expected_shasum="${2}"
+
+  local actual_shasum=""
+  if command -v sha256sum > /dev/null 2>&1; then
+    actual_shasum=$(sha256sum "$file_name" | cut -f1 -d' ')
+  elif command -v shasum > /dev/null 2>&1; then
+    actual_shasum=$(shasum -a 256 "$file_name" | cut -f1 -d' ')
+  else
+    echo "sha256sum or shasum not found" >&2
+    return 1
+  fi
+
+  if [[ "$actual_shasum" == "$expected_shasum" ]]; then
+     return 0
+  else
+    return 1
+  fi
+}
+
+if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFLUENT_SHA256"; then
+  for i in $(seq 1 5); do
+    if curl --retry 3 --retry-delay 1 -o "$CONFLUENT_TAR_PATH" "$CONFLUENT_URL"; then
+      break
+    fi
+    sleep 15;
+  done
+fi
+tar xvf /tmp/confluent.tar.gz -C "$CONFLUENT_DIR"
+`
+	// kafkaJAASConfig is a JAAS configuration file that creats a
+	// user called "plain" with password "plain-secret" that can
+	// authenticate via SASL/PLAIN.
+	//
+	// Newer versions of confluent configure this directly in
+	// server.properties.
+	//
+	// This configuration file is used by the kafka-auth tests to
+	// enable TLS and SASL. Other tests use an empty file as they
+	// require no authentication.
+	kafkaJAASConfig = `
+KafkaServer {
+   org.apache.kafka.common.security.plain.PlainLoginModule required
+   username="admin"
+   password="admin-secret"
+   user_admin="admin-secret"
+   user_plain="plain-secret";
+};
+`
+
+	// kafkaConfigTmpl is a template for Kafka's server.properties
+	// configuration file. This template is used by the kafka-auth
+	// tests to enable TLS and SASL. Other tests uses the default
+	// configuration contained in the confluent archive we
+	// install.
+	kafkaConfigTmpl = `
+ssl.truststore.location=%s
+ssl.truststore.password=%s
+
+ssl.keystore.location=%s
+ssl.keystore.password=%s
+
+listeners=PLAINTEXT://:9092,SSL://:9093,SASL_SSL://:9094
+advertised.listeners=PLAINTEXT://%s:9092,SSL://%s:9093,SASL_SSL://:9094
+
+sasl.enabled.mechanisms=SCRAM-SHA-256,SCRAM-SHA-512,PLAIN
+sasl.mechanism.inter.broker.protocol=PLAIN
+inter.broker.listener.name=SASL_SSL
+
+# The following is from the confluent-4.0 default configuration file.
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+num.partitions=1
+num.recovery.threads.per.data.dir=1
+
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+zookeeper.connect=localhost:2181
+zookeeper.connection.timeout.ms=6000
+confluent.support.metrics.enable=false
+confluent.support.customer.id=anonymous
+`
+)
+
 type kafkaManager struct {
 	c     *cluster
 	nodes nodeListOption
@@ -624,39 +966,149 @@ func (k kafkaManager) basePath() string {
 	return `/mnt/data1/confluent`
 }
 
+func (k kafkaManager) configDir() string {
+	return k.basePath() + `/confluent-4.0.0/etc/kafka/`
+}
+
+func (k kafkaManager) serverJAASConfig() string {
+	return k.configDir() + `server_jaas.conf`
+}
+
 func (k kafkaManager) install(ctx context.Context) {
 	k.c.status("installing kafka")
 	folder := k.basePath()
+
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
-	k.c.Run(
-		ctx,
-		k.nodes,
-		fmt.Sprintf(
-			`for i in $(seq 1 5); do curl --retry 3 --retry-delay 1 -o /tmp/confluent.tar.gz https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz && break || sleep 15; done && tar xvf /tmp/confluent.tar.gz -C %s`,
-			folder,
-		),
-	)
+
+	downloadScriptPath := filepath.Join(folder, "/install.sh")
+	err := k.c.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	k.c.Run(ctx, k.nodes, downloadScriptPath, conluentDownloadURL, confluentSHA256, folder)
 	if !k.c.isLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
 		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
-		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre 2>&1 > logs/apt-get-install.log`)
+		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)
 	}
 }
 
-func (k kafkaManager) start(ctx context.Context) {
+func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
+	k.c.status("generating TLS certificates")
+	kafkaIP := k.c.ExternalIP(ctx, k.nodes)[0]
+
+	testCerts, err := makeTestCerts(kafkaIP)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+
+	configDir := k.configDir()
+	// truststorePath is the path to our "truststore", a Java
+	// KeyStore that contains any CA certificates we want to
+	// trust.
+	truststorePath := filepath.Join(configDir, "kafka.truststore.jks")
+	// keyStorePath is the path to our "keystore", a Java KeyStore
+	// that contains the certificates and private keys that we
+	// will use to establish TLS connections.
+	keystorePath := filepath.Join(configDir, "kafka.keystore.jks")
+
+	caKeyPath := filepath.Join(configDir, "ca.key")
+	caCertPath := filepath.Join(configDir + "ca.crt")
+
+	kafkaKeyPath := filepath.Join(configDir, "kafka.key")
+	kafkaCertPath := filepath.Join(configDir, "kafka.crt")
+	kafkaBundlePath := filepath.Join(configDir, "kafka.p12")
+
+	kafkaConfigPath := filepath.Join(configDir, "server.properties")
+	kafkaJAASPath := filepath.Join(configDir, "server_jaas.conf")
+
+	k.c.status("writing kafka configuration files")
+	kafkaConfig := fmt.Sprintf(kafkaConfigTmpl,
+		truststorePath,
+		keystorePassword,
+		keystorePath,
+		keystorePassword,
+		kafkaIP,
+		kafkaIP,
+	)
+
+	k.PutConfigContent(ctx, testCerts.KafkaKey, kafkaKeyPath)
+	k.PutConfigContent(ctx, testCerts.KafkaCert, kafkaCertPath)
+	k.PutConfigContent(ctx, testCerts.CAKey, caKeyPath)
+	k.PutConfigContent(ctx, testCerts.CACert, caCertPath)
+	k.PutConfigContent(ctx, kafkaConfig, kafkaConfigPath)
+	k.PutConfigContent(ctx, kafkaJAASConfig, kafkaJAASPath)
+
+	k.c.status("constructing java keystores")
+	// Convert PEM cert and key into pkcs12 bundle so that it can be imported into a java keystore.
+	k.c.Run(ctx, k.nodes,
+		fmt.Sprintf("openssl pkcs12 -export -in %s -inkey %s -name kafka -out %s -password pass:%s",
+			kafkaCertPath,
+			kafkaKeyPath,
+			kafkaBundlePath,
+			keystorePassword))
+
+	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", keystorePath))
+	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", truststorePath))
+
+	k.c.Run(ctx, k.nodes,
+		fmt.Sprintf("keytool -importkeystore -deststorepass %s -destkeystore %s -srckeystore %s -srcstoretype PKCS12 -srcstorepass %s -alias kafka",
+			keystorePassword,
+			keystorePath,
+			kafkaBundlePath,
+			keystorePassword))
+	k.c.Run(ctx, k.nodes,
+		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
+			truststorePath,
+			caCertPath,
+			keystorePassword))
+	k.c.Run(ctx, k.nodes,
+		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
+			keystorePath,
+			caCertPath,
+			keystorePassword))
+
+	return testCerts
+}
+
+func (k kafkaManager) PutConfigContent(ctx context.Context, data string, path string) {
+	err := k.c.PutString(ctx, data, path, 0600, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+}
+
+func (k kafkaManager) start(ctx context.Context, services ...string) {
 	folder := k.basePath()
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
 	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent destroy || true`)
-	k.restart(ctx)
+	k.restart(ctx, services...)
 }
 
-func (k kafkaManager) restart(ctx context.Context) {
+func (k kafkaManager) restart(ctx context.Context, services ...string) {
 	folder := k.basePath()
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent start schema-registry`)
+
+	var startArgs string
+	if len(services) == 0 {
+		startArgs = "schema-registry"
+	} else {
+		startArgs = strings.Join(services, " ")
+	}
+
+	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
+
+	startCmd := fmt.Sprintf(
+		"CONFLUENT_CURRENT=%s KAFKA_OPTS=-Djava.security.auth.login.config=%s %s start %s",
+		folder,
+		k.serverJAASConfig(),
+		folder+"/confluent-4.0.0/bin/confluent",
+		startArgs)
+	k.c.Run(ctx, k.nodes, startCmd)
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
 	folder := k.basePath()
+	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
 	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent stop`)
 }
 
@@ -689,6 +1141,14 @@ func (k kafkaManager) chaosLoop(
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
 	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
+}
+
+func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
+	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9093`
+}
+
+func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
+	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9094`
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
