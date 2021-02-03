@@ -167,10 +167,9 @@ func DecodeRowInfo(
 			colIDs[i] = index.GetColumnID(i)
 		}
 	} else if index.Primary() {
-		publicColumns := tableDesc.GetPublicColumns()
-		colIDs = make([]descpb.ColumnID, len(publicColumns))
-		for i := range publicColumns {
-			colIDs[i] = publicColumns[i].ID
+		colIDs = make([]descpb.ColumnID, len(tableDesc.PublicColumnsNew()))
+		for i, col := range tableDesc.PublicColumnsNew() {
+			colIDs[i] = col.GetID()
 		}
 	} else {
 		colIDs = make([]descpb.ColumnID, 0, index.NumColumns()+index.NumExtraColumns()+index.NumStoredColumns())

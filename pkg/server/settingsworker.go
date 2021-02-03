@@ -48,7 +48,7 @@ func processSystemConfigKVs(
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []*types.T{tbl.GetPublicColumns()[0].Type}
+			types := []*types.T{tbl.PublicColumnsNew()[0].GetType()}
 			nameRow := make([]rowenc.EncDatum, 1)
 			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
 			if err != nil {
@@ -83,16 +83,16 @@ func processSystemConfigKVs(
 				colID := lastColID + descpb.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap.Get(colID); ok {
-					res, bytes, err = rowenc.DecodeTableValue(a, tbl.GetPublicColumns()[idx].Type, bytes)
+					res, bytes, err = rowenc.DecodeTableValue(a, tbl.PublicColumnsNew()[idx].GetType(), bytes)
 					if err != nil {
 						return err
 					}
 					switch colID {
-					case tbl.GetPublicColumns()[1].ID: // value
+					case tbl.PublicColumnsNew()[1].GetID(): // value
 						v = string(tree.MustBeDString(res))
-					case tbl.GetPublicColumns()[3].ID: // valueType
+					case tbl.PublicColumnsNew()[3].GetID(): // valueType
 						t = string(tree.MustBeDString(res))
-					case tbl.GetPublicColumns()[2].ID: // lastUpdated
+					case tbl.PublicColumnsNew()[2].GetID(): // lastUpdated
 						// TODO(dt): we could decode just the len and then seek `bytes` past
 						// it, without allocating/decoding the unused timestamp.
 					default:

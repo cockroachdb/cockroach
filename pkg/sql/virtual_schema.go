@@ -427,7 +427,7 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 		col := &columns[i]
 		datum := datums[i]
 		if datum == tree.DNull {
-			if !e.desc.GetPublicColumns()[i].Nullable {
+			if !e.desc.PublicColumnsNew()[i].IsNullable() {
 				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
 					e.desc.GetName(), col.Name)
 			}
@@ -449,11 +449,10 @@ func (e *virtualDefEntry) getPlanInfo(
 	idxConstraint *constraint.Constraint,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
-	for i := range e.desc.GetPublicColumns() {
-		col := &e.desc.GetPublicColumns()[i]
+	for _, col := range e.desc.PublicColumnsNew() {
 		columns = append(columns, colinfo.ResultColumn{
-			Name:           col.Name,
-			Typ:            col.Type,
+			Name:           col.GetName(),
+			Typ:            col.GetType(),
 			TableID:        table.GetID(),
 			PGAttributeNum: col.GetPGAttributeNum(),
 		})

@@ -2041,12 +2041,11 @@ CREATE TABLE crdb_internal.table_columns (
 				func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
-					columns := table.GetPublicColumns()
-					for i := range columns {
-						col := &columns[i]
+					columns := table.PublicColumnsNew()
+					for _, col := range columns {
 						defStr := tree.DNull
-						if col.DefaultExpr != nil {
-							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx, tree.FmtParsable)
+						if col.HasDefault() {
+							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, col.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
 							if err != nil {
 								return err
 							}
@@ -2056,12 +2055,12 @@ CREATE TABLE crdb_internal.table_columns (
 						row = append(row,
 							tableID,
 							tableName,
-							tree.NewDInt(tree.DInt(col.ID)),
-							tree.NewDString(col.Name),
-							tree.NewDString(col.Type.DebugString()),
-							tree.MakeDBool(tree.DBool(col.Nullable)),
+							tree.NewDInt(tree.DInt(col.GetID())),
+							tree.NewDString(col.GetName()),
+							tree.NewDString(col.GetType().DebugString()),
+							tree.MakeDBool(tree.DBool(col.IsNullable())),
 							defStr,
-							tree.MakeDBool(tree.DBool(col.Hidden)),
+							tree.MakeDBool(tree.DBool(col.IsHidden())),
 						)
 						if err := pusher.pushRow(row...); err != nil {
 							return err

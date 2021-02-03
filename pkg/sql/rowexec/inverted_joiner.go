@@ -219,7 +219,7 @@ func newInvertedJoiner(
 		}
 		tableRowIdx := ij.colIdxMap.GetDefault(colID)
 		ij.indexRowToTableRowMap[indexRowIdx] = tableRowIdx
-		ij.indexRowTypes[indexRowIdx] = ij.desc.GetPublicColumns()[tableRowIdx].Type
+		ij.indexRowTypes[indexRowIdx] = ij.desc.PublicColumnsNew()[tableRowIdx].GetType()
 		indexRowIdx++
 	}
 

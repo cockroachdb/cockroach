@@ -211,7 +211,6 @@ type TableDescriptor interface {
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
 	FindColumnWithName(name tree.Name) (Column, error)
 
-	GetPublicColumns() []descpb.ColumnDescriptor // deprecated
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	ContainsUserDefinedTypes() bool
 	GetNextColumnID() descpb.ColumnID

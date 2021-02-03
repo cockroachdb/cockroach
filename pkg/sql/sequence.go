@@ -44,7 +44,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	if err != nil {
 		return nil, err
 	}
-	for _, col := range tableDesc.GetPublicColumns() {
+	for _, col := range tableDesc.PublicColumnsNew() {
 		if col.ColName() == columnName {
 			// Seems like we have no way of detecting whether this was done using "SERIAL".
 			// Guess by assuming it is SERIAL it it uses only one sequence.
@@ -53,11 +53,11 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       which have not been thought about (e.g. implication for backup and restore,
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
-			if len(col.UsesSequenceIds) == 1 {
+			if col.NumUsesSequences() == 1 {
 				seq, err := p.Descriptors().GetImmutableTableByID(
 					ctx,
 					p.txn,
-					col.UsesSequenceIds[0],
+					col.GetUsesSequenceID(0),
 					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc),
 				)
 				if err != nil {

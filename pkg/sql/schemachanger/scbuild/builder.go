@@ -469,17 +469,17 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 
 	var storeColIDs []descpb.ColumnID
 	var storeColNames []string
-	for _, col := range table.GetPublicColumns() {
+	for _, col := range table.PublicColumnsNew() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
-			if id == col.ID {
+			if id == col.GetID() {
 				containsCol = true
 				break
 			}
 		}
 		if !containsCol {
-			storeColIDs = append(storeColIDs, col.ID)
-			storeColNames = append(storeColNames, col.Name)
+			storeColIDs = append(storeColIDs, col.GetID())
+			storeColNames = append(storeColNames, col.GetName())
 		}
 	}
 
@@ -543,21 +543,21 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	var addStoreColNames []string
 	var dropStoreColIDs []descpb.ColumnID
 	var dropStoreColNames []string
-	for _, col := range table.GetPublicColumns() {
+	for _, col := range table.PublicColumnsNew() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
-			if id == col.ID {
+			if id == col.GetID() {
 				containsCol = true
 				break
 			}
 		}
 		if !containsCol {
-			if colID != col.ID {
-				addStoreColIDs = append(addStoreColIDs, col.ID)
-				addStoreColNames = append(addStoreColNames, col.Name)
+			if colID != col.GetID() {
+				addStoreColIDs = append(addStoreColIDs, col.GetID())
+				addStoreColNames = append(addStoreColNames, col.GetName())
 			}
-			dropStoreColIDs = append(dropStoreColIDs, col.ID)
-			dropStoreColNames = append(dropStoreColNames, col.Name)
+			dropStoreColIDs = append(dropStoreColIDs, col.GetID())
+			dropStoreColNames = append(dropStoreColNames, col.GetName())
 		}
 	}
 

@@ -90,11 +90,11 @@ func ShowCreateView(
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i := range desc.GetPublicColumns() {
+	for i, col := range desc.PublicColumnsNew() {
 		if i > 0 {
 			f.WriteString(", ")
 		}
-		name := desc.PublicColumnsNew()[i].GetName()
+		name := col.GetName()
 		f.FormatNameP(&name)
 	}
 	f.WriteString(") AS ")
