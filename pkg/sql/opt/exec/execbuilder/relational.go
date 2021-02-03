@@ -329,17 +329,21 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// In race builds, assert that the exec plan output columns match the opt
+	// In test builds, assert that the exec plan output columns match the opt
 	// plan output columns.
-	if util.RaceEnabled {
-		optCols := e.Relational().OutputCols
-		var execCols opt.ColSet
-		ep.outputCols.ForEach(func(key, val int) {
-			execCols.Add(opt.ColumnID(key))
-		})
-		if !execCols.Equals(optCols) {
-			return execPlan{}, errors.AssertionFailedf(
-				"exec columns do not match opt columns: expected %v, got %v", optCols, execCols)
+	if util.CrdbTestBuild {
+		// TODO(sumeer): paired inverted joins produce extra columns unknown to the
+		// optimizer.
+		if e.Op() != opt.InvertedJoinOp {
+			optCols := e.Relational().OutputCols
+			var execCols opt.ColSet
+			ep.outputCols.ForEach(func(key, val int) {
+				execCols.Add(opt.ColumnID(key))
+			})
+			if !execCols.Equals(optCols) {
+				return execPlan{}, errors.AssertionFailedf(
+					"exec columns do not match opt columns: expected %v, got %v. op: %T", optCols, execCols, e)
+			}
 		}
 	}
 

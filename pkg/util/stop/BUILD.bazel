@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/util/caller",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
