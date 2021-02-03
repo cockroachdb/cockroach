@@ -364,35 +364,6 @@ func (desc *wrapper) AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConst
 	return fks
 }
 
-// ForeachPublicColumn runs a function on all public columns.
-func (desc *wrapper) ForeachPublicColumn(f func(column *descpb.ColumnDescriptor) error) error {
-	for i := range desc.Columns {
-		if err := f(&desc.Columns[i]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ForeachNonDropColumn runs a function on all public columns and columns
-// currently being added.
-func (desc *wrapper) ForeachNonDropColumn(f func(column *descpb.ColumnDescriptor) error) error {
-	if err := desc.ForeachPublicColumn(f); err != nil {
-		return err
-	}
-
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		mutCol := mut.GetColumn()
-		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
-			if err := f(mutCol); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // ForeachDependedOnBy runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *wrapper) ForeachDependedOnBy(

@@ -2343,12 +2343,13 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			}
 
 			// Record sequence dependencies.
-			return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
-				for _, sequenceID := range col.UsesSequenceIds {
+			for _, col := range table.PublicColumnsNew() {
+				for i := 0; i < col.NumUsesSequences(); i++ {
+					sequenceID := col.GetUsesSequenceID(i)
 					if err := addRow(
 						tableID, tableName,
 						tree.DNull,
-						tree.NewDInt(tree.DInt(col.ID)),
+						tree.NewDInt(tree.DInt(col.GetID())),
 						tree.NewDInt(tree.DInt(sequenceID)),
 						sequenceDep,
 						tree.DNull,
@@ -2358,8 +2359,8 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						return err
 					}
 				}
-				return nil
-			})
+			}
+			return nil
 		})
 	},
 }

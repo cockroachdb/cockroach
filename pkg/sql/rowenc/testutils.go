@@ -1019,18 +1019,12 @@ func TestingMakePrimaryIndexKey(
 		}
 		// Check that the value type matches.
 		colID := index.GetColumnID(i)
-		var done bool
-		if err := desc.ForeachPublicColumn(func(c *descpb.ColumnDescriptor) error {
-			if !done && c.ID == colID {
-				colTyp := datums[i].ResolvedType()
-				if t := colTyp.Family(); t != c.Type.Family() {
-					return errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Family(), t)
-				}
-				done = true
+		col, _ := desc.FindColumnWithID(colID)
+		if col != nil && col.Public() {
+			colTyp := datums[i].ResolvedType()
+			if t := colTyp.Family(); t != col.GetType().Family() {
+				return nil, errors.Errorf("column %d of type %s, got value of type %s", i, col.GetType().Family(), t)
 			}
-			return nil
-		}); err != nil {
-			return nil, err
 		}
 	}
 	// Create the ColumnID to index in datums slice map needed by
