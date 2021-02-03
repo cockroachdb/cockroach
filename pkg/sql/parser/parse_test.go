@@ -200,6 +200,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (a INT8 DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
 		{`CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
 		{`CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))`},
+		{`CREATE TABLE a (b INT8 NOT VISIBLE)`},
+		{`CREATE TABLE a (b INT8 NOT VISIBLE NULL)`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other)`},

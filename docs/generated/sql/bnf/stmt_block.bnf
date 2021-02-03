@@ -2139,6 +2139,7 @@ reserved_keyword ::=
 	| 'USER'
 	| 'USING'
 	| 'VARIADIC'
+	| 'VISIBLE'
 	| 'WHEN'
 	| 'WHERE'
 	| 'WINDOW'
@@ -2909,6 +2910,7 @@ create_as_constraint_elem ::=
 col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
+	| 'NOT' 'VISIBLE'
 	| 'UNIQUE' opt_without_index
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr

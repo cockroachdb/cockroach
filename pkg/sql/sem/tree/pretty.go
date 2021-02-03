@@ -1889,6 +1889,12 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 			pretty.ConcatSpace(pretty.Keyword("DEFAULT"), p.Doc(node.DefaultExpr.Expr))))
 	}
 
+	// [NOT] VISIBLE constraint.
+	if node.Hidden {
+		hiddenConstraint := pretty.Keyword("NOT VISIBLE")
+		clauses = append(clauses, p.maybePrependConstraintName(&node.Nullable.ConstraintName, hiddenConstraint))
+	}
+
 	// NULL/NOT NULL constraint.
 	nConstraint := pretty.Nil
 	switch node.Nullable.Nullability {
