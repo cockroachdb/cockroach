@@ -366,26 +366,27 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
-		colNum := 0
-		return table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
-			colNum++
-			if column.DefaultExpr == nil {
+		for _, column := range table.PublicColumnsNew() {
+			if !column.HasDefault() {
 				// pg_attrdef only expects rows for columns with default values.
-				return nil
+				continue
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
 			defSrc := tree.NewDString(displayExpr)
-			return addRow(
-				h.ColumnOid(table.GetID(), column.ID),               // oid
+			if err := addRow(
+				h.ColumnOid(table.GetID(), column.GetID()),          // oid
 				tableOid(table.GetID()),                             // adrelid
 				tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // adnum
 				defSrc, // adbin
 				defSrc, // adsrc
-			)
-		})
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
@@ -436,11 +437,11 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
-		if err := table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
+		for _, column := range table.PublicColumnsNew() {
 			tableID := tableOid(table.GetID())
-			return addColumn(column, tableID, column.GetPGAttributeNum())
-		}); err != nil {
-			return err
+			if err := addColumn(column.ColumnDesc(), tableID, column.GetPGAttributeNum()); err != nil {
+				return err
+			}
 		}
 
 		// Columns for each index.
