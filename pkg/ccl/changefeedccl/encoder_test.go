@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -215,7 +216,13 @@ func TestEncoders(t *testing.T) {
 				t.Fatalf(`unknown format: %s`, o[changefeedbase.OptFormat])
 			}
 
-			e, err := getEncoder(o)
+			target := jobspb.ChangefeedTarget{
+				StatementTimeName: tableDesc.GetName(),
+			}
+			targets := jobspb.ChangefeedTargets{}
+			targets[tableDesc.GetID()] = target
+
+			e, err := getEncoder(o, targets)
 			if len(expected.err) > 0 {
 				require.EqualError(t, err, expected.err)
 				return
@@ -434,8 +441,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		assertRegisteredSubjects(t, reg, []string{
 			`drivers-key`,
 			`drivers-value`,
-			`db#.schema#.drivers-key`,
-			`db#.schema#.drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
 		})
 
 		prefixFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
@@ -450,8 +457,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		assertRegisteredSubjects(t, reg, []string{
 			`drivers-key`,
 			`drivers-value`,
-			`db#.schema#.drivers-key`,
-			`db#.schema#.drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
 			`superdrivers-key`,
 			`superdrivers-value`,
 		})
@@ -468,12 +475,12 @@ func TestAvroSchemaNaming(t *testing.T) {
 		assertRegisteredSubjects(t, reg, []string{
 			`drivers-key`,
 			`drivers-value`,
-			`db#.schema#.drivers-key`,
-			`db#.schema#.drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
 			`superdrivers-key`,
 			`superdrivers-value`,
-			`superdb#.schema#.drivers-key`,
-			`superdb#.schema#.drivers-value`,
+			`supermovr.public.drivers-key`,
+			`supermovr.public.drivers-value`,
 		})
 	}
 

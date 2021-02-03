@@ -244,7 +244,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts); err != nil {
+		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
@@ -537,9 +537,6 @@ func validateChangefeedTable(
 
 	if tableDesc.GetState() == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
-	}
-	if tableDesc.GetName() != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
 	}
 
 	// TODO(mrtracy): re-enable this when allow-backfill option is added.
