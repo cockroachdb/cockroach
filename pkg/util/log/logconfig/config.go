@@ -30,6 +30,10 @@ const DefaultFileFormat = `crdb-v2`
 // when not specified in a configuration.
 const DefaultStderrFormat = `crdb-v2-tty`
 
+// DefaultFluentFormat is the entry format for fluent sinks
+// when not specified in a configuration.
+const DefaultFluentFormat = `json-fluent-compact`
+
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
 func DefaultConfig() (c Config) {
@@ -44,6 +48,11 @@ file-defaults:
     max-group-size: 100mib
     exit-on-error: true
     buffered-writes: true
+fluent-defaults:
+    filter: INFO
+    format: ` + DefaultFluentFormat + `
+    redactable: true
+    exit-on-error: false
 sinks:
   stderr:
     filter: NONE
@@ -86,6 +95,11 @@ type Config struct {
 	// inherited when a specific file sink config does not provide a
 	// configuration value.
 	FileDefaults FileDefaults `yaml:"file-defaults,omitempty"`
+
+	// FluentDefaults represents the default configuration for fluent sinks,
+	// inherited when a specific fluent sink config does not provide a
+	// configuration value.
+	FluentDefaults FluentDefaults `yaml:"fluent-defaults,omitempty"`
 
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
@@ -147,12 +161,15 @@ type CommonSinkConfig struct {
 type SinkConfig struct {
 	// FileGroups represents the list of configured file sinks.
 	FileGroups map[string]*FileSinkConfig `yaml:"file-groups,omitempty"`
+	// FluentServer represents the list of configured fluent sinks.
+	FluentServers map[string]*FluentSinkConfig `yaml:"fluent-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrSinkConfig `yaml:",omitempty"`
 
-	// sortedFileGroupNames is used internally to
+	// sortedFileGroupNames and sortedServerNames are used internally to
 	// make the Export() function deterministic.
 	sortedFileGroupNames []string
+	sortedServerNames    []string
 }
 
 // StderrSinkConfig represents the configuration for the stderr sink.
@@ -207,6 +224,94 @@ type StderrSinkConfig struct {
 	// here to ensure that "general" options appear after the
 	// sink-specific options in YAML config dumps.
 	CommonSinkConfig `yaml:",inline"`
+}
+
+// FluentDefaults represent configuration defaults for fluent sinks.
+type FluentDefaults struct {
+	CommonSinkConfig `yaml:",inline"`
+}
+
+// FluentSinkConfig represents the configuration for one fluentd sink.
+//
+// User-facing documentation follows.
+// TITLE: output to Fluentd-compatible log collectors
+//
+// This sink type causes logging data to be sent over the network, to
+// a log collector that can ingest log data in a
+// [Fluentd](https://www.fluentd.org)-compatible protocol.
+//
+// Note that TLS is not supported yet: the connection to the log
+// collector is neither authenticated nor encrypted. Given that
+// logging events may contain sensitive information, care should be
+// taken to keep the log collector and the CockroachDB node close
+// together on a private network, or connect them using a secure
+// VPN. TLS support may be added at a later date.
+//
+// At the time of this writing, a Fluent sink buffers at most one log
+// entry and retries sending the event at most one time if a network
+// error is encountered. This is just sufficient to tolerate a restart
+// of the Fluentd collector after a configuration change under light
+// logging activity. If the server is unavailable for too long, or if
+// more than one error is encountered, an error is reported to the
+// process' standard error output with a copy of the logging event and
+// the logging event is dropped.
+//
+// The configuration key under the `sinks` key in the YAML
+// configuration is `fluent-servers`. Example configuration:
+//
+//     sinks:
+//        fluent-servers:        # fluent configurations start here
+//           health:             # defines one sink called "health"
+//              channels: HEALTH
+//              address: 127.0.0.1:5170
+//
+// A cascading defaults mechanism is available for configurations:
+// every new server sink configured automatically inherits the
+// configurations set in the `fluent-defaults` section.
+//
+// For example:
+//
+//      fluent-defaults:
+//          redactable: false # default: disable redaction markers
+//      sinks:
+//        fluent-servers:
+//          health:
+//             channels: HEALTH
+//             # This sink has redactable set to false,
+//             # as the setting is inherited from fluent-defaults
+//             # unless overridden here.
+//
+// The default output format for Fluent sinks is
+// `json-fluent-compact`. The `fluent` variants of the JSON formats
+// include a `tag` field as required by the Fluentd protocol, which
+// the non-`fluent` JSON format variants do not include.
+//
+// Users are invited to peruse the `check-log-config` tool to
+// verify the effect of defaults inheritance.
+//
+type FluentSinkConfig struct {
+	// Channels is the list of logging channels that use this sink.
+	Channels ChannelList `yaml:",omitempty,flow"`
+
+	// Net is the protocol for the fluent server. Can be "tcp", "udp",
+	// "tcp4", etc.
+	Net string `yaml:",omitempty"`
+
+	// Address is the network address of the fluent server. The
+	// host/address and port parts are separated with a colon. IPv6
+	// numeric addresses should be included within square brackets,
+	// e.g.: [::1]:1234.
+	Address string `yaml:""`
+
+	// CommonSinkConfig is the configuration common to all sinks. Note
+	// that although the idiom in Go is to place embedded fields at the
+	// beginning of a struct, we purposefully deviate from the idiom
+	// here to ensure that "general" options appear after the
+	// sink-specific options in YAML config dumps.
+	CommonSinkConfig `yaml:",inline"`
+
+	// serverName is populated/used during validation.
+	serverName string
 }
 
 // FileDefaults represent configuration defaults for file sinks.

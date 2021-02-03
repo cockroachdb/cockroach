@@ -13,6 +13,7 @@ run
 start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -33,6 +34,7 @@ run
 start-single-node
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -57,12 +59,14 @@ run
 sql
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 run
 init
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 
@@ -74,6 +78,7 @@ run
 bank
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -83,6 +88,7 @@ run
 demo
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrCfg(NONE,false)>}}
 
 
@@ -97,6 +103,7 @@ start
 --store=type=mem,size=3g
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -108,6 +115,7 @@ start
 --store=path=/pathB
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -130,6 +138,7 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -153,6 +162,7 @@ start
 --log=file-defaults: {dir: /pathA/logs}
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -181,6 +191,7 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -202,6 +213,7 @@ start
 --log=sinks: {stderr: {filter: ERROR}}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -224,6 +236,7 @@ start
 --log=capture-stray-errors: {enable: false}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -267,6 +280,7 @@ start
 --log-dir=
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -276,6 +290,7 @@ start
 --log-dir=/mypath
 ----
 config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -299,6 +314,7 @@ start
 --log-dir=/pathA
 ----
 config: {<stdFileDefaults(/pathA)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -322,6 +338,7 @@ init
 --log-dir=/mypath
 ----
 config: {<fileDefaultsNoMaxSize(/mypath)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: {channels: all,
 dir: /mypath,
 buffered-writes: true,
@@ -337,6 +354,7 @@ start
 --logtostderr=INFO
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -358,6 +376,7 @@ start
 --logtostderr
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -379,6 +398,7 @@ init
 --logtostderr=INFO
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 # Default when no severity is specified is WARNING.
@@ -387,6 +407,7 @@ init
 --logtostderr
 ----
 config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 
