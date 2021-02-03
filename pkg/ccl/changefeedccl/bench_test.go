@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -232,11 +232,22 @@ func createBenchmarkChangefeed(
 		NeedsInitialScan: needsInitialScan,
 	}
 
-	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	rowsFn := kvsToRows(ctx, cfg.Codec, cfg.Settings, cfg.DB, cfg.LeaseManager, cfg.HydratedTables, details, buf.Get)
 	sf := span.MakeFrontier(spans...)
-	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
-		encoder, sink, rowsFn, TestingKnobs{}, metrics)
+	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
+		sink, encoder, details, TestingKnobs{})
+	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
+		event, err := buf.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if event.Type() == kvfeed.KVEvent {
+			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
+				return nil, err
+			}
+		}
+		return event.Resolved(), nil
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = kvfeed.Run(ctx, kvfeedCfg) }()
@@ -250,19 +261,17 @@ func createBenchmarkChangefeed(
 			sf := span.MakeFrontier(spans...)
 			for {
 				// This is basically the ChangeAggregator processor.
-				resolvedSpans, err := tickFn(ctx)
+				rs, err := tickFn(ctx)
 				if err != nil {
 					return err
 				}
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				for _, rs := range resolvedSpans {
-					if sf.Forward(rs.Span, rs.Timestamp) {
-						frontier := sf.Frontier()
-						if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
-							return err
-						}
+				if sf.Forward(rs.Span, rs.Timestamp) {
+					frontier := sf.Frontier()
+					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
+						return err
 					}
 				}
 			}
