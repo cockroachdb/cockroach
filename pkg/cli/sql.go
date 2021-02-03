@@ -44,6 +44,9 @@ import (
 )
 
 const (
+	// Refer to README.md to understand the general design guidelines for
+	// help texts.
+
 	welcomeMessage = `#
 # Welcome to the CockroachDB SQL shell.
 # All statements must be terminated by a semicolon.
