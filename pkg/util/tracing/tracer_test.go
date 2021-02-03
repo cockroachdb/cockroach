@@ -14,6 +14,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -387,4 +388,29 @@ func TestTracer_VisitSpans(t *testing.T) {
 	require.Len(t, getSortedActiveSpanOps(t, tr2), 0)
 	require.Len(t, tr1.activeSpans.m, 0)
 	require.Len(t, tr2.activeSpans.m, 0)
+}
+
+// TestActiveSpanVisitorErrors confirms that the visitor of the Tracer's
+// activeSpans registry gracefully exits upon receiving a sentinel error from
+// `iterutil.StopIteration()`.
+func TestActiveSpanVisitorErrors(t *testing.T) {
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithForceRealSpan())
+	defer root.Finish()
+
+	child := tr.StartSpan("root.child", WithParentAndAutoCollection(root))
+	defer child.Finish()
+
+	remoteChild := tr.StartSpan("root.remotechild", WithParentAndManualCollection(child.Meta()))
+	defer remoteChild.Finish()
+
+	var numVisited int
+
+	visitor := func(*Span) error {
+		numVisited++
+		return iterutil.StopIteration()
+	}
+
+	require.NoError(t, tr.VisitSpans(visitor))
+	require.Equal(t, 1, numVisited)
 }

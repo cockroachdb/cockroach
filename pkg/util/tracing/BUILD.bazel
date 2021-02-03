@@ -23,6 +23,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/caller",
         "//pkg/util/envutil",
+        "//pkg/util/iterutil",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -58,6 +59,7 @@ go_test(
     embed = [":tracing"],
     deps = [
         "//pkg/settings",
+        "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_gogo_protobuf//types",

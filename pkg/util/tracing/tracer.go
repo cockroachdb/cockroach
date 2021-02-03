@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -607,7 +608,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 	}, nil
 }
 
-// VisitSpans invokes the visitor with all active Spans.
+// VisitSpans invokes the visitor with all active Spans. The function will
+// gracefully exit if the visitor returns iterutil.StopIteration().
 func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	t.activeSpans.Lock()
 	sl := make([]*Span, 0, len(t.activeSpans.m))
@@ -618,6 +620,9 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 
 	for _, sp := range sl {
 		if err := visitor(sp); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
 			return err
 		}
 	}
