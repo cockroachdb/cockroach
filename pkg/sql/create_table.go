@@ -1356,7 +1356,11 @@ func newTableDescIfAs(
 		for _, colRes := range resultColumns {
 			var d *tree.ColumnTableDef
 			var ok bool
-			var tableDef tree.TableDef = &tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
+			var tableDef tree.TableDef = &tree.ColumnTableDef{
+				Name:   tree.Name(colRes.Name),
+				Type:   colRes.Typ,
+				Hidden: colRes.Hidden,
+			}
 			if d, ok = tableDef.(*tree.ColumnTableDef); !ok {
 				return nil, errors.Errorf("failed to cast type to ColumnTableDef\n")
 			}

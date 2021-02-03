@@ -383,6 +383,7 @@ type ColumnTableDef struct {
 	Name     Name
 	Type     ResolvableTypeReference
 	IsSerial bool
+	Hidden   bool
 	Nullable struct {
 		Nullability    Nullability
 		ConstraintName Name
@@ -495,6 +496,8 @@ func NewColumnTableDef(
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
+		case HiddenConstraint:
+			d.Hidden = true
 		case NotNullConstraint:
 			if d.Nullable.Nullability == Null {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -595,6 +598,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		ctx.WriteString(" CONSTRAINT ")
 		ctx.FormatNode(&node.Nullable.ConstraintName)
+	}
+	if node.Hidden {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 	switch node.Nullable.Nullability {
 	case Null:
@@ -714,6 +720,7 @@ func (ColumnCollation) columnQualification()             {}
 func (*ColumnDefault) columnQualification()              {}
 func (NotNullConstraint) columnQualification()           {}
 func (NullConstraint) columnQualification()              {}
+func (HiddenConstraint) columnQualification()            {}
 func (PrimaryKeyConstraint) columnQualification()        {}
 func (ShardedPrimaryKeyConstraint) columnQualification() {}
 func (UniqueConstraint) columnQualification()            {}
@@ -735,6 +742,9 @@ type NotNullConstraint struct{}
 
 // NullConstraint represents NULL on a column.
 type NullConstraint struct{}
+
+// HiddenConstraint represents HIDDEN on a column.
+type HiddenConstraint struct{}
 
 // PrimaryKeyConstraint represents PRIMARY KEY on a column.
 type PrimaryKeyConstraint struct{}
