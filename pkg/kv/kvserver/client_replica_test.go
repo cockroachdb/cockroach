@@ -3498,6 +3498,7 @@ func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
 //  (3) When a store starts up, it assigns the right tenant ID.
 func TestTenantID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
