@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,7 +35,7 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
-	defer setTestJobsAdoptInterval()()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -120,7 +121,7 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
-	defer setTestJobsAdoptInterval()()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	ctx := context.Background()
 	// Protects errorReturned.
@@ -164,7 +165,7 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	// Decrease the adopt loop interval so that retries happen quickly.
-	defer setTestJobsAdoptInterval()()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
