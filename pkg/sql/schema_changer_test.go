@@ -1629,7 +1629,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	// attempt 2: writing the third chunk returns a permanent failure
 	// purge the schema change.
 	expectedAttempts := 3
-	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -1637,8 +1636,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -1665,6 +1662,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
 
 	// Bulk insert.
 	const maxValue = 4*chunkSize + 1
@@ -1689,23 +1694,30 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// A schema change that fails after the first mutation has completed. The
 	// column is backfilled and the index backfill fails requiring the column
 	// backfill to be rolled back.
+	//
+	// The schema changer may detect a unique constraint violation in 2 ways.
+	//  1. If a duplicate key is processed in the same BulkAdder batch, a
+	//     duplicate key error is returned.
+	//
+	//  2. If the number of index entries we added does not equal the table
+	//     row count, we detect we've violated the constraint.
 	if _, err := sqlDB.Exec(
 		`ALTER TABLE t.test ADD column e INT DEFAULT 0 UNIQUE CREATE FAMILY F4, ADD CHECK (e >= 0)`,
 	); !testutils.IsError(err, ` violates unique constraint`) {
 		t.Fatalf("err = %s", err)
 	}
 
-	// No garbage left behind.
-	if err := checkTableKeyCount(context.Background(), kvDB, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	// No garbage left behind, after the rollback has been GC'ed.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(context.Background(), kvDB, 1, maxValue)
+	})
 
-	// Check that constraints are cleaned up.
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	// Check that constraints are cleaned up on the latest version of the
+	// descriptor.
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
-	close(blockGC)
 }
 
 // TestSchemaChangeReverseMutations tests that schema changes get reversed
@@ -4469,9 +4481,9 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 	}
 
 	if err := tx.Commit(); !testutils.IsError(
-		err, `duplicate key value`,
+		err, `unique constraint "v_unique"`,
 	) {
-		t.Fatal(err)
+		t.Fatalf(`expected 'unique constraint "v_unique"', got %+v`, err)
 	}
 }
 
