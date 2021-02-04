@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -274,6 +275,7 @@ func prepareRightReplicaForSplit(
 	// the txnWaitQueue.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
+	ctx = logtags.AddTag(ctx, "r", rightRepl.RangeID)
 	rightRepl.leasePostApplyLocked(ctx, rightLease, false /* permitJump */)
 	return rightRepl
 }
