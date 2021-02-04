@@ -105,7 +105,12 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	engine := &stickyInMemEngine{
 		id:     spec.StickyInMemoryEngineID,
 		closed: false,
-		Engine: storage.NewInMem(ctx, spec.Attributes, spec.Size.InBytes),
+		// This engine will stay alive after the node dies, so we don't want the
+		// caller to pass in a *cluster.Settings from the current node. Just
+		// create a random one since that is what we like to do in tests (for
+		// better test coverage).
+		Engine: storage.NewInMem(
+			ctx, spec.Attributes, spec.Size.InBytes, storage.MakeRandomSettingsForSeparatedIntents()),
 	}
 	registry.entries[spec.StickyInMemoryEngineID] = engine
 	return engine, nil

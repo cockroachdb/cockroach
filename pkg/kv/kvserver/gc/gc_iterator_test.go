@@ -122,7 +122,7 @@ func TestGCIterator(t *testing.T) {
 	}
 	makeTest := func(tc testCase) func(t *testing.T) {
 		return func(t *testing.T) {
-			eng := storage.NewDefaultInMem()
+			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			ds := makeLiteralDataDistribution(tc.data...)
 			ds.setupTest(t, eng, desc)

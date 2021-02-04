@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -27,11 +28,11 @@ import (
 func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	eng := createTestPebbleEngine().(*Pebble)
-	defer eng.Close()
 	// Force separated intents for writing.
-	eng.wrappedIntentWriter, eng.useWrappedIntentWriter =
-		intentDemuxWriter{w: eng, enabledSeparatedIntents: true}, true
+	settings := makeSettingsForSeparatedIntents(
+		false /* oldClusterVersion */, true /* enabled */)
+	eng := createTestPebbleEngineWithSettings(settings)
+	defer eng.Close()
 
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
 	// Many versions of each key.
@@ -62,15 +63,15 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, k := range keys {
-		_, err = eng.PutIntent(k, metaBytes, NoExistingIntent, true, uuid)
+		_, err = eng.PutIntent(
+			context.Background(), k, metaBytes, NoExistingIntent, true /* txnDidNotUpdateMeta */, uuid)
 		require.NoError(t, err)
 	}
 
-	reader := eng.NewReadOnly().(*pebbleReadOnly)
+	reader := eng.NewReadOnly()
 	defer reader.Close()
-	iter := intentInterleavingReader{wrappableReader: reader}.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind,
-		IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	iter := reader.NewMVCCIterator(
+		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
 	defer iter.Close()
 
 	// Look for older versions that come after the scanner has exhausted its

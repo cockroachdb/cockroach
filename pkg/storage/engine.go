@@ -558,14 +558,19 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(
-		key roachpb.Key, value []byte, state PrecedingIntentState, txnDidNotUpdateMeta bool,
-		txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
+		ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState,
+		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutEngineKey(key EngineKey, value []byte) error
+	// SafeToWriteSeparatedIntents is only for internal use in the storage
+	// package. Returns an error if the callee does not know whether it is safe.
+	// This method is temporary, to handle the transition from clusters where
+	// not all nodes understand separated intents.
+	SafeToWriteSeparatedIntents(ctx context.Context) (bool, error)
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
@@ -698,6 +703,11 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
+
+	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
+	// that know that this enabled setting is not changing and need the value to
+	// adjust their expectations.
+	IsSeparatedIntentsEnabledForTesting() bool
 }
 
 // Batch is the interface for batch specific operations.

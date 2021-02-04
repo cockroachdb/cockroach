@@ -93,6 +93,20 @@ func assertStrategy(
 	}
 }
 
+// Separated locks and snapshots send/receive:
+// When running in a mixed version cluster with 21.1 and 20.2, snapshots sent
+// by 21.1 nodes will attempt to read the lock table key space and send any
+// keys in it. But there will be none, so 20.2 nodes receiving such snapshots
+// are fine. A 21.1 node receiving a snapshot will construct SSTs for the lock
+// table key range which will only contain ClearRange for those ranges.
+//
+// When the cluster transitions to clusterversion.SeparatedLocks, the nodes
+// that see that transition can immediately start writing separated
+// intents/locks. Since the 21.1 nodes that have not seen that transition are
+// always ready to handle separated intents, including receiving them in
+// snapshots, the cluster will behave correctly despite nodes seeing this
+// state transition at different times.
+
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
@@ -915,7 +929,8 @@ func SendEmptySnapshot(
 	to roachpb.ReplicaDescriptor,
 ) error {
 	// Create an engine to use as a buffer for the empty snapshot.
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewInMem(
+		context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 	defer eng.Close()
 
 	var ms enginepb.MVCCStats

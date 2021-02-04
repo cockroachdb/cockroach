@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -142,6 +143,7 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
@@ -162,6 +164,11 @@ func (fw *SSTWriter) PutEngineKey(key EngineKey, value []byte) error {
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
 	return fw.fw.Set(fw.scratch, value)
+}
+
+// SafeToWriteSeparatedIntents implements the Writer interface.
+func (fw *SSTWriter) SafeToWriteSeparatedIntents(context.Context) (bool, error) {
+	return false, errors.Errorf("SSTWriter does not support SafeToWriteSeparatedIntents")
 }
 
 // put puts a kv entry into the sstable being built. An error is returned if it

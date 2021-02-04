@@ -75,7 +75,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	engine := storage.NewDefaultInMem()
+	engine := storage.NewDefaultInMemForTesting()
 	defer engine.Close()
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {
@@ -153,7 +153,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
-		db := storage.NewDefaultInMem()
+		db := storage.NewDefaultInMemForTesting()
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()

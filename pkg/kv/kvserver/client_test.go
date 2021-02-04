@@ -122,7 +122,7 @@ func createTestStoreWithOpts(
 	}
 	eng := opts.eng
 	if eng == nil {
-		eng = storage.NewDefaultInMem()
+		eng = storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(eng)
 	}
 
@@ -832,7 +832,7 @@ func (m *multiTestContext) addStore(idx int) {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-		eng = storage.NewDefaultInMem()
+		eng = storage.NewDefaultInMemForTesting()
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true

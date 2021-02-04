@@ -228,7 +228,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
-		tc.engine = storage.NewInMem(context.Background(), roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.engine = storage.NewInMemForTesting(context.Background(), roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
@@ -6194,6 +6194,12 @@ func verifyRangeStats(
 	return nil
 }
 
+func accountForTxnDidNotUpdateMeta(t *testing.T, eng storage.Engine) bool {
+	accountFor, err := eng.SafeToWriteSeparatedIntents(context.Background())
+	require.NoError(t, err)
+	return accountFor
+}
+
 // TestRangeStatsComputation verifies that commands executed against a
 // range update the range stat counters. The stat values are
 // empirically derived; we're really just testing that they increment
@@ -6268,11 +6274,11 @@ func TestRangeStatsComputation(t *testing.T) {
 		ValCount:    2,
 		IntentCount: 1,
 	})
-	if !storage.DisallowSeparatedIntents {
+	if accountForTxnDidNotUpdateMeta(t, tc.engine) {
 		// Account for TxnDidNotUpdateMeta
 		expMS.LiveBytes += 2
 		expMS.ValBytes += 2
-		if storage.EnabledSeparatedIntents {
+		if tc.engine.IsSeparatedIntentsEnabledForTesting() {
 			expMS.SeparatedIntentCount++
 		}
 	}
@@ -8373,7 +8379,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 				t.Fatalf("expected %d declared keys, found %d", expSpans, numSpans)
 			}
 
-			eng := storage.NewDefaultInMem()
+			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 
 			batch := eng.NewBatch()
