@@ -63,8 +63,8 @@ func TestTraceAnalyzer(t *testing.T) {
 							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
 						}
 						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-							flowMetadata := execstats.NewFlowMetadata(flows)
-							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
+							flowsMetadata := execstats.NewFlowsMetadata(flows)
+							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
 							return nil
 						}
@@ -193,7 +193,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 		cumulativeKVTime         = node1KVTime + node2KVTime
 		cumulativeContentionTime = node1ContentionTime + node2ContentionTime
 	)
-	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
+	a := &execstats.TraceAnalyzer{FlowsMetadata: &execstats.FlowsMetadata{}}
 	a.AddComponentStats(
 		1, /* nodeID */
 		&execinfrapb.ComponentStats{
@@ -277,4 +277,48 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 			reflectedAccumulatedStats.Type().Field(i).Name,
 		)
 	}
+}
+
+// TestGetQueryLevelStatsAccumulates does a sanity check that GetQueryLevelStats
+// accumulates the stats for all flows passed into it. It does so by creating
+// two FlowsMetadata objects and, thus, simulating a subquery and a main query.
+func TestGetQueryLevelStatsAccumulates(t *testing.T) {
+	const f1KVTime = 1 * time.Second
+	const f2KVTime = 3 * time.Second
+
+	// Artificially inject component stats directly into the FlowsMetadata (in
+	// the non-testing setting the stats come from the trace).
+	var f1, f2 execstats.FlowsMetadata
+	f1.AddComponentStats(
+		1, /* nodeID */
+		&execinfrapb.ComponentStats{
+			Component: execinfrapb.ProcessorComponentID(
+				execinfrapb.FlowID{UUID: uuid.MakeV4()},
+				1, /* processorID */
+			),
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(f1KVTime),
+			},
+		},
+	)
+	f2.AddComponentStats(
+		2, /* nodeID */
+		&execinfrapb.ComponentStats{
+			Component: execinfrapb.ProcessorComponentID(
+				execinfrapb.FlowID{UUID: uuid.MakeV4()},
+				2, /* processorID */
+			),
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(f2KVTime),
+			},
+		},
+	)
+
+	queryLevelStats, err := execstats.GetQueryLevelStats(
+		nil,   /* trace */
+		false, /* deterministicExplainAnalyze */
+		[]*execstats.FlowsMetadata{&f1, &f2},
+	)
+	require.NoError(t, err)
+	require.Equal(t, f1KVTime+f2KVTime, queryLevelStats.KVTime)
 }

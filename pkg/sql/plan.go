@@ -267,8 +267,9 @@ var _ planNodeSpooled = &spoolNode{}
 type flowInfo struct {
 	typ     planComponentType
 	diagram execinfrapb.FlowDiagram
-	// FlowMetadata stores metadata from flows that will be used by TraceAnalyzer.
-	flowMetadata *execstats.FlowMetadata
+	// flowsMetadata stores metadata from flows that will be used by
+	// execstats.TraceAnalyzer.
+	flowsMetadata *execstats.FlowsMetadata
 }
 
 // planTop is the struct that collects the properties
