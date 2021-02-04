@@ -256,16 +256,26 @@ The initialization token can be any string of bytes though for security it is re
 
 ## Joining a Cluster
 
-Nodes must prove membership to join a cluster. This is affected with a join token that provides the material for a Diffie-Hellman-like mutual assertion of trust using HMACs. The tokens are ephemeral and single-use to reduce risk associated with spillage.
+Nodes must prove membership to join a cluster. They also must ensure they are communicating with a trusted endpoint. This is affected with a join token that provides the material for validation of the CA cert and proof of valid join token via HMACs. The tokens are ephemeral and single-use to reduce risk associated with spillage.
 
 **Establishing client/server trust and a new provisioning service**
 
-**N.B.:** _This process requires the addition of an unauthenticated provisioning endpoint that behaves similiarly to the cluster initialization service._
+**N.B.:** _This process requires the addition of two unauthenticated provisioning endpoints that behave similiarly to the cluster initialization service._
 
-The provisioning service does not require mTLS. It has one endpoint that responds to HTTPS post requests. These requests must contain a `proof-of-membership`.
+A reference implementation is available here: https://github.com/aaron-crl/secure-join-handshake
+
+The provisioning service does not require mTLS. It has:
+* An endpoint that responds to HTTPS GET requests with the PEM encoded CA public key.
+* An endpoint that respondes to HTTPS POSTs and provides a valid cluster CA bundle. These requests must contain a `proof-of-membership`.
 
 **New Term:** `proof-of-membership`
-Proof of membership is a struct containing `tokenId`, and a MAC of a peer's `interNodeHostCertificate` public key concatinated with the `tokenId` keyed with the `sharedSecret` ( HMAC[tokenId+serverPublicKey, sharedSecret] ).
+Proof of membership is a struct containing `tokenId`, and a MAC of the `tokenId` keyed with the `sharedSecret`.
+```
+type addJoinProof struct {
+	TokenID []byte // tokenID of join-token
+	MAC     []byte // HMAC(tokenID, sharedSecret)
+}
+```
 
 **Generating a join-token**
 Any existing node may be used to generate a `join-token` if the user has appropriate permissions (let us assume these will be the same as current requirement for adding nodes).
@@ -274,30 +284,36 @@ On existing node:
 - This node generates an entry in the `join-tokens` capturing
 ```golang
 type joinToken struct {
-  tokenId UUID
-  sharedSecret string // random string of 32 alphanumeric characters
-  expiration DateTime
+	tokenID      uuid.UUID // Generated at time of token creation
+	sharedSecret []byte    // 32 byte crypto-rand string
+	expiration   time.Time // configurable time
 }
 ```
-- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret base62 and a one byte checksum encoded as the `join-token` to the invoker and a single concatinated string.
-```
-id := base62(tokenId)
-authFingerPrint := base62(HMAC(interNodeCA.PublicKey, sharedSecret))
-secret := base62(sharedSecret)
-cSum := oneByteChecksum(id+authFingerPrint+secret)
-join-token := id + authFingerPrint + secret + cSum 
+- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret and a one byte checksum in a copy/paste friendly encoding (possibly base62) as the `join-token` to the invoker as a single string.
+```golang
+// Example using hex encoding and a truncated checksum
+func (jt joinToken) Marshal(caPublicKey []byte) string {
+	id, _ := jt.tokenID.MarshalBinary()
+	authFingerprint := computeHmac256(caPublicKey, jt.sharedSecret)
+	token := append(id, authFingerprint...)
+	token = append(token, jt.sharedSecret...)
+	cSum := crc32.ChecksumIEEE(token)
+	token = append(token, byte(cSum)) // + 1 Truncated checksum
+	return hex.EncodeToString(token)
+}
 ```
 
 **Upon new node launch:**
 - The new node will be provided a `join-token` or the location of a file containing it with its start flags.
-- The node will TLS Dial a peer and collect the certificate chain
-- The node will recompute the authentication fingerprint from above chain using the `interNodeCA.PublicKey` and `sharedSecret` from its `join-token` to confirm it matches the one in it's join token
+- The node will request the `interNodeCa` public key from a peer
+- The node will recompute the authentication fingerprint from above key and `sharedSecret` from its `join-token` to confirm it has connected to a trusted endpoint.
 - If validation succeeds
-    1. The new node will compute its `proof-of-membership` using the `interNodeHostCertificate` from its peer
-    2. The new node will create a secure TLS connection to the same peer's provisioning service and request an `initialization-bundle` by sending its `token-uuid`, and `proof-of-membership`.
+    0. The new node will add this CA to its CA pool
+    1. The new node will compute its `proof-of-membership` as detailed above
+    2. The new node will create a secure TLS connection to a peer's provisioning service and request an `initialization-bundle` by sending its `token-uuid`, and `proof-of-membership`.
         - The server will:
             - Look up the token associated with this `token-uuid`
-            - Confirm the `proof-of-membership` using its own cert public key and the `shared-secret` stored in the `join-tokens` table with the specified `token-uuid`
+            - Confirm the `proof-of-membership` using its own ca cert public key and the `sharedSecret` stored in the `join-tokens` table with the specified `token-uuid`
             - Upon success the server will collect and return an `initialization-bundle` to the new node.
             - The server will mark the `join-token` as consumed in the `join-tokens` table to avoid reuse.
     3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
