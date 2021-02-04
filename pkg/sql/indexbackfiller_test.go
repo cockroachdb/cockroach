@@ -358,10 +358,10 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		mm := mon.MakeStandaloneBudget(1 << 30)
 		idx, err := table.FindIndexWithID(indexID)
-		colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumnsNew())
+		colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		var valsNeeded util.FastIntSet
 		if idx.Primary() {
-			for _, column := range table.PublicColumnsNew() {
+			for _, column := range table.PublicColumns() {
 				if !column.IsVirtual() {
 					valsNeeded.Add(colIdxMap.GetDefault(column.GetID()))
 				}

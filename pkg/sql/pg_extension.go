@@ -55,7 +55,7 @@ func postgisColumnsTablePopulator(
 				if p.CheckAnyPrivilege(ctx, table) != nil {
 					return nil
 				}
-				for _, col := range table.PublicColumnsNew() {
+				for _, col := range table.PublicColumns() {
 					if col.GetType().Family() != matchingFamily {
 						continue
 					}

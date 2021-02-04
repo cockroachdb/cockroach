@@ -300,7 +300,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(params.ctx,
 			params.p, v.db, v.index,
 			v.run.indexKeyDatums,
-			catalog.ColumnIDToOrdinalMap(v.table.PublicColumnsNew()),
+			catalog.ColumnIDToOrdinalMap(v.table.PublicColumns()),
 			&idxConstraint,
 			v.vtableCols,
 		)

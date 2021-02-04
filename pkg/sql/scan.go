@@ -255,7 +255,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 func findReadableColumnByID(
 	desc catalog.TableDescriptor, id descpb.ColumnID,
 ) (catalog.Column, error) {
-	for _, c := range desc.ReadableColumnsNew() {
+	for _, c := range desc.ReadableColumns() {
 		if c.GetID() == id {
 			return c, nil
 		}
@@ -271,7 +271,7 @@ func initColsForScan(
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.AllColumnsNew()))
+	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
 	for _, wc := range colCfg.wantedColumns {
 		var c *descpb.ColumnDescriptor
 		var err error
@@ -308,7 +308,7 @@ func initColsForScan(
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for _, c := range desc.PublicColumnsNew() {
+		for _, c := range desc.PublicColumns() {
 			found := false
 			for _, wc := range colCfg.wantedColumns {
 				if descpb.ColumnID(wc) == c.GetID() {

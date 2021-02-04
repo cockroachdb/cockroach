@@ -80,7 +80,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	tn.ExplicitCatalog = true
 	tn.ExplicitSchema = true
 	sel := &tree.SelectClause{
-		Exprs: tabledesc.ColumnsSelectors(o.tableDesc.PublicColumnsNew()),
+		Exprs: tabledesc.ColumnsSelectors(o.tableDesc.PublicColumns()),
 		From: tree.From{
 			Tables: tree.TableExprs{&tn},
 		},
@@ -109,7 +109,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	o.run.rows = rows
 
 	// Collect all the columns.
-	for _, c := range o.tableDesc.PublicColumnsNew() {
+	for _, c := range o.tableDesc.PublicColumns() {
 		o.columns = append(o.columns, c.ColumnDesc())
 	}
 	// Find the row indexes for all of the primary index columns.

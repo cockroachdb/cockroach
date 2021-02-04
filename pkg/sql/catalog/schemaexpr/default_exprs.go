@@ -97,7 +97,7 @@ func ProcessColumnSet(
 
 	// Add all public or columns in DELETE_AND_WRITE_ONLY state
 	// that satisfy the condition.
-	for _, col := range tableDesc.WritableColumnsNew() {
+	for _, col := range tableDesc.WritableColumns() {
 		if inSet(col.ColumnDesc()) {
 			if !colIDSet.Contains(col.GetID()) {
 				colIDSet.Add(col.GetID())

@@ -137,7 +137,7 @@ func (v *ComputedColumnValidator) Validate(
 // computed columns being added reference the given column.
 // TODO(mgartner): Add unit tests for ValidateNoDependents.
 func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescriptor) error {
-	for _, c := range v.desc.NonDropColumnsNew() {
+	for _, c := range v.desc.NonDropColumns() {
 		if !c.IsComputed() {
 			continue
 		}

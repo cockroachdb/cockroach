@@ -83,7 +83,7 @@ func ShowCreateTable(
 	f.FormatNode(tn)
 	f.WriteString(" (")
 	primaryKeyIsOnVisibleColumn := false
-	for i, col := range desc.VisibleColumnsNew() {
+	for i, col := range desc.VisibleColumns() {
 		if i != 0 {
 			f.WriteString(",")
 		}

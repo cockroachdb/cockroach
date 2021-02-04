@@ -91,9 +91,9 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
-	cols := tableDesc.PublicColumnsNew()
+	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = tableDesc.AllColumnsNew()
+		cols = tableDesc.AllColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
 	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)

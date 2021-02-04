@@ -289,53 +289,53 @@ func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {
 	return newColumnCache(desc.TableDesc())
 }
 
-// AllColumnsNew returns a slice of Column interfaces containing the
+// AllColumns returns a slice of Column interfaces containing the
 // table's public columns and column mutations, in the canonical order:
 // - all public columns in the same order as in the underlying
 //   desc.TableDesc().Columns slice;
 // - all column mutations in the same order as in the underlying
 //   desc.TableDesc().Mutations slice.
-func (desc *wrapper) AllColumnsNew() []catalog.Column {
+func (desc *wrapper) AllColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().all
 }
 
-// PublicColumnsNew returns a slice of Column interfaces containing the
+// PublicColumns returns a slice of Column interfaces containing the
 // table's public columns, in the canonical order.
-func (desc *wrapper) PublicColumnsNew() []catalog.Column {
+func (desc *wrapper) PublicColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().public
 }
 
-// WritableColumnsNew returns a slice of Column interfaces containing the
+// WritableColumns returns a slice of Column interfaces containing the
 // table's public columns and DELETE_AND_WRITE_ONLY mutations, in the canonical
 // order.
-func (desc *wrapper) WritableColumnsNew() []catalog.Column {
+func (desc *wrapper) WritableColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().writable
 }
 
-// NonDropColumnsNew returns a slice of Column interfaces containing the
+// NonDropColumns returns a slice of Column interfaces containing the
 // table's public columns and ADD mutations, in the canonical order.
-func (desc *wrapper) NonDropColumnsNew() []catalog.Column {
+func (desc *wrapper) NonDropColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().nonDrop
 }
 
-// VisibleColumnsNew returns a slice of Column interfaces containing the
+// VisibleColumns returns a slice of Column interfaces containing the
 // table's visible columns , in the canonical order.
-func (desc *wrapper) VisibleColumnsNew() []catalog.Column {
+func (desc *wrapper) VisibleColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().visible
 }
 
-// ColumnsWithUserDefinedTypesNew returns a slice of Column interfaces
+// UserDefinedTypeColumns returns a slice of Column interfaces
 // containing the table's columns with user defined types, in the
 // canonical order.
-func (desc *wrapper) ColumnsWithUserDefinedTypesNew() []catalog.Column {
+func (desc *wrapper) UserDefinedTypeColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().withUDTs
 }
 
-// ReadableColumnsNew is a list of columns (including those undergoing a schema
+// ReadableColumns is a list of columns (including those undergoing a schema
 // change) which can be scanned. Columns in the process of a schema change
 // are all set to nullable while column backfilling is still in
 // progress, as mutation columns may have NULL values.
-func (desc *wrapper) ReadableColumnsNew() []catalog.Column {
+func (desc *wrapper) ReadableColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().readable
 }
 
@@ -343,7 +343,7 @@ func (desc *wrapper) ReadableColumnsNew() []catalog.Column {
 // provided target ID, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
-	for _, col := range desc.AllColumnsNew() {
+	for _, col := range desc.AllColumns() {
 		if col.GetID() == id {
 			return col, nil
 		}
@@ -355,7 +355,7 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 // provided target ID, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
-	for _, col := range desc.AllColumnsNew() {
+	for _, col := range desc.AllColumns() {
 		if col.ColName() == name {
 			return col, nil
 		}

@@ -416,11 +416,11 @@ func (t *typeSchemaChanger) canRemoveEnumLabel(
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
 		}
 		var query strings.Builder
-		colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumnsNew())
+		colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumns())
 		columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 		query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
 		firstClause := true
-		for _, col := range desc.PublicColumnsNew() {
+		for _, col := range desc.PublicColumns() {
 			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
 				if !firstClause {
 					query.WriteString(" OR")
@@ -457,7 +457,7 @@ func (t *typeSchemaChanger) canRemoveEnumLabel(
 		if len(rows) > 0 {
 			return pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"could not remove enum value %q as it is being used by %q in row: %s",
-				member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.PublicColumnsNew(), rows))
+				member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.PublicColumns(), rows))
 		}
 	}
 	// We have ascertained that the value is not in use, and can therefore be

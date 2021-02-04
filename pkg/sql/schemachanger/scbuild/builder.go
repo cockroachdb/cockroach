@@ -469,7 +469,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 
 	var storeColIDs []descpb.ColumnID
 	var storeColNames []string
-	for _, col := range table.PublicColumnsNew() {
+	for _, col := range table.PublicColumns() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
 			if id == col.GetID() {
@@ -543,7 +543,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	var addStoreColNames []string
 	var dropStoreColIDs []descpb.ColumnID
 	var dropStoreColNames []string
-	for _, col := range table.PublicColumnsNew() {
+	for _, col := range table.PublicColumns() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
 			if id == col.GetID() {

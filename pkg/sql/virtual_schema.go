@@ -427,7 +427,7 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 		col := &columns[i]
 		datum := datums[i]
 		if datum == tree.DNull {
-			if !e.desc.PublicColumnsNew()[i].IsNullable() {
+			if !e.desc.PublicColumns()[i].IsNullable() {
 				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
 					e.desc.GetName(), col.Name)
 			}
@@ -449,7 +449,7 @@ func (e *virtualDefEntry) getPlanInfo(
 	idxConstraint *constraint.Constraint,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
-	for _, col := range e.desc.PublicColumnsNew() {
+	for _, col := range e.desc.PublicColumns() {
 		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
@@ -510,7 +510,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.
-			columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumnsNew())
+			columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 			indexKeyDatums := make([]tree.Datum, len(index.ColumnIDs))
 
 			generator, cleanup := setupGenerator(ctx, e.makeConstrainedRowsGenerator(

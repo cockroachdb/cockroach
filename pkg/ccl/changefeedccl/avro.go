@@ -414,13 +414,13 @@ func indexToAvroSchema(
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
-	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumnsNew())
+	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumns())
 	for _, colID := range indexDesc.ColumnIDs {
 		colIdx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		col := tableDesc.PublicColumnsNew()[colIdx]
+		col := tableDesc.PublicColumns()[colIdx]
 		field, err := columnDescToAvroSchema(col.ColumnDesc())
 		if err != nil {
 			return nil, err
@@ -465,7 +465,7 @@ func tableToAvroSchema(
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
-	for _, col := range tableDesc.PublicColumnsNew() {
+	for _, col := range tableDesc.PublicColumns() {
 		field, err := columnDescToAvroSchema(col.ColumnDesc())
 		if err != nil {
 			return nil, err

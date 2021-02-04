@@ -92,8 +92,8 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	for _, desc := range []catalog.TableDescriptor{parentDesc, childDesc} {
 		var colIdxMap catalog.TableColMap
 		var valNeededForCol util.FastIntSet
-		colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumnsNew()))
-		for i, col := range desc.PublicColumnsNew() {
+		colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
+		for i, col := range desc.PublicColumns() {
 			colIdxMap.Set(col.GetID(), i)
 			valNeededForCol.Add(i)
 			colDescs[i] = *col.ColumnDesc()

@@ -119,16 +119,16 @@ func (cb *ColumnBackfiller) init(
 
 	// We need all the columns.
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(desc.PublicColumnsNew())-1)
+	valNeededForCol.AddRange(0, len(desc.PublicColumns())-1)
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
 		Index:           desc.GetPrimaryIndex().IndexDesc(),
-		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumnsNew()),
-		Cols:            make([]descpb.ColumnDescriptor, len(desc.PublicColumnsNew())),
+		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
+		Cols:            make([]descpb.ColumnDescriptor, len(desc.PublicColumns())),
 		ValNeededForCol: valNeededForCol,
 	}
-	for i, col := range desc.PublicColumnsNew() {
+	for i, col := range desc.PublicColumns() {
 		tableArgs.Cols[i] = *col.ColumnDesc()
 	}
 
@@ -168,8 +168,8 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumnsNew()))
-	for i, col := range desc.PublicColumnsNew() {
+	colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
+	for i, col := range desc.PublicColumns() {
 		colDescs[i] = *col.ColumnDesc()
 	}
 	computedExprs, _, err := schemaexpr.MakeComputedExprs(
@@ -200,8 +200,8 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
-	cols := make([]descpb.ColumnDescriptor, len(desc.PublicColumnsNew()))
-	for i, col := range desc.PublicColumnsNew() {
+	cols := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
+	for i, col := range desc.PublicColumns() {
 		cols[i] = *col.ColumnDesc()
 	}
 	var defaultExprs, computedExprs []tree.TypedExpr
@@ -268,8 +268,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumnsNew())+len(cb.added)+len(cb.dropped))
-	for _, col := range tableDesc.PublicColumnsNew() {
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumns())+len(cb.added)+len(cb.dropped))
+	for _, col := range tableDesc.PublicColumns() {
 		requestedCols = append(requestedCols, *col.ColumnDesc())
 	}
 	requestedCols = append(requestedCols, cb.added...)
@@ -316,10 +316,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	b := txn.NewBatch()
 	rowLength := 0
 	iv := &schemaexpr.RowIndexedVarContainer{
-		Cols:    make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumnsNew())+len(cb.added)),
+		Cols:    make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumns())+len(cb.added)),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
-	for _, col := range tableDesc.PublicColumnsNew() {
+	for _, col := range tableDesc.PublicColumns() {
 		iv.Cols = append(iv.Cols, *col.ColumnDesc())
 	}
 	iv.Cols = append(iv.Cols, cb.added...)
@@ -667,8 +667,8 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
-	ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.AllColumnsNew()))
-	for _, column := range desc.AllColumnsNew() {
+	ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
+	for _, column := range desc.AllColumns() {
 		columnDesc := *column.ColumnDesc()
 		if column.Public() {
 			if column.IsComputed() && column.IsVirtual() {
@@ -713,7 +713,7 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 				isPrimaryIndex := idx.GetEncodingType(desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding
 				if (idxContainsColumn || isPrimaryIndex) &&
 					!ib.cols[i].Virtual &&
-					i < len(desc.PublicColumnsNew()) {
+					i < len(desc.PublicColumns()) {
 					valNeededForCol.Add(i)
 				}
 			}

@@ -36,7 +36,7 @@ func ProcessTargetColumns(
 			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
 			// hidden columns. At present, the only hidden column is the implicit rowid
 			// primary key column.
-			return tableDesc.VisibleColumnsNew(), nil
+			return tableDesc.VisibleColumns(), nil
 		}
 		return nil, nil
 	}

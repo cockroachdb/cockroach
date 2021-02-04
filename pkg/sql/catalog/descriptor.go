@@ -200,13 +200,13 @@ type TableDescriptor interface {
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
 
-	AllColumnsNew() []Column
-	PublicColumnsNew() []Column
-	WritableColumnsNew() []Column
-	NonDropColumnsNew() []Column
-	VisibleColumnsNew() []Column
-	ReadableColumnsNew() []Column
-	ColumnsWithUserDefinedTypesNew() []Column
+	AllColumns() []Column
+	PublicColumns() []Column
+	WritableColumns() []Column
+	NonDropColumns() []Column
+	VisibleColumns() []Column
+	ReadableColumns() []Column
+	UserDefinedTypeColumns() []Column
 
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
 	FindColumnWithName(name tree.Name) (Column, error)
@@ -721,8 +721,8 @@ func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bo
 // as in the other descriptor. Note that this function is only valid on two
 // descriptors representing the same table at the same version.
 func UserDefinedTypeColsHaveSameVersion(desc TableDescriptor, otherDesc TableDescriptor) bool {
-	otherCols := otherDesc.ColumnsWithUserDefinedTypesNew()
-	for i, thisCol := range desc.ColumnsWithUserDefinedTypesNew() {
+	otherCols := otherDesc.UserDefinedTypeColumns()
+	for i, thisCol := range desc.UserDefinedTypeColumns() {
 		this, other := thisCol.GetType(), otherCols[i].GetType()
 		if this.TypeMeta.Version != other.TypeMeta.Version {
 			return false

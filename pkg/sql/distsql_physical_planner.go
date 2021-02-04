@@ -1041,7 +1041,7 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for _, col := range desc.AllColumnsNew() {
+	for _, col := range desc.AllColumns() {
 		if col.Public() || visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 			if col.GetID() == colID {
 				return col.Ordinal()
@@ -1054,16 +1054,16 @@ func tableOrdinal(
 	// different for each system column kind. MVCCTimestampColumnID is the
 	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.AllColumnsNew()) + int(colinfo.MVCCTimestampColumnID-colID)
+		return len(desc.AllColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.PublicColumnsNew()) - 1
+	highest := len(desc.PublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.AllColumnsNew()) - 1
+		highest = len(desc.AllColumns()) - 1
 	}
 	return highest
 }
@@ -1300,10 +1300,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	cols := info.desc.PublicColumnsNew()
+	cols := info.desc.PublicColumns()
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 	if returnMutations {
-		cols = info.desc.AllColumnsNew()
+		cols = info.desc.AllColumns()
 	}
 	typs := catalog.ColumnTypesWithVirtualCol(cols, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
@@ -1320,7 +1320,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planToStreamColMap := make([]int, len(info.cols))
 	var descColumnIDs util.FastIntMap
 	colID := 0
-	for _, col := range info.desc.AllColumnsNew() {
+	for _, col := range info.desc.AllColumns() {
 		if col.Public() || returnMutations {
 			descColumnIDs.Set(colID, int(col.GetID()))
 			colID++
@@ -2261,7 +2261,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 
-		numStreamCols += len(side.scan.desc.PublicColumnsNew())
+		numStreamCols += len(side.scan.desc.PublicColumns())
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
@@ -2318,7 +2318,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			i++
 		}
 
-		colOffset += len(side.scan.desc.PublicColumnsNew())
+		colOffset += len(side.scan.desc.PublicColumns())
 	}
 
 	// Set the ON condition.

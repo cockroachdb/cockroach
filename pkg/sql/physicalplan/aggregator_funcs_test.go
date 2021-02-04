@@ -123,7 +123,7 @@ func checkDistAggregationInfo(
 	fn execinfrapb.AggregatorSpec_Func,
 	info DistAggregationInfo,
 ) {
-	colType := tableDesc.PublicColumnsNew()[colIdx].GetType()
+	colType := tableDesc.PublicColumns()[colIdx].GetType()
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
@@ -463,7 +463,7 @@ func TestDistAggregationTable(t *testing.T) {
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
-		for _, col := range desc.PublicColumnsNew() {
+		for _, col := range desc.PublicColumns() {
 			if col.Ordinal() == 0 {
 				continue
 			}

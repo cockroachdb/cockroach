@@ -142,7 +142,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 }
 
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
-	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumnsNew())
+	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumns())
 	primaryIndex := row.tableDesc.GetPrimaryIndex()
 	jsonEntries := make([]interface{}, primaryIndex.NumColumns())
 	for i := 0; i < primaryIndex.NumColumns(); i++ {
@@ -152,7 +152,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		datum := row.datums[idx]
-		datum, col := row.datums[idx], row.tableDesc.PublicColumnsNew()[idx]
+		datum, col := row.datums[idx], row.tableDesc.PublicColumns()[idx]
 		if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 			return nil, err
 		}
@@ -173,7 +173,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var after map[string]interface{}
 	if !row.deleted {
-		columns := row.tableDesc.PublicColumnsNew()
+		columns := row.tableDesc.PublicColumns()
 		after = make(map[string]interface{}, len(columns))
 		for i, col := range columns {
 			datum := row.datums[i]
@@ -190,7 +190,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var before map[string]interface{}
 	if row.prevDatums != nil && !row.prevDeleted {
-		columns := row.prevTableDesc.PublicColumnsNew()
+		columns := row.prevTableDesc.PublicColumns()
 		before = make(map[string]interface{}, len(columns))
 		for i, col := range columns {
 			datum := row.prevDatums[i]

@@ -154,7 +154,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// TODO(dan): Allow for decoding a subset of the columns.
 	var colIdxMap catalog.TableColMap
 	var valNeededForCol util.FastIntSet
-	for _, col := range tableDesc.PublicColumnsNew() {
+	for _, col := range tableDesc.PublicColumns() {
 		colIdxMap.Set(col.GetID(), col.Ordinal())
 		valNeededForCol.Add(col.Ordinal())
 	}
@@ -166,10 +166,10 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		Index:            tableDesc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: false,
-		Cols:             make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumnsNew())),
+		Cols:             make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
 		ValNeededForCol:  valNeededForCol,
 	}
-	for i, col := range tableDesc.PublicColumnsNew() {
+	for i, col := range tableDesc.PublicColumns() {
 		rfArgs.Cols[i] = *col.ColumnDesc()
 	}
 	if err := rf.Init(
