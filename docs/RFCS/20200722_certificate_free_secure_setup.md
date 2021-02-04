@@ -99,7 +99,7 @@ cockroach start --certs-dir=certs \
 
 # Reference-level explanation
 
-It is assumed that any customer-facing TLS configuration is separate from inter-node config in this approach. This will require additional TLS work within CRDB. The RPC service is also given its own certificate which presupposes that it may be offered on a separate port from SQL. The latter is temporary until the RPC service's features are fully migrated to SQL.
+It is assumed that any customer-facing TLS configuration is separate from inter-node config in this approach. This will require additional TLS work within CRDB. The RPC service is also given its own certificate helping separate authentication surfaces until the RPC service's features are fully migrated to SQL and we can remove it entirely.
 
 **Documentation aids:**
 The following names to refer to node certificate authorities.
@@ -262,6 +262,8 @@ Nodes must prove membership to join a cluster. They also must ensure they are co
 
 **N.B.:** _This process requires the addition of two unauthenticated provisioning endpoints that behave similiarly to the cluster initialization service._
 
+We shoud make this an optional endpoint to avoid exposing additional attack surface on clusters that do not use this feature.
+
 A reference implementation is available here: https://github.com/aaron-crl/secure-join-handshake
 
 The provisioning service does not require mTLS. It has:
@@ -278,7 +280,10 @@ type addJoinProof struct {
 ```
 
 **Generating a joinToken**
-Any existing node may be used to generate a `joinToken` if the user has appropriate permissions (let us assume these will be the same as current requirement for adding nodes).
+Any existing node may be used to generate a `joinToken` if the user has appropriate permissions.
+
+**N.B:** _This will require a new database permission._
+
 On existing node:
 - A user or operator invokes a new token request.
 - This node generates an entry in the `joinTokens` capturing
@@ -315,7 +320,7 @@ func (jt joinToken) Marshal(caPublicKey []byte) string {
             - Look up the token associated with this `token-uuid`
             - Confirm the `proof-of-membership` using its own ca cert public key and the `sharedSecret` stored in the `joinTokens` table with the specified `token-uuid`
             - Upon success the server will collect and return an `initialization-bundle` to the new node.
-            - The server will mark the `joinToken` as consumed in the `joinTokens` table to avoid reuse.
+            - The server will delete the `joinToken` from the `joinTokens` table to avoid reuse.
     3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
 
 **N.B.:** Before checking for `token-uuid` presence in the `joinToken`'s table the system checks expiration for all unexpired `joinToken`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
