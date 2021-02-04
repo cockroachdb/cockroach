@@ -8,7 +8,7 @@
 
 # Summary
 
-This RFC proposes a means of creating a CRDB single or multi-node cluster running in the default secure mode without requiring an operator to create or manage certificates. _It should "just work"._ In addition it proposes a means by which an operator may add nodes to a running cluster via an operator-opaque `join-token` which would prove membership and enable nodes to self-manage the cluster's internal trust mechanisms.
+This RFC proposes a means of creating a CRDB single or multi-node cluster running in the default secure mode without requiring an operator to create or manage certificates. _It should "just work"._ In addition it proposes a means by which an operator may add nodes to a running cluster via an operator-opaque `joinToken` which would prove membership and enable nodes to self-manage the cluster's internal trust mechanisms.
 
 # Motivation
 
@@ -20,7 +20,7 @@ Implementation of the approach in this RFC is expected to decrease usage of the 
 
 This also eases the deployment challenge where some CAs require issued certificates match fully qualified domain names ([https://aws.amazon.com/certificate-manager/faqs/?nc=sn&loc=5#ACM_Public_Certificates]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
 
-This removes the requirement that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. It may also help with orchestration as any node may then be used to create a `join-token` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
+This removes the requirement that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. It may also help with orchestration as any node may then be used to create a `joinToken` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
 
 Existing users deploying with the default secure mode will find that they have fewer steps to get to a running cluster. Users who have relied on `--insecure` to avoid the hassle of managing certificates when testing will now be able to test with the system in a secure state by default with minor adjustment to their workflow.
 
@@ -85,7 +85,7 @@ Any node with access to the `interNodeCa` may be joined to the cluster (at any t
 
 _In a kubernetes environment it is envisioned that this internode CA will be copied from any existing node to the joining node by an operator._
 
-In a configuration where it is impossible or undesirable to directly manage the internode CA, a SQL function is exposed for generating `join-token`s that are single-use, time-limited primitives that enable a node without access to the `interNodeCa` to submit proof of membership.
+In a configuration where it is impossible or undesirable to directly manage the internode CA, a SQL function is exposed for generating `joinToken`s that are single-use, time-limited primitives that enable a node without access to the `interNodeCa` to submit proof of membership.
 
 This would manifest as a new flag passed to the `start` command (https://www.cockroachlabs.com/docs/v20.1/cockroach-start.html) and look something of the form:
 ```
@@ -94,7 +94,7 @@ cockroach start --certs-dir=certs \
     --join=node1,node2,node3 \
     --cache=.25 \
     --max-sql-memory=.25 \
-    --join-token=b122701da0ade08fc31b54ebdac40a6b23
+    --joinToken=b122701da0ade08fc31b54ebdac40a6b23
 ```
 
 # Reference-level explanation
@@ -126,10 +126,10 @@ This is the collection of CAs that a new node node needs to generate its certifi
 * `adminUiServiceCa`: CA governing admin-ui/HTTP service port TLS
 * `root` user certificate _(if present)_
 
-**New term:** `join-token`
+**New term:** `joinToken`
 This is a user opaque token that can be requested by a cluster operator from any online node and supplied to a fresh unprovisioned node to join it to the cluster.
 
-A `join-token` must provide a means to:
+A `joinToken` must provide a means to:
  - Confirm the identity of the server (node to join)
  - Identify the joining node
  - Establish token uniqueness (for auditing and to avoid reuse)
@@ -222,8 +222,8 @@ In the kubernetes case, adding nodes is trivial if the `interNodeCa` is placed i
 **Other orchestration (using interNodeCa )**
 Identical to the kubernetes case except that the orchestration solution must place the `interNodeCa` on the node's filesystem.
 
-**Manual (join-tokens)**
-Any user with the permissions to add or remove nodes would have the ability to generate a `join-token` via a SQL call. The `join-token` would then be passed as an initial argument to the new node enabling it to prove membership and receive the `interNodeCa`, restart, and request provisioning (and populate its own certificates directory). The token would be consumed upon successful join to reduce risks associated with join token spillage.
+**Manual (joinTokens)**
+Any user with the permissions to add or remove nodes would have the ability to generate a `joinToken` via a SQL call. The `joinToken` would then be passed as an initial argument to the new node enabling it to prove membership and receive the `interNodeCa`, restart, and request provisioning (and populate its own certificates directory). The token would be consumed upon successful join to reduce risks associated with join token spillage.
 
 **Adding New Regions**
 To add a new region an operator may copy the `interNodeCa` to the nodes in the new region, allow them to initialize themselves, then join them. Since all nodes share the same `interNodeCa` there should be no additional complexity beyond any other multi-region concerns.
@@ -272,16 +272,16 @@ The provisioning service does not require mTLS. It has:
 Proof of membership is a struct containing `tokenId`, and a MAC of the `tokenId` keyed with the `sharedSecret`.
 ```
 type addJoinProof struct {
-	TokenID []byte // tokenID of join-token
+	TokenID []byte // tokenID of joinToken
 	MAC     []byte // HMAC(tokenID, sharedSecret)
 }
 ```
 
-**Generating a join-token**
-Any existing node may be used to generate a `join-token` if the user has appropriate permissions (let us assume these will be the same as current requirement for adding nodes).
+**Generating a joinToken**
+Any existing node may be used to generate a `joinToken` if the user has appropriate permissions (let us assume these will be the same as current requirement for adding nodes).
 On existing node:
 - A user or operator invokes a new token request.
-- This node generates an entry in the `join-tokens` capturing
+- This node generates an entry in the `joinTokens` capturing
 ```golang
 type joinToken struct {
 	tokenID      uuid.UUID // Generated at time of token creation
@@ -289,7 +289,7 @@ type joinToken struct {
 	expiration   time.Time // configurable time
 }
 ```
-- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret and a one byte checksum in a copy/paste friendly encoding (possibly base62) as the `join-token` to the invoker as a single string.
+- The node then computes an authentication fingerprint of HMAC(interNodeCA.PublicKey, sharedSecret) and returns the that concatinated with the sharedSecret and a one byte checksum in a copy/paste friendly encoding (possibly base62) as the `joinToken` to the invoker as a single string.
 ```golang
 // Example using hex encoding and a truncated checksum
 func (jt joinToken) Marshal(caPublicKey []byte) string {
@@ -304,21 +304,21 @@ func (jt joinToken) Marshal(caPublicKey []byte) string {
 ```
 
 **Upon new node launch:**
-- The new node will be provided a `join-token` or the location of a file containing it with its start flags.
+- The new node will be provided a `joinToken` or the location of a file containing it with its start flags.
 - The node will request the `interNodeCa` public key from a peer
-- The node will recompute the authentication fingerprint from above key and `sharedSecret` from its `join-token` to confirm it has connected to a trusted endpoint.
+- The node will recompute the authentication fingerprint from above key and `sharedSecret` from its `joinToken` to confirm it has connected to a trusted endpoint.
 - If validation succeeds
     0. The new node will add this CA to its CA pool
     1. The new node will compute its `proof-of-membership` as detailed above
     2. The new node will create a secure TLS connection to a peer's provisioning service and request an `initialization-bundle` by sending its `token-uuid`, and `proof-of-membership`.
         - The server will:
             - Look up the token associated with this `token-uuid`
-            - Confirm the `proof-of-membership` using its own ca cert public key and the `sharedSecret` stored in the `join-tokens` table with the specified `token-uuid`
+            - Confirm the `proof-of-membership` using its own ca cert public key and the `sharedSecret` stored in the `joinTokens` table with the specified `token-uuid`
             - Upon success the server will collect and return an `initialization-bundle` to the new node.
-            - The server will mark the `join-token` as consumed in the `join-tokens` table to avoid reuse.
+            - The server will mark the `joinToken` as consumed in the `joinTokens` table to avoid reuse.
     3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
 
-**N.B.:** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
+**N.B.:** Before checking for `token-uuid` presence in the `joinToken`'s table the system checks expiration for all unexpired `joinToken`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
 
 
 
@@ -332,7 +332,7 @@ This approach assumes that a malicious entity may manipulate any traffic between
 
 Several approaches were explored to accomplish this. Discussion summarized below.
 
-**Deterministic certificate generation from the `init-token`**
+**Deterministic certificate generation from the `initToken`**
 This appeared to work well and could have providedd for a simple common format between the init and add/join functions as all endpoints would be able to start in an mTLS-ready state. However, the Golang authors agressively protect their cryptologic implementation against inadvertent insecure misuse and include traps to prevent exactly this type of approach within the certificate generation libraries. Reference: [Maybe read a byte - how Go crypto library prevents you from getting overdependent on it](https://nogoegst.net/post/maybereadbyte/).
 
 **Encoding an initial CA _as_ the join token**
@@ -349,7 +349,7 @@ For the add join case, a slight varient of this approach including a token UUID 
 
 **Kubernetes**
 
-A kubernetes case may either make use of the `init-token` and add/remove function (using valid credentials) or simply copy the valid `interNodeCa` from an existing node to the container of the joining node.
+A kubernetes case may either make use of the `initToken` and add/remove function (using valid credentials) or simply copy the valid `interNodeCa` from an existing node to the container of the joining node.
 
 **Manual Deployment**
 
