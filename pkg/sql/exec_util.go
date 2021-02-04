@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -2332,9 +2333,16 @@ func (s *sqlStatsCollector) recordTransaction(
 	retryLat time.Duration,
 	commitLat time.Duration,
 	numRows int,
+	collectedExecStats bool,
+	execStats execstats.QueryLevelStats,
+	rowsRead int64,
+	bytesRead int64,
 ) {
 	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
-	s.appStats.recordTransaction(key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat, numRows)
+	s.appStats.recordTransaction(
+		key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat,
+		numRows, collectedExecStats, execStats, rowsRead, bytesRead,
+	)
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {

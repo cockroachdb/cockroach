@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -415,6 +416,10 @@ func (a *appStats) recordTransaction(
 	retryLat time.Duration,
 	commitLat time.Duration,
 	numRows int,
+	collectedExecStats bool,
+	execStats execstats.QueryLevelStats,
+	rowsRead int64,
+	bytesRead int64,
 ) {
 	if !txnStatsEnable.Get(&a.st.SV) {
 		return
@@ -442,6 +447,15 @@ func (a *appStats) recordTransaction(
 	s.mu.data.CommitLat.Record(s.mu.data.Count, commitLat.Seconds())
 	if retryCount > s.mu.data.MaxRetries {
 		s.mu.data.MaxRetries = retryCount
+	}
+	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(rowsRead))
+	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(bytesRead))
+
+	if collectedExecStats {
+		s.mu.data.ExecStats.Count++
+		s.mu.data.ExecStats.NetworkBytes.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkBytesSent))
+		s.mu.data.ExecStats.NetworkBytes.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkBytesSent))
+		s.mu.data.ExecStats.ContentionTime.Record(s.mu.data.ExecStats.Count, execStats.ContentionTime.Seconds())
 	}
 }
 

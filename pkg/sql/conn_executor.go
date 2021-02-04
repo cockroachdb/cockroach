@@ -1048,6 +1048,11 @@ type connExecutor struct {
 		shouldCollectExecutionStats bool
 		// accumulatedStats are the accumulated stats of all statements.
 		accumulatedStats execstats.QueryLevelStats
+		// rowsRead and bytesRead are separate from QueryLevelStats because they are
+		// accumulated independently since they are always collected, as opposed to
+		// QueryLevelStats which are sampled.
+		rowsRead  int64
+		bytesRead int64
 	}
 
 	// sessionData contains the user-configurable connection variables.
