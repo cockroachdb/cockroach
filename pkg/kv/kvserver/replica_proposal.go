@@ -293,16 +293,16 @@ A file preventing this node from restarting was placed at:
 	}
 }
 
-// leasePostApply updates the Replica's internal state to reflect the
+// leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
 // called repeatedly for the same lease safely. However, the method will panic
 // if passed a lease with a lower sequence number than the current lease. By
 // default, the method will also panic if passed a lease that indicates a
 // forward sequence number jump (i.e. a skipped lease). This behavior can
 // be disabled by passing permitJump as true.
-func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, permitJump bool) {
-	r.mu.RLock()
-	replicaID := r.mu.replicaID
+func (r *Replica) leasePostApplyLocked(
+	ctx context.Context, newLease roachpb.Lease, permitJump bool,
+) {
 	// Pull out the last lease known to this Replica. It's possible that this is
 	// not actually the last lease in the Range's lease sequence because the
 	// Replica may have missed the application of a lease between prevLease and
@@ -310,7 +310,6 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// lease update. All other forms of lease updates should be continuous
 	// without jumps (see permitJump).
 	prevLease := *r.mu.state.Lease
-	r.mu.RUnlock()
 
 	// Sanity check to make sure that the lease sequence is moving in the right
 	// direction.
@@ -337,7 +336,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		}
 	}
 
-	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
+	iAmTheLeaseHolder := newLease.Replica.ReplicaID == r.mu.replicaID
 	// NB: in the case in which a node restarts, minLeaseProposedTS forces it to
 	// get a new lease and we make sure it gets a new sequence number, thus
 	// causing the right half of the disjunction to fire so that we update the
@@ -363,7 +362,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// TODO(aayush): In the future, if we permit co-operative lease transfers
 		// when a range is subsumed, it should be relatively straightforward to
 		// allow historical reads on the subsumed RHS after such lease transfers.
-		if err := r.maybeWatchForMerge(ctx, hlc.Timestamp{} /* freezeStart */); err != nil {
+		if err := r.maybeWatchForMergeLocked(ctx, hlc.Timestamp{} /* freezeStart */); err != nil {
 			// We were unable to determine whether a merge was in progress. We cannot
 			// safely proceed.
 			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
@@ -381,7 +380,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// requests, this is kosher). This means that we don't use the old
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
-		setTimestampCacheLowWaterMark(r.store.tsCache, r.Desc(), newLease.Start.ToTimestamp())
+		setTimestampCacheLowWaterMark(r.store.tsCache, r.descRLocked(), newLease.Start.ToTimestamp())
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
@@ -391,6 +390,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	}
 
 	// Inform the concurrency manager that the lease holder has been updated.
+	// We do this before installing the new lease in `r.mu.state` as we have
+	// an invariant that any replica with a lease has the concurrency manager
+	// enabled. (In practice, since both happen under `r.mu`, it is likely
+	// to not matter).
 	r.concMgr.OnRangeLeaseUpdated(newLease.Sequence, iAmTheLeaseHolder)
 
 	// Ordering is critical here. We only install the new lease after we've
@@ -398,23 +401,21 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// ordering were reversed, it would be possible for requests to see the new
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
-	r.mu.Lock()
 	r.mu.state.Lease = &newLease
 	expirationBasedLease := r.requiresExpiringLeaseRLocked()
-	r.mu.Unlock()
 
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
 	now := r.store.Clock().NowAsClockTimestamp()
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.OwnsValidLease(ctx, now) {
-		r.gossipFirstRange(ctx)
+	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.ownsValidLeaseRLocked(ctx, now) {
+		r.gossipFirstRangeLocked(ctx)
 	}
 
 	// Whenever we first acquire an expiration-based lease, notify the lease
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.OwnsValidLease(ctx, now) {
+	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.ownsValidLeaseRLocked(ctx, now) {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:
@@ -425,7 +426,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// If we're the current raft leader, may want to transfer the leadership to
 	// the new leaseholder. Note that this condition is also checked periodically
 	// when ticking the replica.
-	r.maybeTransferRaftLeadershipToLeaseholder(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
 
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).
@@ -450,18 +451,21 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// will be gossiped rarely because it falls on a range with an epoch-based
 	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
-		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
-			log.Errorf(ctx, "%v", err)
-		}
-		if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-			log.Errorf(ctx, "%v", err)
-		}
+		// NB: run these in an async task to keep them out of the critical section
+		// (r.mu is held here).
+		_ = r.store.stopper.RunAsyncTask(ctx, "lease-triggers", func(ctx context.Context) {
+			if err := r.MaybeGossipSystemConfig(ctx); err != nil {
+				log.Errorf(ctx, "%v", err)
+			}
+			if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+				log.Errorf(ctx, "%v", err)
+			}
 
-		// Emit an MLAI on the leaseholder replica, as follower will be looking
-		// for one and if we went on to quiesce, they wouldn't necessarily get
-		// one otherwise (unless they ask for it, which adds latency).
-		r.EmitMLAI()
-
+			// Emit an MLAI on the leaseholder replica, as follower will be looking
+			// for one and if we went on to quiesce, they wouldn't necessarily get
+			// one otherwise (unless they ask for it, which adds latency).
+			r.EmitMLAI()
+		})
 		if leaseChangingHands && log.V(1) {
 			// This logging is useful to troubleshoot incomplete drains.
 			log.Info(ctx, "is now leaseholder")
@@ -781,10 +785,7 @@ func (r *Replica) evaluateProposal(
 			activeVersion := r.ClusterSettings().Version.ActiveVersion(ctx).Version
 			migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
 			if migrationVersion.Less(activeVersion) {
-				// TODO(irfansharif): This was originally a fatal, which seems
-				// to have been a racey assertion (see #58378). We've downgraded
-				// it to an error to not trip up builds while we investigate.
-				log.Error(ctx, "not using applied state key in v21.1")
+				log.Fatal(ctx, "not using applied state key in v21.1")
 			}
 			// The range applied state was introduced in v2.1. It's possible to
 			// still find ranges that haven't activated it. If so, activate it.

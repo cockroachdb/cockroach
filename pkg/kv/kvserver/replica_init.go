@@ -122,6 +122,20 @@ func newUnloadedReplica(
 	return r
 }
 
+// setStartKeyLocked sets r.startKey. Note that this field has special semantics
+// described on its comment. Callers to this method are initializing an
+// uninitialized Replica and hold Replica.mu.
+func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
+	r.mu.AssertHeld()
+	if r.startKey != nil {
+		log.Fatalf(
+			r.AnnotateCtx(context.Background()),
+			"start key written twice: was %s, now %s", r.startKey, startKey,
+		)
+	}
+	r.startKey = startKey
+}
+
 // loadRaftMuLockedReplicaMuLocked will load the state of the replica from disk.
 // If desc is initialized, the Replica will be initialized when this method
 // returns. An initialized Replica may not be reloaded. If this method is called
@@ -141,6 +155,9 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	} else if r.mu.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
+	}
+	if desc.IsInitialized() {
+		r.setStartKeyLocked(desc.StartKey)
 	}
 
 	// Clear the internal raft group in case we're being reset. Since we're
