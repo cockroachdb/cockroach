@@ -25,6 +25,7 @@ func main() {
 	}
 
 	var compileAll = flag.Bool("all", false, "compile all supported builds (darwin, linux, windows)")
+	var buildType = flag.String("buildtype", "release", "compile with a different build type. Default: 'release'. Options: 'development', 'release'")
 	flag.Parse()
 
 	// We compile just the first supported target unless we explicitly told to
@@ -33,11 +34,15 @@ func main() {
 	if *compileAll {
 		targets = release.SupportedTargets
 	}
+	opts := []release.MakeReleaseOption{
+		release.WithMakeReleaseOptionEnv("MKRELEASE_BUILDTYPE=" + *buildType),
+	}
 
 	for _, target := range targets {
 		if err := release.MakeRelease(
 			target,
 			pkg.Dir,
+			opts...,
 		); err != nil {
 			log.Fatal(err)
 		}
