@@ -303,6 +303,7 @@ A file preventing this node from restarting was placed at:
 func (r *Replica) leasePostApplyLocked(
 	ctx context.Context, newLease roachpb.Lease, permitJump bool,
 ) {
+	ctx = r.AnnotateCtx(ctx)
 	// Pull out the last lease known to this Replica. It's possible that this is
 	// not actually the last lease in the Range's lease sequence because the
 	// Replica may have missed the application of a lease between prevLease and
