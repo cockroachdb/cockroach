@@ -11,6 +11,7 @@
 package filetable
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"database/sql/driver"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -223,7 +225,7 @@ func resolveInternalFileToTableExecutor(
 	var e *InternalFileToTableExecutor
 	var ok bool
 	if e, ok = executor.(*InternalFileToTableExecutor); !ok {
-		return nil, errors.New("unable to resolve to a supported executor type")
+		return nil, errors.Newf("unable to resolve %T to a supported executor type", executor)
 	}
 
 	return e, nil
@@ -635,69 +637,107 @@ func (r *reader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (reader) Close() error {
-	return nil
-}
-
 func newFileTableReader(
 	ctx context.Context,
 	filename string,
 	username security.SQLUsername,
 	fileTableName, payloadTableName string,
-	ie *sql.InternalExecutor,
+	ie FileToTableSystemExecutor,
 	offset int64,
 ) (io.ReadCloser, int64, error) {
 	// Get file_id from metadata entry in File table.
-	fileIDQuery := fmt.Sprintf(`SELECT file_id FROM %s WHERE filename=$1`, fileTableName)
-	fileIDRow, err := ie.QueryRowEx(
-		ctx, "get-filename-payload",
-		nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, fileIDQuery, filename,
-	)
+	var fileID []byte
+	var sz int64
+	metadataQuery := fmt.Sprintf(
+		`SELECT f.file_id, sum_int(length(p.payload))
+		FROM %s f LEFT OUTER JOIN %s p ON p.file_id = f.file_id
+		WHERE f.filename = $1 GROUP BY f.file_id`,
+		fileTableName, payloadTableName)
+	metaRows, err := ie.Query(ctx, "userfile-reader-info", metadataQuery, username, filename)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, errors.Wrap(err, "failed to read file info")
+	}
+	// Based on the executor type we must process the outputted rows differently.
+	switch ie.(type) {
+	case *InternalFileToTableExecutor:
+		if len(metaRows.internalExecResults) < 1 {
+			return nil, 0, os.ErrNotExist
+		}
+		fileID = metaRows.internalExecResults[0][0].(*tree.DUuid).UUID.GetBytes()
+		if metaRows.internalExecResults[0][1] != tree.DNull {
+			sz = int64(tree.MustBeDInt(metaRows.internalExecResults[0][1]))
+		}
+	case *SQLConnFileToTableExecutor:
+		defer func() {
+			if err := metaRows.sqlConnExecResults.Close(); err != nil {
+				log.Warningf(ctx, "failed to close %+v", err)
+			}
+		}()
+		vals := make([]driver.Value, 2)
+		err := metaRows.sqlConnExecResults.Next(vals)
+		if err == io.EOF {
+			return nil, 0, os.ErrNotExist
+		} else if err != nil {
+			return nil, 0, errors.Wrap(err, "failed to read returned file metadata")
+		}
+		fileID = vals[0].([]byte)
+		sz = vals[1].(int64)
+	default:
+		panic("unknown executor")
 	}
 
-	// If no metadata entry was found return a does not exist error.
-	if fileIDRow == nil {
-		return nil, 0, os.ErrNotExist
-	}
-	fileID := fileIDRow[0]
-	rows, err := ie.QueryEx(ctx, "get-file-size", nil /*txn*/, sessiondata.InternalExecutorOverride{User: username},
-		fmt.Sprintf(`SELECT sum_int(length(payload)) FROM %s WHERE file_id=$1`, payloadTableName), fileID,
-	)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if len(rows) == 0 || rows[0][0] == tree.DNull {
+	if sz == 0 {
 		return ioutil.NopCloser(bytes.NewReader(nil)), 0, nil
 	}
 
-	sz := int64(tree.MustBeDInt(rows[0][0]))
+	const bufSize = 256 << 10
 
 	fn := func(p []byte, pos int64) (int, error) {
 		if pos >= sz {
 			return 0, io.EOF
 		}
 		query := fmt.Sprintf(
-			`SELECT byte_offset, payload FROM %s WHERE file_id=$1 AND byte_offset <= $2 ORDER BY byte_offset DESC LIMIT 1`, payloadTableName)
-		rows, err := ie.QueryEx(
-			ctx, "get-filename-payload",
-			nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileID, pos,
+			`SELECT substr(payload, $2+1-byte_offset, $3)
+			FROM %s WHERE file_id=$1 AND byte_offset <= $2
+			ORDER BY byte_offset DESC
+			LIMIT 1`, payloadTableName)
+		rows, err := ie.Query(
+			ctx, "userfile-reader-payload", query, username, fileID, pos, bufSize,
 		)
 		if err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "reading file content")
 		}
-		if len(rows) == 0 || rows[0][1] == tree.DNull {
-			return 0, io.EOF
+		var block []byte
+		switch ie.(type) {
+		case *InternalFileToTableExecutor:
+			if len(rows.internalExecResults) == 0 || rows.internalExecResults[0][0] == tree.DNull {
+				return 0, io.EOF
+			}
+			block = []byte(tree.MustBeDBytes(rows.internalExecResults[0][0]))
+		case *SQLConnFileToTableExecutor:
+			defer func() {
+				if err := rows.sqlConnExecResults.Close(); err != nil {
+					log.Warningf(ctx, "failed to close %+v", err)
+				}
+			}()
+			vals := make([]driver.Value, 1)
+			if err := rows.sqlConnExecResults.Next(vals); err == io.EOF {
+				return 0, io.EOF
+			} else if err != nil {
+				return 0, errors.Wrap(err, "failed to read returned file content")
+			}
+			block = vals[0].([]byte)
+		default:
+			panic("unknown executor")
 		}
-		block := tree.MustBeDBytes(rows[0][1])
-		offsetInBlock := pos - int64(tree.MustBeDInt(rows[0][0]))
-		n := copy(p, block[offsetInBlock:])
+		n := copy(p, block)
+		if pos+int64(n) >= sz {
+			return n, io.EOF
+		}
 		return n, nil
 	}
 
-	return &reader{fn: fn, pos: offset}, sz, nil
+	return ioutil.NopCloser(bufio.NewReaderSize(&reader{fn: fn, pos: offset}, bufSize)), sz, nil
 }
 
 // ReadFile returns the blob for filename using a FileTableReader.
@@ -707,13 +747,8 @@ func newFileTableReader(
 func (f *FileToTableSystem) ReadFile(
 	ctx context.Context, filename string, offset int64,
 ) (io.ReadCloser, int64, error) {
-	e, err := resolveInternalFileToTableExecutor(f.executor)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	return newFileTableReader(
-		ctx, filename, f.username, f.GetFQFileTableName(), f.GetFQPayloadTableName(), e.ie, offset,
+		ctx, filename, f.username, f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.executor, offset,
 	)
 }
 
