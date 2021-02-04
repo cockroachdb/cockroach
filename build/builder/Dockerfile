@@ -1,4 +1,4 @@
-FROM ubuntu:xenial-20170915
+FROM ubuntu:focal-20210119
 
 # This is the CockroachDB "builder" image, which bundles cross-compiling
 # toolchains that can build CockroachDB on all supported platforms.
@@ -15,14 +15,19 @@ FROM ubuntu:xenial-20170915
 # g++ - crosstool-ng
 # gawk - crosstool-ng
 # git - crosstool-ng
+# gnupg2 - for apt
 # gperf - crosstool-ng
 # help2man - crosstool-ng
 # libncurses-dev - crosstool-ng / CRDB build system
+# libtool-bin - crosstool-ng
 # make - crosstool-ng / CRDB build system
 # patch - crosstool-ng
 # texinfo - crosstool-ng
 # xz-utils - crosstool-ng / msan
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# unzip - crosstool-ng
+# zlib1g[-dev] - osxcross
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     apt-transport-https \
     autoconf \
     bison \
@@ -34,32 +39,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     gawk \
     git \
+    gnupg2 \
     gperf \
     help2man \
     libncurses-dev \
+    libtool-bin \
     make \
     patch \
     patchelf \
     texinfo \
     xz-utils \
+    unzip \
+    zlib1g \
+    zlib1g-dev \
  && apt-get clean
 
 RUN mkdir crosstool-ng \
- && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.23.0.tar.xz | tar --strip-components=1 -C crosstool-ng -xJ \
+ && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.24.0.tar.xz | tar --strip-components=1 -C crosstool-ng -xJ \
  && cd crosstool-ng \
  && ./configure --prefix /usr/local/ct-ng \
  && make -j$(nproc) \
+ && make -j$(nproc) bash-completion/ct-ng \
  && make install \
- && cp ct-ng.comp /etc/bash_completion.d/ \
+ && cp bash-completion/ct-ng /etc/bash_completion.d/ct-ng.comp \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86_64-unknown-linux-gnu.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig s390x-ibm-linux-gnu.defconfig ./
+COPY x86_64-unknown-linux-gnu.config x86_64-w64-mingw.config aarch64-unknown-linux-gnueabi.config s390x-ibm-linux-gnu.config ./
 RUN mkdir src \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-gnu.defconfig      /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-w64-mingw.defconfig              /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../s390x-ibm-linux-gnu.defconfig           /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && cp ../x86_64-unknown-linux-gnu.config .config && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && cp ../x86_64-w64-mingw.config .config && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && cp ../aarch64-unknown-linux-gnueabi.config .config && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && cp ../s390x-ibm-linux-gnu.config .config && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
 RUN mkdir -p /usr/local/lib/ccache \
@@ -105,12 +116,12 @@ RUN mkdir ncurses \
          --host=x86_64-unknown-linux-gnu \
          $(cat /ncurses.conf) \
     && make install.libs) \
- && mkdir build-aarch64-unknown-linux-gnueabi \
- && (cd build-aarch64-unknown-linux-gnueabi \
-    && CC=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-cc \
-       CXX=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-c++ \
-       ../configure --prefix=/x-tools/aarch64-unknown-linux-gnueabi/aarch64-unknown-linux-gnueabi/sysroot/usr \
-         --host=aarch64-unknown-linux-gnueabi \
+ && mkdir build-aarch64-unknown-linux-gnu \
+ && (cd build-aarch64-unknown-linux-gnu \
+    && CC=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-cc \
+       CXX=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-c++ \
+       ../configure --prefix=/x-tools/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr \
+         --host=aarch64-unknown-linux-gnu \
          $(cat /ncurses.conf) \
     && make install.libs) \
  && mkdir build-s390x-ibm-linux-gnu \
@@ -126,29 +137,28 @@ RUN mkdir ncurses \
 
 RUN apt-get purge -y gcc g++ && apt-get autoremove -y
 
-# clang-3.9 - msan, libtapi needs 3.9+
+# clang-10 - compiler
 # cmake - msan / c-deps: libroach, protobuf, et al.
 # libssl-dev - osxcross
 # libxml2-dev - osxcross
 # python - msan
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    clang-3.9 \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    clang-10 \
     cmake \
     libssl-dev \
     libxml2-dev \
     python \
-  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-3.9 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-3.9
+  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
 # Build an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
-RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
- && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
- && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
- && curl -fsSL https://github.com/llvm-mirror/libcxx/commit/b640da0b315ead39690d4d65c76938ab8aeb5449.patch | git -C llvm/projects/libcxx apply \
- && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc)) \
- && rm -rf llvm
+RUN mkdir llvm                    && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/llvm-10.0.0.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
+ && mkdir libcxx    && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/libcxx-10.0.0.src.tar.xz    | tar --strip-components=1 -C libcxx -xJ \
+ && mkdir libcxxabi && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/libcxxabi-10.0.0.src.tar.xz | tar --strip-components=1 -C libcxxabi -xJ \
+ && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" && make cxx -j$(nproc)) \
+ && rm -rf llvm libcxx libcxxabi
 
 # libtapi is required for later versions of MacOSX.
 RUN git clone https://github.com/tpoechtrager/apple-libtapi.git \
@@ -187,7 +197,8 @@ ENV PATH $PATH:/x-tools/x86_64-apple-darwin19/bin
 # autopoint - sed build
 # gettext - sed build
 # rsync - sed build
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     automake \
     autopoint \
     gettext \
@@ -205,8 +216,8 @@ RUN git clone git://git.sv.gnu.org/sed \
  && cd .. \
  && rm -rf sed
 
-# xenial installs cmake 3.5.1. We need a newer version. Run this step
-# after the llvm/cross-compile step which is exceedingly slow.
+# We need a newer version of cmake. Run this step after the llvm/cross-compile
+# step which is exceedingly slow.
 #
 # NOTE: When upgrading cmake, bump the rebuild counters in
 # c-deps/*-rebuild to force recreating the makefiles. This prevents
@@ -223,7 +234,7 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 # NB: care needs to be taken when updating this version because earlier
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
-RUN apt-get install -y --no-install-recommends golang \
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang \
  && curl -fsSL https://storage.googleapis.com/golang/go1.15.6.src.tar.gz -o golang.tar.gz \
  && echo '890bba73c5e2b19ffb1180e385ea225059eb008eb91b694875dd86ea48675817 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
@@ -254,17 +265,17 @@ RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" >
 # chrome - ui
 # unzip - for installing awscli
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
- && echo 'deb https://deb.nodesource.com/node_12.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
+ && echo 'deb https://deb.nodesource.com/node_12.x focal main' | tee /etc/apt/sources.list.d/nodesource.list \
  && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
  && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
  && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
- && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
  && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
  && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
  && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
  && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
  && apt-get update \
- && apt-get install -y --no-install-recommends \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bazel-3.6.0 \
     ccache \
     google-cloud-sdk \
@@ -286,7 +297,7 @@ RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-b
   rm -rf awscli-bundle.zip awscli-bundle
 
 # git - Upgrade to a more modern version
-RUN apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
+RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \
