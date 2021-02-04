@@ -225,11 +225,11 @@ func (ih *instrumentationHelper) Finish(
 	// TODO(radu): this should be unified with other stmt stats accesses.
 	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 	if stmtStats != nil {
-		var flowMetadata []*execstats.FlowMetadata
+		var flowsMetadata []*execstats.FlowsMetadata
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
+			flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
 		}
-		queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
 		if err != nil {
 			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, err)
 		} else {
