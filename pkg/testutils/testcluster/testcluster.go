@@ -1170,26 +1170,50 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	s := srv.(*server.TestServer)
 
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	tc.Servers[idx] = s
-	tc.mu.serverStoppers[idx] = s.Stopper()
+	if err := func() error {
+		tc.mu.Lock()
+		defer tc.mu.Unlock()
+		tc.Servers[idx] = s
+		tc.mu.serverStoppers[idx] = s.Stopper()
 
-	if inspect != nil {
-		inspect(s)
-	}
+		if inspect != nil {
+			inspect(s)
+		}
 
-	if err := srv.Start(); err != nil {
+		if err := srv.Start(); err != nil {
+			return err
+		}
+
+		dbConn, err := serverutils.OpenDBConnE(srv.ServingSQLAddr(),
+			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
+		if err != nil {
+			return err
+		}
+		tc.Conns[idx] = dbConn
+		return nil
+	}(); err != nil {
 		return err
 	}
 
-	dbConn, err := serverutils.OpenDBConnE(srv.ServingSQLAddr(),
-		serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
-	if err != nil {
-		return err
-	}
-	tc.Conns[idx] = dbConn
-	return nil
+	// Wait until the other nodes can successfully connect to the newly restarted
+	// node. This is useful to avoid flakes: the newly restarted node is now on a
+	// different port, and a cycle of gossip is necessary to make all other nodes
+	// aware.
+	return retry.ForDuration(15*time.Second, func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		for idx, s := range tc.Servers {
+			if tc.ServerStopped(idx) || s == srv {
+				continue
+			}
+			cc, err := s.NodeDialer().Dial(ctx, srv.NodeID(), rpc.SystemClass)
+			if err != nil {
+				return errors.Wrapf(err, "connecting n%d->n%d", s.NodeID(), srv.NodeID())
+			}
+			_ = cc.Close()
+		}
+		return nil
+	})
 }
 
 // ServerStopped determines if a server has been explicitly
