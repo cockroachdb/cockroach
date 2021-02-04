@@ -156,6 +156,9 @@ func newFileUploadMachine(
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.processRows = f.writeFile
 	c.forceNotNull = true
+	c.format = tree.CopyFormatText
+	c.null = `\N`
+	c.delimiter = '\t'
 	return
 }
 

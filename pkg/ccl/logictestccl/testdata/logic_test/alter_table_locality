@@ -4,7 +4,11 @@ statement ok
 CREATE DATABASE alter_locality_test primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
 
 statement ok
-CREATE TABLE no_table_locality (i int)
+CREATE TABLE no_table_locality (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+)
 
 statement error cannot alter a table's LOCALITY if its database is not multi-region enabled
 ALTER TABLE no_table_locality SET LOCALITY REGIONAL BY TABLE
@@ -21,16 +25,21 @@ statement ok
 SET experimental_enable_implicit_column_partitioning = true
 
 statement ok
-CREATE TABLE regional_by_row (i int) LOCALITY REGIONAL BY ROW
+CREATE TABLE regional_by_row (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY ROW
 
 query TT
 SHOW CREATE TABLE regional_by_row
 ----
 regional_by_row  CREATE TABLE public.regional_by_row (
+                 pk INT8 NOT NULL,
                  i INT8 NULL,
                  crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
-                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                 FAMILY "primary" (i, crdb_region, rowid)
+                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
   num_voters = 3,
@@ -59,14 +68,20 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-CREATE TABLE regional_by_table_in_primary_region (i int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+CREATE TABLE regional_by_table_in_primary_region (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
 regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
+                                                pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -83,14 +98,20 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-CREATE TABLE regional_by_table_no_region (i int) LOCALITY REGIONAL BY TABLE
+CREATE TABLE regional_by_table_no_region (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE
 
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
 regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
+                                                pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -107,14 +128,20 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-CREATE TABLE regional_by_table_in_us_east (i int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+CREATE TABLE regional_by_table_in_us_east (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
 regional_by_table_in_us_east                 CREATE TABLE public.regional_by_table_in_us_east (
+                                             pk INT8 NOT NULL,
                                              i INT8 NULL,
-                                             FAMILY "primary" (i, rowid)
+                                             CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                             FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
@@ -131,14 +158,16 @@ TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CON
                                     lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
-CREATE TABLE created_as_global (i int) LOCALITY GLOBAL
+CREATE TABLE created_as_global (pk INT PRIMARY KEY, i int, FAMILY (pk, i)) LOCALITY GLOBAL
 
 query TT
 SHOW CREATE TABLE created_as_global
 ----
 created_as_global  CREATE TABLE public.created_as_global (
+                   pk INT8 NOT NULL,
                    i INT8 NULL,
-                   FAMILY "primary" (i, rowid)
+                   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                   FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY GLOBAL
 
 query TT
@@ -174,10 +203,11 @@ query TT
 SHOW CREATE TABLE regional_by_row
 ----
 regional_by_row  CREATE TABLE public.regional_by_row (
+                 pk INT8 NOT NULL,
                  i INT8 NULL,
                  crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
-                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                 FAMILY "primary" (i, crdb_region, rowid)
+                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
   num_voters = 3,
@@ -211,9 +241,11 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global             CREATE TABLE public.created_as_global (
-                   i INT8 NULL,
-                   FAMILY "primary" (i, rowid)
+created_as_global                               CREATE TABLE public.created_as_global (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -239,9 +271,11 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global             CREATE TABLE public.created_as_global (
-                   i INT8 NULL,
-                   FAMILY "primary" (i, rowid)
+created_as_global                                 CREATE TABLE public.created_as_global (
+                                                  pk INT8 NOT NULL,
+                                                  i INT8 NULL,
+                                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                  FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 query TT
@@ -267,9 +301,11 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global                                          CREATE TABLE public.created_as_global (
+created_as_global                               CREATE TABLE public.created_as_global (
+                                                pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -295,9 +331,11 @@ ALTER TABLE created_as_global SET LOCALITY GLOBAL
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global             CREATE TABLE public.created_as_global (
+created_as_global  CREATE TABLE public.created_as_global (
+                   pk INT8 NOT NULL,
                    i INT8 NULL,
-                   FAMILY "primary" (i, rowid)
+                   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                   FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY GLOBAL
 
 query TT
@@ -317,6 +355,98 @@ TABLE created_as_global  ALTER TABLE created_as_global CONFIGURE ZONE USING
 statement error unimplemented: implementation pending
 ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW
 
+# Drop the table and recreate it with columns appropriate for REGIONAL BY ROW transformations.
+statement ok
+DROP TABLE created_as_global;
+CREATE TABLE created_as_global (
+  pk int primary key,
+  i int,
+  b int,
+  index(b),
+  unique(i),
+  cr crdb_internal_region,
+  FAMILY (pk, i, b, cr)
+) LOCALITY GLOBAL;
+INSERT INTO created_as_global VALUES (0, 1, 2, 'us-east-1')
+
+statement error unimplemented: implementation pending
+ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW
+
+statement error cannot use column i for REGIONAL BY ROW as it does not have the crdb_internal_region type
+ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW AS "i"
+
+statement error cannot perform a locality change on created_as_global with other schema changes on created_as_global in the same transaction
+BEGIN;
+ALTER TABLE created_as_global ADD COLUMN c INT;
+ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW AS "cr"
+
+statement ok
+ROLLBACK;
+ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW AS "cr"
+
+query TT
+SHOW CREATE TABLE created_as_global
+----
+created_as_global  CREATE TABLE public.created_as_global (
+                   pk INT8 NOT NULL,
+                   i INT8 NULL,
+                   b INT8 NULL,
+                   cr public.crdb_internal_region NULL,
+                   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                   INDEX created_as_global_b_idx (b ASC),
+                   UNIQUE INDEX created_as_global_i_key (i ASC),
+                   FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
+) LOCALITY REGIONAL BY ROW AS cr;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.created_as_global@created_as_global_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.created_as_global@created_as_global_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.created_as_global@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.created_as_global@created_as_global_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.created_as_global@created_as_global_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.created_as_global@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.created_as_global@created_as_global_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.created_as_global@created_as_global_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.created_as_global@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE created_as_global
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
 statement error region "invalid-region" has not been added to database "alter_locality_test"
 ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in "invalid-region"
 
@@ -327,8 +457,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
 regional_by_table_in_primary_region               CREATE TABLE public.regional_by_table_in_primary_region (
+                                                  pk INT8 NOT NULL,
                                                   i INT8 NULL,
-                                                  FAMILY "primary" (i, rowid)
+                                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                  FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 query TT
@@ -351,9 +483,11 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE i
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
-                                     i INT8 NULL,
-                                     FAMILY "primary" (i, rowid)
+regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -376,9 +510,11 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE i
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
-                                     i INT8 NULL,
-                                     FAMILY "primary" (i, rowid)
+regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -400,9 +536,11 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
-                                     i INT8 NULL,
-                                     FAMILY "primary" (i, rowid)
+regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -425,8 +563,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
 regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                     pk INT8 NOT NULL,
                                      i INT8 NULL,
-                                     FAMILY "primary" (i, rowid)
+                                     CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                     FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY GLOBAL
 
 query TT
@@ -449,7 +589,11 @@ statement ok
 DROP TABLE regional_by_table_in_primary_region
 
 statement ok
-CREATE TABLE regional_by_table_in_primary_region (i int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+CREATE TABLE regional_by_table_in_primary_region (
+  pk INT PRIMARY KEY,
+  i int,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY ROW
@@ -461,8 +605,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
 regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
+                                                pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -483,7 +629,11 @@ statement ok
 DROP TABLE regional_by_table_no_region
 
 statement ok
-CREATE TABLE regional_by_table_no_region (i int)
+CREATE TABLE regional_by_table_no_region (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+)
 
 statement ok
 ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
@@ -492,8 +642,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
 regional_by_table_no_region                       CREATE TABLE public.regional_by_table_no_region (
+                                                  pk INT8 NOT NULL,
                                                   i INT8 NULL,
-                                                  FAMILY "primary" (i, rowid)
+                                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                  FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 query TT
@@ -565,16 +717,101 @@ TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFI
                                    voter_constraints = '[+region=ca-central-1]',
                                    lease_preferences = '[[+region=ca-central-1]]'
 
-# Drop the table and recreate it to get back to original state (this is required because alter table
-# from global to regional by table is not yet implemented).
+# Drop the table and recreate it with columns appropriate for REGIONAL BY ROW transformations.
 statement ok
-DROP TABLE regional_by_table_no_region
-
-statement ok
-CREATE TABLE regional_by_table_no_region (i int) LOCALITY REGIONAL BY TABLE
+DROP TABLE regional_by_table_no_region;
+CREATE TABLE regional_by_table_no_region (
+  pk int primary key,
+  i int,
+  b int,
+  index(b),
+  unique(i),
+  FAMILY (pk, i, b)
+) LOCALITY REGIONAL BY TABLE;
+INSERT INTO regional_by_table_no_region VALUES (0, 1, 2)
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP TABLE regional_by_table_no_region;
+CREATE TABLE regional_by_table_no_region (
+  pk int primary key,
+  i int,
+  b int,
+  index(b),
+  unique(i),
+  cr crdb_internal_region,
+  FAMILY (pk, i, b, cr)
+) LOCALITY REGIONAL BY TABLE;
+INSERT INTO regional_by_table_no_region VALUES (0, 1, 2, 'us-east-1')
+
+
+statement ok
+ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY ROW AS "cr"
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                             pk INT8 NOT NULL,
+                             i INT8 NULL,
+                             b INT8 NULL,
+                             cr public.crdb_internal_region NULL,
+                             CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                             INDEX regional_by_table_no_region_b_idx (b ASC),
+                             UNIQUE INDEX regional_by_table_no_region_i_key (i ASC),
+                             FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
+) LOCALITY REGIONAL BY ROW AS cr;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_no_region@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_no_region@regional_by_table_no_region_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE
@@ -582,9 +819,11 @@ ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
-                              i INT8 NULL,
-                              FAMILY "primary" (i, rowid)
+regional_by_table_in_us_east                    CREATE TABLE public.regional_by_table_in_us_east (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -610,8 +849,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
 regional_by_table_in_us_east                      CREATE TABLE public.regional_by_table_in_us_east (
+                                                  pk INT8 NOT NULL,
                                                   i INT8 NULL,
-                                                  FAMILY "primary" (i, rowid)
+                                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                  FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 query TT
@@ -636,9 +877,11 @@ ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in PRIMA
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
-                              i INT8 NULL,
-                              FAMILY "primary" (i, rowid)
+regional_by_table_in_us_east                    CREATE TABLE public.regional_by_table_in_us_east (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                                FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -661,8 +904,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
 regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                              pk INT8 NOT NULL,
                               i INT8 NULL,
-                              FAMILY "primary" (i, rowid)
+                              CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                              FAMILY fam_0_pk_i (pk, i)
 ) LOCALITY GLOBAL
 
 query TT
@@ -679,16 +924,89 @@ TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CON
                                     voter_constraints = '[+region=ca-central-1]',
                                     lease_preferences = '[[+region=ca-central-1]]'
 
-# Drop the table and recreate it to get back to original state (this is required because alter table
-# from global to regional by table is not yet implemented).
+# Drop the table and recreate it with columns appropriate for REGIONAL BY ROW transformations.
 statement ok
-DROP TABLE regional_by_table_in_us_east
-
-statement ok
-CREATE TABLE regional_by_table_in_us_east (i int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+DROP TABLE regional_by_table_in_us_east;
+CREATE TABLE regional_by_table_in_us_east (
+  pk int PRIMARY KEY,
+  i int,
+  b int,
+  index(b),
+  unique(i),
+  cr crdb_internal_region,
+  FAMILY (pk, i, b, cr)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+INSERT INTO regional_by_table_in_us_east VALUES (0, 1, 2, 'us-east-1')
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW AS "cr"
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                              pk INT8 NOT NULL,
+                              i INT8 NULL,
+                              b INT8 NULL,
+                              cr public.crdb_internal_region NULL,
+                              CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                              INDEX regional_by_table_in_us_east_b_idx (b ASC),
+                              UNIQUE INDEX regional_by_table_in_us_east_i_key (i ASC),
+                              FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
+) LOCALITY REGIONAL BY ROW AS cr;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_b_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_table_in_us_east@regional_by_table_in_us_east_i_key CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
 
 # Set a table with a gc.ttlseconds to be a non-default value, and check this is
 # the same after a change to REGIONAL BY TABLE IN PRIMARY REGION, which overrides

@@ -369,6 +369,7 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cenkalti_backoff//:backoff",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
