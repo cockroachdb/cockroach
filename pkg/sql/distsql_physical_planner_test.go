@@ -266,8 +266,15 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer stopper.Stop(ctx)
 	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
 	r := MakeDistSQLReceiver(
-		ctx, nil /* resultWriter */, tree.Rows,
-		rangeCache, nil /* txn */, nil /* clockUpdater */, &SessionTracing{})
+		ctx,
+		nil, /* resultWriter */
+		tree.Rows,
+		rangeCache,
+		nil, /* txn */
+		nil, /* clockUpdater */
+		&SessionTracing{},
+		nil, /* contentionRegistry */
+	)
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -548,6 +549,7 @@ func MakeDistSQLReceiver(
 	txn *kv.Txn,
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
+	contentionRegistry *contention.Registry,
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
