@@ -11,9 +11,11 @@
 package storage
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -47,8 +49,7 @@ type pebbleBatch struct {
 	writeOnly        bool
 	closed           bool
 
-	useWrappedIntentWriter bool
-	wrappedIntentWriter    intentDemuxWriter
+	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
 	scratch []byte
 }
@@ -62,7 +63,9 @@ var pebbleBatchPool = sync.Pool{
 }
 
 // Instantiates a new pebbleBatch.
-func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleBatch {
+func newPebbleBatch(
+	db *pebble.DB, batch *pebble.Batch, writeOnly bool, settings *cluster.Settings,
+) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
 		db:    db,
@@ -90,7 +93,8 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleB
 		},
 		writeOnly: writeOnly,
 	}
-	pb.wrappedIntentWriter, pb.useWrappedIntentWriter = tryWrapIntentWriter(pb)
+	pb.wrappedIntentWriter =
+		wrapIntentWriter(context.Background(), pb, settings, false /* isLongLived */)
 	return pb
 }
 
@@ -300,14 +304,11 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
 func (p *pebbleBatch) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) (int, error) {
-	if p.useWrappedIntentWriter {
-		var err error
-		var separatedIntentCountDelta int
-		p.scratch, separatedIntentCountDelta, err =
-			p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-		return separatedIntentCountDelta, err
-	}
-	return 0, p.clear(MVCCKey{Key: key})
+	var err error
+	var separatedIntentCountDelta int
+	p.scratch, separatedIntentCountDelta, err =
+		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
+	return separatedIntentCountDelta, err
 }
 
 // ClearEngineKey implements the Batch interface.
@@ -345,12 +346,9 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 
 // ClearMVCCRangeAndIntents implements the Batch interface.
 func (p *pebbleBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	if p.useWrappedIntentWriter {
-		var err error
-		p.scratch, err = p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, p.scratch)
-		return err
-	}
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	var err error
+	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, p.scratch)
+	return err
 }
 
 // ClearMVCCRange implements the Batch interface.
@@ -416,20 +414,18 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Batch interface.
 func (p *pebbleBatch) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) (int, error) {
-	if p.useWrappedIntentWriter {
-		var err error
-		var separatedIntentCountDelta int
-		p.scratch, separatedIntentCountDelta, err =
-			p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-		return separatedIntentCountDelta, err
-	}
-	return 0, p.put(MVCCKey{Key: key}, value)
+	var err error
+	var separatedIntentCountDelta int
+	p.scratch, separatedIntentCountDelta, err =
+		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
+	return separatedIntentCountDelta, err
 }
 
 // PutEngineKey implements the Batch interface.
@@ -440,6 +436,11 @@ func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
 
 	p.buf = key.EncodeToBuf(p.buf[:0])
 	return p.batch.Set(p.buf, value, nil)
+}
+
+// SafeToWriteSeparatedIntents implements the Batch interface.
+func (p *pebbleBatch) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
+	return p.wrappedIntentWriter.safeToWriteSeparatedIntents(ctx)
 }
 
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {

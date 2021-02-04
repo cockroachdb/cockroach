@@ -128,7 +128,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		rangeID := roachpb.RangeID(i)
 		replicaID := roachpb.ReplicaID(1)
 
-		memEngine := storage.NewDefaultInMem()
+		memEngine := storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(memEngine)
 
 		cfg := TestStoreConfig(clock)
@@ -224,7 +224,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-		eng := storage.NewDefaultInMem()
+		eng := storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(eng)
 		s := NewStore(context.Background(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
@@ -513,7 +513,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			engs := []storage.Engine{storage.NewDefaultInMem()}
+			engs := []storage.Engine{storage.NewDefaultInMemForTesting()}
 			defer engs[0].Close()
 			// Configure versions and write.
 			cv := clusterversion.ClusterVersion{Version: tc.engV}

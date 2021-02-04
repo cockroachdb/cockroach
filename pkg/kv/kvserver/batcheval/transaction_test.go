@@ -730,7 +730,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 				skip.IgnoreLint(t, "invalid test case")
 			}
 
-			db := storage.NewDefaultInMem()
+			db := storage.NewDefaultInMemForTesting()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()

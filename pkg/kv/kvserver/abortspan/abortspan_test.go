@@ -45,7 +45,7 @@ var (
 func createTestAbortSpan(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
 ) (*AbortSpan, storage.Engine) {
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	return New(rangeID), eng
 }

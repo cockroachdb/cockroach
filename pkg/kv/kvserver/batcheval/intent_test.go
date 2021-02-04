@@ -119,7 +119,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 			// the request should ignore the intent and should not return any
 			// corresponding intent row.
 			testutils.RunTrueAndFalse(t, "deletion intent", func(t *testing.T, delete bool) {
-				db := &instrumentedEngine{Engine: storage.NewDefaultInMem()}
+				db := &instrumentedEngine{Engine: storage.NewDefaultInMemForTesting()}
 				defer db.Close()
 
 				// Write an intent.

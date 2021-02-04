@@ -42,7 +42,7 @@ func TestRecoverTxn(t *testing.T) {
 	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
 
 	testutils.RunTrueAndFalse(t, "missing write", func(t *testing.T, missingWrite bool) {
-		db := storage.NewDefaultInMem()
+		db := storage.NewDefaultInMemForTesting()
 		defer db.Close()
 
 		// Write the transaction record.
@@ -194,7 +194,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			db := storage.NewDefaultInMem()
+			db := storage.NewDefaultInMemForTesting()
 			defer db.Close()
 
 			// Write the modified transaction record, simulating a concurrent

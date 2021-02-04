@@ -59,7 +59,7 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	e := storage.NewDefaultInMem()
+	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
 	require.NoError(t, kvserver.WriteClusterVersion(ctx, e, clusterversion.TestingClusterVersion))
 
@@ -242,7 +242,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	e := storage.NewDefaultInMem()
+	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
 
 	cv := clusterversion.TestingClusterVersion

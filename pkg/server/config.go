@@ -515,7 +515,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes))
+				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes, cfg.Settings))
 			}
 		} else {
 			if spec.Size.Percent > 0 {

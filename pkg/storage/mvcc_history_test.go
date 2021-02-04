@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -86,274 +87,285 @@ func TestMVCCHistories(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
 
-			// Everything reads/writes under the same prefix.
-			span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
+	// Everything reads/writes under the same prefix.
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
 
-			datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
-				if strings.Contains(path, "_disallow_separated") && !DisallowSeparatedIntents {
-					return
-				}
-				if strings.Contains(path, "_allow_separated") &&
-					(DisallowSeparatedIntents || EnabledSeparatedIntents) {
-					return
-				}
-				if strings.Contains(path, "_enable_separated") &&
-					(DisallowSeparatedIntents || !EnabledSeparatedIntents) {
-					return
-				}
-				// We start from a clean slate in every test file.
-				engine := engineImpl.create()
-				defer engine.Close()
+	datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
+		// Default to random behavior wrt cluster version and separated
+		// intents.
+		oldClusterVersion := rand.Intn(2) == 0
+		enabledSeparated := rand.Intn(2) == 0
+		overridden := false
+		if strings.Contains(path, "_disallow_separated") {
+			oldClusterVersion = true
+			enabledSeparated = false
+			overridden = true
+		}
+		if strings.Contains(path, "_allow_separated") {
+			oldClusterVersion = false
+			enabledSeparated = false
+			overridden = true
+		}
+		if strings.Contains(path, "_enable_separated") {
+			oldClusterVersion = false
+			enabledSeparated = true
+			overridden = true
+		}
+		if !overridden {
+			log.Infof(context.Background(),
+				"randomly setting oldClusterVersion: %t, enableSeparated: %t",
+				oldClusterVersion, enabledSeparated)
+		}
+		settings := makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
+		// We start from a clean slate in every test file.
+		engine := createTestPebbleEngineWithSettings(settings)
+		defer engine.Close()
 
-				reportDataEntries := func(buf *bytes.Buffer) error {
-					hasData := false
-					err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
-						hasData = true
-						if r.Key.Timestamp.IsEmpty() {
-							// Meta is at timestamp zero.
-							meta := enginepb.MVCCMetadata{}
-							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-								fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-							} else {
-								fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
-							}
-						} else {
-							fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
-						}
-						return nil
-					})
-					if !hasData {
-						buf.WriteString("<no data>\n")
+		reportDataEntries := func(buf *bytes.Buffer) error {
+			hasData := false
+			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
+				hasData = true
+				if r.Key.Timestamp.IsEmpty() {
+					// Meta is at timestamp zero.
+					meta := enginepb.MVCCMetadata{}
+					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+						fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+					} else {
+						fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
 					}
-					return err
+				} else {
+					fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
 				}
-
-				e := newEvalCtx(ctx, engine)
-
-				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-					// We'll be overriding cmd/cmdargs below, because the
-					// datadriven reader does not know about sub-commands.
-					defer func(pos, cmd string, cmdArgs []datadriven.CmdArg) {
-						d.Pos = pos
-						d.Cmd = cmd
-						d.CmdArgs = cmdArgs
-					}(d.Pos, d.Cmd, d.CmdArgs)
-					// The various evalCtx helpers want access to the current test
-					// and testdata structs.
-					e.t = t
-					e.td = d
-
-					switch d.Cmd {
-					case "skip":
-						if len(d.CmdArgs) == 0 || d.CmdArgs[0].Key == engineImpl.name {
-							skip.IgnoreLint(e.t, "skipped")
-						}
-						return d.Expected
-					case "run":
-						// Syntax: run [trace] [error]
-						// (other words - in particular "ok" - are accepted but ignored)
-						//
-						// "run" executes a script of zero or more operations from
-						// the commands library defined below.
-						// It stops upon the first error encountered, if any.
-						//
-						// Options:
-						// "trace" means detail each operation in the output.
-						// "error" means expect an error to occur. The specific error type/
-						// message to expect is spelled out in the expected output.
-						//
-						trace := false
-						if e.hasArg("trace") {
-							trace = true
-						}
-						expectError := false
-						if e.hasArg("error") {
-							expectError = true
-						}
-
-						// buf will accumulate the actual output, which the
-						// datadriven driver will use to compare to the expected
-						// output.
-						var buf bytes.Buffer
-						e.results.buf = &buf
-						e.results.traceIntentWrites = trace
-
-						// foundErr remembers which error was last encountered while
-						// executing the script under "run".
-						var foundErr error
-
-						// pos is the original <file>:<lineno> prefix computed by
-						// datadriven. It points to the top "run" command itself.
-						// We editing d.Pos in-place below by extending `pos` upon
-						// each new line of the script.
-						pos := d.Pos
-
-						// dataChange indicates whether some command in the script
-						// has modified the stored data. When this becomes true, the
-						// current content of storage is printed in the results
-						// buffer at the end.
-						dataChange := false
-						// txnChange indicates whether some command has modified
-						// a transaction object. When set, the last modified txn
-						// object is reported in the result buffer at the end.
-						txnChange := false
-
-						reportResults := func(printTxn, printData bool) {
-							if printTxn && e.results.txn != nil {
-								fmt.Fprintf(&buf, "txn: %v\n", e.results.txn)
-							}
-							if printData {
-								err := reportDataEntries(&buf)
-								if err != nil {
-									if foundErr == nil {
-										// Handle the error below.
-										foundErr = err
-									} else {
-										fmt.Fprintf(&buf, "error reading data: (%T:) %v\n", err, err)
-									}
-								}
-							}
-						}
-
-						// sharedCmdArgs is updated by "with" pseudo-commands,
-						// to pre-populate common arguments for the following
-						// indented commands.
-						var sharedCmdArgs []datadriven.CmdArg
-
-						// The lines of the script under "run".
-						lines := strings.Split(d.Input, "\n")
-						for i, line := range lines {
-							if short := strings.TrimSpace(line); short == "" || strings.HasPrefix(short, "#") {
-								// Comment or empty line. Do nothing.
-								continue
-							}
-
-							// Compute a line prefix, to clarify error message. We
-							// prefix a newline character because some text editor do
-							// not know how to jump to the location of an error if
-							// there are multiple file:line prefixes on the same line.
-							d.Pos = fmt.Sprintf("\n%s: (+%d)", pos, i+1)
-
-							// Trace the execution in testing.T, to clarify where we
-							// are in case an error occurs.
-							log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
-
-							// Decompose the current script line.
-							var err error
-							d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
-							if err != nil {
-								e.t.Fatalf("%s: %v", d.Pos, err)
-							}
-
-							// Expand "with" commands:
-							//   with t=A
-							//       txn_begin
-							//       resolve_intent k=a
-							// is equivalent to:
-							//   txn_begin      t=A
-							//   resolve_intent k=a t=A
-							isIndented := strings.TrimLeft(line, " \t") != line
-							if d.Cmd == "with" {
-								if !isIndented {
-									// Reset shared args.
-									sharedCmdArgs = d.CmdArgs
-								} else {
-									// Prefix shared args. We use prefix so that the
-									// innermost "with" can override/shadow the outermost
-									// "with".
-									sharedCmdArgs = append(d.CmdArgs, sharedCmdArgs...)
-								}
-								continue
-							} else if isIndented {
-								// line is indented. Inherit arguments.
-								if len(sharedCmdArgs) == 0 {
-									// sanity check.
-									e.Fatalf("indented command without prior 'with': %s", line)
-								}
-								// We prepend the args that are provided on the command
-								// itself so it's possible to override those provided
-								// via "with".
-								d.CmdArgs = append(d.CmdArgs, sharedCmdArgs...)
-							} else {
-								// line is not indented. Clear shared arguments.
-								sharedCmdArgs = nil
-							}
-
-							cmd := e.getCmd()
-							txnChange = txnChange || cmd.typ == typTxnUpdate
-							dataChange = dataChange || cmd.typ == typDataUpdate
-
-							if trace {
-								// If tracing is also requested by the datadriven input,
-								// we'll trace the statement in the actual results too.
-								fmt.Fprintf(&buf, ">> %s", d.Cmd)
-								for i := range d.CmdArgs {
-									fmt.Fprintf(&buf, " %s", &d.CmdArgs[i])
-								}
-								buf.WriteByte('\n')
-							}
-
-							// Run the command.
-							foundErr = cmd.fn(e)
-
-							if trace {
-								// If tracing is enabled, we report the intermediate results
-								// after each individual step in the script.
-								// This may modify foundErr too.
-								reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate)
-							}
-
-							if foundErr != nil {
-								// An error occurred. Stop the script prematurely.
-								break
-							}
-						}
-						// End of script.
-
-						if !trace {
-							// If we were not tracing, no results were printed yet. Do it now.
-							if txnChange || dataChange {
-								buf.WriteString(">> at end:\n")
-							}
-							reportResults(txnChange, dataChange)
-						}
-
-						signalError := e.t.Errorf
-						if txnChange || dataChange {
-							// We can't recover from an error and continue
-							// to proceed further tests, because the state
-							// may have changed from what the test may be expecting.
-							signalError = e.t.Fatalf
-						}
-
-						// Check for errors.
-						if foundErr == nil && expectError {
-							signalError("%s: expected error, got success", d.Pos)
-							return d.Expected
-						} else if foundErr != nil {
-							if expectError {
-								fmt.Fprintf(&buf, "error: (%T:) %v\n", foundErr, foundErr)
-							} else /* !expectError */ {
-								signalError("%s: expected success, found: (%T:) %v", d.Pos, foundErr, foundErr)
-								return d.Expected
-							}
-						}
-
-						// We're done. Report the actual results and errors to the
-						// datadriven executor.
-						return buf.String()
-
-					default:
-						e.t.Errorf("%s: unknown command: %s", d.Pos, d.Cmd)
-						return d.Expected
-					}
-				})
+				return nil
 			})
+			if !hasData {
+				buf.WriteString("<no data>\n")
+			}
+			return err
+		}
+
+		e := newEvalCtx(ctx, engine)
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// We'll be overriding cmd/cmdargs below, because the
+			// datadriven reader does not know about sub-commands.
+			defer func(pos, cmd string, cmdArgs []datadriven.CmdArg) {
+				d.Pos = pos
+				d.Cmd = cmd
+				d.CmdArgs = cmdArgs
+			}(d.Pos, d.Cmd, d.CmdArgs)
+			// The various evalCtx helpers want access to the current test
+			// and testdata structs.
+			e.t = t
+			e.td = d
+
+			switch d.Cmd {
+			case "skip":
+				if len(d.CmdArgs) == 0 {
+					skip.IgnoreLint(e.t, "skipped")
+				}
+				return d.Expected
+			case "run":
+				// Syntax: run [trace] [error]
+				// (other words - in particular "ok" - are accepted but ignored)
+				//
+				// "run" executes a script of zero or more operations from
+				// the commands library defined below.
+				// It stops upon the first error encountered, if any.
+				//
+				// Options:
+				// "trace" means detail each operation in the output.
+				// "error" means expect an error to occur. The specific error type/
+				// message to expect is spelled out in the expected output.
+				//
+				trace := false
+				if e.hasArg("trace") {
+					trace = true
+				}
+				expectError := false
+				if e.hasArg("error") {
+					expectError = true
+				}
+
+				// buf will accumulate the actual output, which the
+				// datadriven driver will use to compare to the expected
+				// output.
+				var buf bytes.Buffer
+				e.results.buf = &buf
+				e.results.traceIntentWrites = trace
+
+				// foundErr remembers which error was last encountered while
+				// executing the script under "run".
+				var foundErr error
+
+				// pos is the original <file>:<lineno> prefix computed by
+				// datadriven. It points to the top "run" command itself.
+				// We editing d.Pos in-place below by extending `pos` upon
+				// each new line of the script.
+				pos := d.Pos
+
+				// dataChange indicates whether some command in the script
+				// has modified the stored data. When this becomes true, the
+				// current content of storage is printed in the results
+				// buffer at the end.
+				dataChange := false
+				// txnChange indicates whether some command has modified
+				// a transaction object. When set, the last modified txn
+				// object is reported in the result buffer at the end.
+				txnChange := false
+
+				reportResults := func(printTxn, printData bool) {
+					if printTxn && e.results.txn != nil {
+						fmt.Fprintf(&buf, "txn: %v\n", e.results.txn)
+					}
+					if printData {
+						err := reportDataEntries(&buf)
+						if err != nil {
+							if foundErr == nil {
+								// Handle the error below.
+								foundErr = err
+							} else {
+								fmt.Fprintf(&buf, "error reading data: (%T:) %v\n", err, err)
+							}
+						}
+					}
+				}
+
+				// sharedCmdArgs is updated by "with" pseudo-commands,
+				// to pre-populate common arguments for the following
+				// indented commands.
+				var sharedCmdArgs []datadriven.CmdArg
+
+				// The lines of the script under "run".
+				lines := strings.Split(d.Input, "\n")
+				for i, line := range lines {
+					if short := strings.TrimSpace(line); short == "" || strings.HasPrefix(short, "#") {
+						// Comment or empty line. Do nothing.
+						continue
+					}
+
+					// Compute a line prefix, to clarify error message. We
+					// prefix a newline character because some text editor do
+					// not know how to jump to the location of an error if
+					// there are multiple file:line prefixes on the same line.
+					d.Pos = fmt.Sprintf("\n%s: (+%d)", pos, i+1)
+
+					// Trace the execution in testing.T, to clarify where we
+					// are in case an error occurs.
+					log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
+
+					// Decompose the current script line.
+					var err error
+					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+					if err != nil {
+						e.t.Fatalf("%s: %v", d.Pos, err)
+					}
+
+					// Expand "with" commands:
+					//   with t=A
+					//       txn_begin
+					//       resolve_intent k=a
+					// is equivalent to:
+					//   txn_begin      t=A
+					//   resolve_intent k=a t=A
+					isIndented := strings.TrimLeft(line, " \t") != line
+					if d.Cmd == "with" {
+						if !isIndented {
+							// Reset shared args.
+							sharedCmdArgs = d.CmdArgs
+						} else {
+							// Prefix shared args. We use prefix so that the
+							// innermost "with" can override/shadow the outermost
+							// "with".
+							sharedCmdArgs = append(d.CmdArgs, sharedCmdArgs...)
+						}
+						continue
+					} else if isIndented {
+						// line is indented. Inherit arguments.
+						if len(sharedCmdArgs) == 0 {
+							// sanity check.
+							e.Fatalf("indented command without prior 'with': %s", line)
+						}
+						// We prepend the args that are provided on the command
+						// itself so it's possible to override those provided
+						// via "with".
+						d.CmdArgs = append(d.CmdArgs, sharedCmdArgs...)
+					} else {
+						// line is not indented. Clear shared arguments.
+						sharedCmdArgs = nil
+					}
+
+					cmd := e.getCmd()
+					txnChange = txnChange || cmd.typ == typTxnUpdate
+					dataChange = dataChange || cmd.typ == typDataUpdate
+
+					if trace {
+						// If tracing is also requested by the datadriven input,
+						// we'll trace the statement in the actual results too.
+						fmt.Fprintf(&buf, ">> %s", d.Cmd)
+						for i := range d.CmdArgs {
+							fmt.Fprintf(&buf, " %s", &d.CmdArgs[i])
+						}
+						buf.WriteByte('\n')
+					}
+
+					// Run the command.
+					foundErr = cmd.fn(e)
+
+					if trace {
+						// If tracing is enabled, we report the intermediate results
+						// after each individual step in the script.
+						// This may modify foundErr too.
+						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate)
+					}
+
+					if foundErr != nil {
+						// An error occurred. Stop the script prematurely.
+						break
+					}
+				}
+				// End of script.
+
+				if !trace {
+					// If we were not tracing, no results were printed yet. Do it now.
+					if txnChange || dataChange {
+						buf.WriteString(">> at end:\n")
+					}
+					reportResults(txnChange, dataChange)
+				}
+
+				signalError := e.t.Errorf
+				if txnChange || dataChange {
+					// We can't recover from an error and continue
+					// to proceed further tests, because the state
+					// may have changed from what the test may be expecting.
+					signalError = e.t.Fatalf
+				}
+
+				// Check for errors.
+				if foundErr == nil && expectError {
+					signalError("%s: expected error, got success", d.Pos)
+					return d.Expected
+				} else if foundErr != nil {
+					if expectError {
+						fmt.Fprintf(&buf, "error: (%T:) %v\n", foundErr, foundErr)
+					} else /* !expectError */ {
+						signalError("%s: expected success, found: (%T:) %v", d.Pos, foundErr, foundErr)
+						return d.Expected
+					}
+				}
+
+				// We're done. Report the actual results and errors to the
+				// datadriven executor.
+				return buf.String()
+
+			default:
+				e.t.Errorf("%s: unknown command: %s", d.Pos, d.Cmd)
+				return d.Expected
+			}
 		})
-	}
+	})
 }
 
 // getCmd retrieves the cmd entry for the current script line.
@@ -516,6 +528,7 @@ type intentPrintingReadWriter struct {
 }
 
 func (rw intentPrintingReadWriter) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
@@ -524,7 +537,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 ) (int, error) {
 	fmt.Fprintf(rw.buf, "called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID)
+	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(

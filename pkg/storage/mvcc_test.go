@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -80,9 +81,17 @@ var (
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
-	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+	return NewDefaultInMemForTesting()
 }
 
+func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
+	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+}
+
+// TODO(sumeer): the following is legacy from when we had multiple engine
+// implementations. Some tests are switched over to only create Pebble, since
+// the create method does not provide control over cluster.Settings. Switch
+// the rest and remove this.
 var mvccEngineImpls = []struct {
 	name   string
 	create func() Engine
@@ -4704,9 +4713,6 @@ func TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if DisallowSeparatedIntents || !EnabledSeparatedIntents {
-		return
-	}
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {

@@ -39,7 +39,7 @@ import (
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() storage.Engine {
-	return storage.NewInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+	return storage.NewInMemForTesting(context.Background(), roachpb.Attributes{}, 1<<20)
 }
 
 var engineImpls = []struct {
