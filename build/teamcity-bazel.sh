@@ -10,6 +10,9 @@ tc_prepare
 export TMPDIR=$root/artifacts
 mkdir -p "$TMPDIR"
 
+# Bazel configuration for CI.
+cp $root/.bazelrc.ci $root/.bazelrc.user
+
 tc_start_block "Run Bazel build"
 docker run -i ${tty-} --rm --init \
        --workdir="/go/src/github.com/cockroachdb/cockroach" \

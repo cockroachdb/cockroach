@@ -1,0 +1,6 @@
+# Bazel configuration for TeamCity. `cp` this file to `.bazelrc.user` to
+# activate these settings.
+
+# Set `-test.v` in Go tests.
+# Ref: https://github.com/bazelbuild/rules_go/pull/2456
+test --test_env=GO_TEST_WRAP_TESTV=1
