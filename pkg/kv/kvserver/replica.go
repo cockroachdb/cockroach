@@ -194,6 +194,22 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
+	// The start key of a Range remains constant throughout its lifetime (it does
+	// not change through splits or merges). This field carries a copy of
+	// r.mu.state.Desc.StartKey (and nil if the replica is not initialized). The
+	// copy is maintained to allow inserting locked Replicas into
+	// Store.mu.replicasByKey (keyed on start key) without the risk of deadlock.
+	// The synchronization for this field works as follows:
+	//
+	// - the field must not be accessed for uninitialized replicas, except:
+	// - when setting the field (i.e. when initializing the replica), under `mu`.
+	//
+	// Due to the first rule, any access to the field is preceded by an
+	// acquisition of `mu` (Replica.IsInitialized) which serializes the write and
+	// any subsequent reads of the field.
+	//
+	// The writes to this key happen in Replica.setStartKeyLocked.
+	startKey roachpb.RKey
 
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -792,11 +808,6 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 func (r *Replica) Version() roachpb.Version {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	if r.mu.state.Version == nil {
-		// TODO(irfansharif): This is a stop-gap for #58523.
-		return roachpb.Version{}
-	}
 	return *r.mu.state.Version
 }
 
@@ -1089,8 +1100,6 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 // assertStateLocked can be called from the Raft goroutine to check that the
 // in-memory and on-disk states of the Replica are congruent.
 // Requires that both r.raftMu and r.mu are held.
-//
-// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) {
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
@@ -1105,6 +1114,11 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 		r.mu.state.Desc, diskState.Desc = nil, nil
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
 			log.Safe(pretty.Diff(diskState, r.mu.state)))
+	}
+	if r.isInitializedRLocked() {
+		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {
+			log.Fatalf(ctx, "denormalized start key %s diverged from %s", r.startKey, r.mu.state.Desc.StartKey)
+		}
 	}
 }
 
@@ -1407,7 +1421,13 @@ func (ec *endCmds) done(
 // except for read-only requests that are older than `freezeStart`, until the
 // merge completes.
 func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timestamp) error {
-	desc := r.Desc()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maybeWatchForMergeLocked(ctx, freezeStart)
+}
+
+func (r *Replica) maybeWatchForMergeLocked(ctx context.Context, freezeStart hlc.Timestamp) error {
+	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
 		storage.MVCCGetOptions{Inconsistent: true})
@@ -1430,12 +1450,10 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	// whether the merge succeeded or not.
 
 	mergeCompleteCh := make(chan struct{})
-	r.mu.Lock()
 	if r.mu.mergeComplete != nil {
 		// Another request already noticed the merge, installed a mergeComplete
 		// channel, and launched a goroutine to watch for the merge's completion.
 		// Nothing more to do.
-		r.mu.Unlock()
 		return nil
 	}
 	// Note that if the merge txn retries for any reason (for example, if the
@@ -1451,7 +1469,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
 	r.unquiesceLocked()
-	r.mu.Unlock()
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
@@ -1578,12 +1595,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	return err
 }
 
-func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context) {
-	r.mu.Lock()
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
-	r.mu.Unlock()
-}
-
 // maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
 // leadership away from this node to the leaseholder, if this node is the
 // current raft leader but not the leaseholder. We don't attempt to transfer
@@ -1653,10 +1664,6 @@ func checkIfTxnAborted(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), newTxn)
 	}
 	return nil
-}
-
-func (r *Replica) startKey() roachpb.RKey {
-	return r.Desc().StartKey
 }
 
 // GetLeaseHistory returns the lease history stored on this replica.

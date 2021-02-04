@@ -964,13 +964,18 @@ func (r *Replica) applySnapshot(
 	}
 
 	// Atomically swap the placeholder, if any, for the replica, and update the
-	// replica's descriptor.
+	// replica's state. Note that this is intentionally in one critical section.
+	// to avoid exposing an inconsistent in-memory state. We did however already
+	// consume the SSTs above, meaning that at this point the in-memory state lags
+	// the on-disk state.
+
+	r.mu.Lock()
 	r.store.mu.Lock()
 	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
 		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 	}
-	r.setDescRaftMuLocked(ctx, s.Desc)
-	if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
+	r.setDescLockedRaftMuLocked(ctx, s.Desc)
+	if err := r.store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 	}
 	r.store.mu.Unlock()
@@ -979,12 +984,11 @@ func (r *Replica) applySnapshot(
 	// replica according to whether it holds the lease. We allow jumps in the
 	// lease sequence because there may be multiple lease changes accounted for
 	// in the snapshot.
-	r.leasePostApply(ctx, *s.Lease, true /* permitJump */)
+	r.leasePostApplyLocked(ctx, *s.Lease, true /* permitJump */)
 
 	// Inform the concurrency manager that this replica just applied a snapshot.
 	r.concMgr.OnReplicaSnapshotApplied()
 
-	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
 	// not a correctness issue, but means that we may have just transferred
 	// some entries we're about to re-request from the leader and overwrite.

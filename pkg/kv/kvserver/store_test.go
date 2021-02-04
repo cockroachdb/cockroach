@@ -854,9 +854,13 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 
 	expectedResult := "attempted to process uninitialized range.*"
 	ctx := r.AnnotateCtx(context.Background())
-	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-		t.Errorf("expected maybeMarkReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
-	}
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected maybeMarkReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
+		}
+	}()
 
 	// Initialize the range with start and end keys.
 	desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
@@ -869,16 +873,24 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}}
 	desc.NextReplicaID = 2
 	r.setDescRaftMuLocked(ctx, desc)
-	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
-		t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
-	}
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
+		}
+	}()
 
 	store.mu.uninitReplicas[newRangeID] = r
 
 	expectedResult = ".*cannot initialize replica.*"
-	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-		t.Errorf("expected maybeMarkReplicaInitializedLocked with overlapping keys to fail, got %v", err)
-	}
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected maybeMarkReplicaInitializedLocked with overlapping keys to fail, got %v", err)
+		}
+	}()
 }
 
 // TestStoreSend verifies straightforward command execution

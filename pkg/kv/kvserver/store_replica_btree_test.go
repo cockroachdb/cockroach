@@ -97,6 +97,7 @@ func TestStoreReplicaBTree_LookupPrecedingReplica(t *testing.T) {
 		desc.EndKey = roachpb.RKey(end)
 		r := &Replica{}
 		r.mu.state.Desc = desc
+		r.startKey = desc.StartKey // this is what's actually used in the btree
 		return r
 	}
 
@@ -136,4 +137,24 @@ func TestStoreReplicaBTree_LookupPrecedingReplica(t *testing.T) {
 			t.Errorf("%d: expected replica %v; got %v", i, tc.expRepl, repl)
 		}
 	}
+}
+
+func TestStoreReplicaBTree_ReplicaCanBeLockedDuringInsert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Verify that the replica can be locked while being inserted (and removed).
+	// This is important for `Store.maybeMarkReplicaInitializedLockedReplLocked`.
+	ctx := context.Background()
+	repl := &Replica{}
+	k := roachpb.RKey("a")
+	repl.mu.state.Desc = &roachpb.RangeDescriptor{
+		RangeID: 12,
+	}
+	repl.startKey = k
+	repl.mu.Lock()
+	defer repl.mu.Unlock()
+
+	br := newStoreReplicaBTree()
+	require.Nil(t, br.ReplaceOrInsertReplica(ctx, repl).item)
+	require.Equal(t, repl, br.ReplaceOrInsertReplica(ctx, repl).repl)
+	require.Equal(t, repl, br.DeleteReplica(ctx, repl).repl)
 }

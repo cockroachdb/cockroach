@@ -2719,10 +2719,6 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
 	g := ctxgroup.WithContext(ctx)
 	s.VisitReplicas(func(repl *Replica) (wantMore bool) {
-		if (repl.Version() == roachpb.Version{}) {
-			// TODO(irfansharif): This is a stop gap for #58523.
-			return true
-		}
 		if !repl.Version().Less(version) {
 			// Nothing to do here.
 			return true

@@ -29,6 +29,10 @@ const configGossipTTL = 0 // does not expire
 func (r *Replica) gossipFirstRange(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.gossipFirstRangeLocked(ctx)
+}
+
+func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return

@@ -311,24 +311,29 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 // unintialized replica has become initialized so that the store can update its
 // internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
-func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Replica) error {
-	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to process uninitialized range %s", repl)
+func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
+	ctx context.Context, lockedRepl *Replica,
+) error {
+	desc := lockedRepl.descRLocked()
+	if !desc.IsInitialized() {
+		return errors.Errorf("attempted to process uninitialized range %s", desc)
 	}
 
-	rangeID := repl.RangeID
-
+	rangeID := lockedRepl.RangeID
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
 		return nil
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
-		return errors.Errorf("%s: cannot initialize replica; range %s has overlapping range %s",
-			s, repl, it.Desc())
+	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+		return errors.Errorf("%s: cannot initialize replica; %s has overlapping range %s",
+			s, desc, it.Desc())
 	}
-	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, repl); it.item != nil {
+
+	// Copy of the start key needs to be set before inserting into replicasByKey.
+	lockedRepl.setStartKeyLocked(desc.StartKey)
+	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree: %+v",
 			it.item.key(), it)
 	}
