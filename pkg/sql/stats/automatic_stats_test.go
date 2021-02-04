@@ -150,6 +150,11 @@ func TestAverageRefreshTime(t *testing.T) {
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
+	// curTime is used as the current time throughout the test to ensure that the
+	// calculated average refresh time is consistent even if there are delays due
+	// to running the test under race.
+	curTime := timeutil.Now()
+
 	checkAverageRefreshTime := func(expected time.Duration) error {
 		cache.RefreshTableStats(ctx, tableID)
 		return testutils.SucceedsSoonError(func() error {
@@ -178,14 +183,14 @@ func TestAverageRefreshTime(t *testing.T) {
 			if stat == nil {
 				return fmt.Errorf("no recent automatic statistic found")
 			}
-			if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
+			if !lessThan && stat.CreatedAt.After(curTime.Add(-1*expectedAge)) {
 				return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
-					expectedAge, stat.CreatedAt, timeutil.Now(),
+					expectedAge, stat.CreatedAt, curTime,
 				)
 			}
-			if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
+			if lessThan && stat.CreatedAt.Before(curTime.Add(-1*expectedAge)) {
 				return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
-					expectedAge, stat.CreatedAt, timeutil.Now(),
+					expectedAge, stat.CreatedAt, curTime,
 				)
 			}
 			return nil
@@ -232,7 +237,7 @@ func TestAverageRefreshTime(t *testing.T) {
 				return err
 			}
 			createdAt, err := tree.MakeDTimestamp(
-				timeutil.Now().Add(time.Duration(-1*(i*3+7))*time.Hour), time.Hour,
+				curTime.Add(time.Duration(-1*(i*3+7))*time.Hour), time.Hour,
 			)
 			if err != nil {
 				return err
@@ -257,7 +262,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}
 
 	// Add some stats on column v in table a with name AutoStatsName, separated
-	// by three hours each, starting 6 hours ago.
+	// by four hours each, starting 6 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
@@ -265,7 +270,7 @@ func TestAverageRefreshTime(t *testing.T) {
 				return err
 			}
 			createdAt, err := tree.MakeDTimestamp(
-				timeutil.Now().Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
+				curTime.Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
 			)
 			if err != nil {
 				return err
@@ -316,7 +321,7 @@ func TestAverageRefreshTime(t *testing.T) {
 				return err
 			}
 			createdAt, err := tree.MakeDTimestamp(
-				timeutil.Now().Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
+				curTime.Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
 			)
 			if err != nil {
 				return err
