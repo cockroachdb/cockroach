@@ -134,6 +134,17 @@ message TransactionStatistics {
   // CommitLat is the amount of time required to commit the transaction after
   // all statement operations have been applied.
   optional NumericStat commit_lat = 6 [(gogoproto.nullable) = false];
+
+  // BytesRead collects the number of bytes read from disk.
+  optional NumericStat bytes_read = 7 [(gogoproto.nullable) = false];
+
+  // RowsRead collects the number of rows read from disk.
+  optional NumericStat rows_read = 8 [(gogoproto.nullable) = false];
+
+  // ExecStats are the execution statistics for this transaction, i.e. an
+  // aggregation of all its statements' execution statistics. These statistics
+  // are sampled.
+  optional ExecStats exec_stats = 9 [(gogoproto.nullable) = false];
 }
 
 
@@ -231,4 +242,27 @@ message TxnStats {
   optional int64 implicit_count = 4 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
+}
+
+// ExecStats contains execution statistics that apply to both statements
+// and transactions. These stats are currently collected using a sampling
+// approach.
+// TODO(asubiotto): Use this in StatementStatistics.
+message ExecStats {
+  // Count keeps track of how many times execution stats were recorded. This is
+  // not necessarily equal to the number of times a statement/transaction was
+  // run.
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+
+  // NetworkBytes collects the number of bytes sent over the network.
+  optional NumericStat network_bytes = 2 [(gogoproto.nullable) = false];
+
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  optional NumericStat max_mem_usage = 3 [(gogoproto.nullable) = false];
+
+  // ContentionTime collects the time this statement spent contending.
+  optional NumericStat contention_time = 4 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields
+  // here!
 }
