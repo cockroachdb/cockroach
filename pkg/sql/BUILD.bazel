@@ -281,6 +281,7 @@ go_library(
         "//pkg/sql/colexec",
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/colflow",
+        "//pkg/sql/contention",
         "//pkg/sql/covering",
         "//pkg/sql/delegate",
         "//pkg/sql/distsql",
