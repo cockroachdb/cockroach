@@ -54,12 +54,12 @@ SELECT * FROM a WHERE s = 'foo'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string)
- ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+ ├── stats: [rows=96.4285715, distinct(3)=1, null(3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int)
-      ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=96.4285715, distinct(3)=1, null(3)=0]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -1281,17 +1281,17 @@ SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=8.54700855]
+ ├── stats: [rows=8.54700856]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=8.54700855, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── stats: [rows=8.54700856, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=8.54700855]
+      │    ├── stats: [rows=8.54700856]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1304,7 +1304,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=8.54700855]
+      │         ├── stats: [rows=8.54700856]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
@@ -1313,7 +1313,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
+      │              ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700856, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -1325,17 +1325,17 @@ SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=2.84900285]
+ ├── stats: [rows=2.84900286]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=2.84900285, distinct(2)=2.84900285, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=2.84900286, distinct(2)=2.84900286, null(2)=0, distinct(3)=1, null(3)=0]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=8.54700855]
+      │    ├── stats: [rows=8.54700856]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1348,7 +1348,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=8.54700855]
+      │         ├── stats: [rows=8.54700856]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
@@ -1357,7 +1357,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
+      │              ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700856, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
