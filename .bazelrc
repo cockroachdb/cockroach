@@ -2,6 +2,5 @@
 
 build --ui_event_filters=-DEBUG
 query --ui_event_filters=-DEBUG
-test --test_env=GO_TEST_WRAP_TESTV=1
 
 try-import %workspace%/.bazelrc.user
