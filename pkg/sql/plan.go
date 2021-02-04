@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -267,8 +266,6 @@ var _ planNodeSpooled = &spoolNode{}
 type flowInfo struct {
 	typ     planComponentType
 	diagram execinfrapb.FlowDiagram
-	// FlowMetadata stores metadata from flows that will be used by TraceAnalyzer.
-	flowMetadata *execstats.FlowMetadata
 }
 
 // planTop is the struct that collects the properties

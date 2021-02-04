@@ -980,9 +980,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
-	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
-		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-	} else if planner.instrumentation.ShouldSaveFlows() {
+	if planner.instrumentation.ShouldSaveFlows() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 	planCtx.traceMetadata = planner.instrumentation.traceMetadata

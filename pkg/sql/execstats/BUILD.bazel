@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
@@ -18,12 +17,10 @@ go_test(
     srcs = [
         "main_test.go",
         "traceanalyzer_test.go",
-        "utils_test.go",
     ],
-    embed = [":execstats"],
     deps = [
+        ":execstats",
         "//pkg/base",
-        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -39,7 +36,6 @@ go_test(
         "//pkg/util/optional",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

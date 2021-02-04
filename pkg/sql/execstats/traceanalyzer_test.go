@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,16 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestTraceAnalyzer verifies that the TraceAnalyzer correctly calculates
-// expected top-level statistics from a physical plan and an accompanying trace
-// from that plan's execution. It does this by starting up a multi-node cluster,
-// enabling tracing, capturing the physical plan of a test statement, and
-// constructing a TraceAnalyzer from the resulting trace and physical plan.
-func TestTraceAnalyzer(t *testing.T) {
+// TestTraceAnalyzerAnalyze verifies that the TraceAnalyzer correctly calculates
+// expected query-level statistics from the trace. It does this by starting up a
+// multi-node cluster, enabling tracing, and constructing a TraceAnalyzer from
+// the resulting trace.
+func TestTraceAnalyzerAnalyze(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer leaktest.AfterTest(t)()
 
@@ -51,27 +48,10 @@ func TestTraceAnalyzer(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	analyzerChan := make(chan *execstats.TraceAnalyzer, 1)
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			UseDatabase: "test",
-			Knobs: base.TestingKnobs{
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
-						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-							flowMetadata := execstats.NewFlowMetadata(flows)
-							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
-							analyzerChan <- analyzer
-							return nil
-						}
-					},
-				},
-			},
-		}})
+		ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	const gatewayNode = 0
@@ -125,14 +105,13 @@ func TestTraceAnalyzer(t *testing.T) {
 		sp.Finish()
 		require.NoError(t, err)
 		trace := sp.GetRecording()
-		analyzer := <-analyzerChan
-		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
-		require.NoError(t, analyzer.ProcessStats())
+		var analyzer execstats.TraceAnalyzer
+		require.NoError(t, analyzer.Analyze(trace, true /* makeDeterministic */))
 		switch vectorizeMode {
 		case sessiondatapb.VectorizeOff:
-			rowexecTraceAnalyzer = analyzer
+			rowexecTraceAnalyzer = &analyzer
 		case sessiondatapb.VectorizeOn:
-			colexecTraceAnalyzer = analyzer
+			colexecTraceAnalyzer = &analyzer
 		default:
 			t.Fatalf("programming error, vectorize mode %s not handled", vectorizeMode)
 		}
@@ -155,14 +134,6 @@ func TestTraceAnalyzer(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			nodeLevelStats := tc.analyzer.GetNodeLevelStats()
-			require.Equal(
-				t, numNodes-1, len(nodeLevelStats.NetworkBytesSentGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
-			)
-			require.Equal(
-				t, numNodes, len(nodeLevelStats.MaxMemoryUsageGroupedByNode), "expected all nodes to have specified maximum memory usage",
-			)
-
 			queryLevelStats := tc.analyzer.GetQueryLevelStats()
 
 			// The stats don't count the actual bytes, but they are a synthetic value
@@ -184,15 +155,14 @@ func TestTraceAnalyzer(t *testing.T) {
 	}
 }
 
-func TestTraceAnalyzerProcessStats(t *testing.T) {
+func TestTraceAnalyzerProcessComponentStats(t *testing.T) {
 	const (
 		node1Time      = 3 * time.Second
 		node2Time      = 5 * time.Second
 		cumulativeTime = node1Time + node2Time
 	)
-	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
-	a.AddComponentStats(
-		1, /* nodeID */
+	var a execstats.TraceAnalyzer
+	require.NoError(t, a.ProcessComponentStats(
 		&execinfrapb.ComponentStats{
 			Component: execinfrapb.ProcessorComponentID(
 				execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -203,10 +173,9 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				ContentionTime: optional.MakeTimeValue(node1Time),
 			},
 		},
-	)
+	))
 
-	a.AddComponentStats(
-		2, /* nodeID */
+	require.NoError(t, a.ProcessComponentStats(
 		&execinfrapb.ComponentStats{
 			Component: execinfrapb.ProcessorComponentID(
 				execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -217,14 +186,13 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				ContentionTime: optional.MakeTimeValue(node2Time),
 			},
 		},
-	)
+	))
 
 	expected := execstats.QueryLevelStats{
 		KVTime:         cumulativeTime,
 		ContentionTime: cumulativeTime,
 	}
 
-	assert.NoError(t, a.ProcessStats())
 	if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {
 		t.Errorf("ProcessStats() = %v, want %v", got, expected)
 	}
