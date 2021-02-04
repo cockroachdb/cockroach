@@ -1,0 +1,17 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING sql.show_tables.estimated_row_count.enabled = false
+
+statement ok
+CREATE TABLE show_this_table ()
+
+query TTTT
+SHOW TABLES
+----
+public  show_this_table  table  root
+
+query TTTTT
+SHOW TABLES WITH COMMENT
+----
+public  show_this_table  table  root  ·
