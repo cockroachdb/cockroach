@@ -70,7 +70,7 @@ func slurpSSTablesLatestKey(
 ) []storage.MVCCKeyValue {
 	start, end := storage.MVCCKey{Key: keys.LocalMax}, storage.MVCCKey{Key: keys.MaxKey}
 
-	e := storage.NewDefaultInMem()
+	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
 	batch := e.NewBatch()
 	defer batch.Close()

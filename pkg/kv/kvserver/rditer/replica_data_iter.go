@@ -73,7 +73,7 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
-// 3. Lock-table key ranges (optional)
+// 3. Lock-table key ranges
 // 4. User key range
 func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 	return makeRangeKeyRanges(d, true /* replicatedOnly */)
@@ -82,24 +82,17 @@ func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 func makeRangeKeyRanges(d *roachpb.RangeDescriptor, replicatedOnly bool) []KeyRange {
 	rangeIDLocal := MakeRangeIDLocalKeyRange(d.RangeID, replicatedOnly)
 	rangeLocal := makeRangeLocalKeyRange(d)
-	user := MakeUserKeyRange(d)
-	if storage.DisallowSeparatedIntents {
-		return []KeyRange{
-			rangeIDLocal,
-			rangeLocal,
-			user,
-		}
-	}
 	rangeLockTable := makeRangeLockTableKeyRanges(d)
-	ranges := make([]KeyRange, 3+len(rangeLockTable))
+	user := MakeUserKeyRange(d)
+	ranges := make([]KeyRange, 5)
 	ranges[0] = rangeIDLocal
 	ranges[1] = rangeLocal
-	i := 2
-	for j := range rangeLockTable {
-		ranges[i] = rangeLockTable[j]
-		i++
+	if len(rangeLockTable) != 2 {
+		panic("unexpected number of lock table ranges")
 	}
-	ranges[i] = user
+	ranges[2] = rangeLockTable[0]
+	ranges[3] = rangeLockTable[1]
+	ranges[4] = user
 	return ranges
 }
 
@@ -121,26 +114,20 @@ func MakeReplicatedKeyRangesExceptLockTable(d *roachpb.RangeDescriptor) []KeyRan
 // replicated for the given Range, except for the replicated range-id local key range.
 // These are returned in the following sorted order:
 // 1. Range-local key range
-// 2. Lock-table key ranges (optional)
+// 2. Lock-table key ranges
 // 3. User key range
 func MakeReplicatedKeyRangesExceptRangeID(d *roachpb.RangeDescriptor) []KeyRange {
 	rangeLocal := makeRangeLocalKeyRange(d)
-	user := MakeUserKeyRange(d)
-	if storage.DisallowSeparatedIntents {
-		return []KeyRange{
-			rangeLocal,
-			user,
-		}
-	}
 	rangeLockTable := makeRangeLockTableKeyRanges(d)
-	ranges := make([]KeyRange, 2+len(rangeLockTable))
+	user := MakeUserKeyRange(d)
+	ranges := make([]KeyRange, 4)
 	ranges[0] = rangeLocal
-	i := 1
-	for j := range rangeLockTable {
-		ranges[i] = rangeLockTable[j]
-		i++
+	if len(rangeLockTable) != 2 {
+		panic("unexpected number of lock table ranges")
 	}
-	ranges[i] = user
+	ranges[1] = rangeLockTable[0]
+	ranges[2] = rangeLockTable[1]
+	ranges[3] = user
 	return ranges
 }
 
