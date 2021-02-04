@@ -300,16 +300,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.ForeignKeyConstraintTableDef:
-				for _, colName := range d.FromCols {
-					col, err := n.tableDesc.FindActiveOrNewColumnByName(colName)
-					if err != nil {
-						return err
-					}
-
-					if err := col.CheckCanBeFKRef(); err != nil {
-						return err
-					}
-				}
 				affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 				// If there are any FKs, we will need to update the table descriptor of the

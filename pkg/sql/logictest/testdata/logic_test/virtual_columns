@@ -500,3 +500,45 @@ a  b   v   w1  w2
 1  10  11  10  20
 2  20  22  40  40
 3  30  33  90  60
+
+# Verify that FK relations on virtual columns are disallowed.
+statement ok
+CREATE TABLE fk (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  u INT UNIQUE AS (b+c) VIRTUAL
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  c INT REFERENCES fk(u)
+)
+
+statement error virtual column "c" cannot reference a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  c INT AS (p+1) VIRTUAL REFERENCES fk(a)
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  q INT,
+  r INT,
+  CONSTRAINT fk FOREIGN KEY (q,r) REFERENCES fk(a,u)
+)
+
+statement ok
+CREATE TABLE fk2 (
+  x INT PRIMARY KEY,
+  y INT,
+  v INT AS (x+y) VIRTUAL
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (x) REFERENCES fk(u)
+
+statement error virtual column "v" cannot reference a foreign key
+ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (v) REFERENCES fk(a)

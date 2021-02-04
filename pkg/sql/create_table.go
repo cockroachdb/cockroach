@@ -807,7 +807,7 @@ func ResolveFK(
 		if err != nil {
 			return err
 		}
-		if err := col.CheckCanBeFKRef(); err != nil {
+		if err := col.CheckCanBeOutboundFKRef(); err != nil {
 			return err
 		}
 		// Ensure that the origin columns don't have duplicates.
@@ -887,6 +887,12 @@ func ResolveFK(
 	referencedCols, err := target.FindActiveColumnsByNames(referencedColNames)
 	if err != nil {
 		return err
+	}
+
+	for i := range referencedCols {
+		if err := referencedCols[i].CheckCanBeInboundFKRef(); err != nil {
+			return err
+		}
 	}
 
 	if len(referencedCols) != len(originCols) {
