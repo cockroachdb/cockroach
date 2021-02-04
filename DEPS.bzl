@@ -1752,8 +1752,8 @@ def go_deps():
         name = "com_github_linkedin_goavro_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/linkedin/goavro/v2",
-        sum = "h1:4OGyN6pvutqmVtObCSzm0BQ+wQQNxSuHCN0t8UAfrjk=",
-        version = "v2.8.1",
+        sum = "h1:jN50elxBsGBDGVDEKqUlDuU1cFwJ11K/yrJCBMe/7Wg=",
+        version = "v2.9.8",
     )
     go_repository(
         name = "com_github_lufia_iostat",
