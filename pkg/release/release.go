@@ -74,6 +74,7 @@ var SupportedTargets = []SupportedTarget{
 // makeReleaseAndVerifyOptions are options for MakeRelease.
 type makeReleaseAndVerifyOptions struct {
 	args   []string
+	env    []string
 	execFn ExecFn
 }
 
@@ -110,6 +111,14 @@ func WithMakeReleaseOptionExecFn(r ExecFn) MakeReleaseOption {
 	}
 }
 
+// WithMakeReleaseOptionEnv adds an environment variable to the build.
+func WithMakeReleaseOptionEnv(env string) MakeReleaseOption {
+	return func(m makeReleaseAndVerifyOptions) makeReleaseAndVerifyOptions {
+		m.env = append(m.env, env)
+		return m
+	}
+}
+
 // MakeWorkload makes the bin/workload binary.
 func MakeWorkload(pkgDir string) error {
 	cmd := exec.Command("make", "bin/workload")
@@ -137,6 +146,9 @@ func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) er
 		cmd := exec.Command("mkrelease", args...)
 		cmd.Dir = pkgDir
 		cmd.Stderr = os.Stderr
+		if len(params.env) > 0 {
+			cmd.Env = append(os.Environ(), params.env...)
+		}
 		log.Printf("%s %s", cmd.Env, cmd.Args)
 		if out, err := params.execFn(cmd); err != nil {
 			return errors.Newf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
