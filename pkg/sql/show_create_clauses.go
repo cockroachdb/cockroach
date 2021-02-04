@@ -90,7 +90,7 @@ func ShowCreateView(
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i, col := range desc.PublicColumnsNew() {
+	for i, col := range desc.PublicColumns() {
 		if i > 0 {
 			f.WriteString(", ")
 		}
@@ -255,7 +255,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}
-		if len(desc.VisibleColumnsNew()) == 0 {
+		if len(desc.VisibleColumns()) == 0 {
 			f.WriteString("FAMILY ")
 		} else {
 			f.WriteString(",\n\tFAMILY ")

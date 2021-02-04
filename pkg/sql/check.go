@@ -48,7 +48,7 @@ func validateCheckExpr(
 	if err != nil {
 		return err
 	}
-	colSelectors := tabledesc.ColumnsSelectors(tableDesc.PublicColumnsNew())
+	colSelectors := tabledesc.ColumnsSelectors(tableDesc.PublicColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 	queryStr := fmt.Sprintf(`SELECT %s FROM [%d AS t] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), exprStr)
 	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
@@ -60,7 +60,7 @@ func validateCheckExpr(
 	if rows.Len() > 0 {
 		return pgerror.Newf(pgcode.CheckViolation,
 			"validation of CHECK %q failed on row: %s",
-			expr, labeledRowValues(tableDesc.PublicColumnsNew(), rows))
+			expr, labeledRowValues(tableDesc.PublicColumns(), rows))
 	}
 	return nil
 }

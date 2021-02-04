@@ -1913,7 +1913,7 @@ func (desc *wrapper) ValidateTable(ctx context.Context) error {
 func (desc *wrapper) validateColumns(
 	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
 ) error {
-	for _, column := range desc.NonDropColumnsNew() {
+	for _, column := range desc.NonDropColumns() {
 
 		if err := catalog.ValidateName(column.GetName(), "column"); err != nil {
 			return err
@@ -2512,7 +2512,7 @@ func notIndexableError(cols []descpb.ColumnDescriptor) error {
 func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error {
 	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumnsNew() {
+		for _, col := range tableDesc.NonDropColumns() {
 			if col.GetName() == indexCol {
 				if !colinfo.ColumnTypeIsIndexable(col.GetType()) {
 					invalidColumns = append(invalidColumns, *col.ColumnDesc())
@@ -2529,7 +2529,7 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumnsNew() {
+		for _, col := range tableDesc.NonDropColumns() {
 			if col.GetName() == indexCol {
 				// The last column indexed by an inverted index must be
 				// inverted indexable.
@@ -2696,7 +2696,7 @@ func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, new
 // same transaction that is currently running.
 func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column, error) {
 	currentMutationID := desc.ClusterVersion.NextMutationID
-	for _, col := range desc.AllColumnsNew() {
+	for _, col := range desc.AllColumns() {
 		if (col.Public() && col.ColName() == name) ||
 			(col.Adding() && col.(*column).mutationID == currentMutationID) {
 			return col, nil
@@ -2708,7 +2708,7 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 // ContainsUserDefinedTypes returns whether or not this table descriptor has
 // any columns of user defined types.
 func (desc *wrapper) ContainsUserDefinedTypes() bool {
-	return len(desc.ColumnsWithUserDefinedTypesNew()) > 0
+	return len(desc.UserDefinedTypeColumns()) > 0
 }
 
 // FindFamilyByID finds the family with specified ID.
@@ -3793,7 +3793,7 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 		}
 	}
 
-	for _, c := range desc.NonDropColumnsNew() {
+	for _, c := range desc.NonDropColumns() {
 		for i := 0; i < c.NumUsesSequences(); i++ {
 			id := c.GetUsesSequenceID(i)
 			refs[id] = struct{}{}

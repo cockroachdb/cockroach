@@ -45,7 +45,7 @@ func DequalifyAndValidateExpr(
 	tn *tree.TableName,
 ) (string, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
-	nonDropColumns := desc.NonDropColumnsNew()
+	nonDropColumns := desc.NonDropColumns()
 	nonDropColumnDescs := make([]descpb.ColumnDescriptor, len(nonDropColumns))
 	for i, col := range nonDropColumns {
 		nonDropColumnDescs[i] = *col.ColumnDesc()

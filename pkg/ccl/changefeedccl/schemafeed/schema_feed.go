@@ -167,13 +167,13 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 }
 
 func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
-	for _, col := range tbl.ColumnsWithUserDefinedTypesNew() {
+	for _, col := range tbl.UserDefinedTypeColumns() {
 		t.removeDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
 	}
 }
 
 func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
-	for _, col := range tbl.ColumnsWithUserDefinedTypesNew() {
+	for _, col := range tbl.UserDefinedTypeColumns() {
 		t.addDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
 	}
 }

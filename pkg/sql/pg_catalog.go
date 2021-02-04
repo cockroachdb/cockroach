@@ -366,7 +366,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
-		for _, column := range table.PublicColumnsNew() {
+		for _, column := range table.PublicColumns() {
 			if !column.HasDefault() {
 				// pg_attrdef only expects rows for columns with default values.
 				continue
@@ -437,7 +437,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
-		for _, column := range table.PublicColumnsNew() {
+		for _, column := range table.PublicColumns() {
 			tableID := tableOid(table.GetID())
 			if err := addColumn(column.ColumnDesc(), tableID, column.GetPGAttributeNum()); err != nil {
 				return err
@@ -445,12 +445,12 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for each index.
-		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumnsNew())
+		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			for i := 0; i < index.NumColumns(); i++ {
 				colID := index.GetColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
-				column := table.PublicColumnsNew()[columnIdxMap.GetDefault(colID)]
+				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
 				if err := addColumn(column.ColumnDesc(), idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}
@@ -604,8 +604,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence,  // relPersistence
 			tree.DBoolFalse, // relistemp
 			relKind,         // relkind
-			tree.NewDInt(tree.DInt(len(table.PublicColumnsNew()))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.GetChecks()))),        // relchecks
+			tree.NewDInt(tree.DInt(len(table.PublicColumns()))), // relnatts
+			tree.NewDInt(tree.DInt(len(table.GetChecks()))),     // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules

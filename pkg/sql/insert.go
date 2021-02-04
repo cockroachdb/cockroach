@@ -107,7 +107,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 		r.resultRowBuffer[i] = tree.DNull
 	}
 
-	colIDToRetIndex := catalog.ColumnIDToOrdinalMap(r.ti.tableDesc().PublicColumnsNew())
+	colIDToRetIndex := catalog.ColumnIDToOrdinalMap(r.ti.tableDesc().PublicColumns())
 	r.rowIdxToTabColIdx = make([]int, len(r.insertCols))
 	for i, col := range r.insertCols {
 		if idx, ok := colIDToRetIndex.Get(col.ID); !ok {

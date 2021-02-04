@@ -507,12 +507,12 @@ func (ov *optView) Query() string {
 
 // ColumnNameCount is part of the cat.View interface.
 func (ov *optView) ColumnNameCount() int {
-	return len(ov.desc.PublicColumnsNew())
+	return len(ov.desc.PublicColumns())
 }
 
 // ColumnName is part of the cat.View interface.
 func (ov *optView) ColumnName(i int) tree.Name {
-	return ov.desc.PublicColumnsNew()[i].ColName()
+	return ov.desc.PublicColumns()[i].ColName()
 }
 
 // optSequence is a wrapper around catalog.TableDescriptor that
@@ -625,7 +625,7 @@ func newOptTable(
 	}
 
 	// First, determine how many columns we will potentially need.
-	cols := ot.desc.AllColumnsNew()
+	cols := ot.desc.AllColumns()
 	numCols := len(cols) + len(colinfo.AllSystemColumnDescs)
 	// One for each inverted index virtual column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
@@ -989,8 +989,8 @@ func (ot *optTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i < len(ot.desc.AllColumnsNew()) {
-		return ot.desc.AllColumnsNew()[i].ColumnDesc()
+	if i < len(ot.desc.AllColumns()) {
+		return ot.desc.AllColumns()[i].ColumnDesc()
 	}
 	// Check if the column matches any registered system columns.
 	for j := range colinfo.AllSystemColumnDescs {
@@ -1698,7 +1698,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.PublicColumnsNew())+1)
+	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
 		0,
@@ -1711,7 +1711,7 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 	)
-	for i, d := range desc.PublicColumnsNew() {
+	for i, d := range desc.PublicColumns() {
 		ot.columns[i+1].InitNonVirtual(
 			i+1,
 			cat.StableID(d.GetID()),
@@ -1822,8 +1822,8 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 
 // getColDesc is part of optCatalogTableInterface.
 func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
-	if i > 0 && i <= len(ot.desc.PublicColumnsNew()) {
-		return ot.desc.PublicColumnsNew()[i-1].ColumnDesc()
+	if i > 0 && i <= len(ot.desc.PublicColumns()) {
+		return ot.desc.PublicColumns()[i-1].ColumnDesc()
 	}
 	return nil
 }

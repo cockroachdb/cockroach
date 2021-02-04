@@ -66,12 +66,12 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
-	colIDToIdx := catalog.ColumnIDToOrdinalMap(o.tableDesc.PublicColumnsNew())
+	colIDToIdx := catalog.ColumnIDToOrdinalMap(o.tableDesc.PublicColumns())
 	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
 
 	// Collect all of the columns being scanned.
 	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {
-		for _, c := range o.tableDesc.PublicColumnsNew() {
+		for _, c := range o.tableDesc.PublicColumns() {
 			columnIDs = append(columnIDs, tree.ColumnID(c.GetID()))
 		}
 	} else {
@@ -88,7 +88,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	for i := range columnIDs {
 		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
-		columns = append(columns, o.tableDesc.PublicColumnsNew()[idx].ColumnDesc())
+		columns = append(columns, o.tableDesc.PublicColumns()[idx].ColumnDesc())
 	}
 
 	// Find the row indexes for all of the primary index columns.

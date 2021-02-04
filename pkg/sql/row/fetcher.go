@@ -166,9 +166,9 @@ func (fta *FetcherTableArgs) InitCols(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) {
-	cols := desc.PublicColumnsNew()
+	cols := desc.PublicColumns()
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumnsNew()
+		cols = desc.ReadableColumns()
 	}
 	fta.Cols = make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
 	for i, col := range cols {
@@ -1141,7 +1141,7 @@ func (rf *Fetcher) processValueSingle(
 	if rf.traceKV || table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumnsNew()[idx].GetName())
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
 			}
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
@@ -1216,7 +1216,7 @@ func (rf *Fetcher) processValueBytes(
 		idx := table.colIdxMap.GetDefault(colID)
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumnsNew()[idx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
 		}
 
 		var encValue rowenc.EncDatum
@@ -1408,7 +1408,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
 	colIDToColumn := make(map[descpb.ColumnID]catalog.Column)
-	for _, col := range table.desc.PublicColumnsNew() {
+	for _, col := range table.desc.PublicColumns() {
 		colIDToColumn[col.GetID()] = col
 	}
 
