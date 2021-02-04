@@ -752,7 +752,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	txnB1 := txn(kB, ts1)
 	txnC1 := txn(kC, ts1)
 
-	db := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
+	db := createTestPebbleEngine()
 	defer db.Close()
 
 	// Set up two sstables very specifically:
@@ -825,7 +825,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
+	db1 := NewInMemForTesting(ctx, roachpb.Attributes{}, 10<<20)
 	defer db1.Close()
 
 	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
@@ -860,7 +860,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//
 	//   SSTable 2:
 	//     b@2
-	db2 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
+	db2 := NewInMemForTesting(ctx, roachpb.Attributes{}, 10<<20)
 	defer db2.Close()
 
 	// NB: If the original intent was separated, iterating using an interleaving

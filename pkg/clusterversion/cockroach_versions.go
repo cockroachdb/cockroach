@@ -219,6 +219,8 @@ const (
 	PostTruncatedAndRangeAppliedStateMigration
 	// NewSchemaChanger enables the new schema changer.
 	NewSchemaChanger
+	// SeparatedIntents allows the writing of separated intents/locks.
+	SeparatedIntents
 
 	// Step (1): Add new versions here.
 )
@@ -360,6 +362,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     NewSchemaChanger,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
+	},
+	{
+		Key:     SeparatedIntents,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 20},
 	},
 	// Step (2): Add new versions here.
 })

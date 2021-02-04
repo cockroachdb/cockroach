@@ -73,7 +73,7 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
-// 3. Lock-table key ranges (optional)
+// 3. Lock-table key ranges
 // 4. User key range
 func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 	return makeRangeKeyRanges(d, true /* replicatedOnly */)
@@ -83,13 +83,6 @@ func makeRangeKeyRanges(d *roachpb.RangeDescriptor, replicatedOnly bool) []KeyRa
 	rangeIDLocal := MakeRangeIDLocalKeyRange(d.RangeID, replicatedOnly)
 	rangeLocal := makeRangeLocalKeyRange(d)
 	user := MakeUserKeyRange(d)
-	if storage.DisallowSeparatedIntents {
-		return []KeyRange{
-			rangeIDLocal,
-			rangeLocal,
-			user,
-		}
-	}
 	rangeLockTable := makeRangeLockTableKeyRanges(d)
 	ranges := make([]KeyRange, 3+len(rangeLockTable))
 	ranges[0] = rangeIDLocal
@@ -121,17 +114,11 @@ func MakeReplicatedKeyRangesExceptLockTable(d *roachpb.RangeDescriptor) []KeyRan
 // replicated for the given Range, except for the replicated range-id local key range.
 // These are returned in the following sorted order:
 // 1. Range-local key range
-// 2. Lock-table key ranges (optional)
+// 2. Lock-table key ranges
 // 3. User key range
 func MakeReplicatedKeyRangesExceptRangeID(d *roachpb.RangeDescriptor) []KeyRange {
 	rangeLocal := makeRangeLocalKeyRange(d)
 	user := MakeUserKeyRange(d)
-	if storage.DisallowSeparatedIntents {
-		return []KeyRange{
-			rangeLocal,
-			user,
-		}
-	}
 	rangeLockTable := makeRangeLockTableKeyRanges(d)
 	ranges := make([]KeyRange, 2+len(rangeLockTable))
 	ranges[0] = rangeLocal

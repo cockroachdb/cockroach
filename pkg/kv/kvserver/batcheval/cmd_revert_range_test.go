@@ -55,12 +55,12 @@ func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 // createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
 // storage capacity.
 func createTestRocksDBEngine(ctx context.Context) storage.Engine {
-	return storage.NewInMem(ctx, roachpb.Attributes{}, 1<<20)
+	return storage.NewInMemForTesting(ctx, roachpb.Attributes{}, 1<<20)
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine(ctx context.Context) storage.Engine {
-	return storage.NewInMem(ctx, roachpb.Attributes{}, 1<<20)
+	return storage.NewInMemForTesting(ctx, roachpb.Attributes{}, 1<<20)
 }
 
 var engineImpls = []struct {

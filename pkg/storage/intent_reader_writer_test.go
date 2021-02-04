@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -211,7 +212,10 @@ func TestIntentDemuxWriter(t *testing.T) {
 			case "new-writer":
 				var separated bool
 				d.ScanArgs(t, "enable-separated", &separated)
-				w = intentDemuxWriter{w: &pw, enabledSeparatedIntents: separated}
+				// This is a low-level test that explicitly wraps the writer, so it
+				// doesn't matter how the original call to createTestPebbleEngine
+				// behaved in terms of separated intents config.
+				w = wrapIntentWriter(&pw, makeSettingsForSeparatedIntents(false, separated))
 				return ""
 			case "put-intent":
 				pw.reset()
@@ -235,7 +239,8 @@ func TestIntentDemuxWriter(t *testing.T) {
 				}
 				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				scratch, err = w.PutIntent(key, val, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.PutIntent(
+					context.Background(), key, val, state, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}

@@ -87,7 +87,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	t.Run("Mem", func(t *testing.T) {
-		eng := storage.NewDefaultInMem()
+		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 		testSideloadingSideloadedStorage(t, eng)
 	})
@@ -418,7 +418,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
 		defer cancel()
 
-		eng := storage.NewDefaultInMem()
+		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 		ss := newTestingSideloadStorage(t, eng)
 		ec := raftentry.NewCache(1024) // large enough
@@ -523,7 +523,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			eng := storage.NewDefaultInMem()
+			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(t, eng)
 			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
@@ -560,7 +560,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "InMem", func(t *testing.T, engineInMem bool) {
 		var eng storage.Engine
 		if engineInMem {
-			eng = storage.NewDefaultInMem()
+			eng = storage.NewDefaultInMemForTesting()
 		} else {
 			var cleanup func()
 			cleanup, eng = newOnDiskEngine(t)

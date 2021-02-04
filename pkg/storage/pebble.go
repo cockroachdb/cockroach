@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -405,6 +406,8 @@ func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
 // a new Pebble instance.
 type PebbleConfig struct {
 	// StorageConfig contains storage configs for all storage engines.
+	// A non-nil cluster.Settings must be provided in the StorageConfig for a
+	// Pebble instance that will be used to write intents.
 	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
@@ -428,11 +431,13 @@ type EncryptionStatsHandler interface {
 type Pebble struct {
 	db *pebble.DB
 
-	closed        bool
-	path          string
-	auxDir        string
-	maxSize       int64
-	attrs         roachpb.Attributes
+	closed  bool
+	path    string
+	auxDir  string
+	maxSize int64
+	attrs   roachpb.Attributes
+	// settings must be non-nil if this Pebble instance will be used to write
+	// intents.
 	settings      *cluster.Settings
 	statsHandler  EncryptionStatsHandler
 	fileRegistry  *PebbleFileRegistry
@@ -446,8 +451,7 @@ type Pebble struct {
 	fs     vfs.FS
 	logger pebble.Logger
 
-	useWrappedIntentWriter bool
-	wrappedIntentWriter    intentDemuxWriter
+	wrappedIntentWriter intentDemuxWriter
 }
 
 var _ Engine = &Pebble{}
@@ -547,7 +551,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter, p.useWrappedIntentWriter = tryWrapIntentWriter(p)
+	p.wrappedIntentWriter = wrapIntentWriter(p, cfg.Settings)
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
@@ -763,11 +767,8 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 func (p *Pebble) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
-	if p.useWrappedIntentWriter {
-		_, err := p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
-		return err
-	}
-	return p.clear(MVCCKey{Key: key})
+	_, err := p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
+	return err
 }
 
 // ClearEngineKey implements the Engine interface.
@@ -800,11 +801,9 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
 
 // ClearMVCCRangeAndIntents implements the Engine interface.
 func (p *Pebble) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	if p.useWrappedIntentWriter {
-		_, err := p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, nil)
-		return err
-	}
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	_, err := p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, nil)
+	return err
+
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -853,17 +852,16 @@ func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Engine interface.
 func (p *Pebble) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) error {
-	if p.useWrappedIntentWriter {
-		_, err := p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
-		return err
-	}
-	return p.put(MVCCKey{Key: key}, value)
+	_, err := p.wrappedIntentWriter.PutIntent(
+		ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
+	return err
 }
 
 // PutEngineKey implements the Engine interface.
@@ -872,6 +870,15 @@ func (p *Pebble) PutEngineKey(key EngineKey, value []byte) error {
 		return emptyKeyError()
 	}
 	return p.db.Set(key.Encode(), value, pebble.Sync)
+}
+
+// SafeToWriteSeparatedIntents implements the Engine interface.
+func (p *Pebble) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
+	if p.settings == nil {
+		return false,
+			errors.Errorf("Pebble without cluster.Settings does not support SafeToWriteSeparatedIntents")
+	}
+	return p.settings.Version.IsActive(ctx, clusterversion.SeparatedIntents), nil
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
@@ -1037,7 +1044,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1049,7 +1056,7 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly)
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.settings)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -1433,6 +1440,7 @@ func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 func (p *pebbleReadOnly) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state PrecedingIntentState,
@@ -1443,6 +1451,10 @@ func (p *pebbleReadOnly) PutIntent(
 }
 
 func (p *pebbleReadOnly) PutEngineKey(key EngineKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) SafeToWriteSeparatedIntents(context.Context) (bool, error) {
 	panic("not implemented")
 }
 

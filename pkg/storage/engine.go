@@ -557,14 +557,19 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(
-		key roachpb.Key, value []byte, state PrecedingIntentState, txnDidNotUpdateMeta bool,
-		txnUUID uuid.UUID) error
+		ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState,
+		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutEngineKey(key EngineKey, value []byte) error
+	// SafeToWriteSeparatedIntents is only for internal use in the storage
+	// package. Returns an error if the callee does not know whether it is safe.
+	// This method is temporary, to handle the transition from clusters where
+	// not all nodes understand separated intents.
+	SafeToWriteSeparatedIntents(ctx context.Context) (bool, error)
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
