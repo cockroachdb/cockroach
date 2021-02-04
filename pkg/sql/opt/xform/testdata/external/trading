@@ -572,7 +572,7 @@ project
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:8!null cardid:9!null version:16!null
       │         ├── constraint: /8/16: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621393, null(9)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
+      │         ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621426, null(9)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
       │         │   histogram(16)=  0                0                 0.020162           0
       │         │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
       │         ├── key: (9)
