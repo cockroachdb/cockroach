@@ -3,29 +3,6 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "execstatspb",
-    srcs = [
-        "component_stats.go",
-        "component_stats.pb.go",
-        "int_value.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/types",
-    ],
-)
-
-go_test(
-    name = "execstatspb_test",
-    srcs = ["int_value_test.go"],
-    embed = [":execstatspb"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
-)
-
-go_library(
     name = "execinfrapb",
     srcs = [
         "api.go",

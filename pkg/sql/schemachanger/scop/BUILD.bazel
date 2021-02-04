@@ -1,17 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "ops",
-    srcs = ["ops.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemachanger/targets",
-    ],
-)
-
-go_library(
     name = "scop",
     srcs = [
         "backfill.go",
