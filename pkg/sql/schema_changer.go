@@ -291,6 +291,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			// because it sets "enabled: false" and thus none of the
 			// other fields are used.
 			&SessionTracing{},
+			sc.execCfg.ContentionRegistry,
 		)
 		defer recv.Release()
 

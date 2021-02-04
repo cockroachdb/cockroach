@@ -972,6 +972,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planner.txn,
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
+		ex.server.cfg.ContentionRegistry,
 	)
 	recv.progressAtomic = progressAtomic
 	defer recv.Release()
