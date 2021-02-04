@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
@@ -161,11 +162,16 @@ func SyncDNS(vms vm.List) error {
 			fmt.Fprintf(os.Stderr, "removing %s failed: %v", f.Name(), err)
 		}
 	}()
+
+	var zoneBuilder strings.Builder
 	for _, vm := range vms {
 		if len(vm.Name) < 60 {
-			fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
+			zoneBuilder.WriteString(fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP))
+		} else {
+			fmt.Printf("WARN: not adding `%s' to the zone file because it is longer than 60 characters\n", vm.Name)
 		}
 	}
+	fmt.Fprint(f, zoneBuilder.String())
 	f.Close()
 
 	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
@@ -173,7 +179,7 @@ func SyncDNS(vms vm.List) error {
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
 
-	return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
 }
 
 // GetUserAuthorizedKeys retreives reads a list of user public keys from the
