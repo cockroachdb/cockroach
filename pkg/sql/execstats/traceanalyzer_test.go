@@ -63,8 +63,8 @@ func TestTraceAnalyzer(t *testing.T) {
 							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
 						}
 						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-							flowMetadata := execstats.NewFlowMetadata(flows)
-							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
+							flowsMetadata := execstats.NewFlowsMetadata(flows)
+							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
 							return nil
 						}
@@ -193,7 +193,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 		cumulativeKVTime         = node1KVTime + node2KVTime
 		cumulativeContentionTime = node1ContentionTime + node2ContentionTime
 	)
-	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
+	a := &execstats.TraceAnalyzer{FlowsMetadata: &execstats.FlowsMetadata{}}
 	a.AddComponentStats(
 		1, /* nodeID */
 		&execinfrapb.ComponentStats{
