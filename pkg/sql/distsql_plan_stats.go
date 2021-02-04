@@ -131,7 +131,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			// with different configurations). See #50655.
 			col := s.columns[0]
 			for _, index := range desc.PublicNonPrimaryIndexes() {
-				if index.GetType() == descpb.IndexDescriptor_INVERTED && index.GetColumnID(0) == col {
+				if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == col {
 					spec.Index = index.IndexDesc()
 					break
 				}
