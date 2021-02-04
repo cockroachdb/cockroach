@@ -13,10 +13,18 @@ package delegate
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
+
+var showEstimatedRowCountClusterSetting = settings.RegisterPublicBoolSetting(
+	"sql.show_tables.estimated_row_count.enabled",
+	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
+		"will improve SHOW TABLES performance.",
+	true,
 )
 
 // delegateShowTables implements SHOW TABLES which returns all the tables.
@@ -60,28 +68,37 @@ SELECT ns.nspname AS schema_name,
        WHEN pc.relkind = 'S' THEN 'sequence'
        ELSE 'table'
        END AS type,
-       rl.rolname AS owner,
-       s.estimated_row_count AS estimated_row_count
+       rl.rolname AS owner
+			 %[4]s
        %[3]s
   FROM %[1]s.pg_catalog.pg_class AS pc
   LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
   JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
   LEFT
   JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
-  LEFT
-  JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)
+	%[5]s
  WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
  ORDER BY schema_name, table_name
 `
 	var comment string
+	var estimatedRowCount string
+	var estimatedRowCountJoin string
 	if n.WithComment {
 		comment = `, COALESCE(pd.description, '')       AS comment`
+	}
+	if showEstimatedRowCountClusterSetting.Get(&d.evalCtx.Settings.SV) {
+		estimatedRowCount = ", s.estimated_row_count AS estimated_row_count"
+		estimatedRowCountJoin = `
+  LEFT
+  JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)`
 	}
 	query := fmt.Sprintf(
 		getTablesQuery,
 		&name.CatalogName,
 		schemaClause,
 		comment,
+		estimatedRowCount,
+		estimatedRowCountJoin,
 	)
 	return parse(query)
 }
