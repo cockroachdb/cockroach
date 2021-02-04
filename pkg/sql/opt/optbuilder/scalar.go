@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -521,9 +522,19 @@ func (b *Builder) buildFunction(
 			panic(err)
 		}
 		if seqIdentifier != nil {
-			tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
-			ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
-
+			var ds cat.DataSource
+			if seqIdentifier.IsByID() {
+				flags := cat.Flags{
+					AvoidDescriptorCaches: b.insideViewDef,
+				}
+				ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(seqIdentifier.SeqID))
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
+				ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+			}
 			b.viewDeps = append(b.viewDeps, opt.ViewDep{
 				DataSource: ds,
 			})

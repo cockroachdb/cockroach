@@ -412,16 +412,28 @@ var _ = (*Builder)(nil).alterTableDropColumn
 func (b *Builder) maybeAddSequenceReferenceDependencies(
 	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
 ) error {
-	seqNames, err := sequence.GetUsedSequenceNames(defaultExpr)
+	seqIdentifiers, err := sequence.GetUsedSequences(defaultExpr)
 	if err != nil {
 		return err
 	}
-	for _, seqName := range seqNames {
-		parsedSeqName, err := parser.ParseTableName(seqName)
-		if err != nil {
-			return err
+	for _, seqIdentifier := range seqIdentifiers {
+		var tn tree.TableName
+
+		if seqIdentifier.IsByID() {
+			name, err := b.semaCtx.TableNameResolver.GetQualifiedTableNameByID(
+				ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
+			if err != nil {
+				return err
+			}
+			tn = *name
+		} else {
+
+			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+			if err != nil {
+				return err
+			}
+			tn = parsedSeqName.ToTableName()
 		}
-		tn := parsedSeqName.ToTableName()
 		seqDesc, err := resolver.ResolveExistingTableObject(ctx, b.res, &tn,
 			tree.ObjectLookupFlagsWithRequired())
 		if err != nil {

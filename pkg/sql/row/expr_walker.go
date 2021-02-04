@@ -541,11 +541,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			seqIdentifier, err := sequence.GetSequenceFromFunc(fn)
 			if err != nil {
 				return err
+			} else if seqIdentifier.IsByID() {
+				return errors.Newf("referencing sequences by ID is unsupported by IMPORT INTO")
 			}
 			var sequenceMetadata *SequenceMetadata
 			var ok bool
 			if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[seqIdentifier.SeqName]; !ok {
-				return errors.Newf("sequence %s not found in annotation", *seqIdentifier)
+				return errors.Newf("sequence %s not found in annotation", seqIdentifier.SeqName)
 			}
 			sequenceMetadata.instancesPerRow++
 			return nil

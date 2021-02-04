@@ -301,6 +301,9 @@ func isAllowedDependentDescInRenameDatabase(
 			return false, "", err
 		}
 		for _, seqIdentifier := range seqIdentifiers {
+			if seqIdentifier.IsByID() {
+				continue
+			}
 			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
 			if err != nil {
 				return false, "", err

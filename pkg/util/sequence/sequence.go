@@ -25,9 +25,16 @@ type SeqIdentifier struct {
 	SeqID   int64
 }
 
-// GetSequenceFromFunc extracts a sequence name from a FuncExpr if the function
-// takes a sequence name as an arg. Returns the name of the sequence or nil
-// if no sequence was found.
+// IsByID indicates whether the SeqIdentifier is identifying
+// the sequence by its ID or by its name.
+func (si *SeqIdentifier) IsByID() bool {
+	return len(si.SeqName) == 0
+}
+
+// GetSequenceFromFunc extracts a sequence identifier from a FuncExpr if the function
+// takes a sequence identifier as an arg (a sequence identifier can either be
+// a sequence name or an ID), wrapped in the SeqIdentifier type.
+// Returns the identifier of the sequence or nil if no sequence was found.
 func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 	searchPath := sessiondata.SearchPath{}
 
@@ -83,23 +90,23 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 	return nil, nil
 }
 
-// GetUsedSequences returns the name of the sequence passed to
+// GetUsedSequences returns the identifier of the sequence passed to
 // a call to sequence function in the given expression or nil if no sequence
-// names are found.
-// e.g. nextval('foo') => "foo"; <some other expression> => nil
+// identifiers are found. The identifier is wrapped in a SeqIdentifier.
+// e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
 func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
-	var names []SeqIdentifier
+	var seqIdentifiers []SeqIdentifier
 	_, err := tree.SimpleVisit(
 		defaultExpr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			switch t := expr.(type) {
 			case *tree.FuncExpr:
-				name, err := GetSequenceFromFunc(t)
+				identifier, err := GetSequenceFromFunc(t)
 				if err != nil {
 					return false, nil, err
 				}
-				if name != nil {
-					names = append(names, *name)
+				if identifier != nil {
+					seqIdentifiers = append(seqIdentifiers, *identifier)
 				}
 			}
 			return true, expr, nil
@@ -108,5 +115,5 @@ func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return names, nil
+	return seqIdentifiers, nil
 }
