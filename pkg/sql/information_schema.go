@@ -331,7 +331,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			// NULL column constraints in information_schema.check_constraints.
 			// Cockroach doesn't track these constraints as check constraints,
 			// but we can pull them off of the table's column descriptors.
-			for _, column := range table.PublicColumnsNew() {
+			for _, column := range table.PublicColumns() {
 				// Only visible, non-nullable columns are included.
 				if column.IsHidden() || column.IsNullable() {
 					continue
@@ -374,7 +374,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			for _, u := range table.GetPrivileges().Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
-						for _, cd := range table.PublicColumnsNew() {
+						for _, cd := range table.PublicColumns() {
 							if err := addRow(
 								tree.DNull,                             // grantor
 								tree.NewDString(u.User().Normalized()), // grantee
@@ -427,7 +427,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			for _, column := range table.PublicColumnsNew() {
+			for _, column := range table.PublicColumns() {
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
 				collationName := tree.DNull
@@ -530,7 +530,7 @@ https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
-				for _, col := range table.PublicColumnsNew() {
+				for _, col := range table.PublicColumns() {
 					if !col.GetType().UserDefined() {
 						continue
 					}
@@ -1454,7 +1454,7 @@ CREATE TABLE information_schema.table_constraints (
 				// NULL column constraints in information_schema.check_constraints.
 				// Cockroach doesn't track these constraints as check constraints,
 				// but we can pull them off of the table's column descriptors.
-				for _, col := range table.PublicColumnsNew() {
+				for _, col := range table.PublicColumns() {
 					if col.IsNullable() {
 						continue
 					}

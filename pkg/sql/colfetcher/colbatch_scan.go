@@ -174,9 +174,9 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	cols := table.PublicColumnsNew()
+	cols := table.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.AllColumnsNew()
+		cols = table.AllColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
 	typs := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)

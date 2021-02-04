@@ -448,10 +448,10 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 
 	ctx := context.Background()
 	getDefault := func(desc catalog.TableDescriptor) string {
-		return desc.PublicColumnsNew()[0].GetDefaultExpr()
+		return desc.PublicColumns()[0].GetDefaultExpr()
 	}
 	getComputed := func(desc catalog.TableDescriptor) string {
-		return desc.PublicColumnsNew()[0].GetComputeExpr()
+		return desc.PublicColumns()[0].GetComputeExpr()
 	}
 	getCheck := func(desc catalog.TableDescriptor) string {
 		return desc.GetChecks()[0].Expr

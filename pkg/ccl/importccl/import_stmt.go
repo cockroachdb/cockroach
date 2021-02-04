@@ -730,7 +730,7 @@ func importPlanHook(
 			// Ensure that non-target columns that don't have default
 			// expressions are nullable.
 			if len(isTargetCol) != 0 {
-				for _, col := range found.VisibleColumnsNew() {
+				for _, col := range found.VisibleColumns() {
 					if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
 						return errors.Newf(
 							"all non-target columns in IMPORT INTO must be nullable "+

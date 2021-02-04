@@ -162,7 +162,7 @@ func GenerateInsertRow(
 	// favor of the (simpler, correct) code in the CBO.
 
 	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.WritableColumnsNew() {
+	for _, col := range tableDesc.WritableColumns() {
 		if !col.IsNullable() {
 			if i, ok := rowContainerForComputedVals.Mapping.Get(col.GetID()); !ok || rowVals[i] == tree.DNull {
 				return nil, sqlerrors.NewNonNullViolationError(col.GetName())
@@ -312,7 +312,7 @@ func NewDatumRowConverter(
 			return nil, err
 		}
 	} else {
-		targetCols = tableDesc.VisibleColumnsNew()
+		targetCols = tableDesc.VisibleColumns()
 	}
 
 	targetColDescriptors := make([]descpb.ColumnDescriptor, len(targetCols))
@@ -420,9 +420,9 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colDescs := make([]descpb.ColumnDescriptor, len(c.tableDesc.PublicColumnsNew()))
+	colDescs := make([]descpb.ColumnDescriptor, len(c.tableDesc.PublicColumns()))
 	colsOrdered := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range c.tableDesc.PublicColumnsNew() {
+	for i, col := range c.tableDesc.PublicColumns() {
 		colDescs[i] = *col.ColumnDesc()
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
@@ -445,9 +445,9 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumnsNew())),
+		Cols:    make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
 	}
-	for i, col := range tableDesc.PublicColumnsNew() {
+	for i, col := range tableDesc.PublicColumns() {
 		c.computedIVarContainer.Cols[i] = *col.ColumnDesc()
 	}
 	return c, nil
@@ -481,7 +481,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	var computedColsLookup []descpb.ColumnDescriptor
 	if len(c.computedExprs) > 0 {
-		cols := c.tableDesc.PublicColumnsNew()
+		cols := c.tableDesc.PublicColumns()
 		computedColsLookup = make([]descpb.ColumnDescriptor, len(cols))
 		for i, col := range cols {
 			computedColsLookup[i] = *col.ColumnDesc()

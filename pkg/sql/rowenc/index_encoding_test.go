@@ -210,7 +210,7 @@ func TestIndexKey(t *testing.T) {
 			colNames []string
 			colIDs   descpb.ColumnIDs
 		)
-		for _, c := range tableDesc.PublicColumnsNew() {
+		for _, c := range tableDesc.PublicColumns() {
 			colNames = append(colNames, c.GetName())
 			colIDs = append(colIDs, c.GetID())
 		}

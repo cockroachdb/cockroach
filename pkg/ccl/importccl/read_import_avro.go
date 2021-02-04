@@ -397,7 +397,7 @@ func newImportAvroPipeline(
 	avro *avroInputReader, input *fileReader,
 ) (importRowProducer, importRowConsumer, error) {
 	fieldIdxByName := make(map[string]int)
-	for idx, col := range avro.importContext.tableDesc.VisibleColumnsNew() {
+	for idx, col := range avro.importContext.tableDesc.VisibleColumns() {
 		fieldIdxByName[col.GetName()] = idx
 	}
 

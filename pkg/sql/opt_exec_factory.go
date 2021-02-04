@@ -657,8 +657,8 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		return nil, err
 	}
 	tableScan.index = indexDesc
-	publicColDescs := make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumnsNew()))
-	for i, col := range tableDesc.PublicColumnsNew() {
+	publicColDescs := make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns()))
+	for i, col := range tableDesc.PublicColumns() {
 		publicColDescs[i] = *col.ColumnDesc()
 	}
 	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), publicColDescs)
@@ -762,7 +762,7 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.PublicColumnsNew()[c].GetID()))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tableDesc.PublicColumns()[c].GetID()))
 	}
 
 	scan := ef.planner.Scan()
@@ -1679,7 +1679,7 @@ func (ef *execFactory) ConstructCreateView(
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.PublicColumnsNew()[ord].GetID())
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.PublicColumns()[ord].GetID())
 			})
 		}
 		entry := planDeps[desc.GetID()]
@@ -1956,7 +1956,7 @@ func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []descpb.
 func makePublicColIdxToRetIdx(
 	tableDesc catalog.TableDescriptor, returnColDescs []descpb.ColumnDescriptor,
 ) []int {
-	publicCols := tableDesc.PublicColumnsNew()
+	publicCols := tableDesc.PublicColumns()
 	publicColDescs := make([]descpb.ColumnDescriptor, len(publicCols))
 	for i, col := range publicCols {
 		publicColDescs[i] = *col.ColumnDesc()

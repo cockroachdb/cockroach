@@ -2038,7 +2038,7 @@ CREATE TABLE crdb_internal.table_columns (
 				func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
-					columns := table.PublicColumnsNew()
+					columns := table.PublicColumns()
 					for _, col := range columns {
 						defStr := tree.DNull
 						if col.HasDefault() {
@@ -2342,7 +2342,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			}
 
 			// Record sequence dependencies.
-			for _, col := range table.PublicColumnsNew() {
+			for _, col := range table.PublicColumns() {
 				for i := 0; i < col.NumUsesSequences(); i++ {
 					sequenceID := col.GetUsesSequenceID(i)
 					if err := addRow(
