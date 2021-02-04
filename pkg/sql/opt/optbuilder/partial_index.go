@@ -63,6 +63,12 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 	if scan != nil && tableScope.colSet().SubsetOf(scan.Relational().OutputCols) {
 		tableScope.expr = scan
 	} else {
+		// TODO(mgartner): This is a sketchy because computed columns won't
+		// exist in the scan table's metadata. Currently, the scan argument is
+		// nil when building partial index predicates for UPDATEs and UPSERTs
+		// table metadata (which are built in order to prune fetch columns). As
+		// a result, virtual columns referenced in partial index predicates
+		// might not be pruned in all cases that they can be pruned in theory.
 		tableScope.expr = b.factory.ConstructScan(&memo.ScanPrivate{
 			Table: tabMeta.MetaID,
 			Cols:  tableScope.colSet(),
