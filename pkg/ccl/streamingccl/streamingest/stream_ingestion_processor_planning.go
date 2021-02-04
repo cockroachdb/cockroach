@@ -127,6 +127,7 @@ func distStreamIngest(
 		noTxn,
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
+		execCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
