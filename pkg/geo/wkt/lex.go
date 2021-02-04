@@ -98,6 +98,14 @@ func getKeywordToken(tokStr string) int {
 		return LINESTRINGZ
 	case "LINESTRINGZM":
 		return LINESTRINGZM
+	case "POLYGON":
+		return POLYGON
+	case "POLYGONM":
+		return POLYGONM
+	case "POLYGONZ":
+		return POLYGONZ
+	case "POLYGONZM":
+		return POLYGONZM
 	default:
 		return eof
 	}
