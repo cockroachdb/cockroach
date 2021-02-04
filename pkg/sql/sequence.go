@@ -432,6 +432,9 @@ func resolveColumnItemToDescriptors(
 	var tableName tree.TableName
 	if columnItem.TableName != nil {
 		tableName = columnItem.TableName.ToTableName()
+	} else {
+		err := pgerror.New(pgcode.Syntax, "invalid OWNED BY option")
+		return nil, nil, errors.WithHint(err, "Specify OWNED BY table.column or OWNED BY NONE.")
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
