@@ -229,11 +229,13 @@ func checkDemoConfiguration(
 				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
 		} else {
-			const msg = `#
-# --geo-partitioned replicas operates on a 9 node cluster.
-# The cluster size has been changed from the default to 9 nodes.`
-			fmt.Println(msg)
 			demoCtx.nodes = 9
+			printlnUnlessEmbedded(
+				// Only explain how the configuration was interpreted if the
+				// user has control over it.
+				`#
+# --geo-partitioned replicas operates on a 9 node cluster.
+# The cluster size has been changed from the default to 9 nodes.`)
 		}
 
 		// If geo-partition-replicas is requested, make sure the workload has a Partitioning step.
@@ -288,12 +290,14 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
 
+		// Only print details about the telemetry configuration if the
+		// user has control over it.
 		if demoCtx.disableTelemetry {
-			fmt.Println("#\n# Telemetry and automatic license acquisition disabled by configuration.")
+			printlnUnlessEmbedded("#\n# Telemetry and automatic license acquisition disabled by configuration.")
 		} else if demoCtx.disableLicenseAcquisition {
-			fmt.Println("#\n# Enterprise features disabled by OSS-only build.")
+			printlnUnlessEmbedded("#\n# Enterprise features disabled by OSS-only build.")
 		} else {
-			fmt.Println("#\n# This demo session will attempt to enable enterprise features\n" +
+			printlnUnlessEmbedded("#\n# This demo session will attempt to enable enterprise features\n" +
 				"# by acquiring a temporary license from Cockroach Labs in the background.\n" +
 				"# To disable this behavior, set the environment variable\n" +
 				"# COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=true.")
@@ -318,23 +322,28 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		}
 
 		fmt.Println(`#
-# Reminder: your changes to data stored in the demo session will not be saved!
-#
-# Connection parameters:`)
+# Reminder: your changes to data stored in the demo session will not be saved!`)
+
 		var nodeList strings.Builder
 		c.listDemoNodes(&nodeList, true /* justOne */)
-		fmt.Println("#", strings.ReplaceAll(nodeList.String(), "\n", "\n# "))
+		printlnUnlessEmbedded(
+			// Only print the server details when the shell is not embedded;
+			// if embedded, the embedding platform owns the network
+			// configuration.
+			`#
+# Connection parameters:
+#`,
+			strings.ReplaceAll(strings.TrimSuffix(nodeList.String(), "\n"), "\n", "\n# "))
 
 		if !demoCtx.insecure {
-			fmt.Printf(
-				"# The user %q with password %q has been created. Use it to access the Web UI!\n#\n",
+			fmt.Printf(`#
+# The user %q with password %q has been created. Use it to access the Web UI!
+#
+`,
 				c.adminUser,
 				c.adminPassword,
 			)
 		}
-		// If we didn't launch a workload, we still need to inform the
-		// user if the license check fails. Do this asynchronously and print
-		// the final error if any.
 
 		// It's ok to do this twice (if workload setup already waited) because
 		// then the error return is guaranteed to be nil.
