@@ -14,15 +14,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRegistry runs the datadriven test found in testdata/contention_registry.
@@ -122,4 +126,41 @@ func TestRegistry(t *testing.T) {
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 	})
+}
+
+func TestRegistryConcurrentAdds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numGoroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+	registry := NewRegistry()
+	errCh := make(chan error, numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			defer wg.Done()
+			errCh <- registry.AddContentionEvent(roachpb.ContentionEvent{
+				Key: keys.MakeTableIDIndexID(nil /* key */, 1 /* tableID */, 1 /* indexID */),
+			})
+		}()
+	}
+
+	wg.Wait()
+
+	for drained := false; drained; {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err, "unexpected error from goroutine adding contention event")
+		default:
+			// Nothing else to read.
+			drained = true
+		}
+	}
+
+	numContentionEvents := uint64(0)
+	registry.indexMap.internalCache.Do(func(e *cache.Entry) {
+		v := e.Value.(*indexMapValue)
+		numContentionEvents += v.numContentionEvents
+	})
+	require.Equal(t, uint64(numGoroutines), numContentionEvents)
 }
