@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -384,12 +385,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.rng,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectExecutionStats,
 	)
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
-			retErr = ih.Finish(ex.server.cfg, ex.appStats, ex.statsCollector, p, ast, sql, res, retErr)
+			retErr = ih.Finish(
+				ex.server.cfg,
+				ex.appStats,
+				&ex.extraTxnState.accumulatedStats,
+				ex.statsCollector,
+				p,
+				ast,
+				sql,
+				res,
+				retErr,
+			)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
@@ -1466,6 +1477,11 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
+	ex.extraTxnState.shouldCollectExecutionStats = false
+	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+	if execStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); execStatsSampleRate > 0 {
+		ex.extraTxnState.shouldCollectExecutionStats = execStatsSampleRate > ex.rng.Float64()
+	}
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
@@ -1478,6 +1494,9 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
+		// accumulatedStats are cleared, but shouldCollectExecutionStats is
+		// unchanged.
+		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	}
 	return onTxnFinish, onTxnRestart
 }
