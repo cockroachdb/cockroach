@@ -186,9 +186,12 @@ func TestTraceAnalyzer(t *testing.T) {
 
 func TestTraceAnalyzerProcessStats(t *testing.T) {
 	const (
-		node1Time      = 3 * time.Second
-		node2Time      = 5 * time.Second
-		cumulativeTime = node1Time + node2Time
+		node1KVTime              = 1 * time.Second
+		node1ContentionTime      = 2 * time.Second
+		node2KVTime              = 3 * time.Second
+		node2ContentionTime      = 4 * time.Second
+		cumulativeKVTime         = node1KVTime + node2KVTime
+		cumulativeContentionTime = node1ContentionTime + node2ContentionTime
 	)
 	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
 	a.AddComponentStats(
@@ -199,8 +202,8 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				1, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime:         optional.MakeTimeValue(node1Time),
-				ContentionTime: optional.MakeTimeValue(node1Time),
+				KVTime:         optional.MakeTimeValue(node1KVTime),
+				ContentionTime: optional.MakeTimeValue(node1ContentionTime),
 			},
 		},
 	)
@@ -213,15 +216,15 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 				2, /* processorID */
 			),
 			KV: execinfrapb.KVStats{
-				KVTime:         optional.MakeTimeValue(node2Time),
-				ContentionTime: optional.MakeTimeValue(node2Time),
+				KVTime:         optional.MakeTimeValue(node2KVTime),
+				ContentionTime: optional.MakeTimeValue(node2ContentionTime),
 			},
 		},
 	)
 
 	expected := execstats.QueryLevelStats{
-		KVTime:         cumulativeTime,
-		ContentionTime: cumulativeTime,
+		KVTime:         cumulativeKVTime,
+		ContentionTime: cumulativeContentionTime,
 	}
 
 	assert.NoError(t, a.ProcessStats())

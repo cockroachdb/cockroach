@@ -287,7 +287,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.queryLevelStats.NetworkMessages += networkMessages
 	}
 
-	for _, contentionTime := range a.nodeLevelStats.KVTimeGroupedByNode {
+	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
 		a.queryLevelStats.ContentionTime += contentionTime
 	}
 	return errs
