@@ -46,6 +46,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/ring",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeofday",
