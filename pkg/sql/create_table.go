@@ -1571,7 +1571,10 @@ func NewTableDesc(
 			c.Nullable.Nullability = tree.NotNull
 			c.DefaultExpr.Expr = &tree.CastExpr{
 				Expr: &tree.FuncExpr{
-					Func: tree.WrapFunction("gateway_region"),
+					Func: tree.WrapFunction("valid_region_or_primary_region"),
+					Exprs: []tree.Expr{
+						&tree.FuncExpr{Func: tree.WrapFunction("gateway_region")},
+					},
 				},
 				Type:       &tree.OIDTypeReference{OID: oid},
 				SyntaxMode: tree.CastShort,
