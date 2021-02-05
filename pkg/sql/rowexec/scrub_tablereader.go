@@ -113,7 +113,7 @@ func newScrubTableReader(
 			tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
 		}
 	} else {
-		colIdxMap := tr.tableDesc.ColumnIdxMap()
+		colIdxMap := catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumns())
 		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
 			neededColumns.Add(colIdxMap.GetDefault(id))
 			return nil
@@ -125,7 +125,7 @@ func newScrubTableReader(
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
+		flowCtx, &fetcher, tr.tableDesc, int(spec.IndexIdx), catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumns()),
 		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
 		nil /* systemColumns */, nil, /* virtualColumn */
@@ -153,9 +153,9 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})
 	for i, colIdx := range tr.fetcherResultToColIdx {
-		col := tr.tableDesc.GetPublicColumns()[colIdx]
+		col := tr.tableDesc.PublicColumns()[colIdx]
 		// TODO(joey): We should maybe try to get the underlying type.
-		rowDetails[col.Name] = row[i].String(col.Type)
+		rowDetails[col.GetName()] = row[i].String(col.GetType())
 	}
 	details["row_data"] = rowDetails
 	details["index_name"] = index.GetName()
@@ -193,7 +193,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	var colIDToRowIdxMap catalog.TableColMap
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
-		colIDToRowIdxMap.Set(tr.tableDesc.GetPublicColumns()[colIdx].ID, rowIdx)
+		colIDToRowIdxMap.Set(tr.tableDesc.PublicColumns()[colIdx].GetID(), rowIdx)
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')

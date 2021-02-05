@@ -167,22 +167,14 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 }
 
 func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
-	if !tbl.ContainsUserDefinedTypes() {
-		return
-	}
-	for _, colOrd := range tbl.GetColumnOrdinalsWithUserDefinedTypes() {
-		colTyp := tbl.DeletableColumns()[colOrd].Type
-		t.removeDependency(typedesc.UserDefinedTypeOIDToID(colTyp.Oid()), tbl.GetID())
+	for _, col := range tbl.UserDefinedTypeColumns() {
+		t.removeDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
 	}
 }
 
 func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
-	if !tbl.ContainsUserDefinedTypes() {
-		return
-	}
-	for _, colOrd := range tbl.GetColumnOrdinalsWithUserDefinedTypes() {
-		colTyp := tbl.DeletableColumns()[colOrd].Type
-		t.addDependency(typedesc.UserDefinedTypeOIDToID(colTyp.Oid()), tbl.GetID())
+	for _, col := range tbl.UserDefinedTypeColumns() {
+		t.addDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
 	}
 }
 

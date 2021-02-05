@@ -1041,17 +1041,10 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for i := range desc.GetPublicColumns() {
-		if desc.GetPublicColumns()[i].ID == colID {
-			return i
-		}
-	}
-	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		offset := len(desc.GetPublicColumns())
-		mutationColumns := desc.MutationColumns()
-		for i := range mutationColumns {
-			if mutationColumns[i].ID == colID {
-				return offset + i
+	for _, col := range desc.AllColumns() {
+		if col.Public() || visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+			if col.GetID() == colID {
+				return col.Ordinal()
 			}
 		}
 	}
@@ -1061,16 +1054,16 @@ func tableOrdinal(
 	// different for each system column kind. MVCCTimestampColumnID is the
 	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.GetPublicColumns()) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
+		return len(desc.AllColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.GetPublicColumns()) - 1
+	highest := len(desc.PublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.GetPublicColumns()) + len(desc.MutationColumns()) - 1
+		highest = len(desc.AllColumns()) - 1
 	}
 	return highest
 }
@@ -1307,8 +1300,12 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
+	cols := info.desc.PublicColumns()
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-	typs := info.desc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
+	if returnMutations {
+		cols = info.desc.AllColumns()
+	}
+	typs := catalog.ColumnTypesWithVirtualCol(cols, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)
@@ -1323,14 +1320,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	planToStreamColMap := make([]int, len(info.cols))
 	var descColumnIDs util.FastIntMap
 	colID := 0
-	for i := range info.desc.GetPublicColumns() {
-		descColumnIDs.Set(colID, int(info.desc.GetPublicColumns()[i].ID))
-		colID++
-	}
-	if returnMutations {
-		mutationColumns := info.desc.MutationColumns()
-		for i := range mutationColumns {
-			descColumnIDs.Set(colID, int(mutationColumns[i].ID))
+	for _, col := range info.desc.AllColumns() {
+		if col.Public() || returnMutations {
+			descColumnIDs.Set(colID, int(col.GetID()))
 			colID++
 		}
 	}
@@ -2269,7 +2261,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 
-		numStreamCols += len(side.scan.desc.GetPublicColumns())
+		numStreamCols += len(side.scan.desc.PublicColumns())
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
@@ -2326,7 +2318,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			i++
 		}
 
-		colOffset += len(side.scan.desc.GetPublicColumns())
+		colOffset += len(side.scan.desc.PublicColumns())
 	}
 
 	// Set the ON condition.

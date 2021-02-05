@@ -193,7 +193,7 @@ func newInvertedJoiner(
 		joinType:             spec.Type,
 		batchSize:            invertedJoinerBatchSize,
 	}
-	ij.colIdxMap = ij.desc.ColumnIdxMap()
+	ij.colIdxMap = catalog.ColumnIDToOrdinalMap(ij.desc.PublicColumns())
 
 	var err error
 	indexIdx := int(spec.IndexIdx)
@@ -207,8 +207,7 @@ func newInvertedJoiner(
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
 	indexColumnIDs, _ := ij.index.FullColumnIDs()
 	// Inverted joins are not used for mutations.
-	tableColumns := ij.desc.ColumnsWithMutations(false /* mutations */)
-	ij.tableRow = make(rowenc.EncDatumRow, len(tableColumns))
+	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
 	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
 	ij.indexRowTypes = make([]*types.T, len(ij.indexRow))
 	ij.indexRowToTableRowMap = make([]int, len(ij.indexRow))
@@ -220,13 +219,13 @@ func newInvertedJoiner(
 		}
 		tableRowIdx := ij.colIdxMap.GetDefault(colID)
 		ij.indexRowToTableRowMap[indexRowIdx] = tableRowIdx
-		ij.indexRowTypes[indexRowIdx] = ij.desc.GetPublicColumns()[tableRowIdx].Type
+		ij.indexRowTypes[indexRowIdx] = ij.desc.PublicColumns()[tableRowIdx].GetType()
 		indexRowIdx++
 	}
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.ColumnTypes()
+	rightColTypes := catalog.ColumnTypes(ij.desc.PublicColumns())
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)

@@ -114,8 +114,7 @@ func (tu *optTableUpserter) init(
 		// Note that this map will *not* contain any mutation columns - that's
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
-		tu.colIDToReturnIndex = tu.tableDesc().ColumnIdxMapWithMutations(false /* includeMutations */)
-
+		tu.colIDToReturnIndex = catalog.ColumnIDToOrdinalMap(tu.tableDesc().PublicColumns())
 		if tu.ri.InsertColIDtoRowIndex.Len() == tu.colIDToReturnIndex.Len() {
 			for i := range tu.ri.InsertCols {
 				colID := tu.ri.InsertCols[i].ID

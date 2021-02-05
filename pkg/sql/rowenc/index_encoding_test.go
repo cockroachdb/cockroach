@@ -210,9 +210,9 @@ func TestIndexKey(t *testing.T) {
 			colNames []string
 			colIDs   descpb.ColumnIDs
 		)
-		for _, c := range tableDesc.GetPublicColumns() {
-			colNames = append(colNames, c.Name)
-			colIDs = append(colIDs, c.ID)
+		for _, c := range tableDesc.PublicColumns() {
+			colNames = append(colNames, c.GetName())
+			colIDs = append(colIDs, c.GetID())
 		}
 		tableDesc.TableDesc().Families = []descpb.ColumnFamilyDescriptor{{
 			Name:            "defaultFamily",

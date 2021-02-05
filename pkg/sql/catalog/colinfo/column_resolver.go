@@ -16,7 +16,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +29,7 @@ import (
 // mutations are added.
 func ProcessTargetColumns(
 	tableDesc catalog.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
-) ([]descpb.ColumnDescriptor, error) {
+) ([]catalog.Column, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
 			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -43,25 +42,22 @@ func ProcessTargetColumns(
 	}
 
 	var colIDSet catalog.TableColSet
-	cols := make([]descpb.ColumnDescriptor, len(nameList))
+	cols := make([]catalog.Column, len(nameList))
 	for i, colName := range nameList {
-		var col *descpb.ColumnDescriptor
-		var err error
-		if allowMutations {
-			col, _, err = tableDesc.FindColumnByName(colName)
-		} else {
-			col, err = tableDesc.FindActiveColumnByName(string(colName))
-		}
+		col, err := tableDesc.FindColumnWithName(colName)
 		if err != nil {
 			return nil, err
 		}
+		if !allowMutations && !col.Public() {
+			return nil, NewUndefinedColumnError(string(colName))
+		}
 
-		if colIDSet.Contains(col.ID) {
+		if colIDSet.Contains(col.GetID()) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
-		colIDSet.Add(col.ID)
-		cols[i] = *col
+		colIDSet.Add(col.GetID())
+		cols[i] = col
 	}
 
 	return cols, nil

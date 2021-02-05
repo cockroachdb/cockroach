@@ -137,33 +137,33 @@ func (v *ComputedColumnValidator) Validate(
 // computed columns being added reference the given column.
 // TODO(mgartner): Add unit tests for ValidateNoDependents.
 func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescriptor) error {
-	checkComputed := func(c *descpb.ColumnDescriptor) error {
+	for _, c := range v.desc.NonDropColumns() {
 		if !c.IsComputed() {
-			return nil
+			continue
 		}
 
-		expr, err := parser.ParseExpr(*c.ComputeExpr)
+		expr, err := parser.ParseExpr(c.GetComputeExpr())
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)
 		}
 
-		return iterColDescriptors(v.desc, expr, func(colVar *descpb.ColumnDescriptor) error {
+		err = iterColDescriptors(v.desc, expr, func(colVar *descpb.ColumnDescriptor) error {
 			if colVar.ID == col.ID {
 				return pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"column %q is referenced by computed column %q",
 					col.Name,
-					c.Name,
+					c.GetName(),
 				)
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
 	}
-
-	return v.desc.ForeachNonDropColumn(func(col *descpb.ColumnDescriptor) error {
-		return checkComputed(col)
-	})
+	return nil
 }
 
 // MakeComputedExprs returns a slice of the computed expressions for the

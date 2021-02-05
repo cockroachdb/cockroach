@@ -148,18 +148,30 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// guaranteed that the tables have the same version. Additionally, these
 	// fetchers are always initialized with a single tabledesc.Immutable.
 	if rf, ok := c.fetchers[idVer]; ok &&
-		tableDesc.UserDefinedTypeColsHaveSameVersion(rf.GetTables()[0].(catalog.TableDescriptor)) {
+		catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, rf.GetTables()[0].(catalog.TableDescriptor)) {
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.
 	var colIdxMap catalog.TableColMap
 	var valNeededForCol util.FastIntSet
-	for colIdx := range tableDesc.GetPublicColumns() {
-		colIdxMap.Set(tableDesc.GetPublicColumns()[colIdx].ID, colIdx)
-		valNeededForCol.Add(colIdx)
+	for _, col := range tableDesc.PublicColumns() {
+		colIdxMap.Set(col.GetID(), col.Ordinal())
+		valNeededForCol.Add(col.Ordinal())
 	}
 
 	var rf row.Fetcher
+	rfArgs := row.FetcherTableArgs{
+		Spans:            tableDesc.AllIndexSpans(c.codec),
+		Desc:             tableDesc,
+		Index:            tableDesc.GetPrimaryIndex().IndexDesc(),
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: false,
+		Cols:             make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
+		ValNeededForCol:  valNeededForCol,
+	}
+	for i, col := range tableDesc.PublicColumns() {
+		rfArgs.Cols[i] = *col.ColumnDesc()
+	}
 	if err := rf.Init(
 		context.TODO(),
 		c.codec,
@@ -169,15 +181,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		false, /* isCheck */
 		&c.a,
 		nil, /* memMonitor */
-		row.FetcherTableArgs{
-			Spans:            tableDesc.AllIndexSpans(c.codec),
-			Desc:             tableDesc,
-			Index:            tableDesc.GetPrimaryIndex().IndexDesc(),
-			ColIdxMap:        colIdxMap,
-			IsSecondaryIndex: false,
-			Cols:             tableDesc.GetPublicColumns(),
-			ValNeededForCol:  valNeededForCol,
-		},
+		rfArgs,
 	); err != nil {
 		return nil, err
 	}

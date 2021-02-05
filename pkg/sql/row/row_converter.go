@@ -163,9 +163,9 @@ func GenerateInsertRow(
 
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.WritableColumns() {
-		if !col.Nullable {
-			if i, ok := rowContainerForComputedVals.Mapping.Get(col.ID); !ok || rowVals[i] == tree.DNull {
-				return nil, sqlerrors.NewNonNullViolationError(col.Name)
+		if !col.IsNullable() {
+			if i, ok := rowContainerForComputedVals.Mapping.Get(col.GetID()); !ok || rowVals[i] == tree.DNull {
+				return nil, sqlerrors.NewNonNullViolationError(col.GetName())
 			}
 		}
 	}
@@ -301,24 +301,26 @@ func NewDatumRowConverter(
 		EvalCtx:   evalCtx.Copy(),
 	}
 
-	var targetColDescriptors []descpb.ColumnDescriptor
+	var targetCols []catalog.Column
 	var err error
 	// IMPORT INTO allows specifying target columns which could be a subset of
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
+		if targetCols, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
 	} else {
-		targetColDescriptors = tableDesc.VisibleColumns()
+		targetCols = tableDesc.VisibleColumns()
 	}
 
+	targetColDescriptors := make([]descpb.ColumnDescriptor, len(targetCols))
 	var targetColIDs catalog.TableColSet
-	for i, col := range targetColDescriptors {
+	for i, col := range targetCols {
 		c.TargetColOrds.Add(i)
-		targetColIDs.Add(col.ID)
+		targetColIDs.Add(col.GetID())
+		targetColDescriptors[i] = *col.ColumnDesc()
 	}
 
 	var txCtx transform.ExprTransformContext
@@ -418,11 +420,13 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.GetPublicColumns()))
-	for _, col := range c.tableDesc.GetPublicColumns() {
+	colDescs := make([]descpb.ColumnDescriptor, len(c.tableDesc.PublicColumns()))
+	colsOrdered := make([]descpb.ColumnDescriptor, len(cols))
+	for i, col := range c.tableDesc.PublicColumns() {
+		colDescs[i] = *col.ColumnDesc()
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
-		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.ID)] = col
+		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.GetID())] = colDescs[i]
 	}
 	// Here, computeExprs will be nil if there's no computed column, or
 	// the list of computed expressions (including nil, for those columns
@@ -430,7 +434,7 @@ func NewDatumRowConverter(
 	c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
 		ctx,
 		colsOrdered,
-		c.tableDesc.GetPublicColumns(),
+		colDescs,
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
@@ -441,7 +445,10 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.GetPublicColumns(),
+		Cols:    make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
+	}
+	for i, col := range tableDesc.PublicColumns() {
+		c.computedIVarContainer.Cols[i] = *col.ColumnDesc()
 	}
 	return c, nil
 }
@@ -474,7 +481,11 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	var computedColsLookup []descpb.ColumnDescriptor
 	if len(c.computedExprs) > 0 {
-		computedColsLookup = c.tableDesc.GetPublicColumns()
+		cols := c.tableDesc.PublicColumns()
+		computedColsLookup = make([]descpb.ColumnDescriptor, len(cols))
+		for i, col := range cols {
+			computedColsLookup[i] = *col.ColumnDesc()
+		}
 	}
 
 	insertRow, err := GenerateInsertRow(

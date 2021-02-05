@@ -166,27 +166,19 @@ func (fta *FetcherTableArgs) InitCols(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) {
-	cols := desc.GetPublicColumns()
+	cols := desc.PublicColumns()
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns()
 	}
-	if virtualColumn != nil {
-		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
-		copy(tempCols, cols)
-		for i := range tempCols {
-			if tempCols[i].ID == virtualColumn.ID {
-				tempCols[i] = *virtualColumn
-			}
+	fta.Cols = make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
+	for i, col := range cols {
+		if virtualColumn != nil && col.GetID() == virtualColumn.ID {
+			fta.Cols[i] = *virtualColumn
+		} else {
+			fta.Cols[i] = *col.ColumnDesc()
 		}
-		cols = tempCols
-		// Add on any requested system columns.
-		cols = append(cols, systemColumns...)
-	} else {
-		// Add on any requested system columns. We slice cols to avoid modifying
-		// the underlying table descriptor.
-		cols = append(cols[:len(cols):len(cols)], systemColumns...)
 	}
-	fta.Cols = cols
+	fta.Cols = append(fta.Cols, systemColumns...)
 }
 
 // Fetcher handles fetching kvs and forming table rows for an
@@ -1149,7 +1141,7 @@ func (rf *Fetcher) processValueSingle(
 	if rf.traceKV || table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
 			}
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
@@ -1224,7 +1216,7 @@ func (rf *Fetcher) processValueBytes(
 		idx := table.colIdxMap.GetDefault(colID)
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
 		}
 
 		var encValue rowenc.EncDatum
@@ -1415,11 +1407,10 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (rowenc.EncDatumRow, e
 func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
-	colIDToColumn := make(map[descpb.ColumnID]*descpb.ColumnDescriptor)
-	_ = table.desc.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
-		colIDToColumn[col.ID] = col
-		return nil
-	})
+	colIDToColumn := make(map[descpb.ColumnID]catalog.Column)
+	for _, col := range table.desc.PublicColumns() {
+		colIDToColumn[col.GetID()] = col
+	}
 
 	indexes := make([]descpb.IndexDescriptor, len(table.desc.PublicNonPrimaryIndexes()))
 	for i, idx := range table.desc.PublicNonPrimaryIndexes() {
@@ -1454,20 +1445,20 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 				return errors.AssertionFailedf("column mapping not found for column %d", colID)
 			}
 
-			if lastColID > col.ID {
-				return errors.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
+			if lastColID > col.GetID() {
+				return errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.ID - lastColID
-			lastColID = col.ID
+			colIDDiff := col.GetID() - lastColID
+			lastColID = col.GetID()
 
 			if result, err := rowenc.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
 				scratch); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
-					col.Name, rowVal.Datum)
+					col.GetName(), rowVal.Datum)
 			} else if !rowVal.BytesEqual(result) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
-					col.Name, colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
+					col.GetName(), colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
 			}
 		}
 		return nil

@@ -880,9 +880,9 @@ CREATE TABLE system.jobs (
 
 	newJobsTable := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.Equal(t, 7, len(newJobsTable.GetPublicColumns()))
-	require.Equal(t, "created_by_type", newJobsTable.GetPublicColumns()[5].Name)
-	require.Equal(t, "created_by_id", newJobsTable.GetPublicColumns()[6].Name)
+	require.Equal(t, 7, len(newJobsTable.PublicColumns()))
+	require.Equal(t, "created_by_type", newJobsTable.PublicColumns()[5].GetName())
+	require.Equal(t, "created_by_id", newJobsTable.PublicColumns()[6].GetName())
 	require.Equal(t, 2, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family name.
 	require.Equal(t, primaryFamilyName, newJobsTable.GetFamilies()[0].Name)
@@ -962,9 +962,9 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 
 	newJobsTable := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.Equal(t, 9, len(newJobsTable.GetPublicColumns()))
-	require.Equal(t, "claim_session_id", newJobsTable.GetPublicColumns()[7].Name)
-	require.Equal(t, "claim_instance_id", newJobsTable.GetPublicColumns()[8].Name)
+	require.Equal(t, 9, len(newJobsTable.PublicColumns()))
+	require.Equal(t, "claim_session_id", newJobsTable.PublicColumns()[7].GetName())
+	require.Equal(t, "claim_instance_id", newJobsTable.PublicColumns()[8].GetName())
 	require.Equal(t, 3, len(newJobsTable.GetFamilies()))
 	// Ensure we keep old family names.
 	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.GetFamilies()[0].Name)

@@ -320,8 +320,8 @@ func cleanupSchemaObjects(
 					for _, colID := range d.ColumnIDs {
 						dependentColIDs.Add(int(colID))
 					}
-					for _, col := range dTableDesc.GetPublicColumns() {
-						if dependentColIDs.Contains(int(col.ID)) {
+					for _, col := range dTableDesc.PublicColumns() {
+						if dependentColIDs.Contains(int(col.GetID())) {
 							tbName := tree.MakeTableNameWithSchema(
 								tree.Name(db.GetName()),
 								tree.Name(schema),
@@ -335,7 +335,7 @@ func cleanupSchemaObjects(
 								fmt.Sprintf(
 									"ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
 									tbName.FQString(),
-									tree.NameString(col.Name),
+									tree.NameString(col.GetName()),
 								),
 							)
 							if err != nil {

@@ -90,11 +90,12 @@ func ShowCreateView(
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i := range desc.GetPublicColumns() {
+	for i, col := range desc.PublicColumns() {
 		if i > 0 {
 			f.WriteString(", ")
 		}
-		f.FormatNameP(&desc.GetColumnAtIdx(i).Name)
+		name := col.GetName()
+		f.FormatNameP(&name)
 	}
 	f.WriteString(") AS ")
 	f.WriteString(desc.GetViewQuery())
@@ -120,7 +121,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnByID(descpb.ColumnID(columnComment.subID))
+		col, err := table.FindColumnWithID(descpb.ColumnID(columnComment.subID))
 		if err != nil {
 			return err
 		}
@@ -129,7 +130,7 @@ func showComments(
 		f.FormatNode(&tree.CommentOnColumn{
 			ColumnItem: &tree.ColumnItem{
 				TableName:  tn.ToUnresolvedObjectName(),
-				ColumnName: tree.Name(col.Name),
+				ColumnName: tree.Name(col.GetName()),
 			},
 			Comment: &columnComment.comment,
 		})
@@ -250,7 +251,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range desc.GetFamilies() {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
-			if _, err := desc.FindActiveColumnByID(colID); err == nil {
+			if col, _ := desc.FindColumnWithID(colID); col != nil && col.Public() {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}

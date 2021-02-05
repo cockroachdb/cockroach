@@ -119,14 +119,17 @@ func (cb *ColumnBackfiller) init(
 
 	// We need all the columns.
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(desc.GetPublicColumns())-1)
+	valNeededForCol.AddRange(0, len(desc.PublicColumns())-1)
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
 		Index:           desc.GetPrimaryIndex().IndexDesc(),
-		ColIdxMap:       desc.ColumnIdxMap(),
-		Cols:            desc.GetPublicColumns(),
+		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
+		Cols:            make([]descpb.ColumnDescriptor, len(desc.PublicColumns())),
 		ValNeededForCol: valNeededForCol,
+	}
+	for i, col := range desc.PublicColumns() {
+		tableArgs.Cols[i] = *col.ColumnDesc()
 	}
 
 	// Create a bound account associated with the column backfiller.
@@ -165,10 +168,14 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
+	colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
+	for i, col := range desc.PublicColumns() {
+		colDescs[i] = *col.ColumnDesc()
+	}
 	computedExprs, _, err := schemaexpr.MakeComputedExprs(
 		ctx,
 		cb.added,
-		desc.GetPublicColumns(),
+		colDescs,
 		desc,
 		tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
 		evalCtx,
@@ -193,6 +200,10 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
+	cols := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
+	for i, col := range desc.PublicColumns() {
+		cols[i] = *col.ColumnDesc()
+	}
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
@@ -215,7 +226,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		computedExprs, _, err = schemaexpr.MakeComputedExprs(
 			ctx,
 			cb.added,
-			desc.GetPublicColumns(),
+			cols,
 			desc,
 			tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
 			evalCtx,
@@ -257,8 +268,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.GetPublicColumns())+len(cb.added)+len(cb.dropped))
-	requestedCols = append(requestedCols, tableDesc.GetPublicColumns()...)
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumns())+len(cb.added)+len(cb.dropped))
+	for _, col := range tableDesc.PublicColumns() {
+		requestedCols = append(requestedCols, *col.ColumnDesc())
+	}
 	requestedCols = append(requestedCols, cb.added...)
 	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
@@ -303,9 +316,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	b := txn.NewBatch()
 	rowLength := 0
 	iv := &schemaexpr.RowIndexedVarContainer{
-		Cols:    append(tableDesc.GetPublicColumns(), cb.added...),
+		Cols:    make([]descpb.ColumnDescriptor, 0, len(tableDesc.PublicColumns())+len(cb.added)),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
+	for _, col := range tableDesc.PublicColumns() {
+		iv.Cols = append(iv.Cols, *col.ColumnDesc())
+	}
+	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
 	for i := int64(0); i < chunkSize; i++ {
 		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
@@ -650,37 +667,27 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
-	for i := range desc.GetPublicColumns() {
-		col := &desc.GetPublicColumns()[i]
-		ib.cols = append(ib.cols, *col)
-		if col.IsComputed() && col.Virtual {
-			ib.computedCols = append(ib.computedCols, *col)
-		}
-	}
-	ib.cols = append([]descpb.ColumnDescriptor(nil), desc.GetPublicColumns()...)
-
-	// If there are ongoing mutations, add columns that are being added and in
-	// the DELETE_AND_WRITE_ONLY state.
-	if len(desc.GetMutations()) > 0 {
-		ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.GetPublicColumns())+len(desc.GetMutations()))
-		ib.cols = append(ib.cols, desc.GetPublicColumns()...)
-		for _, m := range desc.GetMutations() {
-			if column := m.GetColumn(); column != nil &&
-				m.Direction == descpb.DescriptorMutation_ADD &&
-				m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				ib.cols = append(ib.cols, *column)
-				if column.IsComputed() {
-					ib.computedCols = append(ib.computedCols, *column)
-				} else {
-					ib.addedCols = append(ib.addedCols, *column)
-				}
+	ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
+	for _, column := range desc.AllColumns() {
+		columnDesc := *column.ColumnDesc()
+		if column.Public() {
+			if column.IsComputed() && column.IsVirtual() {
+				ib.computedCols = append(ib.computedCols, columnDesc)
 			}
+		} else if column.Adding() && column.WriteAndDeleteOnly() {
+			// If there are ongoing mutations, add columns that are being added and in
+			// the DELETE_AND_WRITE_ONLY state.
+			if column.IsComputed() {
+				ib.computedCols = append(ib.computedCols, columnDesc)
+			} else {
+				ib.addedCols = append(ib.addedCols, columnDesc)
+			}
+		} else {
+			continue
 		}
-	}
-
-	// Create a map of each column's ID to its ordinal.
-	for i := range ib.cols {
-		ib.colIdxMap.Set(ib.cols[i].ID, i)
+		// Create a map of each column's ID to its ordinal.
+		ib.colIdxMap.Set(column.GetID(), len(ib.cols))
+		ib.cols = append(ib.cols, columnDesc)
 	}
 }
 
@@ -706,7 +713,7 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 				isPrimaryIndex := idx.GetEncodingType(desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding
 				if (idxContainsColumn || isPrimaryIndex) &&
 					!ib.cols[i].Virtual &&
-					i < len(desc.GetPublicColumns()) {
+					i < len(desc.PublicColumns()) {
 					valNeededForCol.Add(i)
 				}
 			}

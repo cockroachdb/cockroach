@@ -254,7 +254,7 @@ func alterColumnTypeGeneral(
 	}
 
 	nameExists := func(name string) bool {
-		_, _, err := tableDesc.FindColumnByName(tree.Name(name))
+		_, err := tableDesc.FindColumnWithName(tree.Name(name))
 		return err == nil
 	}
 

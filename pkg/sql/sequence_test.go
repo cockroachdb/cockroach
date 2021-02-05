@@ -163,7 +163,7 @@ func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
-	col := tableDesc.GetPublicColumns()[colIdx]
+	col := tableDesc.PublicColumns()[colIdx]
 	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
@@ -172,24 +172,25 @@ func assertColumnOwnsSequences(
 		)
 	}
 
-	if len(col.OwnsSequenceIds) != len(seqDescs) {
+	if col.NumOwnsSequences() != len(seqDescs) {
 		t.Fatalf(
 			"unexpected number of sequence ownership dependencies. expected: %d, got:%d",
-			len(seqDescs), len(col.OwnsSequenceIds),
+			len(seqDescs), col.NumOwnsSequences(),
 		)
 	}
 
-	for i, seqID := range col.OwnsSequenceIds {
+	for i := 0; i < col.NumOwnsSequences(); i++ {
+		seqID := col.GetOwnsSequenceID(i)
 		if seqID != seqDescs[i].GetID() {
 			t.Fatalf("unexpected sequence id. expected %d got %d", seqDescs[i].GetID(), seqID)
 		}
 
 		ownerTableID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerTableID
 		ownerColID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerColumnID
-		if ownerTableID != tableDesc.GetID() || ownerColID != col.ID {
+		if ownerTableID != tableDesc.GetID() || ownerColID != col.GetID() {
 			t.Fatalf(
 				"unexpected sequence owner. expected table id %d, got: %d; expected column id %d, got :%d",
-				tableDesc.GetID(), ownerTableID, col.ID, ownerColID,
+				tableDesc.GetID(), ownerTableID, col.GetID(), ownerColID,
 			)
 		}
 	}

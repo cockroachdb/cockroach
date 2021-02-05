@@ -325,12 +325,12 @@ func (desc *wrapper) collectConstraintInfo(
 					"error computing columns used in check constraint %q", c.Name)
 			}
 			for _, colID := range colsUsed {
-				col, err := desc.FindColumnByID(colID)
+				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 						"error finding column %d in table %s", log.Safe(colID), desc.Name)
 				}
-				detail.Columns = append(detail.Columns, col.Name)
+				detail.Columns = append(detail.Columns, col.GetName())
 			}
 		}
 		info[c.Name] = detail
@@ -459,4 +459,51 @@ func InitTableDescriptor(
 			},
 		},
 	}
+}
+
+// FindPublicColumnsWithNames is a convenience function which behaves exactly
+// like FindPublicColumnWithName applied repeatedly to the names in the
+// provided list, returning early at the first encountered error.
+func FindPublicColumnsWithNames(
+	desc catalog.TableDescriptor, names tree.NameList,
+) ([]catalog.Column, error) {
+	cols := make([]catalog.Column, len(names))
+	for i, name := range names {
+		c, err := FindPublicColumnWithName(desc, name)
+		if err != nil {
+			return nil, err
+		}
+		cols[i] = c
+	}
+	return cols, nil
+}
+
+// FindPublicColumnWithName is a convenience function which behaves exactly
+// like desc.FindColumnWithName except it ignores column mutations.
+func FindPublicColumnWithName(
+	desc catalog.TableDescriptor, name tree.Name,
+) (catalog.Column, error) {
+	col, err := desc.FindColumnWithName(name)
+	if err != nil {
+		return nil, err
+	}
+	if !col.Public() {
+		return nil, colinfo.NewUndefinedColumnError(string(name))
+	}
+	return col, nil
+}
+
+// FindPublicColumnWithID is a convenience function which behaves exactly
+// like desc.FindColumnWithID except it ignores column mutations.
+func FindPublicColumnWithID(
+	desc catalog.TableDescriptor, id descpb.ColumnID,
+) (catalog.Column, error) {
+	col, err := desc.FindColumnWithID(id)
+	if err != nil {
+		return nil, err
+	}
+	if !col.Public() {
+		return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+	}
+	return col, nil
 }

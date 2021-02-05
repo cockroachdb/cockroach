@@ -274,13 +274,13 @@ func isAllowedDependentDescInRenameDatabase(
 		colIDs.Add(int(colID))
 	}
 
-	for _, column := range dependentDesc.GetPublicColumns() {
-		if !colIDs.Contains(int(column.ID)) {
+	for _, column := range dependentDesc.PublicColumns() {
+		if !colIDs.Contains(int(column.GetID())) {
 			continue
 		}
-		colIDs.Remove(int(column.ID))
+		colIDs.Remove(int(column.GetID()))
 
-		if column.DefaultExpr == nil {
+		if !column.HasDefault() {
 			return false, "", errors.AssertionFailedf(
 				"rename_database: expected column id %d in table id %d to have a default expr",
 				dependedOn.ID,
@@ -288,11 +288,11 @@ func isAllowedDependentDescInRenameDatabase(
 			)
 		}
 		// Try parse the default expression and find the table name direct reference.
-		parsedExpr, err := parser.ParseExpr(*column.DefaultExpr)
+		parsedExpr, err := parser.ParseExpr(column.GetDefaultExpr())
 		if err != nil {
 			return false, "", err
 		}
-		typedExpr, err := tree.TypeCheck(ctx, parsedExpr, nil, column.Type)
+		typedExpr, err := tree.TypeCheck(ctx, parsedExpr, nil, column.GetType())
 		if err != nil {
 			return false, "", err
 		}
@@ -310,7 +310,7 @@ func isAllowedDependentDescInRenameDatabase(
 				// We only don't allow this if the database name is in there.
 				// This is always the last argument.
 				if tree.Name(parsedSeqName.Parts[parsedSeqName.NumParts-1]).Normalize() == tree.Name(dbName).Normalize() {
-					return false, column.Name, nil
+					return false, column.GetName(), nil
 				}
 			}
 		}

@@ -169,14 +169,17 @@ func NewColBatchScan(
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
-	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	// TODO(ajwerner): The need to construct an immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
-	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
+	cols := table.PublicColumns()
+	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		cols = table.AllColumns()
+	}
+	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
+	typs := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)
 
 	// Add all requested system columns to the output.
 	var sysColDescs []descpb.ColumnDescriptor

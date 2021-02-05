@@ -106,9 +106,9 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	// columns and extra columns in the secondary index used for foreign
 	// key referencing. This also implicitly includes all primary index
 	// columns.
-	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.GetPublicColumns()))
-	for i := range o.tableDesc.GetPublicColumns() {
-		columnsByID[o.tableDesc.GetPublicColumns()[i].ID] = &o.tableDesc.GetPublicColumns()[i]
+	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.PublicColumns()))
+	for _, c := range o.tableDesc.PublicColumns() {
+		columnsByID[c.GetID()] = c.ColumnDesc()
 	}
 
 	// Get primary key columns not included in the FK.
@@ -159,11 +159,11 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	// pretty JSON dictionary for row_data.
 	for _, id := range o.constraint.FK.OriginColumnIDs {
 		idx := o.colIDToRowIdx.GetDefault(id)
-		col, err := o.tableDesc.FindActiveColumnByID(id)
+		col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 		if err != nil {
 			return nil, err
 		}
-		rowDetails[col.Name] = row[idx].String()
+		rowDetails[col.GetName()] = row[idx].String()
 	}
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		id := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
@@ -176,11 +176,11 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		}
 		if !found {
 			idx := o.colIDToRowIdx.GetDefault(id)
-			col, err := o.tableDesc.FindActiveColumnByID(id)
+			col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 			if err != nil {
 				return nil, err
 			}
-			rowDetails[col.Name] = row[idx].String()
+			rowDetails[col.GetName()] = row[idx].String()
 		}
 	}
 

@@ -167,10 +167,9 @@ func DecodeRowInfo(
 			colIDs[i] = index.GetColumnID(i)
 		}
 	} else if index.Primary() {
-		publicColumns := tableDesc.GetPublicColumns()
-		colIDs = make([]descpb.ColumnID, len(publicColumns))
-		for i := range publicColumns {
-			colIDs[i] = publicColumns[i].ID
+		colIDs = make([]descpb.ColumnID, len(tableDesc.PublicColumns()))
+		for i, col := range tableDesc.PublicColumns() {
+			colIDs[i] = col.GetID()
 		}
 	} else {
 		colIDs = make([]descpb.ColumnID, 0, index.NumColumns()+index.NumExtraColumns()+index.NumStoredColumns())
@@ -187,11 +186,11 @@ func DecodeRowInfo(
 	cols := make([]descpb.ColumnDescriptor, len(colIDs))
 	for i, colID := range colIDs {
 		colIdxMap.Set(colID, i)
-		col, err := tableDesc.FindColumnByID(colID)
+		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		cols[i] = *col
+		cols[i] = *col.ColumnDesc()
 	}
 
 	tableArgs := FetcherTableArgs{

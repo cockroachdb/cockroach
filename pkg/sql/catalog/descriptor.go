@@ -200,33 +200,20 @@ type TableDescriptor interface {
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
 
-	GetPublicColumns() []descpb.ColumnDescriptor
-	ForeachPublicColumn(f func(col *descpb.ColumnDescriptor) error) error
-	ForeachNonDropColumn(f func(col *descpb.ColumnDescriptor) error) error
+	AllColumns() []Column
+	PublicColumns() []Column
+	WritableColumns() []Column
+	NonDropColumns() []Column
+	VisibleColumns() []Column
+	ReadableColumns() []Column
+	UserDefinedTypeColumns() []Column
+
+	FindColumnWithID(id descpb.ColumnID) (Column, error)
+	FindColumnWithName(name tree.Name) (Column, error)
+
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
-	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)
-	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
-	FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
-	ColumnIdxMap() TableColMap
-	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor
-	AllNonDropColumns() []descpb.ColumnDescriptor
-	VisibleColumns() []descpb.ColumnDescriptor
-	ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor
-	ColumnIdxMapWithMutations(includeMutations bool) TableColMap
-	DeletableColumns() []descpb.ColumnDescriptor
-	MutationColumns() []descpb.ColumnDescriptor
 	ContainsUserDefinedTypes() bool
-	GetColumnOrdinalsWithUserDefinedTypes() []int
-	UserDefinedTypeColsHaveSameVersion(otherDesc TableDescriptor) bool
-	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
-	WritableColumns() []descpb.ColumnDescriptor
-	ReadableColumns() []descpb.ColumnDescriptor
 	GetNextColumnID() descpb.ColumnID
-	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)
-	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error)
-	ColumnTypes() []*types.T
-	ColumnTypesWithMutations(mutations bool) []*types.T
-	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor
@@ -377,6 +364,111 @@ type Index interface {
 
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
+}
+
+// Column is an interface around the index descriptor types.
+type Column interface {
+
+	// ColumnDesc returns the underlying protobuf descriptor.
+	// Ideally, this method should be called as rarely as possible.
+	ColumnDesc() *descpb.ColumnDescriptor
+
+	// ColumnDescDeepCopy returns a deep copy of the underlying proto.
+	ColumnDescDeepCopy() descpb.ColumnDescriptor
+
+	// Ordinal returns the ordinal of the column in its parent table descriptor.
+	//
+	// The ordinal of a column in a `tableDesc descpb.TableDescriptor` is
+	// defined as follows:
+	// - [0:len(tableDesc.Columns)] is the range of public columns,
+	// - [len(tableDesc.Columns):] is the range of non-public columns.
+	//
+	// In terms of a `table catalog.TableDescriptor` interface, it is defined
+	// as the catalog.Column object's position in the table.AllColumns() slice.
+	Ordinal() int
+
+	// Public returns true iff the column is active, i.e. readable, in the table
+	// descriptor.
+	Public() bool
+
+	// WriteAndDeleteOnly returns true iff the column is a mutation in the
+	// delete-and-write-only state in the table descriptor.
+	WriteAndDeleteOnly() bool
+
+	// DeleteOnly returns true iff the column is a mutation in the delete-only
+	// state in the table descriptor.
+	DeleteOnly() bool
+
+	// Adding returns true iff the column is an add mutation in the table
+	// descriptor.
+	Adding() bool
+
+	// Dropped returns true iff the column is a drop mutation in the table
+	// descriptor.
+	Dropped() bool
+
+	// GetID returns the column ID.
+	GetID() descpb.ColumnID
+
+	// GetName returns the column name as a string.
+	GetName() string
+
+	// ColName returns the column name as a tree.Name.
+	ColName() tree.Name
+
+	// HasType returns true iff the column type is set.
+	HasType() bool
+
+	// GetType returns the column type.
+	GetType() *types.T
+
+	// IsNullable returns true iff the column allows NULL values.
+	IsNullable() bool
+
+	// HasDefault returns true iff the column has a default expression set.
+	HasDefault() bool
+
+	// GetDefaultExpr returns the column default expression if it exists,
+	// empty string otherwise.
+	GetDefaultExpr() string
+
+	// IsComputed returns true iff the column is a computed column.
+	IsComputed() bool
+
+	// GetComputeExpr returns the column computed expression if it exists,
+	// empty string otherwise.
+	GetComputeExpr() string
+
+	// IsHidden returns true iff the column is not visible.
+	IsHidden() bool
+
+	// NumUsesSequences returns the number of sequences used by this column.
+	NumUsesSequences() int
+
+	// GetUsesSequenceID returns the ID of a sequence used by this column.
+	GetUsesSequenceID(usesSequenceOrdinal int) descpb.ID
+
+	// NumOwnsSequences returns the number of sequences owned by this column.
+	NumOwnsSequences() int
+
+	// GetOwnsSequenceID returns the ID of a sequence owned by this column.
+	GetOwnsSequenceID(ownsSequenceOrdinal int) descpb.ID
+
+	// IsVirtual returns true iff the column is a virtual column.
+	IsVirtual() bool
+
+	// CheckCanBeInboundFKRef returns whether the given column can be on the
+	// referenced (target) side of a foreign key relation.
+	CheckCanBeInboundFKRef() error
+
+	// CheckCanBeOutboundFKRef returns whether the given column can be on the
+	// referencing (origin) side of a foreign key relation.
+	CheckCanBeOutboundFKRef() error
+
+	// GetPGAttributeNum returns the PGAttributeNum of the column descriptor
+	// if the PGAttributeNum is set (non-zero). Returns the ID of the
+	// column descriptor if the PGAttributeNum is not set.
+	GetPGAttributeNum() uint32
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
@@ -622,4 +714,48 @@ func FindDeletableNonPrimaryIndex(desc TableDescriptor, test func(idx Index) boo
 // DeleteOnlyNonPrimaryIndex() for which test returns true.
 func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
+}
+
+// UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's
+// columns with user defined type metadata have the same versions of metadata
+// as in the other descriptor. Note that this function is only valid on two
+// descriptors representing the same table at the same version.
+func UserDefinedTypeColsHaveSameVersion(desc TableDescriptor, otherDesc TableDescriptor) bool {
+	otherCols := otherDesc.UserDefinedTypeColumns()
+	for i, thisCol := range desc.UserDefinedTypeColumns() {
+		this, other := thisCol.GetType(), otherCols[i].GetType()
+		if this.TypeMeta.Version != other.TypeMeta.Version {
+			return false
+		}
+	}
+	return true
+}
+
+// ColumnIDToOrdinalMap returns a map from Column ID to the ordinal
+// position of that column.
+func ColumnIDToOrdinalMap(columns []Column) TableColMap {
+	var m TableColMap
+	for _, col := range columns {
+		m.Set(col.GetID(), col.Ordinal())
+	}
+	return m
+}
+
+// ColumnTypes returns the types of the given columns
+func ColumnTypes(columns []Column) []*types.T {
+	return ColumnTypesWithVirtualCol(columns, nil)
+}
+
+// ColumnTypesWithVirtualCol returns the types of all given columns,
+// If virtualCol is non-nil, substitutes the type of the virtual
+// column instead of the column with the same ID.
+func ColumnTypesWithVirtualCol(columns []Column, virtualCol *descpb.ColumnDescriptor) []*types.T {
+	t := make([]*types.T, len(columns))
+	for i, col := range columns {
+		t[i] = col.GetType()
+		if virtualCol != nil && col.GetID() == virtualCol.ID {
+			t[i] = virtualCol.Type
+		}
+	}
+	return t
 }
