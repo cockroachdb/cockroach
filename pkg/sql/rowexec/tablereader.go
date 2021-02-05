@@ -284,8 +284,8 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
-			TuplesRead:     is.NumTuples,
 			BytesRead:      optional.MakeUint(uint64(tr.GetBytesRead())),
+			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
 			ContentionTime: optional.MakeTimeValue(tr.GetCumulativeContentionTime()),
 		},
