@@ -12,12 +12,12 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
@@ -72,7 +72,7 @@ func runBuild(cmd *cobra.Command, targets []string) error {
 	for _, target := range targets {
 		buildTarget, ok := buildTargetMapping[target]
 		if !ok {
-			log.Errorf(ctx, "unrecognized target: %s", target)
+			log.Printf("unrecognized target: %s", target)
 			return errors.Newf("unrecognized target")
 		}
 
@@ -81,10 +81,10 @@ func runBuild(cmd *cobra.Command, targets []string) error {
 	if err := execute(ctx, "bazel", args...); err != nil {
 		return err
 	}
-	return symlinkBinaries(ctx, targets)
+	return symlinkBinaries(targets)
 }
 
-func symlinkBinaries(ctx context.Context, targets []string) error {
+func symlinkBinaries(targets []string) error {
 	var workspace string
 	{
 		out, err := exec.Command("bazel", "info", "workspace").Output()

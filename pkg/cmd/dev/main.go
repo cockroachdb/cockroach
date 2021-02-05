@@ -12,10 +12,10 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/exec"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +70,7 @@ func init() {
 func runDev(ctx context.Context) error {
 	_, err := exec.LookPath(bazel)
 	if err != nil {
-		log.Errorf(ctx, "expected to find bazel in $PATH")
+		log.Printf("expected to find bazel in $PATH")
 		return err
 	}
 
@@ -83,7 +83,7 @@ func runDev(ctx context.Context) error {
 func main() {
 	ctx := context.Background()
 	if err := runDev(ctx); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Printf("%v", err)
 		os.Exit(1)
 	}
 }
