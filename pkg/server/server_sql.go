@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
-	_ "github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -627,13 +626,20 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
 		// versions.
+		//
+		// TODO(ajwerner): Allow tenants to set their cluster version and to
+		// perform sql migrations through the migration infrastructure.
+		// See #48436.
 		c := migrationcluster.New(migrationcluster.ClusterConfig{
 			NodeLiveness: nodeLiveness,
 			Dialer:       cfg.nodeDialer,
 			DB:           cfg.db,
 		})
-		migrationMgr := migrationmanager.NewManager(c, cfg.circularInternalExecutor, jobRegistry)
-		execCfg.MigrationCluster = c
+		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
+		migrationMgr := migrationmanager.NewManager(
+			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
+		)
+		execCfg.MigrationRunDependencies = migrationMgr
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
 	}
 

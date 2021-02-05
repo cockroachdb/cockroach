@@ -231,6 +231,9 @@ var SystemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.WebSessionsTable.GetName(): {
 		IncludeInClusterBackup: OptOutOfClusterBackup,
 	},
+	systemschema.LongRunningMigrationsTable.GetName(): {
+		IncludeInClusterBackup: OptOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that

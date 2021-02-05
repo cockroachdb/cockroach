@@ -14,11 +14,11 @@
 // internal DB state, and much more. They're typically reserved for crdb
 // internal operations and state. Each migration is idempotent in nature, is
 // associated with a specific cluster version, and executed when the cluster
-// version is made activate on every node in the cluster.
+// version is made active on every node in the cluster.
 //
 // Examples of migrations that apply would be migrations to move all raft state
 // from one storage engine to another, or purging all usage of the replicated
-// truncated state in KV. A "sister" package of interest is pkg/sqlmigrations.
+// truncated state in KV.
 package migration
 
 import (
@@ -26,19 +26,33 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/logtags"
 )
 
 // Manager coordinates long-running migrations.
 type Manager interface {
+	RunDependencies
 	Migrate(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
 }
 
-// Cluster abstracts a physical KV cluster and can be utilized by a long-runnng
+// Registry provides access to migrations.
+type Registry interface {
+	GetMigration(key clusterversion.ClusterVersion) (Migration, bool)
+}
+
+// RunDependencies are used by the job to run migrations.
+type RunDependencies interface {
+	Registry
+	Cluster() Cluster
+}
+
+// Cluster abstracts a physical KV cluster and can be utilized by a long-running
 // migration.
 type Cluster interface {
 
@@ -182,6 +196,10 @@ type KVMigration struct {
 	fn KVMigrationFn
 }
 
+// KVMigrationFn is used to perform kv-level migrations. It should only be
+// run from the system tenant.
+type KVMigrationFn func(context.Context, clusterversion.ClusterVersion, Cluster) error
+
 // NewKVMigration constructs a KVMigration.
 func NewKVMigration(
 	description string, cv clusterversion.ClusterVersion, fn KVMigrationFn,
@@ -195,21 +213,47 @@ func NewKVMigration(
 	}
 }
 
-// KVMigrationFn contains the logic of a KVMigration.
-type KVMigrationFn func(context.Context, clusterversion.ClusterVersion, Cluster) error
+// SQLDeps are the dependencies of migrations which perform actions at the
+// SQL layer.
+type SQLDeps struct {
+	DB       *kv.DB
+	Codec    keys.SQLCodec
+	Settings *cluster.Settings
+}
 
-// Run kickstarts the actual migration process. It's responsible for recording
-// the ongoing status of the migration into a system table.
-//
-// TODO(irfansharif): Introduce a `system.migrations` table, and populate it here.
-func (m *KVMigration) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, h Cluster,
+// SQLMigration is an implementation of Migration for SQL-level migrations.
+type SQLMigration struct {
+	migration
+	fn SQLMigrationFn
+}
+
+// NewSQLMigration constructs a SQLMigration.
+func NewSQLMigration(
+	description string, cv clusterversion.ClusterVersion, fn SQLMigrationFn,
+) *SQLMigration {
+	return &SQLMigration{
+		migration: migration{
+			description: description,
+			cv:          cv,
+		},
+		fn: fn,
+	}
+}
+
+// SQLMigrationFn is used to perform sql-level migrations. It may be run from
+// any tenant.
+type SQLMigrationFn func(context.Context, clusterversion.ClusterVersion, SQLDeps) error
+
+// Run kickstarts the actual migration process for KV-level migrations.
+func (m *KVMigration) Run(ctx context.Context, cv clusterversion.ClusterVersion, h Cluster) error {
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
+	return m.fn(ctx, cv, h)
+}
+
+// Run kickstarts the actual migration process for SQL-level migrations.
+func (m *SQLMigration) Run(
+	ctx context.Context, cv clusterversion.ClusterVersion, d SQLDeps,
 ) (err error) {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
-
-	if err := m.fn(ctx, cv, h); err != nil {
-		return err
-	}
-
-	return nil
+	return m.fn(ctx, cv, d)
 }

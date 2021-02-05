@@ -334,14 +334,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 
 func staticIDs(
 	ids ...descpb.ID,
-) func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) { return ids, nil }
+) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) { return ids, nil }
 }
 
 func databaseIDs(
 	names ...string,
-) func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
+) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
 		var ids []descpb.ID
 		for _, name := range names {
 			// This runs as part of an older migration (introduced in 2.1). We use
@@ -392,7 +392,7 @@ type migrationDescriptor struct {
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
 	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error)
+	newDescriptorIDs func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error)
 }
 
 func init() {
@@ -408,7 +408,7 @@ func init() {
 }
 
 type runner struct {
-	db          db
+	db          DB
 	codec       keys.SQLCodec
 	sqlExecutor *sql.InternalExecutor
 	settings    *cluster.Settings
@@ -449,9 +449,9 @@ type leaseManager interface {
 	TimeRemaining(l *leasemanager.Lease) time.Duration
 }
 
-// db is defined just to allow us to use a fake client.DB when testing this
+// DB is defined just to allow us to use a fake client.DB when testing this
 // package.
-type db interface {
+type DB interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
 	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
@@ -463,7 +463,7 @@ type db interface {
 type Manager struct {
 	stopper      *stop.Stopper
 	leaseManager leaseManager
-	db           db
+	db           DB
 	codec        keys.SQLCodec
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
@@ -508,7 +508,7 @@ func NewManager(
 // lifecycle is tightly controlled.
 func ExpectedDescriptorIDs(
 	ctx context.Context,
-	db db,
+	db DB,
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
@@ -891,7 +891,7 @@ func (m *Manager) migrateSystemNamespace(
 }
 
 func getCompletedMigrations(
-	ctx context.Context, db db, codec keys.SQLCodec,
+	ctx context.Context, db DB, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
@@ -913,14 +913,26 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 }
 
 func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescriptor) error {
+	return CreateSystemTable(ctx, r.db, r.codec, r.settings, desc)
+}
+
+// CreateSystemTable is a function to inject a new system table. If the table
+// already exists, ths function is a no-op.
+func CreateSystemTable(
+	ctx context.Context,
+	db DB,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	desc catalog.TableDescriptor,
+) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		tKey := catalogkv.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
-		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
-		b.CPut(catalogkeys.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(r.codec.ForSystemTenant()); err != nil {
+		tKey := catalogkv.MakePublicTableNameKey(ctx, settings, desc.GetParentID(), desc.GetName())
+		b.CPut(tKey.Key(codec), desc.GetID(), nil)
+		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
+		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err
 		}
 		return txn.Run(ctx, b)
@@ -1137,7 +1149,7 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
 			stmt := fmt.Sprintf(createDbStmt, dbName)
-			err = r.execAsRoot(ctx, "create-default-db", stmt)
+			err = r.execAsRoot(ctx, "create-default-DB", stmt)
 			if err != nil {
 				log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
 				break

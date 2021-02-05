@@ -8,7 +8,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/clusterversion",
         "//pkg/kv/kvserver",
+        "//pkg/migration/migrationmanager",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server",

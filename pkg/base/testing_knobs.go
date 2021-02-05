@@ -36,4 +36,5 @@ type TestingKnobs struct {
 	TenantTestingKnobs   ModuleTestingKnobs
 	JobsTestingKnobs     ModuleTestingKnobs
 	BackupRestore        ModuleTestingKnobs
+	MigrationManager     ModuleTestingKnobs
 }
