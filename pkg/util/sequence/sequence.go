@@ -93,7 +93,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 // GetUsedSequences returns the identifier of the sequence passed to
 // a call to sequence function in the given expression or nil if no sequence
 // identifiers are found. The identifier is wrapped in a SeqIdentifier.
-// e.g. nextval('foo') => "foo"; <some other expression> => nil
+// e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
 func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
 	var seqIdentifiers []SeqIdentifier
 	_, err := tree.SimpleVisit(

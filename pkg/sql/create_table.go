@@ -2332,18 +2332,13 @@ func newTableDesc(
 			}
 
 			// Replace the default expression's nextval param with a ID::regclass instead of a string.
-			// TODO: Wrap this in some version checks.
 			defaultExpr := &tree.FuncExpr{
 				Func: tree.WrapFunction("nextval"),
 				Exprs: tree.Exprs{
 					&tree.AnnotateTypeExpr{
 						Type:       types.RegClass,
 						SyntaxMode: tree.AnnotateShort,
-						Expr: &tree.CastExpr{
-							Expr:       tree.NewNumVal(constant.MakeInt64(int64(seqID)), "", false),
-							Type:       types.RegClass,
-							SyntaxMode: tree.CastShort,
-						},
+						Expr:       tree.NewNumVal(constant.MakeInt64(int64(seqID)), "", false),
 					},
 				},
 			}

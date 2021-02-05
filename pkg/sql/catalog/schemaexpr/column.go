@@ -286,9 +286,9 @@ func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDes
 	return ptrs
 }
 
-// replaceSequenceNames replaces occurrences of sequence regclasses in an expression with
+// replaceWithSequenceNames replaces occurrences of sequence regclasses in an expression with
 // the sequence's fully qualified names.
-func replaceSequenceNames(
+func replaceWithSequenceNames(
 	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -318,11 +318,10 @@ func replaceSequenceNames(
 		if err != nil {
 			return true, expr, nil //nolint:returnerrcheck
 		}
-
 		// Swap out this node to use the qualified table name for the sequence.
-		return false, &tree.AnnotateTypeExpr{
-			Type:       types.String,
-			SyntaxMode: tree.AnnotateShort,
+		return false, &tree.CastExpr{
+			Type:       types.RegClass,
+			SyntaxMode: tree.CastShort,
 			Expr:       tree.NewStrVal(seqName.FQString()),
 		}, nil
 	}

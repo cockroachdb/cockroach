@@ -444,6 +444,7 @@ func (b *Builder) maybeAddSequenceReferenceDependencies(
 			SequenceID: seqDesc.GetID(),
 			TableID:    tableID,
 			ColumnID:   col.ID,
+			ByID:       seqIdentifier.IsByID(),
 		})
 	}
 	return nil
