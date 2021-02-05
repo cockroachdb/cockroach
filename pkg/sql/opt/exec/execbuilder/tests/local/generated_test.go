@@ -533,6 +533,13 @@ func TestExecBuild_select_index_vectorize_off(
 	runExecBuildLogicTest(t, "select_index_vectorize_off")
 }
 
+func TestExecBuild_show_tables(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "show_tables")
+}
+
 func TestExecBuild_show_trace(
 	t *testing.T,
 ) {
