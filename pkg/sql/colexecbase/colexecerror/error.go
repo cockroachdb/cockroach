@@ -27,6 +27,7 @@ const panicLineSubstring = "runtime/panic.go"
 // CatchVectorizedRuntimeError executes operation, catches a runtime error if
 // it is coming from the vectorized engine, and returns it. If an error not
 // related to the vectorized engine occurs, it is not recovered from.
+// WARNING: when renaming this method, adjust shouldCatchPanic too.
 func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	defer func() {
 		panicObj := recover()
@@ -54,9 +55,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			panic(errors.AssertionFailedf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
 		}
 		panicEmittedFrom := strings.TrimSpace(scanner.Text())
-		if !isPanicFromVectorizedEngine(panicEmittedFrom) {
-			// Do not recover from the panic not related to the vectorized
-			// engine.
+		if !shouldCatchPanic(panicEmittedFrom) {
 			panic(panicObj)
 		}
 
@@ -97,27 +96,37 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 const (
 	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
 	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	rowexecPackagePrefix   = "github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
+	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
 	treePackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// isPanicFromVectorizedEngine checks whether the panic that was emitted from
+// shouldCatchPanic checks whether the panic that was emitted from
 // panicEmittedFrom line of code (which includes package name as well as the
-// file name and the line number) came from the vectorized engine.
+// file name and the line number) should be caught by the vectorized engine.
+//
+// The vectorized engine uses the panic-catch mechanism of error propagation, so
+// we need to catch all of its errors. We also want to catch any panics that
+// occur because of internal errors in some execution component (e.g. builtins).
+//
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
-func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
+func shouldCatchPanic(panicEmittedFrom string) bool {
+	const panicFromTheCatcherItselfPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror.CatchVectorizedRuntimeError"
+	if strings.HasPrefix(panicEmittedFrom, panicFromTheCatcherItselfPrefix) {
+		// This panic came from the catcher itself, so we will propagate it
+		// unchanged by the higher-level catchers.
+		return false
+	}
 	const testExceptionPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow_test.(*testNonVectorizedPanicEmitter)"
 	if strings.HasPrefix(panicEmittedFrom, testExceptionPrefix) {
-		// Although the panic appears to be coming from the vectorized engine, it
-		// is intended to not be caught in order to test the panic propagation, so
-		// we say that the panic is not from the vectorized engine.
+		// This panic is an exception and should not be caught in order to test
+		// the panic propagation.
 		return false
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, rowexecPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, treePackagePrefix)
 }
 
