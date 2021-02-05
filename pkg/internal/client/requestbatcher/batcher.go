@@ -138,6 +138,12 @@ type Config struct {
 	// DefaultInFlightBackpressureLimit.
 	InFlightBackpressureLimit int
 
+	// DropRequestInBackpressure is a flag that signals for the batcher top start
+	// dropping requests if the batcher goes into backpressure mode. In this case
+	// the batcher will return a stop.ErrThrottled error to the caller to indicate
+	// the request will not be processed due to throttling.
+	DropRequestInBackpressure bool
+
 	// NowFunc is used to determine the current time. It defaults to timeutil.Now.
 	NowFunc func() time.Time
 }
@@ -226,7 +232,7 @@ func (b *RequestBatcher) SendWithChan(
 	ctx context.Context, respChan chan<- Response, rangeID roachpb.RangeID, req roachpb.Request,
 ) error {
 	select {
-	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan):
+	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan, nil):
 		return nil
 	case <-b.cfg.Stopper.ShouldQuiesce():
 		return stop.ErrUnavailable
@@ -255,6 +261,20 @@ func (b *RequestBatcher) Send(
 		return nil, stop.ErrUnavailable
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// SendAsync is the asynchronous version of Send with a callback.
+func (b *RequestBatcher) SendAsync(
+	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request, respFunc func(Response),
+) error {
+	select {
+	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, nil, respFunc):
+		return nil
+	case <-b.cfg.Stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -346,8 +366,13 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 }
 
 func (b *RequestBatcher) sendResponse(req *request, resp Response) {
-	// This send should never block because responseChan is buffered.
-	req.responseChan <- resp
+	if req.responseChan != nil {
+		// This send should never block because responseChan is buffered.
+		req.responseChan <- resp
+	} else {
+		// This call can block, which can serve as a form of backpressure.
+		req.responseFunc(resp)
+	}
 	b.pool.putRequest(req)
 }
 
@@ -409,7 +434,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 		// reqChan consults inBackPressure to determine whether the goroutine is
 		// accepting new requests.
 		reqChan = func() <-chan *request {
-			if inBackPressure {
+			if inBackPressure && !b.cfg.DropRequestInBackpressure {
 				return nil
 			}
 			return b.requestChan
@@ -427,7 +452,19 @@ func (b *RequestBatcher) run(ctx context.Context) {
 				inBackPressure = false
 			}
 		}
+		dropRequest = func(req *request) {
+			res := Response{Err: stop.ErrThrottled}
+			if req.responseFunc != nil {
+				req.responseFunc(res)
+			} else {
+				req.responseChan <- res
+			}
+		}
 		handleRequest = func(req *request) {
+			if inBackPressure && b.cfg.DropRequestInBackpressure {
+				dropRequest(req)
+				return
+			}
 			now := b.cfg.NowFunc()
 			ba, existsInQueue := b.batches.get(req.rangeID)
 			if !existsInQueue {
@@ -484,10 +521,13 @@ func (b *RequestBatcher) run(ctx context.Context) {
 }
 
 type request struct {
-	ctx          context.Context
-	req          roachpb.Request
-	rangeID      roachpb.RangeID
+	ctx     context.Context
+	req     roachpb.Request
+	rangeID roachpb.RangeID
+
+	// One of the following is set.
 	responseChan chan<- Response
+	responseFunc func(Response)
 }
 
 type batch struct {
@@ -562,14 +602,22 @@ func (p *pool) putResponseChan(r chan Response) {
 }
 
 func (p *pool) newRequest(
-	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request, responseChan chan<- Response,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	req roachpb.Request,
+	respChan chan<- Response,
+	respFunc func(Response),
 ) *request {
+	if (respChan != nil) == (respFunc != nil) {
+		panic("either respChan or respFunc should be provided, not both")
+	}
 	r := p.requestPool.Get().(*request)
 	*r = request{
 		ctx:          ctx,
 		rangeID:      rangeID,
 		req:          req,
-		responseChan: responseChan,
+		responseChan: respChan,
+		responseFunc: respFunc,
 	}
 	return r
 }
