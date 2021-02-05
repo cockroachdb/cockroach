@@ -171,25 +171,25 @@ func (b *Builder) buildPartialIndexPredicate(
 		filters,
 	)
 
-	// If the normalized relational expression is a Select, return the filters.
-	if sel, ok := selExpr.(*memo.SelectExpr); ok {
-		return sel.Filters, nil
-	}
-
-	// Otherwise, the filters may be either true or false. Check the cardinality
-	// to determine which one.
-	if selExpr.Relational().Cardinality.IsZero() {
+	switch t := selExpr.(type) {
+	case *memo.SelectExpr:
+		// If the expression remains a Select, return the normalized filters.
+		return t.Filters, nil
+	case *memo.FakeRelExpr:
+		// If the expression has been normalized to a FakeRelExpr, then the
+		// filters were normalized to true and the Select was eliminated.
+		// So, return a true filter.
+		return memo.TrueFilter, nil
+	case *memo.ValuesExpr:
+		// If the expression has been normalized to a Values expression, then
+		// the filters were normalized to false and the Select and FakeRel were
+		// eliminated. So, return a false filter.
 		return memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}, nil
+	default:
+		// Otherwise, normalization resulted in an unexpected expression type.
+		// Panic rather than return an incorrect predicate.
+		panic(errors.AssertionFailedf("unexpected expression during partial index normalization: %T", t))
 	}
-
-	// TODO(mgartner): It is a bit dangerous to assume that if the normalized
-	// expression is not a Select and the cardinality is not zero, then the
-	// filter is equivalent to True. There should only be 3 types of relation
-	// normalized relational expressions: Scan, Values, and Select. Scan
-	// indicates the filters are always true and Values indicates the filters
-	// are always false. If the expression is a Select, use its filters. If the
-	// expression is none of the three, we should probably panic.
-	return memo.TrueFilter, nil
 }
 
 // resolvePartialIndexPredicate attempts to resolve the type of expr as a
