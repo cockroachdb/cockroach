@@ -146,7 +146,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
+			return NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
 		})
 	}
 }
@@ -187,7 +187,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i].Op = newOpTestInput(batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(t, err)
 	op.Init()
 	out := newOpTestOutput(op, expected)
@@ -217,7 +217,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(b, err)
 	op.Init()
 

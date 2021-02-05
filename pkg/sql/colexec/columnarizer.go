@@ -55,6 +55,7 @@ type Columnarizer struct {
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
+	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
 	typs            []*types.T
@@ -102,10 +103,11 @@ func newColumnarizer(
 		return nil, errors.AssertionFailedf("unexpected columnarizerMode %d", mode)
 	}
 	c := &Columnarizer{
-		allocator: allocator,
-		input:     input,
-		ctx:       ctx,
-		mode:      mode,
+		allocator:       allocator,
+		input:           input,
+		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx.Cfg),
+		ctx:             ctx,
+		mode:            mode,
 	}
 	if err = c.ProcessorBase.Init(
 		nil,
@@ -140,7 +142,9 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	var reallocated bool
 	switch c.mode {
 	case columnarizerBufferingMode:
-		c.batch, reallocated = c.allocator.ResetMaybeReallocate(c.typs, c.batch, 1 /* minCapacity */)
+		c.batch, reallocated = c.allocator.ResetMaybeReallocate(
+			c.typs, c.batch, 1 /* minCapacity */, c.maxBatchMemSize,
+		)
 	case columnarizerStreamingMode:
 		// Note that we're not using ResetMaybeReallocate because we will
 		// always have at most one tuple in the batch.

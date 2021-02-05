@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"github.com/apache/arrow/go/arrow/array"
@@ -327,7 +328,10 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength)
+		// For now, we don't enforce any footprint-based memory limit.
+		// TODO(yuzefovich): refactor this.
+		const maxBatchMemSize = math.MaxInt64
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
 		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}

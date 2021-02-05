@@ -31,6 +31,9 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )

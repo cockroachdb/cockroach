@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -51,18 +52,26 @@ func (p *deselectorOp) Init() {
 }
 
 func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
+	// deselectorOp should *not* limit the capacities of the returned batches,
+	// so we don't use a memory limit here. It is up to the wrapped operator to
+	// limit the size of batches based on the memory footprint.
+	const maxBatchMemSize = math.MaxInt64
 	// TODO(yuzefovich): this allocation is only needed in order to appease the
 	// tests of the external sorter with forced disk spilling (if we don't do
 	// this, an OOM error occurs during ResetMaybeReallocate call below at
 	// which point we have already received a batch from the input and it'll
 	// get lost because deselectorOp doesn't support fall-over to the
 	// disk-backed infrastructure).
-	p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, 1 /* minCapacity */)
+	p.output, _ = p.allocator.ResetMaybeReallocate(
+		p.inputTypes, p.output, 1 /* minCapacity */, maxBatchMemSize,
+	)
 	batch := p.input.Next(ctx)
 	if batch.Selection() == nil {
 		return batch
 	}
-	p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, batch.Length())
+	p.output, _ = p.allocator.ResetMaybeReallocate(
+		p.inputTypes, p.output, batch.Length(), maxBatchMemSize,
+	)
 	sel := batch.Selection()
 	p.allocator.PerformOperation(p.output.ColVecs(), func() {
 		for i := range p.inputTypes {
