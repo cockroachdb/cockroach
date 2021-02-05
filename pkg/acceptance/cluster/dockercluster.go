@@ -538,6 +538,10 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// Logging everything we get from Docker in service of finding the root
+	// cause of #58955.
+	log.Infof(ctx, "processing event from Docker: %+v", event)
+
 	// If there's currently a oneshot container, ignore any die messages from
 	// it because those are expected.
 	if l.oneshot != nil && event.ID == l.oneshot.id && event.Status == eventDie {
