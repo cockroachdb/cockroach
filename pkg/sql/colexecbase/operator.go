@@ -36,6 +36,9 @@ type Operator interface {
 	// Init() doesn't succeed for bufferingInMemoryOperator - which should only
 	// happen when 'workmem' setting is too low - just bail, even if we have
 	// disk spilling for that operator.
+	// TODO(yuzefovich): we probably should move ctx argument from Next into
+	// Init, the operator will then capture the context and use it (or the one
+	// derived from it) in Next and DrainMeta (when applicable) calls.
 	Init()
 
 	// Next returns the next Batch from this operator. Once the operator is

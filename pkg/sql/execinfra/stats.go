@@ -12,8 +12,11 @@ package execinfra
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // ShouldCollectStats is a helper function used to determine if a processor
@@ -22,4 +25,28 @@ import (
 // flag was set by the gateway node.
 func ShouldCollectStats(ctx context.Context, flowCtx *FlowCtx) bool {
 	return tracing.SpanFromContext(ctx) != nil && flowCtx.CollectStats
+}
+
+// GetCumulativeContentionTime is a helper function to calculate the cumulative
+// contention time from the tracing span from the context. All contention events
+// found in the trace are included.
+func GetCumulativeContentionTime(ctx context.Context) time.Duration {
+	var cumulativeContentionTime time.Duration
+	recording := GetTraceData(ctx)
+	if recording == nil {
+		return cumulativeContentionTime
+	}
+	var ev roachpb.ContentionEvent
+	for i := range recording {
+		recording[i].Structured(func(any *pbtypes.Any) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			cumulativeContentionTime += ev.Duration
+		})
+	}
+	return cumulativeContentionTime
 }
