@@ -165,6 +165,9 @@ var _ execinfra.RowSource = &invertedJoiner{}
 var _ execinfrapb.MetadataSource = &invertedJoiner{}
 var _ execinfra.OpNode = &invertedJoiner{}
 
+// TODO(yuzefovich): inverted joiner needs to implement execinfra.KVReader
+// interface.
+
 const invertedJoinerProcName = "inverted joiner"
 
 // newInvertedJoiner constructs an invertedJoiner. The datumsToInvertedExpr
@@ -775,7 +778,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		KV: execinfrapb.KVStats{
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(getCumulativeContentionTime(ij.fetcher.GetContentionEvents())),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx)),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
@@ -789,9 +792,6 @@ func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.Produc
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
-	}
-	if contentionEvents := ij.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
 	}
 	return trailingMeta
 }

@@ -287,11 +287,6 @@ message RemoteProducerMetadata {
     // Total number of rows read while executing a statement.
     optional int64 rows_read = 2 [(gogoproto.nullable) = false];
   }
-  // ContentionEvents are any contention events that occurred during query
-  // execution.
-  message ContentionEvents {
-    repeated roachpb.ContentionEvent contention_events = 1 [(gogoproto.nullable) = false];
-  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
@@ -301,9 +296,8 @@ message RemoteProducerMetadata {
     SamplerProgress sampler_progress = 7;
     Metrics metrics = 8;
     BulkProcessorProgress bulk_processor_progress = 9;
-    ContentionEvents contention_events = 10;
   }
-  reserved 6;
+  reserved 6, 10;
 }
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information

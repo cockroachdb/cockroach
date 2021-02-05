@@ -196,9 +196,6 @@ type ProducerMetadata struct {
 	BulkProcessorProgress *RemoteProducerMetadata_BulkProcessorProgress
 	// Metrics contains information about goodput of the node.
 	Metrics *RemoteProducerMetadata_Metrics
-	// ContentionEvents are the contention events that occurred during query
-	// execution.
-	ContentionEvents []roachpb.ContentionEvent
 }
 
 var (
@@ -267,8 +264,6 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Err = v.Error.ErrorDetail(ctx)
 	case *RemoteProducerMetadata_Metrics_:
 		meta.Metrics = v.Metrics
-	case *RemoteProducerMetadata_ContentionEvents_:
-		meta.ContentionEvents = v.ContentionEvents.ContentionEvents
 	default:
 		return *meta, false
 	}
@@ -312,12 +307,6 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.Metrics != nil {
 		rpm.Value = &RemoteProducerMetadata_Metrics_{
 			Metrics: meta.Metrics,
-		}
-	} else if meta.ContentionEvents != nil {
-		rpm.Value = &RemoteProducerMetadata_ContentionEvents_{
-			ContentionEvents: &RemoteProducerMetadata_ContentionEvents{
-				ContentionEvents: meta.ContentionEvents,
-			},
 		}
 	} else {
 		rpm.Value = &RemoteProducerMetadata_Error{
