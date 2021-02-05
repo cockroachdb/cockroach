@@ -294,8 +294,9 @@ type cFetcher struct {
 		tableoidCol coldata.DatumVec
 	}
 
-	typs      []*types.T
-	allocator *colmem.Allocator
+	typs        []*types.T
+	allocator   *colmem.Allocator
+	memoryLimit int64
 
 	// adapter is a utility struct that helps with memory accounting.
 	adapter struct {
@@ -310,7 +311,7 @@ const cFetcherBatchMinCapacity = 1
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity,
+		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -330,12 +331,14 @@ func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
+	memoryLimit int64,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	tables ...row.FetcherTableArgs,
 ) error {
 	rf.allocator = allocator
+	rf.memoryLimit = memoryLimit
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
 	}

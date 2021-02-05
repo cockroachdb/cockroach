@@ -963,6 +963,13 @@ func NewColOperator(
 			rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
 
+			// TODO(yuzefovich): audit all usages of GetWorkMemLimit to see
+			// whether we should be paying attention to ForceDiskSpill knob
+			// there too.
+			memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+			if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
+				memoryLimit = 1
+			}
 			if len(core.HashJoiner.LeftEqColumns) == 0 {
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
@@ -970,13 +977,6 @@ func NewColOperator(
 				crossJoinerMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, crossJoinerMemMonitorName)
 				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, crossJoinerMemMonitorName)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
-				// TODO(yuzefovich): audit all usages of GetWorkMemLimit to see
-				// whether we should be paying attention to ForceDiskSpill knob
-				// there too.
-				memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
-				if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-					memoryLimit = 1
-				}
 				result.Op = colexec.NewCrossJoiner(
 					unlimitedAllocator,
 					memoryLimit,
@@ -1015,7 +1015,7 @@ func NewColOperator(
 				inMemoryHashJoiner := colexec.NewHashJoiner(
 					colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
-					colexec.HashJoinerInitialNumBuckets,
+					colexec.HashJoinerInitialNumBuckets, memoryLimit,
 				)
 				if args.TestingKnobs.DiskSpillingDisabled {
 					// We will not be creating a disk-backed hash joiner because
