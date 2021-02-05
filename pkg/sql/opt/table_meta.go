@@ -284,6 +284,20 @@ func (tm *TableMeta) PartialIndexPredicatesForFormattingOnly() map[cat.IndexOrdi
 	return tm.partialIndexPredicates
 }
 
+// VirtualComputedColumns returns the metadata IDs for the set of table columns
+// that are virtual computed columns.
+func (tm *TableMeta) VirtualComputedColumns() ColSet {
+	var virtualCols ColSet
+	for col := range tm.ComputedCols {
+		ord := tm.MetaID.ColumnOrdinal(col)
+		if tm.Table.Column(ord).IsVirtualComputed() {
+			virtualCols.Add(col)
+		}
+
+	}
+	return virtualCols
+}
+
 // TableAnnotation returns the given annotation that is associated with the
 // given table. If the table has no such annotation, TableAnnotation returns
 // nil.
