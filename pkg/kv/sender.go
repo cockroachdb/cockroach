@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TxnType specifies whether a transaction is the root (parent)
@@ -290,6 +291,14 @@ type TxnSender interface {
 	// GetSteppingMode accompanies ConfigureStepping. It is provided
 	// for use in tests and assertion checks.
 	GetSteppingMode(ctx context.Context) (curMode SteppingMode)
+
+	// NewChildTransaction constructs a new TxnSender which is a child of this
+	// transaction. The rules of child transactions are that the parent shall not
+	// issue any requests until the child reaches a terminal state.
+	//
+	// An error will be returned if this Sender is not a root transaction or has
+	// a fixed commit timestamp.
+	NewChildTransaction() (id uuid.UUID, child TxnSender, _ error)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

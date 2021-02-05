@@ -1,0 +1,83 @@
+# Test interactions between ancestor and descendant transactions.
+
+# Test that we do not block on a parent's intent.
+# Test that we do not block on a parent's read lock.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-child-txn parent=txn1 txn=txn2 ts=10,1 epoch=0
+----
+
+new-child-txn parent=txn2 txn=txn3 ts=10,1 epoch=0
+----
+
+new-request r=r_txn1_rw txn=txn1 ts=10,1 spans=r@a,b+w@c,f
+----
+
+new-request r=r_txn2_rw txn=txn2 ts=10,2 spans=r@a,b+w@c,f
+----
+
+new-request r=r_txn2_ro txn=txn2 ts=10,2 spans=r@a,b+r@c,f
+----
+
+new-request r=r_txn3_rw txn=txn3 ts=10,2 spans=r@a,b+w@c,f
+----
+
+new-request r=r_txn3_ro txn=txn3 ts=10,2 spans=r@a,b+r@c,f
+----
+
+scan r=r_txn1_rw
+----
+start-waiting: false
+
+guard-state r=r_txn1_rw
+----
+new: state=doneWaiting
+
+acquire r=r_txn1_rw k=c durability=r
+----
+global: num=0
+local: num=0
+
+# The descendant transactions should succeed because uncontended, replicated locks
+# are not stored. This is okay because the assertion will be discovered when
+# handling the WriteIntentError.
+
+scan r=r_txn2_rw
+----
+start-waiting: false
+
+scan r=r_txn3_rw
+----
+start-waiting: false
+
+# Acquire unreplicated lock on c so that the descendants can encounter it and
+# hit the assertion error.
+acquire r=r_txn1_rw k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+scan r=r_txn2_rw
+----
+err: descendant transaction 00000000-0000-0000-0000-000000000002 attempted to lock over ancestor 00000000-0000-0000-0000-000000000001 at key "c"
+
+scan r=r_txn3_rw
+----
+err: descendant transaction 00000000-0000-0000-0000-000000000003 attempted to lock over ancestor 00000000-0000-0000-0000-000000000001 at key "c"
+
+# Show that read-only requests for ancestor transactions pass through locks.
+
+scan r=r_txn2_ro
+----
+start-waiting: false
+
+scan r=r_txn3_ro
+----
+start-waiting: false

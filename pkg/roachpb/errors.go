@@ -316,6 +316,7 @@ const (
 	MergeInProgressErrType                  ErrorDetailType = 37
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
+	AncestorAbortedErrorType                ErrorDetailType = 40
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -325,7 +326,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 40
+	NumErrors int = 41
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1237,4 +1238,23 @@ func (e *IndeterminateCommitError) Type() ErrorDetailType {
 	return IndeterminateCommitErrType
 }
 
+var _ ErrorDetailInterface = (*AncestorAbortedError)(nil)
+
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
+
+func (m *AncestorAbortedError) Error() string {
+	return m.message(nil)
+}
+
+func (m *AncestorAbortedError) message(pErr *Error) string {
+	s := fmt.Sprintf("found ancestor txn in ABORTED state %s", m.AncestorTxn)
+	if pErr.GetTxn() == nil {
+		return s
+	}
+	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (m *AncestorAbortedError) Type() ErrorDetailType {
+	return AncestorAbortedErrorType
+}

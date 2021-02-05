@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
@@ -136,16 +137,20 @@ func (pt *pendingTxn) getTxn() *roachpb.Transaction {
 func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 	set := map[uuid.UUID]struct{}{}
 	for _, push := range pt.waitingPushes {
-		if id := push.req.PusherTxn.ID; id != (uuid.UUID{}) {
-			set[id] = struct{}{}
-			push.mu.Lock()
-			if push.mu.dependents != nil {
-				for txnID := range push.mu.dependents {
-					set[txnID] = struct{}{}
-				}
-			}
-			push.mu.Unlock()
+		// Note that the dependents set is augmented to include not just the
+		// waiting pusher but also the ancestors of each pusher. For the purposes
+		// of deadlock, ancestor transactions are interpreted as pushing their
+		// descendants.
+		for cur := &push.req.PusherTxn; cur != nil; cur = cur.Parent {
+			set[cur.ID] = struct{}{}
 		}
+		push.mu.Lock()
+		if push.mu.dependents != nil {
+			for txnID := range push.mu.dependents {
+				set[txnID] = struct{}{}
+			}
+		}
+		push.mu.Unlock()
 	}
 	return set
 }
@@ -393,7 +398,7 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 	if w, ok := q.mu.queries[txnID]; ok {
 		metrics := q.cfg.Metrics
 		metrics.QueryWaiting.Dec(int64(w.count))
-		log.VEventf(ctx, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
+		log.VEventfDepth(ctx, 1, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
 		close(w.pending)
 		delete(q.mu.queries, txnID)
 	}
@@ -468,27 +473,58 @@ func (q *Queue) MaybeWaitForPush(
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
 	// changed.
-	var queryPusherCh <-chan *roachpb.Transaction // accepts updates to the pusher txn
-	var queryPusherErrCh <-chan *roachpb.Error    // accepts errors querying the pusher txn
-	var readyCh chan struct{}                     // signaled when pusher txn should be queried
 
 	// Query the pusher if it's a valid read-write transaction.
-	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.IsLocking() {
-		// Create a context which will be canceled once this call completes.
-		// This ensures that the goroutine created to query the pusher txn
-		// is properly cleaned up.
-		var cancel func()
-		ctx, cancel = context.WithCancel(ctx)
-		readyCh = make(chan struct{}, 1)
-		queryPusherCh, queryPusherErrCh = q.startQueryPusherTxn(ctx, push, readyCh)
-		// Ensure that the pusher querying goroutine is complete at exit.
+	// Also query all of its ancestors.
+
+	// forEachLockingPusher calls f with the pusher transaction if it is locking
+	// or any of its ancestors which are locking.
+	forEachLockingPusher := func(f func(txn *roachpb.Transaction)) {
+		for cur := &req.PusherTxn; cur != nil; cur = cur.Parent {
+			if cur.ID != uuid.Nil && cur.IsLocking() {
+				f(cur)
+			}
+		}
+	}
+
+	var readyChans map[uuid.UUID]chan struct{}  // channels to signal pushers to query
+	var queryPusherCh chan *roachpb.Transaction // accepts updates to a pusher txn
+	var queryPusherErrCh chan *roachpb.Error    // accepts errors querying a pusher txn
+	var sawErr bool
+	var toTrack int // number of locking pushers
+	forEachLockingPusher(func(*roachpb.Transaction) { toTrack++ })
+	if toTrack > 0 {
+		readyChans = make(map[uuid.UUID]chan struct{}, toTrack)
+		queryPusherErrCh = make(chan *roachpb.Error, toTrack)
+		queryPusherCh = make(chan *roachpb.Transaction, toTrack)
+		queryPusherCtx, cancel := context.WithCancel(ctx)
+
+		// Ensure that the pusher querying goroutines are complete at exit.
+		// At most one pusher goroutine will be accounted for having exited on the
+		// merit of having sent on the queryPusherErrCh which resulted which
+		// resulted in this function's returning.
 		defer func() {
 			cancel()
-			if queryPusherErrCh != nil {
+			numToWaitFor := toTrack
+			if sawErr {
+				numToWaitFor--
+			}
+			for i := 0; i < numToWaitFor; i++ {
 				<-queryPusherErrCh
 			}
 		}()
+
+		var i int
+		forEachLockingPusher(func(txn *roachpb.Transaction) {
+			ch := make(chan struct{}, 1)
+			readyChans[txn.ID] = ch
+			q.startQueryPusherTxn(
+				queryPusherCtx, push, ch, queryPusherCh, queryPusherErrCh, txn.Clone(),
+			)
+			i++
+		})
 	}
+
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
@@ -605,19 +641,40 @@ func (q *Queue) MaybeWaitForPush(
 			now := q.cfg.Clock.Now().GoTime()
 			pusheeTxnTimer.Reset(expiration.Sub(now))
 
-		case updatedPusher := <-queryPusherCh:
-			switch updatedPusher.Status {
-			case roachpb.COMMITTED:
-				log.VEventf(ctx, 1, "pusher committed: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionCommittedStatusError(), updatedPusher)
-			case roachpb.ABORTED:
-				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED), updatedPusher)
-			}
-			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
-			if updatedPusher.Priority > pusherPriority {
-				pusherPriority = updatedPusher.Priority
+		case updatedPusherOrAncestor := <-queryPusherCh:
+			pusherUpdated := updatedPusherOrAncestor.ID == req.PusherTxn.ID
+			if pusherUpdated {
+				switch updatedPusherOrAncestor.Status {
+				case roachpb.COMMITTED:
+					log.VEventf(ctx, 1, "pusher committed: %v", updatedPusherOrAncestor)
+					return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionCommittedStatusError(), updatedPusherOrAncestor)
+				case roachpb.ABORTED:
+					log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusherOrAncestor)
+					return nil, roachpb.NewErrorWithTxn(
+						roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED), updatedPusherOrAncestor)
+				}
+				log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusherOrAncestor)
+				if updatedPusherOrAncestor.Priority > pusherPriority {
+					pusherPriority = updatedPusherOrAncestor.Priority
+				}
+			} else { // updated pusher is a parent
+				switch updatedPusherOrAncestor.Status {
+				case roachpb.COMMITTED:
+					log.Errorf(ctx, "(programmer error) pusher parent committed: %v", updatedPusherOrAncestor)
+					return nil, roachpb.NewError(
+						errors.WithAssertionFailure(
+							errors.Wrapf(roachpb.NewTransactionCommittedStatusError(),
+								"unexpected committed parent: %v", updatedPusherOrAncestor)))
+				case roachpb.ABORTED:
+					log.VEventf(ctx, 1, "pusher ancestor aborted: %v %v", updatedPusherOrAncestor, req)
+					// If the ancestor is aborted, then that fact should reach the
+					// ancestor up the stack, aborting its descendants along the way.
+					// The returned AncestorAbortedError will be translated to a restart
+					// error inside the call to ChildTxn() on this ancestor.
+					return nil, roachpb.NewError(&roachpb.AncestorAbortedError{
+						AncestorTxn: *updatedPusherOrAncestor,
+					})
+				}
 			}
 
 			// Check for dependency cycle to find and break deadlocks.
@@ -661,11 +718,14 @@ func (q *Queue) MaybeWaitForPush(
 					return q.forcePushAbort(ctx, req)
 				}
 			}
-			// Signal the pusher query txn loop to continue.
-			readyCh <- struct{}{}
+			// Signal the pusher query txn loop which sent the update to continue.
+			select {
+			case readyChans[updatedPusherOrAncestor.ID] <- struct{}{}:
+			default:
+			}
 
 		case pErr := <-queryPusherErrCh:
-			queryPusherErrCh = nil
+			sawErr = true // we do not need to wait for this goroutine
 			return nil, pErr
 		}
 	}
@@ -769,11 +829,20 @@ func (q *Queue) MaybeWaitForQuery(
 // priority and set of known waiting transactions (dependents) are
 // accumulated over iterations and supplied with each successive
 // invocation of QueryTxn in order to avoid busy querying.
+//
+// The additional txnToQuery will indicate the corresponding transaction
+// being queried. The transaction in txnToQuery will either be
+// push.req.Transaction or one of its ancestors. Given the fact that the
+// ancestors are members of their children, the transaction itself may not
+// be safely modified.
 func (q *Queue) startQueryPusherTxn(
-	ctx context.Context, push *waitingPush, readyCh <-chan struct{},
-) (<-chan *roachpb.Transaction, <-chan *roachpb.Error) {
-	ch := make(chan *roachpb.Transaction, 1)
-	errCh := make(chan *roachpb.Error, 1)
+	ctx context.Context,
+	push *waitingPush,
+	readyCh <-chan struct{},
+	ch chan<- *roachpb.Transaction,
+	errCh chan<- *roachpb.Error,
+	txnToQuery *roachpb.Transaction,
+) {
 	push.mu.Lock()
 	var waitingTxns []uuid.UUID
 	if push.mu.dependents != nil {
@@ -782,7 +851,7 @@ func (q *Queue) startQueryPusherTxn(
 			waitingTxns = append(waitingTxns, txnID)
 		}
 	}
-	pusher := push.req.PusherTxn.Clone()
+	pusher := txnToQuery.Clone()
 	push.mu.Unlock()
 
 	if err := q.cfg.Stopper.RunAsyncTask(
@@ -825,7 +894,12 @@ func (q *Queue) startQueryPusherTxn(
 
 				// Send an update of the pusher txn.
 				pusher.Update(updatedPusher)
-				ch <- pusher
+				select {
+				case ch <- pusher:
+				case <-ctx.Done():
+					errCh <- roachpb.NewError(ctx.Err())
+					return
+				}
 
 				// Wait for context cancellation or indication on readyCh that the
 				// push waiter requires another query of the pusher txn.
@@ -842,7 +916,6 @@ func (q *Queue) startQueryPusherTxn(
 		}); err != nil {
 		errCh <- roachpb.NewError(err)
 	}
-	return ch, errCh
 }
 
 // queryTxnStatus does a "query" push on the specified transaction

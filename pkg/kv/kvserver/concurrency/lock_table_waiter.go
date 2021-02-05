@@ -152,7 +152,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
-			state := guard.CurState()
+			var state waitingState
+			if state, err = guard.CurState(); err != nil {
+				return err
+			}
 			h.emitAndInit(state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
