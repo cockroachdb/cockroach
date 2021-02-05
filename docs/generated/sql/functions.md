@@ -867,6 +867,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
+Otherwise, this will return the primary region of the current database.
+This will error if the current database is not a multi-region database.</p>
+</span></td></tr>
 <tr><td><a name="gateway_region"></a><code>gateway_region() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
 the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr></tbody>
