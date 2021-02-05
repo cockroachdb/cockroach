@@ -57,7 +57,8 @@ message RecordedSpan {
   //
   // A span whose recording is collected before it's finished will have the
   // duration set as the "time of collection - start time". Such a span will
-  // have an "unfinished" tag.
+  // have an "unfinished" tag and a `finished` boolean value of false in this
+  // recording.
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
@@ -79,6 +80,9 @@ message RecordedSpan {
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
+
+  // True if the span has been Finish()ed, false otherwise.
+  bool finished = 13;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
