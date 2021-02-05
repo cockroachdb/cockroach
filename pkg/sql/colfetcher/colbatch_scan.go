@@ -190,9 +190,9 @@ func NewColBatchScan(
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, &fetcher, table, int(spec.IndexIdx), columnIdxMap,
-		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
-		sysColDescs,
+		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), &fetcher,
+		table, int(spec.IndexIdx), columnIdxMap, spec.Reverse, neededColumns,
+		spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy, sysColDescs,
 	); err != nil {
 		return nil, err
 	}
@@ -219,6 +219,7 @@ func NewColBatchScan(
 func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
+	memoryLimit int64,
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
@@ -251,7 +252,7 @@ func initCRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		codec, allocator, reverseScan, lockStrength, lockWaitPolicy, tableArgs,
+		codec, allocator, memoryLimit, reverseScan, lockStrength, lockWaitPolicy, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

@@ -40170,7 +40170,9 @@ func (o *mergeJoinLeftAntiOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinLeftAntiOp) Next(ctx context.Context) coldata.Batch {
-	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(o.outputTypes, o.output, 1 /* minCapacity */)
+	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
+		o.outputTypes, o.output, 1 /* minCapacity */, o.memoryLimit,
+	)
 	for {
 		switch o.state {
 		case mjEntry:

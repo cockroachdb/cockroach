@@ -179,6 +179,10 @@ type hashJoiner struct {
 	// ht holds the hashTable that is populated during the build phase and used
 	// during the probe phase.
 	ht *hashTable
+	// memoryLimit is the total amount of RAM available for the hash joiner.
+	// This limits the output batches (and is also the same limit for the size
+	// of the hash table).
+	memoryLimit int64
 	// output stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
 	output      coldata.Batch
@@ -615,7 +619,9 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 	// batch at a time. If we were to use a limited allocator, we could hit the
 	// limit here, and it would have been very hard to fall back to disk backed
 	// hash joiner because we might have already emitted partial output.
-	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(hj.outputTypes, hj.output, minCapacity)
+	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
+		hj.outputTypes, hj.output, minCapacity, hj.memoryLimit,
+	)
 }
 
 func (hj *hashJoiner) reset(ctx context.Context) {
@@ -713,10 +719,12 @@ func MakeHashJoinerSpec(
 // buildSideAllocator should use a limited memory account and will be used for
 // the build side whereas outputUnlimitedAllocator should use an unlimited
 // memory account and will only be used when populating the output.
+// memoryLimit will limit the size of the batches produced by the hash joiner.
 func NewHashJoiner(
 	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecbase.Operator,
+	memoryLimit int64,
 ) colexecbase.Operator {
 	outputTypes := append([]*types.T{}, spec.left.sourceTypes...)
 	if spec.joinType.ShouldIncludeRightColsInOutput() {
@@ -727,6 +735,7 @@ func NewHashJoiner(
 		buildSideAllocator:       buildSideAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		spec:                     spec,
+		memoryLimit:              memoryLimit,
 		outputTypes:              outputTypes,
 	}
 	hj.probeState.buildIdx = make([]int, coldata.BatchSize())

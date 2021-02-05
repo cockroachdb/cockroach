@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -83,7 +84,10 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 			// We've just appended some distinct tuples to the hash table, so we
 			// will emit all of them as the output.
 			outputLength := op.ht.vals.Length() - op.htIdx
-			op.output, _ = op.allocator.ResetMaybeReallocate(op.typs, op.output, outputLength)
+			// For now, we don't enforce any footprint-based memory limit.
+			// TODO(yuzefovich): refactor this.
+			const maxBatchMemSize = math.MaxInt64
+			op.output, _ = op.allocator.ResetMaybeReallocate(op.typs, op.output, outputLength, maxBatchMemSize)
 			op.allocator.PerformOperation(op.output.ColVecs(), func() {
 				for colIdx, fromCol := range op.ht.vals.ColVecs() {
 					toCol := op.output.ColVec(colIdx)
