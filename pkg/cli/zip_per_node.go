@@ -82,6 +82,10 @@ var debugZipTablesPerNode = []string{
 // (this is useful since these profiles contain profiler labels, which
 // can then be correlated across nodes).
 //
+// Note that the request for CPU profiles is always issued at maximum
+// concurrency, because we wish profiling to be enabled on all nodes
+// simultaneously. This ensures that profiling data flows across RPCs.
+//
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
 func (zc *debugZipContext) collectCPUProfiles(

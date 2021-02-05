@@ -1306,6 +1306,14 @@ The zip command will block for the duration specified. Zero disables this featur
 `,
 	}
 
+	ZipConcurrency = FlagInfo{
+		Name: "concurrency",
+		Description: `
+The maximum number of nodes to request data from simultaneously.
+Can be set to 1 to ensure only one node is polled for data at a time.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
