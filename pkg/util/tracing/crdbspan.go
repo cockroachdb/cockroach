@@ -246,6 +246,7 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		Operation:    s.operation,
 		StartTime:    s.startTime,
 		Duration:     s.mu.duration,
+		Finished:     false,
 	}
 
 	if rs.Duration == -1 {
@@ -253,6 +254,8 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
 		rs.Duration = timeutil.Now().Sub(rs.StartTime)
+	} else {
+		rs.Finished = true
 	}
 
 	addTag := func(k, v string) {

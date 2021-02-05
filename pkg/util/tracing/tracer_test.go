@@ -339,57 +339,6 @@ func TestLightstepContext(t *testing.T) {
 	require.Equal(t, exp, shadowBaggage)
 }
 
-func getSortedActiveSpanOps(t *testing.T, tr *Tracer) []string {
-	t.Helper()
-	var sl []string
-
-	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
-		for _, rec := range sp.GetRecording() {
-			sl = append(sl, rec.Operation)
-		}
-		return nil
-	}))
-
-	sort.Strings(sl)
-	return sl
-}
-
-// TestTracer_VisitSpans verifies that in-flight local root Spans
-// are tracked by the Tracer, and that Finish'ed Spans are not.
-func TestTracer_VisitSpans(t *testing.T) {
-	tr1 := NewTracer()
-	tr2 := NewTracer()
-
-	root := tr1.StartSpan("root", WithForceRealSpan())
-	root.SetVerbose(true)
-	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
-	require.Len(t, tr1.activeSpans.m, 1)
-
-	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
-	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
-	require.Len(t, tr2.activeSpans.m, 2)
-
-	require.NoError(t, child.ImportRemoteSpans(childChildFinished.GetRecording()))
-
-	childChildFinished.Finish()
-	require.Len(t, tr2.activeSpans.m, 1)
-
-	// Even though only `root` is tracked by tr1, we also reach
-	// root.child and (via ImportRemoteSpans) the remote child.
-	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(t, tr1))
-	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(t, tr2))
-
-	childChild.Finish()
-	child.Finish()
-	root.Finish()
-
-	// Nothing is tracked any more.
-	require.Len(t, getSortedActiveSpanOps(t, tr1), 0)
-	require.Len(t, getSortedActiveSpanOps(t, tr2), 0)
-	require.Len(t, tr1.activeSpans.m, 0)
-	require.Len(t, tr2.activeSpans.m, 0)
-}
-
 // TestActiveSpanVisitorErrors confirms that the visitor of the Tracer's
 // activeSpans registry gracefully exits upon receiving a sentinel error from
 // `iterutil.StopIteration()`.
@@ -413,4 +362,124 @@ func TestActiveSpanVisitorErrors(t *testing.T) {
 
 	require.NoError(t, tr.VisitSpans(visitor))
 	require.Equal(t, 1, numVisited)
+}
+
+// getSortedActiveSpanOpsWithFinishedFlag is a helper method that returns a map
+// of in-flight spans, keyed on operation names and with values
+// representing whether the span is finished; and a sorted list of in-flight
+// span operation names.
+func getSortedActiveSpanOpsWithFinishedFlag(t *testing.T, tr *Tracer) (map[string]bool, []string) {
+	t.Helper()
+
+	activeSpans := make(map[string]bool)
+	var spanOps []string
+
+	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
+		for _, rec := range sp.GetRecording() {
+			spanOps = append(spanOps, rec.Operation)
+			activeSpans[rec.Operation] = rec.Finished
+		}
+		return nil
+	}))
+
+	sort.Strings(spanOps)
+	return activeSpans, spanOps
+}
+
+// TestTracer_VisitSpans verifies that in-flight local root Spans
+// are tracked by the Tracer, and that Finish'ed Spans are not.
+func TestTracer_VisitSpans(t *testing.T) {
+	tr1 := NewTracer()
+	tr2 := NewTracer()
+
+	root := tr1.StartSpan("root", WithForceRealSpan())
+	root.SetVerbose(true)
+	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	require.Len(t, tr1.activeSpans.m, 1)
+
+	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
+	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
+	require.Len(t, tr2.activeSpans.m, 2)
+
+	require.NoError(t, child.ImportRemoteSpans(childChildFinished.GetRecording()))
+
+	childChildFinished.Finish()
+	require.Len(t, tr2.activeSpans.m, 1)
+
+	_, sortedSpanOps1 := getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+	_, sortedSpanOps2 := getSortedActiveSpanOpsWithFinishedFlag(t, tr2)
+
+	// Even though only `root` is tracked by tr1, we also reach
+	// root.child and (via ImportRemoteSpans) the remote child.
+	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, sortedSpanOps1)
+	require.Len(t, sortedSpanOps1, 3)
+	require.Equal(t, []string{"root.child.remotechild"}, sortedSpanOps2)
+
+	childChild.Finish()
+	child.Finish()
+	root.Finish()
+
+	_, sortedSpanOps1 = getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+	_, sortedSpanOps2 = getSortedActiveSpanOpsWithFinishedFlag(t, tr2)
+
+	// Nothing is tracked any more.
+	require.Len(t, sortedSpanOps1, 0)
+	require.Len(t, sortedSpanOps2, 0)
+	require.Len(t, tr1.activeSpans.m, 0)
+	require.Len(t, tr2.activeSpans.m, 0)
+}
+
+// TestSpanRecordingFinished verifies that a Span with one or more in-flight
+// child Spans is tracked by the Tracer and that its recording's Fininished
+// boolean value is changed when this Span itself finishes.
+func TestSpanRecordingFinished(t *testing.T) {
+	tr1 := NewTracer()
+	root := tr1.StartSpan("root", WithForceRealSpan())
+	root.SetVerbose(true)
+
+	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	childChild := tr1.StartSpan("root.child.child", WithParentAndAutoCollection(child))
+
+	tr2 := NewTracer()
+	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
+	require.NoError(t, child.ImportRemoteSpans(remoteChildChild.GetRecording()))
+
+	// All spans are un-finished.
+	activeSpanMap, sortedSpanOps := getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+	require.Equal(t, []string{"root", "root.child", "root.child.child", "root.child.remotechild"}, sortedSpanOps)
+	for _, k := range activeSpanMap {
+		require.False(t, k)
+	}
+
+	childChild.Finish()
+	activeSpanMap, _ = getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+
+	// Only childChild should have a true boolean flag for finished.
+	require.False(t, activeSpanMap["root"])
+	require.False(t, activeSpanMap["root.child"])
+	require.True(t, activeSpanMap["root.child.child"])
+	require.False(t, activeSpanMap["root.child.remotechild"])
+
+	child.Finish()
+	activeSpanMap, _ = getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+
+	// Only child and childChild should have a true boolean flag for finished.
+	require.False(t, activeSpanMap["root"])
+	require.True(t, activeSpanMap["root.child"])
+	require.True(t, activeSpanMap["root.child.child"])
+	require.False(t, activeSpanMap["root.child.remotechild"])
+
+	remoteChildChild.Finish()
+	require.NoError(t, child.ImportRemoteSpans(remoteChildChild.GetRecording()))
+	activeSpanMap, _ = getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+
+	// Only child, childChild, and remoteChildChild should have a true boolean flag for finished.
+	require.False(t, activeSpanMap["root"])
+	require.True(t, activeSpanMap["root.child"])
+	require.True(t, activeSpanMap["root.child.child"])
+	require.True(t, activeSpanMap["root.child.remotechild"])
+
+	root.Finish()
+	activeSpanMap, _ = getSortedActiveSpanOpsWithFinishedFlag(t, tr1)
+	require.Len(t, activeSpanMap, 0)
 }
