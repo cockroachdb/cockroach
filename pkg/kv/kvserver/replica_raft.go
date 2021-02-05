@@ -124,7 +124,7 @@ func (r *Replica) evalAndPropose(
 
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
-		proposal.ctx, proposal.sp = tracing.ForkCtxSpan(ctx, "async consensus")
+		proposal.ctx, proposal.sp = tracing.ForkSpan(ctx, "async consensus")
 
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
@@ -205,7 +205,7 @@ func (r *Replica) evalAndPropose(
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
+		// TODO(radu): Should this context be created via tracer.ForkSpan?
 		// We'd need to make sure the span is finished eventually.
 		proposal.ctx = r.AnnotateCtx(context.TODO())
 	}

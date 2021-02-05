@@ -713,11 +713,11 @@ func (h *contentionEventHelper) emit() {
 	}
 	h.ev.Duration = timeutil.Since(h.tBegin)
 	if h.onEvent != nil {
-		// NB: this is intentionally above the call to LogStructured so that
+		// NB: this is intentionally above the call to RecordStructured so that
 		// this interceptor gets to mutate the event (used for test determinism).
 		h.onEvent(h.ev)
 	}
-	h.sp.LogStructured(h.ev)
+	h.sp.RecordStructured(h.ev)
 	h.ev = nil
 }
 

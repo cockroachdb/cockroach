@@ -182,13 +182,13 @@ Span grandchild:
 	require.Equal(t, exp, recToStrippedString(childRec))
 }
 
-func TestSpan_LogStructured(t *testing.T) {
+func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
 	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
-	sp.LogStructured(&types.Int32Value{Value: 4})
+	sp.RecordStructured(&types.Int32Value{Value: 4})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].InternalStructured, 1)
@@ -207,7 +207,7 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer ch.Finish()
 	require.Len(t, sp.crdb.mu.recording.children, 1)
 	require.Equal(t, ch.crdb, sp.crdb.mu.recording.children[0])
-	ch.LogStructured(&types.Int32Value{Value: 5})
+	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)

@@ -632,7 +632,7 @@ func (rc *RangeCache) tryLookup(
 	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
 		var lookupRes EvictionToken
 		if err := rc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
-			ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
+			ctx, reqSpan := tracing.ForkSpan(ctx, "range lookup")
 			defer reqSpan.Finish()
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
