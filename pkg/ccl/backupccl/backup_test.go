@@ -5287,13 +5287,13 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
 			"unexpected table is sequence owner after restore",
 		)
-		require.Equal(t, tableDesc.GetPublicColumns()[0].ID, seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+		require.Equal(t, tableDesc.PublicColumns()[0].GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 			"unexpected column is sequence owner after restore",
 		)
-		require.Equal(t, 1, len(tableDesc.GetPublicColumns()[0].OwnsSequenceIds),
+		require.Equal(t, 1, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 			"unexpected number of sequences owned by d.t after restore",
 		)
-		require.Equal(t, seqDesc.GetID(), tableDesc.GetPublicColumns()[0].OwnsSequenceIds[0],
+		require.Equal(t, seqDesc.GetID(), tableDesc.PublicColumns()[0].GetOwnsSequenceID(0),
 			"unexpected ID of sequence owned by table d.t after restore",
 		)
 	})
@@ -5340,7 +5340,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 
 			tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
 
-			require.Equal(t, 0, len(tableDesc.GetPublicColumns()[0].OwnsSequenceIds),
+			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own 0 sequences",
 			)
 
@@ -5371,13 +5371,13 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
 			"unexpected table is sequence owner after restore",
 		)
-		require.Equal(t, tableDesc.GetPublicColumns()[0].ID, seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+		require.Equal(t, tableDesc.PublicColumns()[0].GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 			"unexpected column is sequence owner after restore",
 		)
-		require.Equal(t, 1, len(tableDesc.GetPublicColumns()[0].OwnsSequenceIds),
+		require.Equal(t, 1, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 			"unexpected number of sequences owned by d.t after restore",
 		)
-		require.Equal(t, seqDesc.GetID(), tableDesc.GetPublicColumns()[0].OwnsSequenceIds[0],
+		require.Equal(t, seqDesc.GetID(), tableDesc.PublicColumns()[0].GetOwnsSequenceID(0),
 			"unexpected ID of sequence owned by table d.t after restore",
 		)
 	})
@@ -5416,7 +5416,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			newDB.Exec(t, `RESTORE DATABASE d2 FROM $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
 
 			tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d2", "t")
-			require.Equal(t, 0, len(tableDesc.GetPublicColumns()[0].OwnsSequenceIds),
+			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own no sequences.",
 			)
 
@@ -5436,12 +5436,12 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			require.Equal(t, td.GetID(), sd.GetSequenceOpts().SequenceOwner.OwnerTableID,
 				"unexpected table owner for sequence seq2 after restore",
 			)
-			require.Equal(t, td.GetPublicColumns()[0].ID, sd.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+			require.Equal(t, td.PublicColumns()[0].GetID(), sd.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 				"unexpected column owner for sequence seq2 after restore")
-			require.Equal(t, 1, len(td.GetPublicColumns()[0].OwnsSequenceIds),
+			require.Equal(t, 1, td.PublicColumns()[0].NumOwnsSequences(),
 				"unexpected number of sequences owned by d3.t after restore",
 			)
-			require.Equal(t, sd.GetID(), td.GetPublicColumns()[0].OwnsSequenceIds[0],
+			require.Equal(t, sd.GetID(), td.PublicColumns()[0].GetOwnsSequenceID(0),
 				"unexpected ID of sequences owned by d3.t",
 			)
 		})
@@ -5465,13 +5465,13 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
 			"unexpected table is sequence owner after restore",
 		)
-		require.Equal(t, tableDesc.GetPublicColumns()[0].ID, seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+		require.Equal(t, tableDesc.PublicColumns()[0].GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 			"unexpected column is sequence owner after restore",
 		)
-		require.Equal(t, 1, len(tableDesc.GetPublicColumns()[0].OwnsSequenceIds),
+		require.Equal(t, 1, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 			"unexpected number of sequences owned by d.t after restore",
 		)
-		require.Equal(t, seqDesc.GetID(), tableDesc.GetPublicColumns()[0].OwnsSequenceIds[0],
+		require.Equal(t, seqDesc.GetID(), tableDesc.PublicColumns()[0].GetOwnsSequenceID(0),
 			"unexpected ID of sequence owned by table d.t after restore",
 		)
 
@@ -5490,20 +5490,20 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			"unexpected table is sequence owner of d3.seq2 after restore",
 		)
 
-		require.Equal(t, td.GetPublicColumns()[0].ID, sd.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+		require.Equal(t, td.PublicColumns()[0].GetID(), sd.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 			"unexpected column is sequence owner of d2.seq after restore",
 		)
-		require.Equal(t, td.GetPublicColumns()[0].ID, sdSeq2.GetSequenceOpts().SequenceOwner.OwnerColumnID,
+		require.Equal(t, td.PublicColumns()[0].GetID(), sdSeq2.GetSequenceOpts().SequenceOwner.OwnerColumnID,
 			"unexpected column is sequence owner of d3.seq2 after restore",
 		)
 
-		require.Equal(t, 2, len(td.GetPublicColumns()[0].OwnsSequenceIds),
+		require.Equal(t, 2, td.PublicColumns()[0].NumOwnsSequences(),
 			"unexpected number of sequences owned by d3.t after restore",
 		)
-		require.Equal(t, sd.GetID(), td.GetPublicColumns()[0].OwnsSequenceIds[0],
+		require.Equal(t, sd.GetID(), td.PublicColumns()[0].GetOwnsSequenceID(0),
 			"unexpected ID of sequence owned by table d3.t after restore",
 		)
-		require.Equal(t, sdSeq2.GetID(), td.GetPublicColumns()[0].OwnsSequenceIds[1],
+		require.Equal(t, sdSeq2.GetID(), td.PublicColumns()[0].GetOwnsSequenceID(1),
 			"unexpected ID of sequence owned by table d3.t after restore",
 		)
 	})

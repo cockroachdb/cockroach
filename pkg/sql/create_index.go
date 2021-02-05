@@ -186,13 +186,13 @@ func MakeIndexDescriptor(
 		}
 
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
-		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[len(n.Columns)-1].Column)
+		column, err := tableDesc.FindColumnWithName(n.Columns[len(n.Columns)-1].Column)
 		if err != nil {
 			return nil, err
 		}
-		switch columnDesc.Type.Family() {
+		switch column.GetType().Family() {
 		case types.GeometryFamily:
-			config, err := geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
+			config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
 			if err != nil {
 				return nil, err
 			}
@@ -267,11 +267,11 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 		if column.Expr != nil {
 			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 		}
-		_, dropping, err := desc.FindColumnByName(column.Column)
+		foundColumn, err := desc.FindColumnWithName(column.Column)
 		if err != nil {
 			return err
 		}
-		if dropping {
+		if foundColumn.Dropped() {
 			return colinfo.NewUndefinedColumnError(string(column.Column))
 		}
 	}
@@ -338,24 +338,24 @@ func maybeCreateAndAddShardCol(
 	if err != nil {
 		return nil, false, err
 	}
-	existingShardCol, dropped, err := desc.FindColumnByName(tree.Name(shardCol.Name))
-	if err == nil && !dropped {
+	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardCol.Name))
+	if err == nil && !existingShardCol.Dropped() {
 		// TODO(ajwerner): In what ways is existingShardCol allowed to differ from
 		// the newly made shardCol? Should there be some validation of
 		// existingShardCol?
-		if !existingShardCol.Hidden {
+		if !existingShardCol.IsHidden() {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
 			return nil, false, pgerror.Newf(pgcode.DuplicateColumn,
 				"column %s already specified; can't be used for sharding", shardCol.Name)
 		}
-		return existingShardCol, false, nil
+		return existingShardCol.ColumnDesc(), false, nil
 	}
 	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !columnIsUndefined {
 		return nil, false, err
 	}
-	if columnIsUndefined || dropped {
+	if columnIsUndefined || existingShardCol.Dropped() {
 		if isNewTable {
 			desc.AddColumn(shardCol)
 		} else {

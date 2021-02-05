@@ -229,7 +229,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Check if the columns exist on the table.
 				for _, column := range d.Columns {
-					if _, _, err := n.tableDesc.FindColumnByName(column.Column); err != nil {
+					if _, err := n.tableDesc.FindColumnWithName(column.Column); err != nil {
 						return err
 					}
 				}
@@ -395,7 +395,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			colToDrop, dropped, err := n.tableDesc.FindColumnByName(t.Column)
+			colToDrop, err := n.tableDesc.FindColumnWithName(t.Column)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -403,24 +403,24 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				return err
 			}
-			if dropped {
+			if colToDrop.Dropped() {
 				continue
 			}
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
-			if len(colToDrop.UsesSequenceIds) > 0 {
-				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop); err != nil {
+			if colToDrop.NumUsesSequences() > 0 {
+				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop.ColumnDesc()); err != nil {
 					return err
 				}
 			}
 
 			// You can't remove a column that owns a sequence that is depended on
 			// by another column
-			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, colToDrop, t.DropBehavior); err != nil {
+			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, colToDrop.ColumnDesc(), t.DropBehavior); err != nil {
 				return err
 			}
 
-			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop, true /* queueJob */); err != nil {
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop.ColumnDesc(), true /* queueJob */); err != nil {
 				return err
 			}
 
@@ -429,7 +429,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for _, ref := range n.tableDesc.DependedOnBy {
 				found := false
 				for _, colID := range ref.ColumnIDs {
-					if colID == colToDrop.ID {
+					if colID == colToDrop.GetID() {
 						found = true
 						break
 					}
@@ -471,13 +471,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				&params.p.semaCtx,
 				tn,
 			)
-			if err := computedColValidator.ValidateNoDependents(colToDrop); err != nil {
+			if err := computedColValidator.ValidateNoDependents(colToDrop.ColumnDesc()); err != nil {
 				return err
 			}
 
-			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.ID) {
+			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
-					"column %q is referenced by the primary key", colToDrop.Name)
+					"column %q is referenced by the primary key", colToDrop.GetName())
 			}
 			var idxNamesToDelete []string
 			for _, idx := range n.tableDesc.NonDropIndexes() {
@@ -490,7 +490,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Analyze the index.
 				for j := 0; j < idx.NumColumns(); j++ {
-					if idx.GetColumnID(j) == colToDrop.ID {
+					if idx.GetColumnID(j) == colToDrop.GetID() {
 						containsThisColumn = true
 						break
 					}
@@ -506,7 +506,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							// sufficient reason to reject the DROP.
 							continue
 						}
-						if id == colToDrop.ID {
+						if id == colToDrop.GetID() {
 							containsThisColumn = true
 							break
 						}
@@ -517,7 +517,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
 					for j := 0; j < idx.NumStoredColumns(); j++ {
-						if idx.GetStoredColumnID(j) == colToDrop.ID {
+						if idx.GetStoredColumnID(j) == colToDrop.GetID() {
 							containsThisColumn = true
 							break
 						}
@@ -537,7 +537,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 
-					if colIDs.Contains(colToDrop.ID) {
+					if colIDs.Contains(colToDrop.GetID()) {
 						containsThisColumn = true
 					}
 				}
@@ -566,7 +566,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				constraint := &n.tableDesc.UniqueWithoutIndexConstraints[i]
 				n.tableDesc.UniqueWithoutIndexConstraints[sliceIdx] = *constraint
 				sliceIdx++
-				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
+				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.GetID()) {
 					sliceIdx--
 
 					// If this unique constraint is used on the referencing side of any FK
@@ -585,7 +585,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
-				if used, err := n.tableDesc.CheckConstraintUsesColumn(check, colToDrop.ID); err != nil {
+				if used, err := n.tableDesc.CheckConstraintUsesColumn(check, colToDrop.GetID()); err != nil {
 					return err
 				} else if used {
 					if check.Validity == descpb.ConstraintValidity_Validating {
@@ -605,7 +605,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.ID); err != nil {
+			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.GetID()); err != nil {
 				return err
 			}
 
@@ -619,7 +619,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
 					sliceIdx++
 					fk := &n.tableDesc.OutboundFKs[i]
-					if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.ID) {
+					if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.GetID()) {
 						sliceIdx--
 						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
 							return err
@@ -631,8 +631,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			found := false
 			for i := range n.tableDesc.Columns {
-				if n.tableDesc.Columns[i].ID == colToDrop.ID {
-					n.tableDesc.AddColumnMutation(colToDrop, descpb.DescriptorMutation_DROP)
+				if n.tableDesc.Columns[i].ID == colToDrop.GetID() {
+					n.tableDesc.AddColumnMutation(colToDrop.ColumnDesc(), descpb.DescriptorMutation_DROP)
 					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
 					// to ColumnDescriptors may unexpectedly change.
 					n.tableDesc.Columns = append(n.tableDesc.Columns[:i:i], n.tableDesc.Columns[i+1:]...)
@@ -777,16 +777,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case tree.ColumnMutationCmd:
 			// Column mutations
-			col, dropped, err := n.tableDesc.FindColumnByName(t.GetColumn())
+			col, err := n.tableDesc.FindColumnWithName(t.GetColumn())
 			if err != nil {
 				return err
 			}
-			if dropped {
+			if col.Dropped() {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
+			if err := applyColumnMutation(params.ctx, n.tableDesc, col.ColumnDesc(), t, params, n.n.Cmds, tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -1142,13 +1142,13 @@ func applyColumnMutation(
 	return nil
 }
 
-func labeledRowValues(cols []descpb.ColumnDescriptor, values tree.Datums) string {
+func labeledRowValues(cols []catalog.Column, values tree.Datums) string {
 	var s bytes.Buffer
 	for i := range cols {
 		if i != 0 {
 			s.WriteString(`, `)
 		}
-		s.WriteString(cols[i].Name)
+		s.WriteString(cols[i].GetName())
 		s.WriteString(`=`)
 		s.WriteString(values[i].String())
 	}
@@ -1206,11 +1206,11 @@ func injectTableStats(
 
 		columnIDs := tree.NewDArray(types.Int)
 		for _, colName := range s.Columns {
-			colDesc, _, err := desc.FindColumnByName(tree.Name(colName))
+			col, err := desc.FindColumnWithName(tree.Name(colName))
 			if err != nil {
 				return err
 			}
-			if err := columnIDs.Append(tree.NewDInt(tree.DInt(colDesc.ID))); err != nil {
+			if err := columnIDs.Append(tree.NewDInt(tree.DInt(col.GetID()))); err != nil {
 				return err
 			}
 		}

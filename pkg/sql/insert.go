@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -106,7 +107,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 		r.resultRowBuffer[i] = tree.DNull
 	}
 
-	colIDToRetIndex := r.ti.tableDesc().ColumnIdxMap()
+	colIDToRetIndex := catalog.ColumnIDToOrdinalMap(r.ti.tableDesc().PublicColumns())
 	r.rowIdxToTabColIdx = make([]int, len(r.insertCols))
 	for i, col := range r.insertCols {
 		if idx, ok := colIDToRetIndex.Get(col.ID); !ok {

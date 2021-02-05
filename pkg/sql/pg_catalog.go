@@ -366,26 +366,27 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
-		colNum := 0
-		return table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
-			colNum++
-			if column.DefaultExpr == nil {
+		for _, column := range table.PublicColumns() {
+			if !column.HasDefault() {
 				// pg_attrdef only expects rows for columns with default values.
-				return nil
+				continue
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
 			defSrc := tree.NewDString(displayExpr)
-			return addRow(
-				h.ColumnOid(table.GetID(), column.ID),               // oid
+			if err := addRow(
+				h.ColumnOid(table.GetID(), column.GetID()),          // oid
 				tableOid(table.GetID()),                             // adrelid
 				tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // adnum
 				defSrc, // adbin
 				defSrc, // adsrc
-			)
-		})
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
@@ -436,21 +437,21 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
-		if err := table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
+		for _, column := range table.PublicColumns() {
 			tableID := tableOid(table.GetID())
-			return addColumn(column, tableID, column.GetPGAttributeNum())
-		}); err != nil {
-			return err
+			if err := addColumn(column.ColumnDesc(), tableID, column.GetPGAttributeNum()); err != nil {
+				return err
+			}
 		}
 
 		// Columns for each index.
-		columnIdxMap := table.ColumnIdxMap()
+		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			for i := 0; i < index.NumColumns(); i++ {
 				colID := index.GetColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
-				column := table.GetColumnAtIdx(columnIdxMap.GetDefault(colID))
-				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
+				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
+				if err := addColumn(column.ColumnDesc(), idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}
 			}
@@ -603,8 +604,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence,  // relPersistence
 			tree.DBoolFalse, // relistemp
 			relKind,         // relkind
-			tree.NewDInt(tree.DInt(len(table.GetPublicColumns()))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.GetChecks()))),        // relchecks
+			tree.NewDInt(tree.DInt(len(table.PublicColumns()))), // relnatts
+			tree.NewDInt(tree.DInt(len(table.GetChecks()))),     // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
@@ -1468,11 +1469,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
 						columnID := index.GetColumnID(i)
 						colIDs = append(colIDs, columnID)
-						col, err := table.FindColumnByID(columnID)
+						col, err := table.FindColumnWithID(columnID)
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(col.Type, h)); err != nil {
+						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
 						}
 						// Currently, nulls always appear first if the order is ascending,

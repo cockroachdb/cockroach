@@ -331,29 +331,30 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			// NULL column constraints in information_schema.check_constraints.
 			// Cockroach doesn't track these constraints as check constraints,
 			// but we can pull them off of the table's column descriptors.
-			colNum := 0
-			return table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
-				colNum++
+			for _, column := range table.PublicColumns() {
 				// Only visible, non-nullable columns are included.
-				if column.Hidden || column.Nullable {
-					return nil
+				if column.IsHidden() || column.IsNullable() {
+					continue
 				}
 				// Generate a unique name for each NOT NULL constraint. Postgres
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), colNum,
+					"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), column.Ordinal()+1,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
-					"%s IS NOT NULL", column.Name,
+					"%s IS NOT NULL", column.GetName(),
 				))
-				return addRow(
+				if err := addRow(
 					dbNameStr,  // constraint_catalog
 					scNameStr,  // constraint_schema
 					conNameStr, // constraint_name
 					chkExprStr, // check_clause
-				)
-			})
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	},
 }
@@ -373,16 +374,14 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			for _, u := range table.GetPrivileges().Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
-						columns := table.GetPublicColumns()
-						for i := range columns {
-							cd := &columns[i]
+						for _, cd := range table.PublicColumns() {
 							if err := addRow(
 								tree.DNull,                             // grantor
 								tree.NewDString(u.User().Normalized()), // grantee
 								dbNameStr,                              // table_catalog
 								scNameStr,                              // table_schema
 								tree.NewDString(table.GetName()),       // table_name
-								tree.NewDString(cd.Name),               // column_name
+								tree.NewDString(cd.GetName()),          // column_name
 								tree.NewDString(priv.String()),         // privilege_type
 								tree.DNull,                             // is_grantable
 							); err != nil {
@@ -428,26 +427,26 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			return table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
+			for _, column := range table.PublicColumns() {
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
 				collationName := tree.DNull
-				if locale := column.Type.Locale(); locale != "" {
+				if locale := column.GetType().Locale(); locale != "" {
 					collationCatalog = dbNameStr
 					collationSchema = pgCatalogNameDString
 					collationName = tree.NewDString(locale)
 				}
 				colDefault := tree.DNull
-				if column.DefaultExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtParsable)
+				if column.HasDefault() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
 					if err != nil {
 						return err
 					}
 					colDefault = tree.NewDString(colExpr)
 				}
 				colComputed := emptyString
-				if column.ComputeExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.ComputeExpr, &p.semaCtx, tree.FmtSimple)
+				if column.IsComputed() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetComputeExpr(), &p.semaCtx, tree.FmtSimple)
 					if err != nil {
 						return err
 					}
@@ -456,62 +455,66 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 
 				// Match the comment belonging to current column from map,using table id and column id
 				tableID := tree.DInt(table.GetID())
-				columnID := tree.DInt(column.ID)
+				columnID := tree.DInt(column.GetID())
 				description := commentMap[tableID][columnID]
 
-				return addRow(
-					dbNameStr,                        // table_catalog
-					scNameStr,                        // table_schema
-					tree.NewDString(table.GetName()), // table_name
-					tree.NewDString(column.Name),     // column_name
-					tree.NewDString(description),     // column_comment
+				err := addRow(
+					dbNameStr,                         // table_catalog
+					scNameStr,                         // table_schema
+					tree.NewDString(table.GetName()),  // table_name
+					tree.NewDString(column.GetName()), // column_name
+					tree.NewDString(description),      // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
-					colDefault,                    // column_default
-					yesOrNoDatum(column.Nullable), // is_nullable
-					tree.NewDString(column.Type.InformationSchemaName()), // data_type
-					characterMaximumLength(column.Type),                  // character_maximum_length
-					characterOctetLength(column.Type),                    // character_octet_length
-					numericPrecision(column.Type),                        // numeric_precision
-					numericPrecisionRadix(column.Type),                   // numeric_precision_radix
-					numericScale(column.Type),                            // numeric_scale
-					datetimePrecision(column.Type),                       // datetime_precision
-					tree.DNull,                                           // interval_type
-					tree.DNull,                                           // interval_precision
-					tree.DNull,                                           // character_set_catalog
-					tree.DNull,                                           // character_set_schema
-					tree.DNull,                                           // character_set_name
-					collationCatalog,                                     // collation_catalog
-					collationSchema,                                      // collation_schema
-					collationName,                                        // collation_name
-					tree.DNull,                                           // domain_catalog
-					tree.DNull,                                           // domain_schema
-					tree.DNull,                                           // domain_name
-					dbNameStr,                                            // udt_catalog
-					pgCatalogNameDString,                                 // udt_schema
-					tree.NewDString(column.Type.PGName()),                // udt_name
-					tree.DNull,                                           // scope_catalog
-					tree.DNull,                                           // scope_schema
-					tree.DNull,                                           // scope_name
-					tree.DNull,                                           // maximum_cardinality
-					tree.DNull,                                           // dtd_identifier
-					tree.DNull,                                           // is_self_referencing
-					tree.DNull,                                           // is_identity
-					tree.DNull,                                           // identity_generation
-					tree.DNull,                                           // identity_start
-					tree.DNull,                                           // identity_increment
-					tree.DNull,                                           // identity_maximum
-					tree.DNull,                                           // identity_minimum
-					tree.DNull,                                           // identity_cycle
-					yesOrNoDatum(column.IsComputed()),                    // is_generated
-					colComputed,                                          // generation_expression
+					colDefault,                        // column_default
+					yesOrNoDatum(column.IsNullable()), // is_nullable
+					tree.NewDString(column.GetType().InformationSchemaName()), // data_type
+					characterMaximumLength(column.GetType()),                  // character_maximum_length
+					characterOctetLength(column.GetType()),                    // character_octet_length
+					numericPrecision(column.GetType()),                        // numeric_precision
+					numericPrecisionRadix(column.GetType()),                   // numeric_precision_radix
+					numericScale(column.GetType()),                            // numeric_scale
+					datetimePrecision(column.GetType()),                       // datetime_precision
+					tree.DNull,                                                // interval_type
+					tree.DNull,                                                // interval_precision
+					tree.DNull,                                                // character_set_catalog
+					tree.DNull,                                                // character_set_schema
+					tree.DNull,                                                // character_set_name
+					collationCatalog,                                          // collation_catalog
+					collationSchema,                                           // collation_schema
+					collationName,                                             // collation_name
+					tree.DNull,                                                // domain_catalog
+					tree.DNull,                                                // domain_schema
+					tree.DNull,                                                // domain_name
+					dbNameStr,                                                 // udt_catalog
+					pgCatalogNameDString,                                      // udt_schema
+					tree.NewDString(column.GetType().PGName()),                // udt_name
+					tree.DNull,                                                // scope_catalog
+					tree.DNull,                                                // scope_schema
+					tree.DNull,                                                // scope_name
+					tree.DNull,                                                // maximum_cardinality
+					tree.DNull,                                                // dtd_identifier
+					tree.DNull,                                                // is_self_referencing
+					tree.DNull,                                                // is_identity
+					tree.DNull,                                                // identity_generation
+					tree.DNull,                                                // identity_start
+					tree.DNull,                                                // identity_increment
+					tree.DNull,                                                // identity_maximum
+					tree.DNull,                                                // identity_minimum
+					tree.DNull,                                                // identity_cycle
+					yesOrNoDatum(column.IsComputed()),                         // is_generated
+					colComputed,                                               // generation_expression
 					yesOrNoDatum(table.IsTable() &&
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),
 					), // is_updatable
-					yesOrNoDatum(column.Hidden),              // is_hidden
-					tree.NewDString(column.Type.SQLString()), // crdb_sql_type
+					yesOrNoDatum(column.IsHidden()),               // is_hidden
+					tree.NewDString(column.GetType().SQLString()), // crdb_sql_type
 				)
-			})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	},
 }
@@ -527,20 +530,23 @@ https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
-				return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
-					if !col.Type.UserDefined() {
-						return nil
+				for _, col := range table.PublicColumns() {
+					if !col.GetType().UserDefined() {
+						continue
 					}
-					return addRow(
-						tree.NewDString(col.Type.TypeMeta.Name.Catalog), // UDT_CATALOG
-						tree.NewDString(col.Type.TypeMeta.Name.Schema),  // UDT_SCHEMA
-						tree.NewDString(col.Type.TypeMeta.Name.Name),    // UDT_NAME
-						dbNameStr,                 // TABLE_CATALOG
-						scNameStr,                 // TABLE_SCHEMA
-						tbNameStr,                 // TABLE_NAME
-						tree.NewDString(col.Name), // COLUMN_NAME
-					)
-				})
+					if err := addRow(
+						tree.NewDString(col.GetType().TypeMeta.Name.Catalog), // UDT_CATALOG
+						tree.NewDString(col.GetType().TypeMeta.Name.Schema),  // UDT_SCHEMA
+						tree.NewDString(col.GetType().TypeMeta.Name.Name),    // UDT_NAME
+						dbNameStr,                      // TABLE_CATALOG
+						scNameStr,                      // TABLE_SCHEMA
+						tbNameStr,                      // TABLE_NAME
+						tree.NewDString(col.GetName()), // COLUMN_NAME
+					); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 		)
 	},
@@ -1448,30 +1454,29 @@ CREATE TABLE information_schema.table_constraints (
 				// NULL column constraints in information_schema.check_constraints.
 				// Cockroach doesn't track these constraints as check constraints,
 				// but we can pull them off of the table's column descriptors.
-				colNum := 0
-				return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
-					colNum++
+				for _, col := range table.PublicColumns() {
+					if col.IsNullable() {
+						continue
+					}
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), colNum,
+						"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), col.Ordinal()+1,
 					))
-					if !col.Nullable {
-						if err := addRow(
-							dbNameStr,                // constraint_catalog
-							scNameStr,                // constraint_schema
-							conNameStr,               // constraint_name
-							dbNameStr,                // table_catalog
-							scNameStr,                // table_schema
-							tbNameStr,                // table_name
-							tree.NewDString("CHECK"), // constraint_type
-							yesOrNoDatum(false),      // is_deferrable
-							yesOrNoDatum(false),      // initially_deferred
-						); err != nil {
-							return err
-						}
+					if err := addRow(
+						dbNameStr,                // constraint_catalog
+						scNameStr,                // constraint_schema
+						conNameStr,               // constraint_name
+						dbNameStr,                // table_catalog
+						scNameStr,                // table_schema
+						tbNameStr,                // table_name
+						tree.NewDString("CHECK"), // constraint_type
+						yesOrNoDatum(false),      // is_deferrable
+						yesOrNoDatum(false),      // initially_deferred
+					); err != nil {
+						return err
 					}
-					return nil
-				})
+				}
+				return nil
 			})
 	},
 }

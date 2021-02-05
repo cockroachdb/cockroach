@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -253,10 +254,10 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 // schema change.
 func findReadableColumnByID(
 	desc catalog.TableDescriptor, id descpb.ColumnID,
-) (*descpb.ColumnDescriptor, error) {
+) (catalog.Column, error) {
 	for _, c := range desc.ReadableColumns() {
-		if c.ID == id {
-			return &c, nil
+		if c.GetID() == id {
+			return c, nil
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
@@ -270,7 +271,7 @@ func initColsForScan(
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns()))
+	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
 	for _, wc := range colCfg.wantedColumns {
 		var c *descpb.ColumnDescriptor
 		var err error
@@ -283,14 +284,16 @@ func initColsForScan(
 			}
 		} else {
 			// Otherwise, collect the descriptors from the table's columns.
+			var col catalog.Column
 			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-				c, err = desc.FindActiveColumnByID(id)
+				col, err = tabledesc.FindPublicColumnWithID(desc, id)
 			} else {
-				c, err = findReadableColumnByID(desc, id)
+				col, err = findReadableColumnByID(desc, id)
 			}
 			if err != nil {
 				return cols, err
 			}
+			c = col.ColumnDesc()
 
 			// If this is a virtual column, create a new descriptor with the correct
 			// type.
@@ -305,11 +308,10 @@ func initColsForScan(
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for i := range desc.GetPublicColumns() {
-			c := &desc.GetPublicColumns()[i]
+		for _, c := range desc.PublicColumns() {
 			found := false
 			for _, wc := range colCfg.wantedColumns {
-				if descpb.ColumnID(wc) == c.ID {
+				if descpb.ColumnID(wc) == c.GetID() {
 					found = true
 					break
 				}
@@ -318,7 +320,7 @@ func initColsForScan(
 				// NB: we could amortize this allocation using a second slice,
 				// but addUnwantedAsHidden is only used by scrub, so doing so
 				// doesn't seem worth it.
-				col := *c
+				col := *c.ColumnDesc()
 				col.Hidden = true
 				cols = append(cols, &col)
 			}

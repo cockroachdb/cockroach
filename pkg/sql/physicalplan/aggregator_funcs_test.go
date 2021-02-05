@@ -123,7 +123,7 @@ func checkDistAggregationInfo(
 	fn execinfrapb.AggregatorSpec_Func,
 	info DistAggregationInfo,
 ) {
-	colType := tableDesc.GetPublicColumns()[colIdx].Type
+	colType := tableDesc.PublicColumns()[colIdx].GetType()
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
@@ -463,13 +463,16 @@ func TestDistAggregationTable(t *testing.T) {
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
-		for colIdx := 1; colIdx < len(desc.GetPublicColumns()); colIdx++ {
+		for _, col := range desc.PublicColumns() {
+			if col.Ordinal() == 0 {
+				continue
+			}
 			// See if this column works with this function.
-			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.GetPublicColumns()[colIdx].Type)
+			_, _, err := execinfrapb.GetAggregateInfo(fn, col.GetType())
 			if err != nil {
 				continue
 			}
-			if fn == execinfrapb.AggregatorSpec_SUM_INT && colIdx == 2 {
+			if fn == execinfrapb.AggregatorSpec_SUM_INT && col.Ordinal() == 2 {
 				// When using sum_int over int2 column we're likely to hit an
 				// integer out of range error since we insert random DInts into
 				// that column, so we'll skip such config.
@@ -477,10 +480,10 @@ func TestDistAggregationTable(t *testing.T) {
 			}
 			foundCol = true
 			for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
-				name := fmt.Sprintf("%s/%s/%d", fn, desc.GetPublicColumns()[colIdx].Name, numRows)
+				name := fmt.Sprintf("%s/%s/%d", fn, col.GetName(), numRows)
 				t.Run(name, func(t *testing.T) {
 					checkDistAggregationInfo(
-						context.Background(), t, tc.Server(0), desc, colIdx, numRows, fn, info)
+						context.Background(), t, tc.Server(0), desc, col.Ordinal(), numRows, fn, info)
 				})
 			}
 		}

@@ -718,29 +718,29 @@ func importPlanHook(
 			var intoCols []string
 			var isTargetCol = make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
-				active, err := found.FindActiveColumnsByNames(tree.NameList{name})
+				active, err := tabledesc.FindPublicColumnsWithNames(found, tree.NameList{name})
 				if err != nil {
 					return errors.Wrap(err, "verifying target columns")
 				}
 
-				isTargetCol[active[0].Name] = true
-				intoCols = append(intoCols, active[0].Name)
+				isTargetCol[active[0].GetName()] = true
+				intoCols = append(intoCols, active[0].GetName())
 			}
 
 			// Ensure that non-target columns that don't have default
 			// expressions are nullable.
 			if len(isTargetCol) != 0 {
 				for _, col := range found.VisibleColumns() {
-					if !(isTargetCol[col.Name] || col.Nullable || col.HasDefault() || col.IsComputed()) {
+					if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
 						return errors.Newf(
 							"all non-target columns in IMPORT INTO must be nullable "+
 								"or have default expressions, or have computed expressions"+
 								" but violated by column %q",
-							col.Name,
+							col.GetName(),
 						)
 					}
-					if isTargetCol[col.Name] && col.IsComputed() {
-						return schemaexpr.CannotWriteToComputedColError(col.Name)
+					if isTargetCol[col.GetName()] && col.IsComputed() {
+						return schemaexpr.CannotWriteToComputedColError(col.GetName())
 					}
 				}
 			}

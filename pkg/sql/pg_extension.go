@@ -55,11 +55,11 @@ func postgisColumnsTablePopulator(
 				if p.CheckAnyPrivilege(ctx, table) != nil {
 					return nil
 				}
-				return table.ForeachPublicColumn(func(colDesc *descpb.ColumnDescriptor) error {
-					if colDesc.Type.Family() != matchingFamily {
-						return nil
+				for _, col := range table.PublicColumns() {
+					if col.GetType().Family() != matchingFamily {
+						continue
 					}
-					m, err := colDesc.Type.GeoMetadata()
+					m, err := col.GetType().GeoMetadata()
 					if err != nil {
 						return err
 					}
@@ -85,16 +85,19 @@ func postgisColumnsTablePopulator(
 						shapeName = geopb.ShapeType_Geometry.String()
 					}
 
-					return addRow(
+					if err := addRow(
 						tree.NewDString(db.GetName()),
 						tree.NewDString(scName),
 						tree.NewDString(table.GetName()),
-						tree.NewDString(colDesc.Name),
+						tree.NewDString(col.GetName()),
 						datumNDims,
 						tree.NewDInt(tree.DInt(m.SRID)),
 						tree.NewDString(strings.ToUpper(shapeName)),
-					)
-				})
+					); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 		)
 	}

@@ -253,8 +253,8 @@ func NeededColumnFamilyIDs(
 	}
 
 	// Build some necessary data structures for column metadata.
-	columns := table.ColumnsWithMutations(true /* includeMutations */)
-	colIdxMap := table.ColumnIdxMapWithMutations(true)
+	columns := table.AllColumns()
+	colIdxMap := catalog.ColumnIDToOrdinalMap(columns)
 	var indexedCols util.FastIntSet
 	var compositeCols util.FastIntSet
 	var extraCols util.FastIntSet
@@ -343,7 +343,7 @@ func NeededColumnFamilyIDs(
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
-			if !columns[columnOrdinal].Nullable && (!indexedCols.Contains(columnOrdinal) ||
+			if !columns[columnOrdinal].IsNullable() && (!indexedCols.Contains(columnOrdinal) ||
 				compositeCols.Contains(columnOrdinal) && !hasSecondaryEncoding) {
 				// The column is non-nullable and cannot be decoded from a different
 				// family, so this column family must have a KV entry for every row.
@@ -1035,11 +1035,11 @@ func EncodePrimaryIndex(
 			// We want to include this column if its value is non-null or
 			// we were requested to include all of the columns.
 			if datum != tree.DNull || includeEmpty {
-				col, err := tableDesc.FindColumnByID(family.DefaultColumnID)
+				col, err := tableDesc.FindColumnWithID(family.DefaultColumnID)
 				if err != nil {
 					return err
 				}
-				value, err := MarshalColumnValue(col, datum)
+				value, err := MarshalColumnValue(col.ColumnDesc(), datum)
 				if err != nil {
 					return err
 				}

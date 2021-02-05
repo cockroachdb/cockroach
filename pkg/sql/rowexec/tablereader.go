@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -90,9 +91,12 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
-	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	resultTypes := tableDesc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
-	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
+	cols := tableDesc.PublicColumns()
+	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		cols = tableDesc.AllColumns()
+	}
+	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
+	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)
 
 	// Add all requested system columns to the output.
 	var sysColDescs []descpb.ColumnDescriptor

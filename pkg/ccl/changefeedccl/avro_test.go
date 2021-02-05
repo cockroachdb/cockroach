@@ -84,9 +84,9 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 	for _, rowTuple := range valuesClause.Rows {
 		var row rowenc.EncDatumRow
 		for colIdx, expr := range rowTuple {
-			col := tableDesc.GetColumnAtIdx(colIdx)
+			col := tableDesc.PublicColumns()[colIdx]
 			typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-				ctx, expr, col.Type, "avro", &semaCtx, tree.VolatilityStable)
+				ctx, expr, col.GetType(), "avro", &semaCtx, tree.VolatilityStable)
 			if err != nil {
 				return nil, err
 			}
@@ -94,7 +94,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
-			row = append(row, rowenc.DatumToEncDatum(col.Type, datum))
+			row = append(row, rowenc.DatumToEncDatum(col.GetType(), datum))
 		}
 		rows = append(rows, row)
 	}
@@ -328,7 +328,7 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnDescToAvroSchema(tableDesc.GetColumnAtIdx(1))
+			field, err := columnDescToAvroSchema(tableDesc.PublicColumns()[1].ColumnDesc())
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)

@@ -364,24 +364,24 @@ func newIndexCache(desc *descpb.TableDescriptor) *indexCache {
 	} else {
 		for _, idx := range c.deletableNonPrimary {
 			if idx.DeleteOnly() {
-				lazyAllocAppend(&c.deleteOnlyNonPrimary, idx, len(c.all)-len(c.active))
+				lazyAllocAppendIndex(&c.deleteOnlyNonPrimary, idx, len(c.all)-len(c.active))
 			} else {
-				lazyAllocAppend(&c.writableNonPrimary, idx, len(c.deletableNonPrimary))
+				lazyAllocAppendIndex(&c.writableNonPrimary, idx, len(c.deletableNonPrimary))
 			}
 		}
 	}
 	for _, idx := range c.all {
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
-			lazyAllocAppend(&c.nonDrop, idx, len(c.all))
+			lazyAllocAppendIndex(&c.nonDrop, idx, len(c.all))
 		}
 		if idx.IsPartial() {
-			lazyAllocAppend(&c.partial, idx, len(c.all))
+			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
 		}
 	}
 	return &c
 }
 
-func lazyAllocAppend(slice *[]catalog.Index, idx catalog.Index, cap int) {
+func lazyAllocAppendIndex(slice *[]catalog.Index, idx catalog.Index, cap int) {
 	if *slice == nil {
 		*slice = make([]catalog.Index, 0, cap)
 	}

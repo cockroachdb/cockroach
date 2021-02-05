@@ -142,7 +142,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 }
 
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
-	colIdxByID := row.tableDesc.ColumnIdxMap()
+	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumns())
 	primaryIndex := row.tableDesc.GetPrimaryIndex()
 	jsonEntries := make([]interface{}, primaryIndex.NumColumns())
 	for i := 0; i < primaryIndex.NumColumns(); i++ {
@@ -152,8 +152,8 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		datum := row.datums[idx]
-		datum, col := row.datums[idx], row.tableDesc.GetColumnAtIdx(idx)
-		if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
+		datum, col := row.datums[idx], row.tableDesc.PublicColumns()[idx]
+		if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 			return nil, err
 		}
 		var err error
@@ -173,16 +173,15 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var after map[string]interface{}
 	if !row.deleted {
-		columns := row.tableDesc.GetPublicColumns()
+		columns := row.tableDesc.PublicColumns()
 		after = make(map[string]interface{}, len(columns))
-		for i := range columns {
-			col := &columns[i]
+		for i, col := range columns {
 			datum := row.datums[i]
-			if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
+			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 				return nil, err
 			}
 			var err error
-			after[col.Name], err = tree.AsJSON(datum.Datum, time.UTC)
+			after[col.GetName()], err = tree.AsJSON(datum.Datum, time.UTC)
 			if err != nil {
 				return nil, err
 			}
@@ -191,16 +190,15 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var before map[string]interface{}
 	if row.prevDatums != nil && !row.prevDeleted {
-		columns := row.prevTableDesc.GetPublicColumns()
+		columns := row.prevTableDesc.PublicColumns()
 		before = make(map[string]interface{}, len(columns))
-		for i := range columns {
-			col := &columns[i]
+		for i, col := range columns {
 			datum := row.prevDatums[i]
-			if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
+			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 				return nil, err
 			}
 			var err error
-			before[col.Name], err = tree.AsJSON(datum.Datum, time.UTC)
+			before[col.GetName()], err = tree.AsJSON(datum.Datum, time.UTC)
 			if err != nil {
 				return nil, err
 			}

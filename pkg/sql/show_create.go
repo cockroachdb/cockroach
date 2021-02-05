@@ -83,19 +83,17 @@ func ShowCreateTable(
 	f.FormatNode(tn)
 	f.WriteString(" (")
 	primaryKeyIsOnVisibleColumn := false
-	visibleCols := desc.VisibleColumns()
-	for i := range visibleCols {
-		col := &visibleCols[i]
+	for i, col := range desc.VisibleColumns() {
 		if i != 0 {
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
-		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col, &p.RunParams(ctx).p.semaCtx)
+		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col.ColumnDesc(), &p.RunParams(ctx).p.semaCtx)
 		if err != nil {
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().GetColumnID(0) == col.ID {
+		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().GetColumnID(0) == col.GetID() {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
 			primaryKeyIsOnVisibleColumn = true

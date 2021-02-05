@@ -278,7 +278,7 @@ func (b *Builder) validateColumnName(
 	col *descpb.ColumnDescriptor,
 	ifNotExists bool,
 ) error {
-	_, err := table.FindActiveColumnByName(string(d.Name))
+	_, err := tabledesc.FindPublicColumnWithName(table, d.Name)
 	if err == nil {
 		if ifNotExists {
 			return nil
@@ -360,7 +360,7 @@ func (b *Builder) alterTableDropColumn(
 
 	// TODO(ajwerner): Deal with drop column for columns which are being added
 	// currently.
-	colToDrop, _, err := table.FindColumnByName(t.Column)
+	colToDrop, err := table.FindColumnWithName(t.Column)
 	if err != nil {
 		if t.IfExists {
 			// Noop.
@@ -398,10 +398,10 @@ func (b *Builder) alterTableDropColumn(
 	// TODO(ajwerner): Add family information to the column.
 	b.addNode(scpb.Target_DROP, &scpb.Column{
 		TableID: table.GetID(),
-		Column:  *colToDrop,
+		Column:  *colToDrop.ColumnDesc(),
 	})
 
-	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.ID)
+	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.GetID())
 	return nil
 }
 
@@ -469,17 +469,17 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 
 	var storeColIDs []descpb.ColumnID
 	var storeColNames []string
-	for _, col := range table.GetPublicColumns() {
+	for _, col := range table.PublicColumns() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
-			if id == col.ID {
+			if id == col.GetID() {
 				containsCol = true
 				break
 			}
 		}
 		if !containsCol {
-			storeColIDs = append(storeColIDs, col.ID)
-			storeColNames = append(storeColNames, col.Name)
+			storeColIDs = append(storeColIDs, col.GetID())
+			storeColNames = append(storeColNames, col.GetName())
 		}
 	}
 
@@ -543,21 +543,21 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	var addStoreColNames []string
 	var dropStoreColIDs []descpb.ColumnID
 	var dropStoreColNames []string
-	for _, col := range table.GetPublicColumns() {
+	for _, col := range table.PublicColumns() {
 		containsCol := false
 		for _, id := range newIdx.ColumnIDs {
-			if id == col.ID {
+			if id == col.GetID() {
 				containsCol = true
 				break
 			}
 		}
 		if !containsCol {
-			if colID != col.ID {
-				addStoreColIDs = append(addStoreColIDs, col.ID)
-				addStoreColNames = append(addStoreColNames, col.Name)
+			if colID != col.GetID() {
+				addStoreColIDs = append(addStoreColIDs, col.GetID())
+				addStoreColNames = append(addStoreColNames, col.GetName())
 			}
-			dropStoreColIDs = append(dropStoreColIDs, col.ID)
-			dropStoreColNames = append(dropStoreColNames, col.Name)
+			dropStoreColIDs = append(dropStoreColIDs, col.GetID())
+			dropStoreColNames = append(dropStoreColNames, col.GetName())
 		}
 	}
 

@@ -12,8 +12,12 @@
 package tabledesc
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -28,10 +32,11 @@ var _ catalog.TableDescriptor = (*wrapper)(nil)
 type wrapper struct {
 	descpb.TableDescriptor
 
-	// indexCache, when not nil, points to a struct containing precomputed
-	// catalog.Index slices. This can therefore only be set when creating an
-	// immutable.
-	indexCache *indexCache
+	// indexCache and columnCache, when not nil, respectively point to a struct
+	// containing precomputed catalog.Index or catalog.Column slices.
+	// This can therefore only be set when creating an immutable.
+	indexCache  *indexCache
+	columnCache *columnCache
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
@@ -50,65 +55,6 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 	return desc.postDeserializationChanges
 }
 
-// mutationColumns returns all non-public writable columns in the specified
-// state.
-func (desc *wrapper) mutationColumns(
-	mutationState descpb.DescriptorMutation_State,
-) []descpb.ColumnDescriptor {
-	if len(desc.Mutations) == 0 {
-		return nil
-	}
-	columns := make([]descpb.ColumnDescriptor, 0, len(desc.Mutations))
-	for _, m := range desc.Mutations {
-		if m.State != mutationState {
-			continue
-		}
-		if col := m.GetColumn(); col != nil {
-			columns = append(columns, *col)
-		}
-	}
-	return columns
-}
-
-// DeletableColumns returns a list of public and non-public columns.
-func (desc *wrapper) DeletableColumns() []descpb.ColumnDescriptor {
-	if len(desc.Mutations) == 0 {
-		return desc.Columns
-	}
-	columns := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-	// Add writable columns.
-	columns = append(columns, desc.WritableColumns()...)
-	// Add delete-only columns.
-	columns = append(columns, desc.mutationColumns(descpb.DescriptorMutation_DELETE_ONLY)...)
-	return columns
-}
-
-// WritableColumns returns a list of public and write-only mutation columns.
-func (desc *wrapper) WritableColumns() []descpb.ColumnDescriptor {
-	if len(desc.Mutations) == 0 {
-		return desc.Columns
-	}
-	columns := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-	// Add public columns.
-	columns = append(columns, desc.Columns...)
-	// Add writable non-public columns.
-	columns = append(columns, desc.mutationColumns(descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)...)
-	return columns
-}
-
-// MutationColumns returns a list of mutation columns.
-func (desc *wrapper) MutationColumns() []descpb.ColumnDescriptor {
-	if len(desc.Mutations) == 0 {
-		return nil
-	}
-	columns := make([]descpb.ColumnDescriptor, 0, len(desc.Mutations))
-	// Add all writable non-public columns.
-	columns = append(columns, desc.mutationColumns(descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)...)
-	// Add all delete-only non-public columns.
-	columns = append(columns, desc.mutationColumns(descpb.DescriptorMutation_DELETE_ONLY)...)
-	return columns
-}
-
 // ActiveChecks returns a list of all check constraints that should be enforced
 // on writes (including constraints being added/validated). The columns
 // referenced by the returned checks are writable, but not necessarily public.
@@ -120,41 +66,13 @@ func (desc *wrapper) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 	return checks
 }
 
-// GetColumnOrdinalsWithUserDefinedTypes returns a slice of column ordinals
-// of columns that contain user defined types.
-func (desc *wrapper) GetColumnOrdinalsWithUserDefinedTypes() []int {
-	var ords []int
-	for ord, col := range desc.DeletableColumns() {
-		if col.Type != nil && col.Type.UserDefined() {
-			ords = append(ords, ord)
-		}
-	}
-	return ords
-}
-
 // immutable is a custom type for TableDescriptors
 // It holds precomputed values and the underlying TableDescriptor
 // should be const.
 type immutable struct {
 	wrapper
 
-	// publicAndNonPublicCols is a list of public and non-public columns.
-	// It is partitioned by the state of the column: public, write-only, delete-only
-	publicAndNonPublicCols []descpb.ColumnDescriptor
-
-	writeOnlyColCount int
-
 	allChecks []descpb.TableDescriptor_CheckConstraint
-
-	// readableColumns is a list of columns (including those undergoing a schema change)
-	// which can be scanned. Columns in the process of a schema change
-	// are all set to nullable while column backfilling is still in
-	// progress, as mutation columns may have NULL values.
-	readableColumns []descpb.ColumnDescriptor
-
-	// columnsWithUDTs is a set of indexes into publicAndNonPublicCols containing
-	// indexes of columns that contain user defined types.
-	columnsWithUDTs []int
 
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
@@ -185,37 +103,6 @@ func (desc *wrapper) GetPrimaryIndexID() descpb.IndexID {
 // IsTemporary returns true if this is a temporary table.
 func (desc *wrapper) IsTemporary() bool {
 	return desc.GetTemporary()
-}
-
-// GetPublicColumns return the public columns in the descriptor.
-func (desc *wrapper) GetPublicColumns() []descpb.ColumnDescriptor {
-	return desc.Columns
-}
-
-// GetColumnAtIdx returns the column at the specified index.
-func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
-	return &desc.Columns[idx]
-}
-
-// ReadableColumns returns a list of columns (including those undergoing a
-// schema change) which can be scanned.
-func (desc *wrapper) ReadableColumns() []descpb.ColumnDescriptor {
-	cols := make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-	cols = append(cols, desc.Columns...)
-	for _, m := range desc.Mutations {
-		if columnMutation := m.GetColumn(); columnMutation != nil {
-			col := *columnMutation
-			col.Nullable = true
-			cols = append(cols, col)
-		}
-	}
-	return cols
-}
-
-// ReadableColumns returns a list of columns (including those undergoing a
-// schema change) which can be scanned.
-func (desc *immutable) ReadableColumns() []descpb.ColumnDescriptor {
-	return desc.readableColumns
 }
 
 // ImmutableCopy implements the MutableDescriptor interface.
@@ -391,4 +278,87 @@ func (desc *wrapper) FindIndexWithName(name string) (catalog.Index, error) {
 		return idx, nil
 	}
 	return nil, errors.Errorf("index %q does not exist", name)
+}
+
+// getExistingOrNewColumnCache should be the only place where the columnCache
+// field in wrapper is ever read.
+func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {
+	if desc.columnCache != nil {
+		return desc.columnCache
+	}
+	return newColumnCache(desc.TableDesc())
+}
+
+// AllColumns returns a slice of Column interfaces containing the
+// table's public columns and column mutations, in the canonical order:
+// - all public columns in the same order as in the underlying
+//   desc.TableDesc().Columns slice;
+// - all column mutations in the same order as in the underlying
+//   desc.TableDesc().Mutations slice.
+func (desc *wrapper) AllColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().all
+}
+
+// PublicColumns returns a slice of Column interfaces containing the
+// table's public columns, in the canonical order.
+func (desc *wrapper) PublicColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().public
+}
+
+// WritableColumns returns a slice of Column interfaces containing the
+// table's public columns and DELETE_AND_WRITE_ONLY mutations, in the canonical
+// order.
+func (desc *wrapper) WritableColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().writable
+}
+
+// NonDropColumns returns a slice of Column interfaces containing the
+// table's public columns and ADD mutations, in the canonical order.
+func (desc *wrapper) NonDropColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().nonDrop
+}
+
+// VisibleColumns returns a slice of Column interfaces containing the
+// table's visible columns , in the canonical order.
+func (desc *wrapper) VisibleColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().visible
+}
+
+// UserDefinedTypeColumns returns a slice of Column interfaces
+// containing the table's columns with user defined types, in the
+// canonical order.
+func (desc *wrapper) UserDefinedTypeColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().withUDTs
+}
+
+// ReadableColumns is a list of columns (including those undergoing a schema
+// change) which can be scanned. Columns in the process of a schema change
+// are all set to nullable while column backfilling is still in
+// progress, as mutation columns may have NULL values.
+func (desc *wrapper) ReadableColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().readable
+}
+
+// FindColumnWithID returns the first column found whose ID matches the
+// provided target ID, in the canonical order.
+// If no column is found then an error is also returned.
+func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
+	for _, col := range desc.AllColumns() {
+		if col.GetID() == id {
+			return col, nil
+		}
+	}
+	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
+// FindColumnWithName returns the first column found whose name matches the
+// provided target ID, in the canonical order.
+// If no column is found then an error is also returned.
+func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
+	for _, col := range desc.AllColumns() {
+		if col.ColName() == name {
+			return col, nil
+		}
+	}
+	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
