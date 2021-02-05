@@ -16,17 +16,20 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +54,8 @@ type debugZipContext struct {
 	status  serverpb.StatusClient
 
 	firstNodeSQLConn *sqlConn
+
+	sem semaphore.Semaphore
 }
 
 func (zc *debugZipContext) runZipFn(
@@ -66,6 +71,10 @@ func (zc *debugZipContext) runZipFnWithTimeout(
 	fn func(ctx context.Context) error,
 ) error {
 	fmt.Printf("%s... ", requestName)
+	if !zipCtx.sequential {
+		// Avoid interleaving outputs.
+		fmt.Println()
+	}
 	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
 }
 
@@ -81,7 +90,51 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, r zipRequest) erro
 	return zc.z.createJSONOrError(r.pathName+".json", data, err)
 }
 
+// forAllNodes runs fn on every node, possibly concurrently.
+func (zc *debugZipContext) forAllNodes(
+	ctx context.Context,
+	nodeList []statuspb.NodeStatus,
+	fn func(ctx context.Context, node statuspb.NodeStatus) error,
+) error {
+	if zipCtx.sequential {
+		// Sequential case.
+		for _, node := range nodeList {
+			if err := fn(ctx, node); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Multiple nodes concurrently.
+
+	// nodeErrs collects the individual error objects.
+	nodeErrs := make(chan error, len(nodeList))
+	// The wait group to wait for all concurrent collectors.
+	var wg sync.WaitGroup
+	for _, node := range nodeList {
+		wg.Add(1)
+		go func(node statuspb.NodeStatus) {
+			defer wg.Done()
+			zc.sem.Acquire(ctx, 1)
+			defer zc.sem.Release(1)
+
+			nodeErrs <- fn(ctx, node)
+		}(node)
+	}
+	wg.Wait()
+
+	// The final error.
+	var err error
+	for range nodeList {
+		err = errors.CombineErrors(err, <-nodeErrs)
+	}
+	return err
+}
+
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
+
+const zipMaxConcurrency = 15
 
 func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -151,12 +204,20 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		timeout = cliCtx.cmdTimeout
 	}
 
+	var sem semaphore.Semaphore
+	if zipCtx.sequential {
+		sem = semaphore.New(1)
+	} else {
+		sem = semaphore.New(zipMaxConcurrency)
+	}
+
 	zc := debugZipContext{
 		z:                z,
 		timeout:          timeout,
 		admin:            admin,
 		status:           status,
 		firstNodeSQLConn: sqlConn,
+		sem:              sem,
 	}
 
 	// Fetch the cluster-wide details.
@@ -172,10 +233,10 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// Collect the per-node data.
-	for _, node := range nodeList {
-		if err := zc.collectPerNodeData(ctx, node, livenessByNodeID); err != nil {
-			return err
-		}
+	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node statuspb.NodeStatus) error {
+		return zc.collectPerNodeData(ctx, node, livenessByNodeID)
+	}); err != nil {
+		return err
 	}
 
 	// Collect the SQL schema.

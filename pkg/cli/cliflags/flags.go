@@ -1235,6 +1235,14 @@ The zip command will block for the duration specified. Zero disables this featur
 `,
 	}
 
+	ZipSequential = FlagInfo{
+		Name: "sequential",
+		Description: `
+Fetch data from nodes one at a time. When this flag is not specified,
+the command attempts to retrieve data from multiple nodes concurrently.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

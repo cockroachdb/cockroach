@@ -106,6 +106,8 @@ func (zc *debugZipContext) collectCPUProfiles(
 		wg.Add(1)
 		go func(ctx context.Context, i int) {
 			defer wg.Done()
+			zc.sem.Acquire(ctx, 1)
+			defer zc.sem.Release(1)
 
 			secs := int32(zipCtx.cpuProfDuration / time.Second)
 			if secs < 1 {

@@ -315,6 +315,10 @@ var zipCtx struct {
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
+
+	// Whether to run the collection sequentially. The code attempts to
+	// access multiple nodes concurrently by default.
+	sequential bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -324,6 +328,7 @@ func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
+	zipCtx.sequential = false
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
