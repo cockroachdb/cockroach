@@ -117,6 +117,13 @@ func (rec *SpanSetReplicaEvalContext) GetTracker() closedts.TrackerI {
 	return rec.i.GetTracker()
 }
 
+// MaxClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) MaxClosedTimestamp(
+	ctx context.Context,
+) (hlc.Timestamp, bool) {
+	return rec.i.MaxClosedTimestamp(ctx)
+}
+
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()

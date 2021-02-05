@@ -1657,6 +1657,15 @@ message SubsumeResponse {
   // mark for the keys previously owned by the subsumed range.
   util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // ClosedTS is the range's closed timestamp at the moment of the subsumption.
+  // Because the SubsumeRequest synchronizes with all other requests, the
+  // range's closed timestamp does not advance past the snapshot captured here.
+  //
+  // Like the FreezeStart, this is used by the merged range to conditionally
+  // bump the timestamp cache for the keys previously owned by the subsumed
+  // range.
+  util.hlc.Timestamp closedTS = 6 [(gogoproto.nullable) = false];
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
