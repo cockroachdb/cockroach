@@ -13,10 +13,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -81,11 +81,11 @@ func init() {
 
 func runTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
 	if logicTest := mustGetFlagBool(cmd, logicFlag); logicTest {
-		return runLogicTest(ctx, cmd)
+		return runLogicTest(cmd)
 	}
 
 	if fuzzTest := mustGetFlagBool(cmd, fuzzFlag); fuzzTest {
-		return runFuzzTest(ctx, cmd, pkgs)
+		return runFuzzTest(cmd, pkgs)
 	}
 
 	return runUnitTest(ctx, cmd, pkgs)
@@ -104,7 +104,7 @@ func runUnitTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
 		return errors.New("-show-logs unimplemented")
 	}
 
-	log.Infof(ctx, "unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
+	log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
 
 	var args []string
@@ -142,19 +142,19 @@ func runUnitTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
 	return execute(ctx, "bazel", args...)
 }
 
-func runLogicTest(ctx context.Context, cmd *cobra.Command) error {
+func runLogicTest(cmd *cobra.Command) error {
 	files := mustGetFlagString(cmd, filesFlag)
 	subtests := mustGetFlagString(cmd, subtestsFlag)
 	config := mustGetFlagString(cmd, configFlag)
 
-	log.Infof(ctx, "logic test args: files=%s  subtests=%s  config=%s",
+	log.Printf("logic test args: files=%s  subtests=%s  config=%s",
 		files, subtests, config)
 	return errors.New("--logic unimplemented")
 }
 
-func runFuzzTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
+func runFuzzTest(cmd *cobra.Command, pkgs []string) error {
 	filter := mustGetFlagString(cmd, filterFlag)
 
-	log.Infof(ctx, "fuzz test args: filter=%s  pkgs=%s", filter, pkgs)
+	log.Printf("fuzz test args: filter=%s  pkgs=%s", filter, pkgs)
 	return errors.New("--fuzz unimplemented")
 }
