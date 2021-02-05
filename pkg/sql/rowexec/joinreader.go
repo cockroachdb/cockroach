@@ -719,7 +719,7 @@ func (jr *joinReader) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the execinfra.KVReader interface.
 func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
-	return getCumulativeContentionTime(jr.fetcher.GetContentionEvents())
+	return execinfra.GetCumulativeContentionTime(jr.Ctx)
 }
 
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
@@ -729,13 +729,7 @@ func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMe
 	meta.Metrics.RowsRead = jr.GetRowsRead()
 	meta.Metrics.BytesRead = jr.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
-		trailingMeta = append(trailingMeta,
-			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},
-		)
-	}
-
-	if contentionEvents := jr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }

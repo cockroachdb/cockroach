@@ -263,6 +263,9 @@ var _ execinfra.RowSource = &zigzagJoiner{}
 var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 var _ execinfra.OpNode = &zigzagJoiner{}
 
+// TODO(yuzefovich): zig-zag joiner needs to implement execinfra.KVReader
+// interface.
+
 const zigzagJoinerProcName = "zigzagJoiner"
 
 // newZigzagJoiner creates a new zigzag joiner given a spec and an EncDatumRow

@@ -1342,7 +1342,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel:                    execinfra.Off,
-		GenerateMockContentionEvents:         true,
 		CheckVectorizedFlowIsClosedCorrectly: true,
 	}
 	cfg := t.cfg
