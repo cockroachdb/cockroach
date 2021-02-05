@@ -6286,14 +6286,15 @@ index_def:
       },
     }
   }
-| INVERTED INDEX opt_name '(' index_params ')' opt_with_storage_parameter_list opt_where_clause
+| INVERTED INDEX opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
-      Name:          tree.Name($3),
-      Columns:       $5.idxElems(),
-      Inverted:      true,
-      StorageParams: $7.storageParams(),
-      Predicate:     $8.expr(),
+      Name:             tree.Name($3),
+      Columns:          $5.idxElems(),
+      Inverted:         true,
+      PartitionByIndex: $7.partitionByIndex(),
+      StorageParams:    $8.storageParams(),
+      Predicate:        $9.expr(),
     }
   }
 
