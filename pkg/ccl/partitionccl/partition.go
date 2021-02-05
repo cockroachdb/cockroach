@@ -153,6 +153,7 @@ func createPartitioningImpl(
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 	numImplicitColumns int,
 	colOffset int,
 ) (descpb.PartitioningDescriptor, error) {
@@ -183,7 +184,11 @@ func createPartitioningImpl(
 		}
 		// Search by name because some callsites of this method have not
 		// allocated ids yet (so they are still all the 0 value).
-		col, err := tableDesc.FindActiveColumnByName(indexDesc.ColumnNames[colOffset+i])
+		col, err := findColumnByNameOnTable(
+			tableDesc,
+			tree.Name(indexDesc.ColumnNames[colOffset+i]),
+			allowedNewColumnNames,
+		)
 		if err != nil {
 			return partDesc, err
 		}
@@ -219,7 +224,15 @@ func createPartitioningImpl(
 				)
 			}
 			subpartitioning, err := createPartitioningImpl(
-				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, 0 /* implicitColumnNames */, newColOffset)
+				ctx,
+				evalCtx,
+				tableDesc,
+				indexDesc,
+				l.Subpartition,
+				allowedNewColumnNames,
+				0, /* implicitColumnNames */
+				newColOffset,
+			)
 			if err != nil {
 				return partDesc, err
 			}
@@ -260,6 +273,7 @@ func detectImplicitPartitionColumns(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, int, error) {
 	if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
 		return indexDesc, 0, nil
@@ -276,7 +290,11 @@ func detectImplicitPartitionColumns(
 			break
 		}
 
-		col, err := tableDesc.FindActiveColumnByName(string(field))
+		col, err := findColumnByNameOnTable(
+			tableDesc,
+			field,
+			allowedNewColumnNames,
+		)
 		if err != nil {
 			return indexDesc, 0, err
 		}
@@ -301,6 +319,25 @@ func detectImplicitPartitionColumns(
 	return indexDesc, len(implicitColumns), nil
 }
 
+// findColumnByNameOnTable finds the given column from the table.
+// By default we only allow active columns on PARTITION BY clauses.
+// However, any columns appearing as allowedNewColumnNames is also
+// permitted provided the caller will ensure this column is backfilled
+// before the partitioning is active.
+func findColumnByNameOnTable(
+	tableDesc *tabledesc.Mutable, col tree.Name, allowedNewColumnNames []tree.Name,
+) (*descpb.ColumnDescriptor, error) {
+	f := func(n tree.Name) (*descpb.ColumnDescriptor, error) {
+		return tableDesc.FindActiveColumnByName(string(n))
+	}
+	for _, allowedNewColName := range allowedNewColumnNames {
+		if allowedNewColName == col {
+			f = tableDesc.FindActiveOrNewColumnByName
+		}
+	}
+	return f(col)
+}
+
 // createPartitioning constructs the partitioning descriptor for an index that
 // is partitioned into ranges, each addressable by zone configs.
 func createPartitioning(
@@ -310,6 +347,7 @@ func createPartitioning(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, error) {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
@@ -318,7 +356,13 @@ func createPartitioning(
 
 	var numImplicitColumns int
 	var err error
-	indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(evalCtx, tableDesc, indexDesc, partBy)
+	indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
+		evalCtx,
+		tableDesc,
+		indexDesc,
+		partBy,
+		allowedNewColumnNames,
+	)
 	if err != nil {
 		return indexDesc, err
 	}
@@ -329,6 +373,7 @@ func createPartitioning(
 		tableDesc,
 		&indexDesc,
 		partBy,
+		allowedNewColumnNames,
 		numImplicitColumns,
 		0, /* colOffset */
 	)
