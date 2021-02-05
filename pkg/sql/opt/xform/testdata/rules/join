@@ -6036,13 +6036,12 @@ project
       │    ├── inverted-expr
       │    │    └── t1.j:20 @> t2.j:3
       │    ├── key: (18)
-      │    ├── fd: (1)-->(2,3), (18)-->(19), (2)==(19), (19)==(2), (1)==(18), (18)==(1)
+      │    ├── fd: (1)-->(2,3), (18)-->(19), (1)==(18), (18)==(1), (2)==(19), (19)==(2)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:1!null l:2 t2.j:3
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
-      │    └── filters
-      │         └── i:19 = l:2 [outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ]), fd=(2)==(19), (19)==(2)]
+      │    └── filters (true)
       └── filters
            └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
@@ -6265,6 +6264,46 @@ anti-join (cross)
  │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
  └── filters
       └── y:3 @> column1:1 [outer=(1,3), immutable]
+
+# Regression test for #59859. Do not panic when the ON condition has a constant
+# filter to constrain the non-inverted prefix column and a variable equality
+# filter that does not constrain the prefix column.
+exec-ddl
+CREATE TABLE t59859_a (
+  k INT PRIMARY KEY,
+  j JSON
+)
+----
+
+exec-ddl
+CREATE TABLE t59859_b (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  INVERTED INDEX (k, j)
+)
+----
+
+opt expect=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT a.k, b.k
+FROM t59859_a AS a INNER INVERTED JOIN t59859_b AS b
+ON b.k = 1 AND b.j @> a.j AND b.i = a.k
+----
+project
+ └── inner-join (lookup t59859_b [as=b])
+      ├── lookup columns are key
+      ├── inner-join (inverted t59859_b@secondary [as=b])
+      │    ├── flags: force inverted join (into right side)
+      │    ├── inverted-expr
+      │    │    └── b.j @> a.j
+      │    ├── project
+      │    │    ├── scan t59859_a [as=a]
+      │    │    └── projections
+      │    │         └── 1
+      │    └── filters (true)
+      └── filters
+           ├── b.j @> a.j
+           └── i = a.k
 
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
