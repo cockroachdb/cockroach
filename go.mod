@@ -34,7 +34,7 @@ require (
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
-	github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0
+	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1-0.20201212195501-e89bf9ee1861
 	github.com/cockroachdb/errors v1.8.2
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
@@ -158,7 +158,7 @@ require (
 	golang.org/x/term v0.0.0-20201117132131-f5c789dd3221
 	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20210104081019-d8d6ddbec6ee
+	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.1.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1
