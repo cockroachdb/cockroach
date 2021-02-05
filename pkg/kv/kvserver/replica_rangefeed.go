@@ -595,7 +595,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 	}
 
 	// Determine what the maximum closed timestamp is for this replica.
-	closedTS, _ := r.maxClosed(ctx)
+	closedTS, _ := r.MaxClosedTimestamp(ctx)
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress

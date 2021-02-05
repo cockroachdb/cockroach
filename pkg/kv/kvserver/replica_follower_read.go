@@ -70,7 +70,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 		ts.Forward(ba.Txn.GlobalUncertaintyLimit)
 	}
 
-	maxClosed, _ := r.maxClosedRLocked(ctx)
+	maxClosed, _ := r.MaxClosedTimestamp(ctx)
 	canServeFollowerRead := ts.LessEq(maxClosed)
 	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -106,7 +106,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 	return true
 }
 
-// maxClosed returns the maximum closed timestamp for this range.
+// MaxClosedTimestamp returns the maximum closed timestamp for this range.
 // It is computed as the most recent of the known closed timestamp for the
 // current lease holder for this range as tracked by the closed timestamp
 // subsystem and the start time of the current lease. It is safe to use the
@@ -117,7 +117,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 // uses an expiration-based lease. Expiration-based leases do not support the
 // closed timestamp subsystem. A zero-value timestamp will be returned if ok
 // is false.
-func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
+func (r *Replica) MaxClosedTimestamp(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.maxClosedRLocked(ctx)
