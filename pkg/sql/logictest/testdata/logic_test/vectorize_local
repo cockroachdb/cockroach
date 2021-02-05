@@ -66,6 +66,7 @@ vectorized: <hidden>
 • lookup join
 │ actual row count: 2
 │ KV rows read: 1
+│ KV bytes read: 8 B
 │ table: d@primary
 │ equality: (b) = (b)
 │
@@ -77,7 +78,7 @@ vectorized: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUk2LFDEUvPsrHnWO43QfPASERllh1nVaZhcv0od08lijPUlM0rDL0D_LP-Avk-604joofhyrXurVqyInpE8DJK4vri5e3JDeKHp5aF-Tpst2tydD7Z7MpqdnpDc9BJw3vFdHTpDvUKETCNFrTsnHmTotD3bmDnIrYF0Y80x3AtpHhjwh2zwwJG5UP_CBleH4ZAsBw1nZYVmrm8QaAtdBuSTpMQTaMUtqKtHUEHj1lrI9sqTtl8-pYO1dZpetd2ejPIaBE0VWRtIq7-_zd6p6Ss8h0Kus33MiP-Ywm803rdJvVI1uEihoTZWyumXIahJ_nvzSW7cGrx4GN02I9qjiPQSuvP84BvrgrSPvJC3J1xqwGqzZSqzCpKyG4byDf6xrduI71uP50__qq_6bvg6cgneJH3T1q83bqRNgc8vlNyY_Rs1voteLTYHtolsIwymXaVXAzpXRfOCP4uq34voncTc9-hoAAP__oYoXgA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklGLEzEUhd_9FZfzHGvTB5GAUJQVuq4d6S6-yDxkkssanSYxycAupT_LP-Avk5mMYi2Kuo_n3Dm593zMAflzD4Xri6uLlzdkFppe7Zo3ZOiy2WzJUrMlu-joOZlFBwEfLG_1njPUe0i0AjEFwzmHNFqH6YONvYNaCjgfhzLarYAJiaEOKK70DIUb3fW8Y205PVlCwHLRrp-eNevMBgLXUfus6DEEmqEoWkuxXkHg9Tsqbs-Kll-_5KpN8IV9ccGfjcoQe86UWFtFc7y7Lz8s-ZReQKDTxXzgTGEocVw23jRHv1srtEeBquZWuehbhpJH8ffNL4Pzc3F5WtyuY3J7ne4hcBXCpyHSx-A8Ba9oaj5jwLxg7lZrVScX3ffnDP4TlzzH9WyixXdshvP8gyCu_gXijnMMPvMJwN-9vDy2Amxvuf6iOQzJ8NsUzLSmymbKTYblXOpUVrHxdTQe-HNY_jG8-iXcHh99CwAA__-Hph2I
 ·
 WARNING: this statement is experimental!
 

@@ -279,11 +279,6 @@ func newJoinReader(
 		return nil, err
 	}
 
-	collectingStats := false
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
-		collectingStats = true
-	}
-
 	rightCols := jr.neededRightCols()
 	if isSecondary {
 		set, err := getIndexColSet(jr.index, jr.colIdxMap)
@@ -305,7 +300,7 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	if collectingStats {
+	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -699,6 +694,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
+			BytesRead:      optional.MakeUint(uint64(jr.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(jr.GetCumulativeContentionTime()),
