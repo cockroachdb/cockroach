@@ -1346,14 +1346,6 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 				noRowLocking,
 				mb.b.allocScope(),
 			)
-			// If the table has any virtual computed columns, buildScan
-			// constructs a Project on top of the Scan. This is problematic when
-			// building arbiter predicates because it relies on tableScope.expr
-			// being a Scan in order to normalize the arbiter predicate. So, if
-			// tableScope.expr is a Project, we set it to its input, a Scan.
-			if proj, ok := tableScope.expr.(*memo.ProjectExpr); ok {
-				tableScope.expr = proj.Input
-			}
 		}
 
 		// Fetch the partial index predicate which was added to tabMeta in the
