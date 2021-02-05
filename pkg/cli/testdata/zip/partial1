@@ -26,8 +26,6 @@ retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_inte
 retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
 retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
 retrieving SQL data for crdb_internal.invalid_objects... writing: debug/crdb_internal.invalid_objects.txt
-doctor examining cluster...No problems found!
-writing: debug/reports/doctor.txt
 requesting nodes... writing: debug/nodes.json
 requesting liveness... writing: debug/liveness.json
 writing: debug/nodes/1/status.json
@@ -232,6 +230,8 @@ writing: debug/nodes/3/ranges/32.json
 writing: debug/nodes/3/ranges/33.json
 writing: debug/nodes/3/ranges/34.json
 writing: debug/nodes/3/ranges/35.json
+doctor examining cluster...No problems found!
+writing: debug/reports/doctor.txt
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found

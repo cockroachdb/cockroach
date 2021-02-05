@@ -51,6 +51,10 @@ go_library(
         "tsdump.go",
         "userfile.go",
         "zip.go",
+        "zip_cluster_wide.go",
+        "zip_cmd.go",
+        "zip_helpers.go",
+        "zip_per_node.go",
         ":gen-keytype-stringer",  # keep
     ],
     # keep
