@@ -84,75 +84,141 @@ var pgCatalog = virtualSchema{
 		// select distinct '"'||table_name||'",' from information_schema.tables
 		//    where table_schema='pg_catalog' order by table_name;
 		"pg_aggregate",
+		"pg_aggregate_fnoid_index",
 		"pg_am",
+		"pg_am_oid_index",
 		"pg_amop",
+		"pg_amop_fam_strat_index",
+		"pg_amop_oid_index",
+		"pg_amop_opr_fam_index",
 		"pg_amproc",
+		"pg_amproc_fam_proc_index",
+		"pg_amproc_oid_index",
 		"pg_attrdef",
+		"pg_attrdef_adrelid_adnum_index",
+		"pg_attrdef_oid_index",
 		"pg_attribute",
+		"pg_attribute_relid_attnum_index",
 		"pg_auth_members",
+		"pg_auth_members_member_role_index",
+		"pg_auth_members_role_member_index",
 		"pg_authid",
+		"pg_authid_oid_index",
 		"pg_available_extension_versions",
 		"pg_available_extensions",
 		"pg_cast",
+		"pg_cast_oid_index",
+		"pg_cast_source_target_index",
 		"pg_class",
+		"pg_class_oid_index",
+		"pg_class_tblspc_relfilenode_index",
 		"pg_collation",
+		"pg_collation_oid_index",
 		"pg_config",
 		"pg_constraint",
+		"pg_constraint_conparentid_index",
+		"pg_constraint_contypid_index",
+		"pg_constraint_oid_index",
 		"pg_conversion",
+		"pg_conversion_default_index",
+		"pg_conversion_oid_index",
 		"pg_cursors",
 		"pg_database",
+		"pg_database_oid_index",
 		"pg_db_role_setting",
+		"pg_db_role_setting_databaseid_rol_index",
 		"pg_default_acl",
+		"pg_default_acl_oid_index",
+		"pg_default_acl_role_nsp_obj_index",
 		"pg_depend",
+		"pg_depend_depender_index",
+		"pg_depend_reference_index",
 		"pg_description",
+		"pg_description_o_c_o_index",
 		"pg_enum",
+		"pg_enum_oid_index",
+		"pg_enum_typid_sortorder_index",
 		"pg_event_trigger",
+		"pg_event_trigger_oid_index",
 		"pg_extension",
+		"pg_extension_oid_index",
 		"pg_file_settings",
 		"pg_foreign_data_wrapper",
+		"pg_foreign_data_wrapper_oid_index",
 		"pg_foreign_server",
+		"pg_foreign_server_oid_index",
 		"pg_foreign_table",
+		"pg_foreign_table_relid_index",
 		"pg_group",
 		"pg_hba_file_rules",
 		"pg_index",
+		"pg_index_indexrelid_index",
+		"pg_index_indrelid_index",
 		"pg_indexes",
 		"pg_inherits",
+		"pg_inherits_parent_index",
+		"pg_inherits_relid_seqno_index",
 		"pg_init_privs",
+		"pg_init_privs_o_c_o_index",
 		"pg_language",
+		"pg_language_oid_index",
 		"pg_largeobject",
+		"pg_largeobject_loid_pn_index",
 		"pg_largeobject_metadata",
+		"pg_largeobject_metadata_oid_index",
 		"pg_locks",
 		"pg_matviews",
 		"pg_namespace",
+		"pg_namespace_oid_index",
 		"pg_opclass",
+		"pg_opclass_oid_index",
 		"pg_operator",
+		"pg_operator_oid_index",
 		"pg_opfamily",
+		"pg_opfamily_oid_index",
 		"pg_partitioned_table",
+		"pg_partitioned_table_partrelid_index",
 		"pg_pltemplate",
 		"pg_policies",
 		"pg_policy",
+		"pg_policy_oid_index",
 		"pg_prepared_statements",
 		"pg_prepared_xacts",
 		"pg_proc",
+		"pg_proc_oid_index",
 		"pg_publication",
+		"pg_publication_oid_index",
 		"pg_publication_rel",
+		"pg_publication_rel_oid_index",
+		"pg_publication_rel_prrelid_prpubid_index",
 		"pg_publication_tables",
 		"pg_range",
+		"pg_range_rngtypid_index",
 		"pg_replication_origin",
+		"pg_replication_origin_roiident_index",
+		"pg_replication_origin_roname_index",
 		"pg_replication_origin_status",
 		"pg_replication_slots",
 		"pg_rewrite",
+		"pg_rewrite_oid_index",
 		"pg_roles",
 		"pg_rules",
 		"pg_seclabel",
+		"pg_seclabel_object_index",
 		"pg_seclabels",
 		"pg_sequence",
+		"pg_sequence_seqrelid_index",
 		"pg_sequences",
 		"pg_settings",
 		"pg_shadow",
 		"pg_shdepend",
+		"pg_shdepend_depender_index",
+		"pg_shdepend_reference_index",
 		"pg_shdescription",
+		"pg_shdescription_o_c_index",
+		"pg_shmem_allocations",
 		"pg_shseclabel",
+		"pg_shseclabel_object_index",
 		"pg_stat_activity",
 		"pg_stat_all_indexes",
 		"pg_stat_all_tables",
@@ -160,8 +226,14 @@ var pgCatalog = virtualSchema{
 		"pg_stat_bgwriter",
 		"pg_stat_database",
 		"pg_stat_database_conflicts",
+		"pg_stat_gssapi",
+		"pg_stat_progress_analyze",
+		"pg_stat_progress_basebackup",
+		"pg_stat_progress_cluster",
+		"pg_stat_progress_create_index",
 		"pg_stat_progress_vacuum",
 		"pg_stat_replication",
+		"pg_stat_slru",
 		"pg_stat_ssl",
 		"pg_stat_subscription",
 		"pg_stat_sys_indexes",
@@ -185,79 +257,245 @@ var pgCatalog = virtualSchema{
 		"pg_statio_user_tables",
 		"pg_statistic",
 		"pg_statistic_ext",
+		"pg_statistic_ext_data_stxoid_index",
+		"pg_statistic_ext_oid_index",
+		"pg_statistic_ext_relid_index",
+		"pg_statistic_relid_att_inh_index",
 		"pg_stats",
 		"pg_subscription",
+		"pg_subscription_oid_index",
 		"pg_subscription_rel",
+		"pg_subscription_rel_srrelid_srsubid_index",
 		"pg_tables",
 		"pg_tablespace",
+		"pg_tablespace_oid_index",
 		"pg_timezone_abbrevs",
 		"pg_timezone_names",
 		"pg_transform",
+		"pg_transform_oid_index",
+		"pg_transform_type_lang_index",
 		"pg_trigger",
+		"pg_trigger_oid_index",
+		"pg_trigger_tgconstraint_index",
 		"pg_ts_config",
 		"pg_ts_config_map",
+		"pg_ts_config_map_index",
+		"pg_ts_config_oid_index",
 		"pg_ts_dict",
+		"pg_ts_dict_oid_index",
 		"pg_ts_parser",
+		"pg_ts_parser_oid_index",
 		"pg_ts_template",
+		"pg_ts_template_oid_index",
 		"pg_type",
+		"pg_type_oid_index",
 		"pg_user",
 		"pg_user_mapping",
+		"pg_user_mapping_oid_index",
+		"pg_user_mapping_user_server_index",
 		"pg_user_mappings",
 		"pg_views",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
-		catconstants.PgCatalogAmTableID:                  pgCatalogAmTable,
-		catconstants.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
-		catconstants.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
-		catconstants.PgCatalogAuthIDTableID:              pgCatalogAuthIDTable,
-		catconstants.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
-		catconstants.PgCatalogAvailableExtensionsTableID: pgCatalogAvailableExtensionsTable,
-		catconstants.PgCatalogCastTableID:                pgCatalogCastTable,
-		catconstants.PgCatalogClassTableID:               pgCatalogClassTable,
-		catconstants.PgCatalogCollationTableID:           pgCatalogCollationTable,
-		catconstants.PgCatalogConstraintTableID:          pgCatalogConstraintTable,
-		catconstants.PgCatalogConversionTableID:          pgCatalogConversionTable,
-		catconstants.PgCatalogDatabaseTableID:            pgCatalogDatabaseTable,
-		catconstants.PgCatalogDefaultACLTableID:          pgCatalogDefaultACLTable,
-		catconstants.PgCatalogDependTableID:              pgCatalogDependTable,
-		catconstants.PgCatalogDescriptionTableID:         pgCatalogDescriptionTable,
-		catconstants.PgCatalogSharedDescriptionTableID:   pgCatalogSharedDescriptionTable,
-		catconstants.PgCatalogEnumTableID:                pgCatalogEnumTable,
-		catconstants.PgCatalogEventTriggerTableID:        pgCatalogEventTriggerTable,
-		catconstants.PgCatalogExtensionTableID:           pgCatalogExtensionTable,
-		catconstants.PgCatalogForeignDataWrapperTableID:  pgCatalogForeignDataWrapperTable,
-		catconstants.PgCatalogForeignServerTableID:       pgCatalogForeignServerTable,
-		catconstants.PgCatalogForeignTableTableID:        pgCatalogForeignTableTable,
-		catconstants.PgCatalogIndexTableID:               pgCatalogIndexTable,
-		catconstants.PgCatalogIndexesTableID:             pgCatalogIndexesTable,
-		catconstants.PgCatalogInheritsTableID:            pgCatalogInheritsTable,
-		catconstants.PgCatalogLanguageTableID:            pgCatalogLanguageTable,
-		catconstants.PgCatalogLocksTableID:               pgCatalogLocksTable,
-		catconstants.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
-		catconstants.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
-		catconstants.PgCatalogOpclassTableID:             pgCatalogOpclassTable,
-		catconstants.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
-		catconstants.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
-		catconstants.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
-		catconstants.PgCatalogProcTableID:                pgCatalogProcTable,
-		catconstants.PgCatalogAggregateTableID:           pgCatalogAggregateTable,
-		catconstants.PgCatalogRangeTableID:               pgCatalogRangeTable,
-		catconstants.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
-		catconstants.PgCatalogRolesTableID:               pgCatalogRolesTable,
-		catconstants.PgCatalogSecLabelsTableID:           pgCatalogSecLabelsTable,
-		catconstants.PgCatalogSequencesTableID:           pgCatalogSequencesTable,
-		catconstants.PgCatalogSettingsTableID:            pgCatalogSettingsTable,
-		catconstants.PgCatalogShdependTableID:            pgCatalogShdependTable,
-		catconstants.PgCatalogUserTableID:                pgCatalogUserTable,
-		catconstants.PgCatalogUserMappingTableID:         pgCatalogUserMappingTable,
-		catconstants.PgCatalogTablesTableID:              pgCatalogTablesTable,
-		catconstants.PgCatalogTablespaceTableID:          pgCatalogTablespaceTable,
-		catconstants.PgCatalogTriggerTableID:             pgCatalogTriggerTable,
-		catconstants.PgCatalogTypeTableID:                pgCatalogTypeTable,
-		catconstants.PgCatalogViewsTableID:               pgCatalogViewsTable,
-		catconstants.PgCatalogStatActivityTableID:        pgCatalogStatActivityTable,
-		catconstants.PgCatalogSecurityLabelTableID:       pgCatalogSecurityLabelTable,
-		catconstants.PgCatalogSharedSecurityLabelTableID: pgCatalogSharedSecurityLabelTable,
+		catconstants.PgCatalogAggregateFnoidIndexTableID:                pgCatalogAggregateFnoidIndexTable,
+		catconstants.PgCatalogAggregateTableID:                          pgCatalogAggregateTable,
+		catconstants.PgCatalogAmOidIndexTableID:                         pgCatalogAmOidIndexTable,
+		catconstants.PgCatalogAmTableID:                                 pgCatalogAmTable,
+		catconstants.PgCatalogAmopFamStratIndexTableID:                  pgCatalogAmopFamStratIndexTable,
+		catconstants.PgCatalogAmopOidIndexTableID:                       pgCatalogAmopOidIndexTable,
+		catconstants.PgCatalogAmopOprFamIndexTableID:                    pgCatalogAmopOprFamIndexTable,
+		catconstants.PgCatalogAmopTableID:                               pgCatalogAmopTable,
+		catconstants.PgCatalogAmprocFamProcIndexTableID:                 pgCatalogAmprocFamProcIndexTable,
+		catconstants.PgCatalogAmprocOidIndexTableID:                     pgCatalogAmprocOidIndexTable,
+		catconstants.PgCatalogAmprocTableID:                             pgCatalogAmprocTable,
+		catconstants.PgCatalogAttrDefTableID:                            pgCatalogAttrDefTable,
+		catconstants.PgCatalogAttrdefAdrelidAdnumIndexTableID:           pgCatalogAttrdefAdrelidAdnumIndexTable,
+		catconstants.PgCatalogAttrdefOidIndexTableID:                    pgCatalogAttrdefOidIndexTable,
+		catconstants.PgCatalogAttributeRelidAttnumIndexTableID:          pgCatalogAttributeRelidAttnumIndexTable,
+		catconstants.PgCatalogAttributeTableID:                          pgCatalogAttributeTable,
+		catconstants.PgCatalogAuthIDTableID:                             pgCatalogAuthIDTable,
+		catconstants.PgCatalogAuthMembersMemberRoleIndexTableID:         pgCatalogAuthMembersMemberRoleIndexTable,
+		catconstants.PgCatalogAuthMembersRoleMemberIndexTableID:         pgCatalogAuthMembersRoleMemberIndexTable,
+		catconstants.PgCatalogAuthMembersTableID:                        pgCatalogAuthMembersTable,
+		catconstants.PgCatalogAuthidOidIndexTableID:                     pgCatalogAuthidOidIndexTable,
+		catconstants.PgCatalogAvailableExtensionVersionsTableID:         pgCatalogAvailableExtensionVersionsTable,
+		catconstants.PgCatalogAvailableExtensionsTableID:                pgCatalogAvailableExtensionsTable,
+		catconstants.PgCatalogCastOidIndexTableID:                       pgCatalogCastOidIndexTable,
+		catconstants.PgCatalogCastSourceTargetIndexTableID:              pgCatalogCastSourceTargetIndexTable,
+		catconstants.PgCatalogCastTableID:                               pgCatalogCastTable,
+		catconstants.PgCatalogClassOidIndexTableID:                      pgCatalogClassOidIndexTable,
+		catconstants.PgCatalogClassTableID:                              pgCatalogClassTable,
+		catconstants.PgCatalogClassTblspcRelfilenodeIndexTableID:        pgCatalogClassTblspcRelfilenodeIndexTable,
+		catconstants.PgCatalogCollationOidIndexTableID:                  pgCatalogCollationOidIndexTable,
+		catconstants.PgCatalogCollationTableID:                          pgCatalogCollationTable,
+		catconstants.PgCatalogConfigTableID:                             pgCatalogConfigTable,
+		catconstants.PgCatalogConstraintConparentidIndexTableID:         pgCatalogConstraintConparentidIndexTable,
+		catconstants.PgCatalogConstraintContypidIndexTableID:            pgCatalogConstraintContypidIndexTable,
+		catconstants.PgCatalogConstraintOidIndexTableID:                 pgCatalogConstraintOidIndexTable,
+		catconstants.PgCatalogConstraintTableID:                         pgCatalogConstraintTable,
+		catconstants.PgCatalogConversionDefaultIndexTableID:             pgCatalogConversionDefaultIndexTable,
+		catconstants.PgCatalogConversionOidIndexTableID:                 pgCatalogConversionOidIndexTable,
+		catconstants.PgCatalogConversionTableID:                         pgCatalogConversionTable,
+		catconstants.PgCatalogCursorsTableID:                            pgCatalogCursorsTable,
+		catconstants.PgCatalogDatabaseOidIndexTableID:                   pgCatalogDatabaseOidIndexTable,
+		catconstants.PgCatalogDatabaseTableID:                           pgCatalogDatabaseTable,
+		catconstants.PgCatalogDbRoleSettingDatabaseidRolIndexTableID:    pgCatalogDbRoleSettingDatabaseidRolIndexTable,
+		catconstants.PgCatalogDbRoleSettingTableID:                      pgCatalogDbRoleSettingTable,
+		catconstants.PgCatalogDefaultACLOidIndexTableID:                 pgCatalogDefaultACLOidIndexTable,
+		catconstants.PgCatalogDefaultACLRoleNspObjIndexTableID:          pgCatalogDefaultACLRoleNspObjIndexTable,
+		catconstants.PgCatalogDefaultACLTableID:                         pgCatalogDefaultACLTable,
+		catconstants.PgCatalogDependDependerIndexTableID:                pgCatalogDependDependerIndexTable,
+		catconstants.PgCatalogDependReferenceIndexTableID:               pgCatalogDependReferenceIndexTable,
+		catconstants.PgCatalogDependTableID:                             pgCatalogDependTable,
+		catconstants.PgCatalogDescriptionOCOIndexTableID:                pgCatalogDescriptionOCOIndexTable,
+		catconstants.PgCatalogDescriptionTableID:                        pgCatalogDescriptionTable,
+		catconstants.PgCatalogEnumOidIndexTableID:                       pgCatalogEnumOidIndexTable,
+		catconstants.PgCatalogEnumTableID:                               pgCatalogEnumTable,
+		catconstants.PgCatalogEnumTypidSortorderIndexTableID:            pgCatalogEnumTypidSortorderIndexTable,
+		catconstants.PgCatalogEventTriggerOidIndexTableID:               pgCatalogEventTriggerOidIndexTable,
+		catconstants.PgCatalogEventTriggerTableID:                       pgCatalogEventTriggerTable,
+		catconstants.PgCatalogExtensionOidIndexTableID:                  pgCatalogExtensionOidIndexTable,
+		catconstants.PgCatalogExtensionTableID:                          pgCatalogExtensionTable,
+		catconstants.PgCatalogFileSettingsTableID:                       pgCatalogFileSettingsTable,
+		catconstants.PgCatalogForeignDataWrapperOidIndexTableID:         pgCatalogForeignDataWrapperOidIndexTable,
+		catconstants.PgCatalogForeignDataWrapperTableID:                 pgCatalogForeignDataWrapperTable,
+		catconstants.PgCatalogForeignServerOidIndexTableID:              pgCatalogForeignServerOidIndexTable,
+		catconstants.PgCatalogForeignServerTableID:                      pgCatalogForeignServerTable,
+		catconstants.PgCatalogForeignTableRelidIndexTableID:             pgCatalogForeignTableRelidIndexTable,
+		catconstants.PgCatalogForeignTableTableID:                       pgCatalogForeignTableTable,
+		catconstants.PgCatalogGroupTableID:                              pgCatalogGroupTable,
+		catconstants.PgCatalogHbaFileRulesTableID:                       pgCatalogHbaFileRulesTable,
+		catconstants.PgCatalogIndexIndexrelidIndexTableID:               pgCatalogIndexIndexrelidIndexTable,
+		catconstants.PgCatalogIndexIndrelidIndexTableID:                 pgCatalogIndexIndrelidIndexTable,
+		catconstants.PgCatalogIndexTableID:                              pgCatalogIndexTable,
+		catconstants.PgCatalogIndexesTableID:                            pgCatalogIndexesTable,
+		catconstants.PgCatalogInheritsParentIndexTableID:                pgCatalogInheritsParentIndexTable,
+		catconstants.PgCatalogInheritsRelidSeqnoIndexTableID:            pgCatalogInheritsRelidSeqnoIndexTable,
+		catconstants.PgCatalogInheritsTableID:                           pgCatalogInheritsTable,
+		catconstants.PgCatalogInitPrivsOCOIndexTableID:                  pgCatalogInitPrivsOCOIndexTable,
+		catconstants.PgCatalogLanguageOidIndexTableID:                   pgCatalogLanguageOidIndexTable,
+		catconstants.PgCatalogLanguageTableID:                           pgCatalogLanguageTable,
+		catconstants.PgCatalogLargeobjectLoidPnIndexTableID:             pgCatalogLargeobjectLoidPnIndexTable,
+		catconstants.PgCatalogLargeobjectMetadataOidIndexTableID:        pgCatalogLargeobjectMetadataOidIndexTable,
+		catconstants.PgCatalogLargeobjectTableID:                        pgCatalogLargeobjectTable,
+		catconstants.PgCatalogLocksTableID:                              pgCatalogLocksTable,
+		catconstants.PgCatalogMatViewsTableID:                           pgCatalogMatViewsTable,
+		catconstants.PgCatalogNamespaceOidIndexTableID:                  pgCatalogNamespaceOidIndexTable,
+		catconstants.PgCatalogNamespaceTableID:                          pgCatalogNamespaceTable,
+		catconstants.PgCatalogOpclassOidIndexTableID:                    pgCatalogOpclassOidIndexTable,
+		catconstants.PgCatalogOpclassTableID:                            pgCatalogOpclassTable,
+		catconstants.PgCatalogOperatorOidIndexTableID:                   pgCatalogOperatorOidIndexTable,
+		catconstants.PgCatalogOperatorTableID:                           pgCatalogOperatorTable,
+		catconstants.PgCatalogOpfamilyOidIndexTableID:                   pgCatalogOpfamilyOidIndexTable,
+		catconstants.PgCatalogOpfamilyTableID:                           pgCatalogOpfamilyTable,
+		catconstants.PgCatalogPartitionedTablePartrelidIndexTableID:     pgCatalogPartitionedTablePartrelidIndexTable,
+		catconstants.PgCatalogPoliciesTableID:                           pgCatalogPoliciesTable,
+		catconstants.PgCatalogPolicyOidIndexTableID:                     pgCatalogPolicyOidIndexTable,
+		catconstants.PgCatalogPreparedStatementsTableID:                 pgCatalogPreparedStatementsTable,
+		catconstants.PgCatalogPreparedXactsTableID:                      pgCatalogPreparedXactsTable,
+		catconstants.PgCatalogProcOidIndexTableID:                       pgCatalogProcOidIndexTable,
+		catconstants.PgCatalogProcTableID:                               pgCatalogProcTable,
+		catconstants.PgCatalogPublicationOidIndexTableID:                pgCatalogPublicationOidIndexTable,
+		catconstants.PgCatalogPublicationRelOidIndexTableID:             pgCatalogPublicationRelOidIndexTable,
+		catconstants.PgCatalogPublicationRelPrrelidPrpubidIndexTableID:  pgCatalogPublicationRelPrrelidPrpubidIndexTable,
+		catconstants.PgCatalogPublicationRelTableID:                     pgCatalogPublicationRelTable,
+		catconstants.PgCatalogPublicationTableID:                        pgCatalogPublicationTable,
+		catconstants.PgCatalogPublicationTablesTableID:                  pgCatalogPublicationTablesTable,
+		catconstants.PgCatalogRangeRngtypidIndexTableID:                 pgCatalogRangeRngtypidIndexTable,
+		catconstants.PgCatalogRangeTableID:                              pgCatalogRangeTable,
+		catconstants.PgCatalogReplicationOriginRoiidentIndexTableID:     pgCatalogReplicationOriginRoiidentIndexTable,
+		catconstants.PgCatalogReplicationOriginRonameIndexTableID:       pgCatalogReplicationOriginRonameIndexTable,
+		catconstants.PgCatalogReplicationOriginTableID:                  pgCatalogReplicationOriginTable,
+		catconstants.PgCatalogRewriteOidIndexTableID:                    pgCatalogRewriteOidIndexTable,
+		catconstants.PgCatalogRewriteTableID:                            pgCatalogRewriteTable,
+		catconstants.PgCatalogRolesTableID:                              pgCatalogRolesTable,
+		catconstants.PgCatalogRulesTableID:                              pgCatalogRulesTable,
+		catconstants.PgCatalogSecLabelsTableID:                          pgCatalogSecLabelsTable,
+		catconstants.PgCatalogSeclabelObjectIndexTableID:                pgCatalogSeclabelObjectIndexTable,
+		catconstants.PgCatalogSecurityLabelTableID:                      pgCatalogSecurityLabelTable,
+		catconstants.PgCatalogSequenceSeqrelidIndexTableID:              pgCatalogSequenceSeqrelidIndexTable,
+		catconstants.PgCatalogSequencesTableID:                          pgCatalogSequencesTable,
+		catconstants.PgCatalogSequenceTableID:                           pgCatalogSequenceTable,
+		catconstants.PgCatalogSettingsTableID:                           pgCatalogSettingsTable,
+		catconstants.PgCatalogShadowTableID:                             pgCatalogShadowTable,
+		catconstants.PgCatalogSharedDescriptionTableID:                  pgCatalogSharedDescriptionTable,
+		catconstants.PgCatalogSharedSecurityLabelTableID:                pgCatalogSharedSecurityLabelTable,
+		catconstants.PgCatalogShdependDependerIndexTableID:              pgCatalogShdependDependerIndexTable,
+		catconstants.PgCatalogShdependReferenceIndexTableID:             pgCatalogShdependReferenceIndexTable,
+		catconstants.PgCatalogShdependTableID:                           pgCatalogShdependTable,
+		catconstants.PgCatalogShdescriptionOCIndexTableID:               pgCatalogShdescriptionOCIndexTable,
+		catconstants.PgCatalogShmemAllocationsTableID:                   pgCatalogShmemAllocationsTable,
+		catconstants.PgCatalogShseclabelObjectIndexTableID:              pgCatalogShseclabelObjectIndexTable,
+		catconstants.PgCatalogStatActivityTableID:                       pgCatalogStatActivityTable,
+		catconstants.PgCatalogStatAllIndexesTableID:                     pgCatalogStatAllIndexesTable,
+		catconstants.PgCatalogStatAllTablesTableID:                      pgCatalogStatAllTablesTable,
+		catconstants.PgCatalogStatArchiverTableID:                       pgCatalogStatArchiverTable,
+		catconstants.PgCatalogStatBgwriterTableID:                       pgCatalogStatBgwriterTable,
+		catconstants.PgCatalogStatDatabaseConflictsTableID:              pgCatalogStatDatabaseConflictsTable,
+		catconstants.PgCatalogStatDatabaseTableID:                       pgCatalogStatDatabaseTable,
+		catconstants.PgCatalogStatGssapiTableID:                         pgCatalogStatGssapiTable,
+		catconstants.PgCatalogStatProgressAnalyzeTableID:                pgCatalogStatProgressAnalyzeTable,
+		catconstants.PgCatalogStatProgressBasebackupTableID:             pgCatalogStatProgressBasebackupTable,
+		catconstants.PgCatalogStatProgressClusterTableID:                pgCatalogStatProgressClusterTable,
+		catconstants.PgCatalogStatProgressCreateIndexTableID:            pgCatalogStatProgressCreateIndexTable,
+		catconstants.PgCatalogStatProgressVacuumTableID:                 pgCatalogStatProgressVacuumTable,
+		catconstants.PgCatalogStatSlruTableID:                           pgCatalogStatSlruTable,
+		catconstants.PgCatalogStatSslTableID:                            pgCatalogStatSslTable,
+		catconstants.PgCatalogStatSysIndexesTableID:                     pgCatalogStatSysIndexesTable,
+		catconstants.PgCatalogStatSysTablesTableID:                      pgCatalogStatSysTablesTable,
+		catconstants.PgCatalogStatUserFunctionsTableID:                  pgCatalogStatUserFunctionsTable,
+		catconstants.PgCatalogStatUserIndexesTableID:                    pgCatalogStatUserIndexesTable,
+		catconstants.PgCatalogStatUserTablesTableID:                     pgCatalogStatUserTablesTable,
+		catconstants.PgCatalogStatXactAllTablesTableID:                  pgCatalogStatXactAllTablesTable,
+		catconstants.PgCatalogStatXactSysTablesTableID:                  pgCatalogStatXactSysTablesTable,
+		catconstants.PgCatalogStatXactUserFunctionsTableID:              pgCatalogStatXactUserFunctionsTable,
+		catconstants.PgCatalogStatXactUserTablesTableID:                 pgCatalogStatXactUserTablesTable,
+		catconstants.PgCatalogStatioAllIndexesTableID:                   pgCatalogStatioAllIndexesTable,
+		catconstants.PgCatalogStatioAllSequencesTableID:                 pgCatalogStatioAllSequencesTable,
+		catconstants.PgCatalogStatioAllTablesTableID:                    pgCatalogStatioAllTablesTable,
+		catconstants.PgCatalogStatioSysIndexesTableID:                   pgCatalogStatioSysIndexesTable,
+		catconstants.PgCatalogStatioSysSequencesTableID:                 pgCatalogStatioSysSequencesTable,
+		catconstants.PgCatalogStatioSysTablesTableID:                    pgCatalogStatioSysTablesTable,
+		catconstants.PgCatalogStatioUserIndexesTableID:                  pgCatalogStatioUserIndexesTable,
+		catconstants.PgCatalogStatioUserSequencesTableID:                pgCatalogStatioUserSequencesTable,
+		catconstants.PgCatalogStatioUserTablesTableID:                   pgCatalogStatioUserTablesTable,
+		catconstants.PgCatalogStatisticExtDataStxoidIndexTableID:        pgCatalogStatisticExtDataStxoidIndexTable,
+		catconstants.PgCatalogStatisticExtOidIndexTableID:               pgCatalogStatisticExtOidIndexTable,
+		catconstants.PgCatalogStatisticExtRelidIndexTableID:             pgCatalogStatisticExtRelidIndexTable,
+		catconstants.PgCatalogStatisticExtTableID:                       pgCatalogStatisticExtTable,
+		catconstants.PgCatalogStatisticRelidAttInhIndexTableID:          pgCatalogStatisticRelidAttInhIndexTable,
+		catconstants.PgCatalogSubscriptionOidIndexTableID:               pgCatalogSubscriptionOidIndexTable,
+		catconstants.PgCatalogSubscriptionRelSrrelidSrsubidIndexTableID: pgCatalogSubscriptionRelSrrelidSrsubidIndexTable,
+		catconstants.PgCatalogSubscriptionTableID:                       pgCatalogSubscriptionTable,
+		catconstants.PgCatalogTablesTableID:                             pgCatalogTablesTable,
+		catconstants.PgCatalogTablespaceOidIndexTableID:                 pgCatalogTablespaceOidIndexTable,
+		catconstants.PgCatalogTablespaceTableID:                         pgCatalogTablespaceTable,
+		catconstants.PgCatalogTimezoneAbbrevsTableID:                    pgCatalogTimezoneAbbrevsTable,
+		catconstants.PgCatalogTimezoneNamesTableID:                      pgCatalogTimezoneNamesTable,
+		catconstants.PgCatalogTransformOidIndexTableID:                  pgCatalogTransformOidIndexTable,
+		catconstants.PgCatalogTransformTableID:                          pgCatalogTransformTable,
+		catconstants.PgCatalogTransformTypeLangIndexTableID:             pgCatalogTransformTypeLangIndexTable,
+		catconstants.PgCatalogTriggerOidIndexTableID:                    pgCatalogTriggerOidIndexTable,
+		catconstants.PgCatalogTriggerTableID:                            pgCatalogTriggerTable,
+		catconstants.PgCatalogTriggerTgconstraintIndexTableID:           pgCatalogTriggerTgconstraintIndexTable,
+		catconstants.PgCatalogTsConfigMapIndexTableID:                   pgCatalogTsConfigMapIndexTable,
+		catconstants.PgCatalogTsConfigMapTableID:                        pgCatalogTsConfigMapTable,
+		catconstants.PgCatalogTsConfigOidIndexTableID:                   pgCatalogTsConfigOidIndexTable,
+		catconstants.PgCatalogTsConfigTableID:                           pgCatalogTsConfigTable,
+		catconstants.PgCatalogTsDictOidIndexTableID:                     pgCatalogTsDictOidIndexTable,
+		catconstants.PgCatalogTsDictTableID:                             pgCatalogTsDictTable,
+		catconstants.PgCatalogTsParserOidIndexTableID:                   pgCatalogTsParserOidIndexTable,
+		catconstants.PgCatalogTsParserTableID:                           pgCatalogTsParserTable,
+		catconstants.PgCatalogTsTemplateOidIndexTableID:                 pgCatalogTsTemplateOidIndexTable,
+		catconstants.PgCatalogTsTemplateTableID:                         pgCatalogTsTemplateTable,
+		catconstants.PgCatalogTypeOidIndexTableID:                       pgCatalogTypeOidIndexTable,
+		catconstants.PgCatalogTypeTableID:                               pgCatalogTypeTable,
+		catconstants.PgCatalogUserMappingOidIndexTableID:                pgCatalogUserMappingOidIndexTable,
+		catconstants.PgCatalogUserMappingTableID:                        pgCatalogUserMappingTable,
+		catconstants.PgCatalogUserMappingUserServerIndexTableID:         pgCatalogUserMappingUserServerIndexTable,
+		catconstants.PgCatalogUserMappingsTableID:                       pgCatalogUserMappingsTable,
+		catconstants.PgCatalogUserTableID:                               pgCatalogUserTable,
+		catconstants.PgCatalogViewsTableID:                              pgCatalogViewsTable,
 	},
 	// Postgres's catalogs are ill-defined when there is no current
 	// database set. Simply reject any attempts to use them in that
@@ -433,6 +671,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull,                        // attacl
 				tree.DNull,                        // attoptions
 				tree.DNull,                        // attfdwoptions
+				// These columns were generated automatically by diff tool
+				tree.DNull, // atthasmissing
 			)
 		}
 
@@ -614,6 +854,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			zeroVal,         // relfrozenxid
 			tree.DNull,      // relacl
 			tree.DNull,      // reloptions
+			// These columns were generated automatically by diff tool
+			tree.DNull, // relrowsecurity
+			tree.DNull, // relforcerowsecurity
+			tree.DNull, // relispartition
+			tree.DNull, // relispopulated
+			tree.DNull, // relreplident
+			tree.DNull, // relrewrite
 		); err != nil {
 			return err
 		}
@@ -660,6 +907,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				zeroVal,         // relfrozenxid
 				tree.DNull,      // relacl
 				tree.DNull,      // reloptions
+				// These columns were generated automatically by diff tool
+				tree.DNull, // relrowsecurity
+				tree.DNull, // relforcerowsecurity
+				tree.DNull, // relispartition
+				tree.DNull, // relispopulated
+				tree.DNull, // relreplident
+				tree.DNull, // relrewrite
 			)
 		})
 	})
@@ -683,6 +937,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					// required by LC_COLLATE and LC_CTYPE.
 					tree.DNull, // collcollate
 					tree.DNull, // collctype
+					// These columns were generated automatically by diff tool
+					tree.DNull, // collprovider
+					tree.DNull, // collversion
+					tree.DNull, // collisdeterministic
 				)
 			}
 			if err := add(tree.DefaultCollationTag); err != nil {
@@ -1520,6 +1778,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						indoptionIntVector,                           // indoption
 						tree.DNull,                                   // indexprs
 						tree.DNull,                                   // indpred
+						// These columns were generated automatically by diff tool
+						tree.DNull, // indnkeyatts
 					)
 				})
 			})
@@ -2018,6 +2278,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							tree.DNull,                                      // probin
 							tree.DNull,                                      // proconfig
 							tree.DNull,                                      // proacl
+							// These columns were generated automatically by diff tool
+							tree.DNull, // prokind
+							tree.DNull, // prosupport
 						)
 						if err != nil {
 							return err
@@ -2104,7 +2367,7 @@ https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
 	},
 }
 
-var pgCatalogSequencesTable = virtualSchemaTable{
+var pgCatalogSequenceTable = virtualSchemaTable{
 	comment: `sequences (see also information_schema.sequences)
 https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
 	schema: vtable.PGCatalogSequence,
@@ -2528,6 +2791,1182 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html`,
 	},
 }
 
+var pgCatalogPoliciesTable = virtualSchemaTable{
+	comment: "pg_policies is not implemented yet",
+	schema:  vtable.PgCatalogPolicies,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConstraintOidIndexTable = virtualSchemaTable{
+	comment: "pg_constraint_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogConstraintOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatSysTablesTable = virtualSchemaTable{
+	comment: "pg_stat_sys_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatSysTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogOpfamilyTable = virtualSchemaTable{
+	comment: "pg_opfamily is not implemented yet",
+	schema:  vtable.PgCatalogOpfamily,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatXactSysTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_sys_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatXactSysTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatAllTablesTable = virtualSchemaTable{
+	comment: "pg_stat_all_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatAllTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAuthMembersRoleMemberIndexTable = virtualSchemaTable{
+	comment: "pg_auth_members_role_member_index is not implemented yet",
+	schema:  vtable.PgCatalogAuthMembersRoleMemberIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatXactUserFunctionsTable = virtualSchemaTable{
+	comment: "pg_stat_xact_user_functions is not implemented yet",
+	schema:  vtable.PgCatalogStatXactUserFunctions,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAvailableExtensionVersionsTable = virtualSchemaTable{
+	comment: "pg_available_extension_versions is not implemented yet",
+	schema:  vtable.PgCatalogAvailableExtensionVersions,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogOpfamilyOidIndexTable = virtualSchemaTable{
+	comment: "pg_opfamily_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogOpfamilyOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogClassTblspcRelfilenodeIndexTable = virtualSchemaTable{
+	comment: "pg_class_tblspc_relfilenode_index is not implemented yet",
+	schema:  vtable.PgCatalogClassTblspcRelfilenodeIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAuthMembersMemberRoleIndexTable = virtualSchemaTable{
+	comment: "pg_auth_members_member_role_index is not implemented yet",
+	schema:  vtable.PgCatalogAuthMembersMemberRoleIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogInheritsRelidSeqnoIndexTable = virtualSchemaTable{
+	comment: "pg_inherits_relid_seqno_index is not implemented yet",
+	schema:  vtable.PgCatalogInheritsRelidSeqnoIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatSslTable = virtualSchemaTable{
+	comment: "pg_stat_ssl is not implemented yet",
+	schema:  vtable.PgCatalogStatSsl,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatUserIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_user_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatUserIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogCursorsTable = virtualSchemaTable{
+	comment: "pg_cursors is not implemented yet",
+	schema:  vtable.PgCatalogCursors,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatGssapiTable = virtualSchemaTable{
+	comment: "pg_stat_gssapi is not implemented yet",
+	schema:  vtable.PgCatalogStatGssapi,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogOperatorOidIndexTable = virtualSchemaTable{
+	comment: "pg_operator_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogOperatorOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConversionOidIndexTable = virtualSchemaTable{
+	comment: "pg_conversion_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogConversionOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDependDependerIndexTable = virtualSchemaTable{
+	comment: "pg_depend_depender_index is not implemented yet",
+	schema:  vtable.PgCatalogDependDependerIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogReplicationOriginRonameIndexTable = virtualSchemaTable{
+	comment: "pg_replication_origin_roname_index is not implemented yet",
+	schema:  vtable.PgCatalogReplicationOriginRonameIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConfigTable = virtualSchemaTable{
+	comment: "pg_config is not implemented yet",
+	schema:  vtable.PgCatalogConfig,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogLargeobjectLoidPnIndexTable = virtualSchemaTable{
+	comment: "pg_largeobject_loid_pn_index is not implemented yet",
+	schema:  vtable.PgCatalogLargeobjectLoidPnIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsConfigTable = virtualSchemaTable{
+	comment: "pg_ts_config is not implemented yet",
+	schema:  vtable.PgCatalogTsConfig,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogGroupTable = virtualSchemaTable{
+	comment: "pg_group is not implemented yet",
+	schema:  vtable.PgCatalogGroup,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDbRoleSettingDatabaseidRolIndexTable = virtualSchemaTable{
+	comment: "pg_db_role_setting_databaseid_rol_index is not implemented yet",
+	schema:  vtable.PgCatalogDbRoleSettingDatabaseidRolIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatUserFunctionsTable = virtualSchemaTable{
+	comment: "pg_stat_user_functions is not implemented yet",
+	schema:  vtable.PgCatalogStatUserFunctions,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogIndexIndrelidIndexTable = virtualSchemaTable{
+	comment: "pg_index_indrelid_index is not implemented yet",
+	schema:  vtable.PgCatalogIndexIndrelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationOidIndexTable = virtualSchemaTable{
+	comment: "pg_publication_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogPublicationOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioUserTablesTable = virtualSchemaTable{
+	comment: "pg_statio_user_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatioUserTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPartitionedTablePartrelidIndexTable = virtualSchemaTable{
+	comment: "pg_partitioned_table_partrelid_index is not implemented yet",
+	schema:  vtable.PgCatalogPartitionedTablePartrelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatXactUserTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_user_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatXactUserTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsConfigMapIndexTable = virtualSchemaTable{
+	comment: "pg_ts_config_map_index is not implemented yet",
+	schema:  vtable.PgCatalogTsConfigMapIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationTable = virtualSchemaTable{
+	comment: "pg_publication is not implemented yet",
+	schema:  vtable.PgCatalogPublication,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationTablesTable = virtualSchemaTable{
+	comment: "pg_publication_tables is not implemented yet",
+	schema:  vtable.PgCatalogPublicationTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogFileSettingsTable = virtualSchemaTable{
+	comment: "pg_file_settings is not implemented yet",
+	schema:  vtable.PgCatalogFileSettings,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogReplicationOriginRoiidentIndexTable = virtualSchemaTable{
+	comment: "pg_replication_origin_roiident_index is not implemented yet",
+	schema:  vtable.PgCatalogReplicationOriginRoiidentIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatProgressVacuumTable = virtualSchemaTable{
+	comment: "pg_stat_progress_vacuum is not implemented yet",
+	schema:  vtable.PgCatalogStatProgressVacuum,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogLargeobjectMetadataOidIndexTable = virtualSchemaTable{
+	comment: "pg_largeobject_metadata_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogLargeobjectMetadataOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatArchiverTable = virtualSchemaTable{
+	comment: "pg_stat_archiver is not implemented yet",
+	schema:  vtable.PgCatalogStatArchiver,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioSysSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_sequences is not implemented yet",
+	schema:  vtable.PgCatalogStatioSysSequences,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioAllIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_all_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatioAllIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShseclabelObjectIndexTable = virtualSchemaTable{
+	comment: "pg_shseclabel_object_index is not implemented yet",
+	schema:  vtable.PgCatalogShseclabelObjectIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogEnumOidIndexTable = virtualSchemaTable{
+	comment: "pg_enum_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogEnumOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatisticRelidAttInhIndexTable = virtualSchemaTable{
+	comment: "pg_statistic_relid_att_inh_index is not implemented yet",
+	schema:  vtable.PgCatalogStatisticRelidAttInhIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmopTable = virtualSchemaTable{
+	comment: "pg_amop is not implemented yet",
+	schema:  vtable.PgCatalogAmop,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatDatabaseConflictsTable = virtualSchemaTable{
+	comment: "pg_stat_database_conflicts is not implemented yet",
+	schema:  vtable.PgCatalogStatDatabaseConflicts,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTablespaceOidIndexTable = virtualSchemaTable{
+	comment: "pg_tablespace_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTablespaceOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogCollationOidIndexTable = virtualSchemaTable{
+	comment: "pg_collation_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogCollationOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSubscriptionTable = virtualSchemaTable{
+	comment: "pg_subscription is not implemented yet",
+	schema:  vtable.PgCatalogSubscription,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogNamespaceOidIndexTable = virtualSchemaTable{
+	comment: "pg_namespace_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogNamespaceOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogOpclassOidIndexTable = virtualSchemaTable{
+	comment: "pg_opclass_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogOpclassOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSequenceSeqrelidIndexTable = virtualSchemaTable{
+	comment: "pg_sequence_seqrelid_index is not implemented yet",
+	schema:  vtable.PgCatalogSequenceSeqrelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTriggerOidIndexTable = virtualSchemaTable{
+	comment: "pg_trigger_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTriggerOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogClassOidIndexTable = virtualSchemaTable{
+	comment: "pg_class_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogClassOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogRangeRngtypidIndexTable = virtualSchemaTable{
+	comment: "pg_range_rngtypid_index is not implemented yet",
+	schema:  vtable.PgCatalogRangeRngtypidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDescriptionOCOIndexTable = virtualSchemaTable{
+	comment: "pg_description_o_c_o_index is not implemented yet",
+	schema:  vtable.PgCatalogDescriptionOCOIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTransformTable = virtualSchemaTable{
+	comment: "pg_transform is not implemented yet",
+	schema:  vtable.PgCatalogTransform,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTimezoneAbbrevsTable = virtualSchemaTable{
+	comment: "pg_timezone_abbrevs is not implemented yet",
+	schema:  vtable.PgCatalogTimezoneAbbrevs,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsParserOidIndexTable = virtualSchemaTable{
+	comment: "pg_ts_parser_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTsParserOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShdependReferenceIndexTable = virtualSchemaTable{
+	comment: "pg_shdepend_reference_index is not implemented yet",
+	schema:  vtable.PgCatalogShdependReferenceIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogForeignDataWrapperOidIndexTable = virtualSchemaTable{
+	comment: "pg_foreign_data_wrapper_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogForeignDataWrapperOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsConfigOidIndexTable = virtualSchemaTable{
+	comment: "pg_ts_config_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTsConfigOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogExtensionOidIndexTable = virtualSchemaTable{
+	comment: "pg_extension_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogExtensionOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioUserSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_user_sequences is not implemented yet",
+	schema:  vtable.PgCatalogStatioUserSequences,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsDictOidIndexTable = virtualSchemaTable{
+	comment: "pg_ts_dict_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTsDictOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogInitPrivsOCOIndexTable = virtualSchemaTable{
+	comment: "pg_init_privs_o_c_o_index is not implemented yet",
+	schema:  vtable.PgCatalogInitPrivsOCOIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConstraintContypidIndexTable = virtualSchemaTable{
+	comment: "pg_constraint_contypid_index is not implemented yet",
+	schema:  vtable.PgCatalogConstraintContypidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatProgressCreateIndexTable = virtualSchemaTable{
+	comment: "pg_stat_progress_create_index is not implemented yet",
+	schema:  vtable.PgCatalogStatProgressCreateIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTransformTypeLangIndexTable = virtualSchemaTable{
+	comment: "pg_transform_type_lang_index is not implemented yet",
+	schema:  vtable.PgCatalogTransformTypeLangIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogUserMappingsTable = virtualSchemaTable{
+	comment: "pg_user_mappings is not implemented yet",
+	schema:  vtable.PgCatalogUserMappings,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDefaultACLRoleNspObjIndexTable = virtualSchemaTable{
+	comment: "pg_default_acl_role_nsp_obj_index is not implemented yet",
+	schema:  vtable.PgCatalogDefaultACLRoleNspObjIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatSlruTable = virtualSchemaTable{
+	comment: "pg_stat_slru is not implemented yet",
+	schema:  vtable.PgCatalogStatSlru,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioSysTablesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatioSysTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioAllSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_all_sequences is not implemented yet",
+	schema:  vtable.PgCatalogStatioAllSequences,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAuthidOidIndexTable = virtualSchemaTable{
+	comment: "pg_authid_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogAuthidOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShmemAllocationsTable = virtualSchemaTable{
+	comment: "pg_shmem_allocations is not implemented yet",
+	schema:  vtable.PgCatalogShmemAllocations,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPolicyOidIndexTable = virtualSchemaTable{
+	comment: "pg_policy_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogPolicyOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShdependDependerIndexTable = virtualSchemaTable{
+	comment: "pg_shdepend_depender_index is not implemented yet",
+	schema:  vtable.PgCatalogShdependDependerIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogCastOidIndexTable = virtualSchemaTable{
+	comment: "pg_cast_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogCastOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConstraintConparentidIndexTable = virtualSchemaTable{
+	comment: "pg_constraint_conparentid_index is not implemented yet",
+	schema:  vtable.PgCatalogConstraintConparentidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioSysIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatioSysIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAttributeRelidAttnumIndexTable = virtualSchemaTable{
+	comment: "pg_attribute_relid_attnum_index is not implemented yet",
+	schema:  vtable.PgCatalogAttributeRelidAttnumIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogEventTriggerOidIndexTable = virtualSchemaTable{
+	comment: "pg_event_trigger_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogEventTriggerOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmprocTable = virtualSchemaTable{
+	comment: "pg_amproc is not implemented yet",
+	schema:  vtable.PgCatalogAmproc,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShadowTable = virtualSchemaTable{
+	comment: "pg_shadow is not implemented yet",
+	schema:  vtable.PgCatalogShadow,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogConversionDefaultIndexTable = virtualSchemaTable{
+	comment: "pg_conversion_default_index is not implemented yet",
+	schema:  vtable.PgCatalogConversionDefaultIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatisticExtTable = virtualSchemaTable{
+	comment: "pg_statistic_ext is not implemented yet",
+	schema:  vtable.PgCatalogStatisticExt,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmprocFamProcIndexTable = virtualSchemaTable{
+	comment: "pg_amproc_fam_proc_index is not implemented yet",
+	schema:  vtable.PgCatalogAmprocFamProcIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAggregateFnoidIndexTable = virtualSchemaTable{
+	comment: "pg_aggregate_fnoid_index is not implemented yet",
+	schema:  vtable.PgCatalogAggregateFnoidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatProgressBasebackupTable = virtualSchemaTable{
+	comment: "pg_stat_progress_basebackup is not implemented yet",
+	schema:  vtable.PgCatalogStatProgressBasebackup,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTriggerTgconstraintIndexTable = virtualSchemaTable{
+	comment: "pg_trigger_tgconstraint_index is not implemented yet",
+	schema:  vtable.PgCatalogTriggerTgconstraintIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsTemplateTable = virtualSchemaTable{
+	comment: "pg_ts_template is not implemented yet",
+	schema:  vtable.PgCatalogTsTemplate,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogCastSourceTargetIndexTable = virtualSchemaTable{
+	comment: "pg_cast_source_target_index is not implemented yet",
+	schema:  vtable.PgCatalogCastSourceTargetIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTypeOidIndexTable = virtualSchemaTable{
+	comment: "pg_type_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTypeOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatisticExtDataStxoidIndexTable = virtualSchemaTable{
+	comment: "pg_statistic_ext_data_stxoid_index is not implemented yet",
+	schema:  vtable.PgCatalogStatisticExtDataStxoidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTransformOidIndexTable = virtualSchemaTable{
+	comment: "pg_transform_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTransformOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDefaultACLOidIndexTable = virtualSchemaTable{
+	comment: "pg_default_acl_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogDefaultACLOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogForeignServerOidIndexTable = virtualSchemaTable{
+	comment: "pg_foreign_server_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogForeignServerOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmopOprFamIndexTable = virtualSchemaTable{
+	comment: "pg_amop_opr_fam_index is not implemented yet",
+	schema:  vtable.PgCatalogAmopOprFamIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogUserMappingOidIndexTable = virtualSchemaTable{
+	comment: "pg_user_mapping_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogUserMappingOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogHbaFileRulesTable = virtualSchemaTable{
+	comment: "pg_hba_file_rules is not implemented yet",
+	schema:  vtable.PgCatalogHbaFileRules,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogLanguageOidIndexTable = virtualSchemaTable{
+	comment: "pg_language_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogLanguageOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDbRoleSettingTable = virtualSchemaTable{
+	comment: "pg_db_role_setting is not implemented yet",
+	schema:  vtable.PgCatalogDbRoleSetting,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatProgressAnalyzeTable = virtualSchemaTable{
+	comment: "pg_stat_progress_analyze is not implemented yet",
+	schema:  vtable.PgCatalogStatProgressAnalyze,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogReplicationOriginTable = virtualSchemaTable{
+	comment: "pg_replication_origin is not implemented yet",
+	schema:  vtable.PgCatalogReplicationOrigin,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDependReferenceIndexTable = virtualSchemaTable{
+	comment: "pg_depend_reference_index is not implemented yet",
+	schema:  vtable.PgCatalogDependReferenceIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmOidIndexTable = virtualSchemaTable{
+	comment: "pg_am_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogAmOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioAllTablesTable = virtualSchemaTable{
+	comment: "pg_statio_all_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatioAllTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatioUserIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_user_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatioUserIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatSysIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_sys_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatSysIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatBgwriterTable = virtualSchemaTable{
+	comment: "pg_stat_bgwriter is not implemented yet",
+	schema:  vtable.PgCatalogStatBgwriter,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAttrdefAdrelidAdnumIndexTable = virtualSchemaTable{
+	comment: "pg_attrdef_adrelid_adnum_index is not implemented yet",
+	schema:  vtable.PgCatalogAttrdefAdrelidAdnumIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationRelPrrelidPrpubidIndexTable = virtualSchemaTable{
+	comment: "pg_publication_rel_prrelid_prpubid_index is not implemented yet",
+	schema:  vtable.PgCatalogPublicationRelPrrelidPrpubidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogInheritsParentIndexTable = virtualSchemaTable{
+	comment: "pg_inherits_parent_index is not implemented yet",
+	schema:  vtable.PgCatalogInheritsParentIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsDictTable = virtualSchemaTable{
+	comment: "pg_ts_dict is not implemented yet",
+	schema:  vtable.PgCatalogTsDict,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatisticExtOidIndexTable = virtualSchemaTable{
+	comment: "pg_statistic_ext_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogStatisticExtOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogForeignTableRelidIndexTable = virtualSchemaTable{
+	comment: "pg_foreign_table_relid_index is not implemented yet",
+	schema:  vtable.PgCatalogForeignTableRelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogUserMappingUserServerIndexTable = virtualSchemaTable{
+	comment: "pg_user_mapping_user_server_index is not implemented yet",
+	schema:  vtable.PgCatalogUserMappingUserServerIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSeclabelObjectIndexTable = virtualSchemaTable{
+	comment: "pg_seclabel_object_index is not implemented yet",
+	schema:  vtable.PgCatalogSeclabelObjectIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSubscriptionRelSrrelidSrsubidIndexTable = virtualSchemaTable{
+	comment: "pg_subscription_rel_srrelid_srsubid_index is not implemented yet",
+	schema:  vtable.PgCatalogSubscriptionRelSrrelidSrsubidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationRelOidIndexTable = virtualSchemaTable{
+	comment: "pg_publication_rel_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogPublicationRelOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogLargeobjectTable = virtualSchemaTable{
+	comment: "pg_largeobject is not implemented yet",
+	schema:  vtable.PgCatalogLargeobject,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogPublicationRelTable = virtualSchemaTable{
+	comment: "pg_publication_rel is not implemented yet",
+	schema:  vtable.PgCatalogPublicationRel,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatUserTablesTable = virtualSchemaTable{
+	comment: "pg_stat_user_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatUserTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatProgressClusterTable = virtualSchemaTable{
+	comment: "pg_stat_progress_cluster is not implemented yet",
+	schema:  vtable.PgCatalogStatProgressCluster,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatXactAllTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_all_tables is not implemented yet",
+	schema:  vtable.PgCatalogStatXactAllTables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatDatabaseTable = virtualSchemaTable{
+	comment: "pg_stat_database is not implemented yet",
+	schema:  vtable.PgCatalogStatDatabase,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogShdescriptionOCIndexTable = virtualSchemaTable{
+	comment: "pg_shdescription_o_c_index is not implemented yet",
+	schema:  vtable.PgCatalogShdescriptionOCIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogRewriteOidIndexTable = virtualSchemaTable{
+	comment: "pg_rewrite_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogRewriteOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatAllIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_all_indexes is not implemented yet",
+	schema:  vtable.PgCatalogStatAllIndexes,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSubscriptionOidIndexTable = virtualSchemaTable{
+	comment: "pg_subscription_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogSubscriptionOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogEnumTypidSortorderIndexTable = virtualSchemaTable{
+	comment: "pg_enum_typid_sortorder_index is not implemented yet",
+	schema:  vtable.PgCatalogEnumTypidSortorderIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsParserTable = virtualSchemaTable{
+	comment: "pg_ts_parser is not implemented yet",
+	schema:  vtable.PgCatalogTsParser,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmopFamStratIndexTable = virtualSchemaTable{
+	comment: "pg_amop_fam_strat_index is not implemented yet",
+	schema:  vtable.PgCatalogAmopFamStratIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogProcOidIndexTable = virtualSchemaTable{
+	comment: "pg_proc_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogProcOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogDatabaseOidIndexTable = virtualSchemaTable{
+	comment: "pg_database_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogDatabaseOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTimezoneNamesTable = virtualSchemaTable{
+	comment: "pg_timezone_names is not implemented yet",
+	schema:  vtable.PgCatalogTimezoneNames,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsConfigMapTable = virtualSchemaTable{
+	comment: "pg_ts_config_map is not implemented yet",
+	schema:  vtable.PgCatalogTsConfigMap,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAttrdefOidIndexTable = virtualSchemaTable{
+	comment: "pg_attrdef_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogAttrdefOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmopOidIndexTable = virtualSchemaTable{
+	comment: "pg_amop_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogAmopOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogAmprocOidIndexTable = virtualSchemaTable{
+	comment: "pg_amproc_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogAmprocOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogRulesTable = virtualSchemaTable{
+	comment: "pg_rules is not implemented yet",
+	schema:  vtable.PgCatalogRules,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogTsTemplateOidIndexTable = virtualSchemaTable{
+	comment: "pg_ts_template_oid_index is not implemented yet",
+	schema:  vtable.PgCatalogTsTemplateOidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogStatisticExtRelidIndexTable = virtualSchemaTable{
+	comment: "pg_statistic_ext_relid_index is not implemented yet",
+	schema:  vtable.PgCatalogStatisticExtRelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogIndexIndexrelidIndexTable = virtualSchemaTable{
+	comment: "pg_index_indexrelid_index is not implemented yet",
+	schema:  vtable.PgCatalogIndexIndexrelidIndex,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogSequencesTable = virtualSchemaTable{
+	comment: "pg_sequences is not implemented yet",
+	schema:  vtable.PgCatalogSequences,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
@@ -2697,6 +4136,9 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 							tree.DNull,        // aggmtransspace
 							tree.DNull,        // agginitval
 							tree.DNull,        // aggminitval
+							// These columns were generated automatically by diff tool
+							tree.DNull, // aggmfinalmodify
+							tree.DNull, // aggfinalmodify
 						)
 						if err != nil {
 							return err
