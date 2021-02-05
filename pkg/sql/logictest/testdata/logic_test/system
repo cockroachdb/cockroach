@@ -16,6 +16,7 @@ public  eventlog                         table  NULL  NULL  NULL
 public  jobs                             table  NULL  NULL  NULL
 public  lease                            table  NULL  NULL  NULL
 public  locations                        table  NULL  NULL  NULL
+public  migrations                       table  NULL  NULL  NULL
 public  namespace                        table  NULL  NULL  NULL
 public  namespace2                       table  NULL  NULL  NULL
 public  protected_ts_meta                table  NULL  NULL  NULL
@@ -73,6 +74,7 @@ SELECT id FROM system.descriptor
 36
 37
 39
+40
 50
 51
 52
@@ -246,6 +248,16 @@ system  public  locations                        root    GRANT
 system  public  locations                        root    INSERT
 system  public  locations                        root    SELECT
 system  public  locations                        root    UPDATE
+system  public  migrations                       admin   DELETE
+system  public  migrations                       admin   GRANT
+system  public  migrations                       admin   INSERT
+system  public  migrations                       admin   SELECT
+system  public  migrations                       admin   UPDATE
+system  public  migrations                       root    DELETE
+system  public  migrations                       root    GRANT
+system  public  migrations                       root    INSERT
+system  public  migrations                       root    SELECT
+system  public  migrations                       root    UPDATE
 system  public  namespace                        admin   GRANT
 system  public  namespace                        admin   SELECT
 system  public  namespace                        root    GRANT

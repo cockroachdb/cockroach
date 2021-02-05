@@ -474,9 +474,9 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
 }
 
-// MigrationCluster returns the migration.Cluster if there is one.
-func (p *planner) MigrationCluster() migration.Cluster {
-	return p.execCfg.MigrationCluster
+// MigrationJobDeps returns the migration.JobDeps.
+func (p *planner) MigrationJobDeps() migration.JobDeps {
+	return p.execCfg.MigrationJobDeps
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.
