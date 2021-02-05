@@ -259,9 +259,10 @@ message RaftCommand {
   // to the physical operations being made in the write_batch.
   LogicalOpLog logical_op_log = 15;
 
-  // trace_data, if not empty, contains details of proposer's trace as returned by
-  // Tracer.Inject(opentracing.TextMap). Used to create span for command
-  // application on all the replicas that "follow from" the proposer.
+  // trace_data, if not empty, contains details of the proposer's trace as
+  // returned by Tracer.InjectMetaInto(sp.Meta(), ...). This is used to create
+  // spans for the command application process on all the replicas that "follow
+  // from" the proposer.
   map<string, string> trace_data = 16;
 
   reserved 1, 2, 10001 to 10014;

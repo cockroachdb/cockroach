@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestRecordingString(t *testing.T) {
@@ -36,18 +36,19 @@ func TestRecordingString(t *testing.T) {
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
 
-	carrier := make(opentracing.HTTPHeadersCarrier)
-	err := tr.Inject(root.Meta(), opentracing.HTTPHeaders, carrier)
+	carrier := metadataCarrier{MD: metadata.MD{}}
+	require.NoError(t, tr.InjectMetaInto(root.Meta(), carrier))
+
+	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
-	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
-	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireContext))
+
+	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireSpanMeta))
 	root.Record("root 2")
 	remoteChild.Record("remote child 1")
-	require.NoError(t, err)
 	remoteChild.Finish()
+
 	remoteRec := remoteChild.GetRecording()
-	err = root.ImportRemoteSpans(remoteRec)
-	require.NoError(t, err)
+	require.NoError(t, root.ImportRemoteSpans(remoteRec))
 	root.Finish()
 
 	root.Record("root 3")
