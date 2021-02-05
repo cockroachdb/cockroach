@@ -68,6 +68,7 @@ type EvalContext interface {
 	GetTerm(uint64) (uint64, error)
 	GetLeaseAppliedIndex() uint64
 	GetTracker() closedts.TrackerI
+	FrozenClosedTimestamp(ctx context.Context) hlc.Timestamp
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -182,6 +183,9 @@ func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
+	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) FrozenClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {

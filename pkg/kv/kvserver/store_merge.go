@@ -29,6 +29,7 @@ func (s *Store) MergeRange(
 	leftRepl *Replica,
 	newLeftDesc, rightDesc roachpb.RangeDescriptor,
 	freezeStart hlc.ClockTimestamp,
+	rightClosedTS hlc.Timestamp,
 ) error {
 	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
@@ -74,20 +75,36 @@ func (s *Store) MergeRange(
 
 	leftLease, _ := leftRepl.GetLease()
 	rightLease, _ := rightRepl.GetLease()
-	if leftLease.OwnedBy(s.Ident.StoreID) && !rightLease.OwnedBy(s.Ident.StoreID) {
-		// We hold the lease for the LHS, but do not hold the lease for the RHS.
-		// That means we don't have up-to-date timestamp cache entries for the
-		// keyspace previously owned by the RHS. Bump the low water mark for the RHS
-		// keyspace to freezeStart, the time at which the RHS promised to stop
-		// serving traffic, as freezeStart is guaranteed to be greater than any
-		// entry in the RHS's timestamp cache.
-		//
-		// Note that we need to update our clock with freezeStart to preserve the
-		// invariant that our clock is always greater than or equal to any
-		// timestamps in the timestamp cache. For a full discussion, see the comment
-		// on TestStoreRangeMergeTimestampCacheCausality.
-		s.Clock().Update(freezeStart)
-		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart.ToTimestamp())
+	if leftLease.OwnedBy(s.Ident.StoreID) {
+		if !rightLease.OwnedBy(s.Ident.StoreID) {
+			// We hold the lease for the LHS, but do not hold the lease for the RHS.
+			// That means we don't have up-to-date timestamp cache entries for the
+			// keyspace previously owned by the RHS. Bump the low water mark for the RHS
+			// keyspace to freezeStart, the time at which the RHS promised to stop
+			// serving traffic, as freezeStart is guaranteed to be greater than any
+			// entry in the RHS's timestamp cache.
+			//
+			// Note that we need to update our clock with freezeStart to preserve the
+			// invariant that our clock is always greater than or equal to any
+			// timestamps in the timestamp cache. For a full discussion, see the comment
+			// on TestStoreRangeMergeTimestampCacheCausality.
+			s.Clock().Update(freezeStart)
+			setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart.ToTimestamp())
+		}
+		// When merging ranges, the closed timestamp of the RHS can regress. It's
+		// possible that, at subsumption time, the RHS had a high closed timestamp.
+		// Being ingested by the LHS, the closed timestamp of the RHS is lost, and
+		// the LHS's closed timestamp takes over the respective keys. In order to
+		// not violate reads that might have been performed by the RHS according to
+		// the old closed ts (either by the leaseholder or by followers), we bump
+		// the timestamp cache.
+		// In the case when the RHS lease was not collocated with the LHS, this bump
+		// is frequently (but not necessarily) redundant with the bumping to the
+		// freeze time done above.
+		if !rightClosedTS.Synthetic {
+			s.Clock().Update(rightClosedTS.UnsafeToClockTimestamp())
+		}
+		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, rightClosedTS)
 	}
 
 	// Update the subsuming range's descriptor.

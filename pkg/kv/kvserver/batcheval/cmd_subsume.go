@@ -151,6 +151,15 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
+	// FrozenClosedTimestamp might return an empty timestamp if the Raft-based
+	// closed timestamp transport hasn't been enabled yet. That's OK because, if
+	// the new transport is not enabled, then ranges with leading closed
+	// timestamps can't exist yet, and so the closed timestamp must be below the
+	// FreezeStart. The FreezeStart is used by Store.MergeRange to bump the RHS'
+	// ts cache if LHS/RHS leases are not collocated. The case when the leases are
+	// collocated also works out because then the closed timestamp (according to
+	// the old mechanism) is the same for both ranges being merged.
+	reply.ClosedTimestamp = cArgs.EvalCtx.FrozenClosedTimestamp(ctx)
 
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
