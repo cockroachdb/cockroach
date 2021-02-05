@@ -538,14 +538,16 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		visitorSideEffect: func(annot *tree.Annotations, fn *tree.FuncExpr) error {
 			// Get sequence name so that we can update the annotation with the number
 			// of nextval calls to this sequence in a row.
-			seqName, err := sequence.GetSequenceFromFunc(fn)
+			seqIdentifier, err := sequence.GetSequenceFromFunc(fn)
 			if err != nil {
 				return err
+			} else if seqIdentifier.IsByID() {
+				return errors.Newf("referencing sequences by ID is unsupported by IMPORT INTO")
 			}
 			var sequenceMetadata *SequenceMetadata
 			var ok bool
-			if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[*seqName]; !ok {
-				return errors.Newf("sequence %s not found in annotation", *seqName)
+			if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[seqIdentifier.SeqName]; !ok {
+				return errors.Newf("sequence %s not found in annotation", seqIdentifier.SeqName)
 			}
 			sequenceMetadata.instancesPerRow++
 			return nil

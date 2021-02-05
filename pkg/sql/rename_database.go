@@ -296,12 +296,15 @@ func isAllowedDependentDescInRenameDatabase(
 		if err != nil {
 			return false, "", err
 		}
-		seqNames, err := sequence.GetUsedSequenceNames(typedExpr)
+		seqIdentifiers, err := sequence.GetUsedSequences(typedExpr)
 		if err != nil {
 			return false, "", err
 		}
-		for _, seqName := range seqNames {
-			parsedSeqName, err := parser.ParseTableName(seqName)
+		for _, seqIdentifier := range seqIdentifiers {
+			if seqIdentifier.IsByID() {
+				continue
+			}
+			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
 			if err != nil {
 				return false, "", err
 			}
