@@ -105,6 +105,59 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"LINESTRING ZM EMPTY", "LINESTRINGZM EMPTY"},
 			expected:    geom.NewLineString(geom.XYZM),
 		},
+		// POLYGON tests
+		{
+			desc:        "parse 2D polygon",
+			equivInputs: []string{"POLYGON((0 0, 1 -1, 2 0, 0 0))", "POLYGON ((0 0, 1 -1, 2 0, 0 0))"},
+			expected:    geom.NewPolygonFlat(geom.XY, []float64{0, 0, 1, -1, 2, 0, 0, 0}, []int{8}),
+		},
+		{
+			desc:        "parse 2D polygon with hole",
+			equivInputs: []string{"POLYGON((0 0, 0 100, 100 100, 100 0, 0 0),(10 10, 11 11, 12 10, 10 10))"},
+			expected: geom.NewPolygonFlat(geom.XY,
+				[]float64{0, 0, 0, 100, 100, 100, 100, 0, 0, 0, 10, 10, 11, 11, 12, 10, 10, 10}, []int{10, 18}),
+		},
+		{
+			desc:        "parse 2D polygon with two holes",
+			equivInputs: []string{"POLYGON((0 0, 0 100, 100 100, 100 0, 0 0),(10 10, 11 11, 12 10, 10 10), (2 2, 4 4, 5 1, 2 2))"},
+			expected: geom.NewPolygonFlat(geom.XY,
+				[]float64{0, 0, 0, 100, 100, 100, 100, 0, 0, 0, 10, 10, 11, 11, 12, 10, 10, 10, 2, 2, 4, 4, 5, 1, 2, 2}, []int{10, 18, 26}),
+		},
+		{
+			desc:        "parse 2D+M polygon",
+			equivInputs: []string{"POLYGONM((0 0 7, 1 -1 -50, 2 0 0, 0 0 7))", "POLYGON M ((0 0 7, 1 -1 -50, 2 0 0, 0 0 7))"},
+			expected:    geom.NewPolygonFlat(geom.XYM, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
+		},
+		{
+			desc:        "parse 3D polygon",
+			equivInputs: []string{"POLYGON((0 0 7, 1 -1 -50, 2 0 0, 0 0 7))", "POLYGON Z ((0 0 7, 1 -1 -50, 2 0 0, 0 0 7))"},
+			expected:    geom.NewPolygonFlat(geom.XYZ, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
+		},
+		{
+			desc:        "parse 4D polygon",
+			equivInputs: []string{"POLYGON((0 0 12 7, 1 -1 12 -50, 2 0 12 0, 0 0 12 7))", "POLYGON ZM ((0 0 12 7, 1 -1 12 -50, 2 0 12 0, 0 0 12 7))"},
+			expected:    geom.NewPolygonFlat(geom.XYZM, []float64{0, 0, 12, 7, 1, -1, 12, -50, 2, 0, 12, 0, 0, 0, 12, 7}, []int{16}),
+		},
+		{
+			desc:        "parse empty 2D polygon",
+			equivInputs: []string{"POLYGON EMPTY"},
+			expected:    geom.NewPolygon(geom.XY),
+		},
+		{
+			desc:        "parse empty 2D+M polygon",
+			equivInputs: []string{"POLYGON M EMPTY", "POLYGONM EMPTY"},
+			expected:    geom.NewPolygon(geom.XYM),
+		},
+		{
+			desc:        "parse empty 3D polygon",
+			equivInputs: []string{"POLYGON Z EMPTY", "POLYGONZ EMPTY"},
+			expected:    geom.NewPolygon(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 4D polygon",
+			equivInputs: []string{"POLYGON ZM EMPTY", "POLYGONZM EMPTY"},
+			expected:    geom.NewPolygon(geom.XYZM),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -147,6 +200,13 @@ DOT(0 0)
 POINT(2 2.3.7)
         ^`,
 		},
+		{
+			desc:  "invalid keyword when extraneous spaces are present in ZM",
+			input: "POINT Z M (1 1 1 1)",
+			expectedErrStr: `lex error: invalid keyword at pos 8
+POINT Z M (1 1 1 1)
+        ^`,
+		},
 		// ParseError
 		{
 			desc:  "invalid point",
@@ -163,11 +223,53 @@ POINT(0, 0)
        ^`,
 		},
 		{
+			desc:  "2D linestring with not enough points",
+			input: "LINESTRING(0 0)",
+			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 14
+LINESTRING(0 0)
+              ^`,
+		},
+		{
 			desc:  "linestring with mixed dimensionality",
 			input: "LINESTRING(0 0, 1 1 1)",
 			expectedErrStr: `syntax error: unexpected NUM, expecting ')' at pos 20
 LINESTRING(0 0, 1 1 1)
                     ^`,
+		},
+		{
+			desc:  "2D polygon with not enough points",
+			input: "POLYGON((0 0, 1 1, 2 0))",
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 22
+POLYGON((0 0, 1 1, 2 0))
+                      ^`,
+		},
+		{
+			desc:  "2D polygon with ring that isn't closed",
+			input: "POLYGON((0 0, 1 1, 2 0, 1 -1))",
+			expectedErrStr: `syntax error: polygon ring not closed at pos 28
+POLYGON((0 0, 1 1, 2 0, 1 -1))
+                            ^`,
+		},
+		{
+			desc:  "2D polygon with empty second ring",
+			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), ())",
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 32
+POLYGON((0 0, 1 -1, 2 0, 0 0), ())
+                                ^`,
+		},
+		{
+			desc:  "2D polygon with EMPTY as second ring",
+			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)",
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at pos 31
+POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)
+                               ^`,
+		},
+		{
+			desc:  "2D polygon with invalid second ring",
+			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))",
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 40
+POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))
+                                        ^`,
 		},
 	}
 
