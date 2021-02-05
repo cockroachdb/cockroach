@@ -213,6 +213,34 @@ func TestSpanRecordStructured(t *testing.T) {
 	`))
 }
 
+func TestSpanRecordStructuredLimit(t *testing.T) {
+	tr := NewTracer()
+	tr._mode = int32(modeBackground)
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+
+	const extra = 10
+	for i := int32(1); i <= maxStructuredEventsPerSpan+extra; i++ {
+		sp.RecordStructured(&types.Int32Value{Value: i})
+	}
+	rec := sp.GetRecording()
+	require.Len(t, rec, 1)
+	require.Len(t, rec[0].InternalStructured, maxStructuredEventsPerSpan)
+
+	first := rec[0].InternalStructured[0]
+	last := rec[0].InternalStructured[len(rec[0].InternalStructured)-1]
+	var d1 types.DynamicAny
+	require.NoError(t, types.UnmarshalAny(first, &d1))
+	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
+
+	var res int32
+	require.NoError(t, types.StdInt32Unmarshal(&res, first.Value))
+	require.Equal(t, res, int32(maxStructuredEventsPerSpan+extra))
+
+	require.NoError(t, types.StdInt32Unmarshal(&res, last.Value))
+	require.Equal(t, res, int32(extra+1))
+}
+
 func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	tr := NewTracer()
 	tr._mode = int32(modeBackground)
