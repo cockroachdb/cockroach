@@ -98,7 +98,7 @@ type PlanHookState interface {
 	) (string, error)
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
-	MigrationCluster() migration.Cluster
+	MigrationRunDependencies() migration.RunDependencies
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

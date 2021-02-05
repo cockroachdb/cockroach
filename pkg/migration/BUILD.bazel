@@ -10,10 +10,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
         "@com_github_cockroachdb_logtags//:logtags",
     ],

@@ -203,6 +203,24 @@ const (
 	CPutInline
 	// ReplicaVersions enables the versioning of Replica state.
 	ReplicaVersions
+	// replacedTruncatedAndRangeAppliedStateMigration stands in for
+	// TruncatedAndRangeAppliedStateMigration which was	re-introduced after the
+	// migration job was introduced. This is necessary because the jobs
+	// infrastructure used to run this migration in v21.1 and its later alphas
+	// was introduced after this version was first introduced. Later code in the
+	// release relies on the job to run the migration but the job relies on
+	// its startup migrations having been run. Versions associated with long
+	// running migrations must follow LongRunningMigrations.
+	replacedTruncatedAndRangeAppliedStateMigration
+	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
+	// version. See its comment.
+	replacedPostTruncatedAndRangeAppliedStateMigration
+	// NewSchemaChanger enables the new schema changer.
+	NewSchemaChanger
+	// LongRunningMigrations introduces the LongRunningMigrations table and jobs.
+	// All versions which have a registered long-running migration must have a
+	// version higher than this version.
+	LongRunningMigrations
 	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
 	// using the legacy truncated state within KV. After the migration, we'll be
 	// using the unreplicated truncated state and the RangeAppliedState on all
@@ -217,8 +235,6 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
-	// NewSchemaChanger enables the new schema changer.
-	NewSchemaChanger
 
 	// Step (1): Add new versions here.
 )
@@ -350,16 +366,28 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 12},
 	},
 	{
-		Key:     TruncatedAndRangeAppliedStateMigration,
+		Key:     replacedTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 14},
 	},
 	{
-		Key:     PostTruncatedAndRangeAppliedStateMigration,
+		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
 	},
 	{
 		Key:     NewSchemaChanger,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
+	},
+	{
+		Key:     LongRunningMigrations,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 20},
+	},
+	{
+		Key:     TruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     PostTruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
 	},
 	// Step (2): Add new versions here.
 })

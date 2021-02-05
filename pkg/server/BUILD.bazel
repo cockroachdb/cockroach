@@ -76,7 +76,6 @@ go_library(
         "//pkg/kv/kvserver/reports",
         "//pkg/migration/migrationcluster",
         "//pkg/migration/migrationmanager",
-        "//pkg/migration/migrations",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
