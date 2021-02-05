@@ -151,6 +151,10 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
+	closedTS, ok := cArgs.EvalCtx.MaxClosedTimestamp(ctx)
+	if ok {
+		reply.ClosedTS = closedTS
+	}
 
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
