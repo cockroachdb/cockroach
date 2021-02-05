@@ -2317,7 +2317,7 @@ func newTableDesc(
 		}
 		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if seqName != nil {
-			if err := doCreateSequence(
+			seqID, err := doCreateSequence(
 				params,
 				n.String(),
 				seqDbDesc,
@@ -2326,9 +2326,28 @@ func newTableDesc(
 				n.Persistence,
 				seqOpts,
 				fmt.Sprintf("creating sequence %s for new table %s", seqName, n.Table.Table()),
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
 			}
+
+			// Replace the default expression's nextval param with a ID::regclass instead of a string.
+			// TODO: Wrap this in some version checks.
+			defaultExpr := &tree.FuncExpr{
+				Func: tree.WrapFunction("nextval"),
+				Exprs: tree.Exprs{
+					&tree.AnnotateTypeExpr{
+						Type:       types.RegClass,
+						SyntaxMode: tree.AnnotateShort,
+						Expr: &tree.CastExpr{
+							Expr:       tree.NewNumVal(constant.MakeInt64(int64(seqID)), "", false),
+							Type:       types.RegClass,
+							SyntaxMode: tree.CastShort,
+						},
+					},
+				},
+			}
+			newDef.DefaultExpr.Expr = defaultExpr
 		}
 		if d != newDef {
 			ensureCopy()
