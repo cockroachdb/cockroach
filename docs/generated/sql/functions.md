@@ -869,6 +869,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tbody>
 <tr><td><a name="gateway_region"></a><code>gateway_region() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
 the locality flag on node startup. Returns an error if no region is set.</p>
+</span></td></tr>
+<tr><td><a name="valid_region_or_primary_region"></a><code>valid_region_or_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region is affiliated with the current database.
+Otherwise, this will return the primary region of the current database.
+This will error if the current database is not a multi-region database.</p>
 </span></td></tr></tbody>
 </table>
 

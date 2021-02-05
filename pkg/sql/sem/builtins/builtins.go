@@ -4742,6 +4742,50 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Volatility: tree.VolatilityStable,
 		},
 	),
+	"valid_region_or_primary_region": makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				r, err := evalCtx.InternalExecutor.QueryRow(
+					evalCtx.Ctx(),
+					"valid_region_or_primary_region",
+					evalCtx.Txn,
+					`SELECT regions @> array[$1::string], primary_region
+				FROM crdb_internal.databases WHERE name = $2`,
+					s,
+					evalCtx.SessionData.Database,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidDatabaseDefinition,
+						"current database %s does not exist",
+						evalCtx.SessionData.Database,
+					)
+				}
+				// If regions is defined on the database, return it.
+				if *(r[0].(*tree.DBool)) {
+					return tree.NewDString(s), nil
+				}
+				// Otherwise, return the primary region.
+				if r[1] == tree.DNull {
+					return nil, pgerror.Newf(
+						pgcode.InvalidDatabaseDefinition,
+						"current database %s is not multi-region enabled",
+						evalCtx.SessionData.Database,
+					)
+				}
+				return r[1], nil
+			},
+			types.String,
+			`Returns the given region if the region is affiliated with the current database.
+	Otherwise, this will return the primary region of the current database.
+	This will error if the current database is not a multi-region database.`,
+			tree.VolatilityStable,
+		),
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
