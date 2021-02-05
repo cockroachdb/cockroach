@@ -54,7 +54,7 @@ func (r *RepeatableRowSource) OutputTypes() []*types.T {
 }
 
 // Start is part of the RowSource interface.
-func (r *RepeatableRowSource) Start(ctx context.Context) context.Context { return ctx }
+func (r *RepeatableRowSource) Start(ctx context.Context) {}
 
 // Next is part of the RowSource interface.
 func (r *RepeatableRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {

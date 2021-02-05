@@ -204,7 +204,7 @@ func TestEval(t *testing.T) {
 				row  rowenc.EncDatumRow
 				meta *execinfrapb.ProducerMetadata
 			)
-			ctx = mat.Start(ctx)
+			mat.Start(ctx)
 			row, meta = mat.Next()
 			if meta != nil {
 				if meta.Err != nil {

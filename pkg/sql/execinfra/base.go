@@ -107,9 +107,9 @@ type RowSource interface {
 	// inputs.
 	//
 	// Implementations are expected to hold on to the provided context. They may
-	// choose to derive and annotate it (Processors generally do). For convenience,
-	// the possibly updated context is returned.
-	Start(context.Context) context.Context
+	// choose to derive and annotate it (Processors generally do, and the
+	// updated context is usually available at ProcessorBase.Ctx).
+	Start(context.Context)
 
 	// Next returns the next record from the source. At most one of the return
 	// values will be non-empty. Both of them can be empty when the RowSource has
@@ -475,7 +475,7 @@ func (rc *RowChannel) OutputTypes() []*types.T {
 }
 
 // Start is part of the RowSource interface.
-func (rc *RowChannel) Start(ctx context.Context) context.Context { return ctx }
+func (rc *RowChannel) Start(ctx context.Context) {}
 
 // Next is part of the RowSource interface.
 func (rc *RowChannel) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {

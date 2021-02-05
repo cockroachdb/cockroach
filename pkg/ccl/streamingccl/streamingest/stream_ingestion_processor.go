@@ -155,8 +155,12 @@ func newStreamIngestionDataProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context {
+func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
+	// Go around "this value of ctx is never used" linter error. We do it this
+	// way instead of omitting the assignment to ctx above so that if in the
+	// future other initialization is added, the correct ctx is used.
+	_ = ctx
 
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
@@ -165,7 +169,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
-		return ctx
+		return
 	}
 
 	// Initialize the event streams.
@@ -175,13 +179,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 		eventCh, err := sip.client.ConsumePartition(sip.Ctx, partitionAddress, startTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
-			return ctx
+			return
 		}
 		eventChs[partitionAddress] = eventCh
 	}
 	sip.eventCh = sip.merge(sip.Ctx, eventChs)
-
-	return ctx
 }
 
 // Next is part of the RowSource interface.

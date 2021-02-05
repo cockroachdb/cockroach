@@ -163,7 +163,7 @@ func (rb *RowBuffer) OutputTypes() []*types.T {
 }
 
 // Start is part of the RowSource interface.
-func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
+func (rb *RowBuffer) Start(ctx context.Context) {}
 
 // Next is part of the RowSource interface.
 //

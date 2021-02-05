@@ -115,7 +115,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 	})
 }
 
-func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
+func (p *planNodeToRowSource) Start(ctx context.Context) {
 	// We do not call p.StartInternal to avoid creating a span. Only the context
 	// needs to be set.
 	p.Ctx = ctx
@@ -125,10 +125,9 @@ func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
 		// This starts all of the nodes below this node.
 		if err := startExec(p.params, p.node); err != nil {
 			p.MoveToDraining(err)
-			return ctx
+			return
 		}
 	}
-	return ctx
 }
 
 func (p *planNodeToRowSource) InternalClose() bool {

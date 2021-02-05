@@ -371,11 +371,10 @@ func valuesSpecToEncDatum(
 }
 
 // Start is part of the RowSource interface.
-func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
+func (z *zigzagJoiner) Start(ctx context.Context) {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
-	return ctx
 }
 
 // zigzagJoinerInfo contains all the information that needs to be

@@ -219,7 +219,11 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 // Run is part of the Processor interface.
 func (s *samplerProcessor) Run(ctx context.Context) {
 	s.input.Start(ctx)
-	s.StartInternal(ctx, samplerProcName)
+	ctx = s.StartInternal(ctx, samplerProcName)
+	// Go around "this value of ctx is never used" linter error. We do it this
+	// way instead of omitting the assignment to ctx above so that if in the
+	// future other initialization is added, the correct ctx is used.
+	_ = ctx
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
