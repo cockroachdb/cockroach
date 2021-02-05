@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,9 +34,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var collectStmtStatsSampleRate = settings.RegisterFloatSetting(
-	"sql.statement_stats.sample_rate",
-	"the probability that a given statement will collect execution statistics (displayed in the DB Console)",
+var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
+	"sql.txn_stats.sample_rate",
+	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
 	0,
 	func(f float64) error {
 		if f < 0 || f > 1 {
@@ -137,7 +136,7 @@ func (ih *instrumentationHelper) Setup(
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
 	implicitTxn bool,
-	rng *rand.Rand,
+	collectExecStats bool,
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
@@ -172,9 +171,7 @@ func (ih *instrumentationHelper) Setup(
 		return ctx, false
 	}
 
-	if statsSampleRate := collectStmtStatsSampleRate.Get(&cfg.Settings.SV); statsSampleRate > 0 {
-		ih.collectExecStats = statsSampleRate > rng.Float64()
-	}
+	ih.collectExecStats = collectExecStats
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
 		if ih.collectExecStats {
@@ -198,6 +195,7 @@ func (ih *instrumentationHelper) Setup(
 func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
 	appStats *appStats,
+	txnStats *execstats.QueryLevelStats,
 	statsCollector *sqlStatsCollector,
 	p *planner,
 	ast tree.Statement,
@@ -249,6 +247,7 @@ func (ih *instrumentationHelper) Finish(
 			)
 			stmtStats.mu.Unlock()
 		}
+		txnStats.Accumulate(queryLevelStats)
 	}
 
 	var bundle diagnosticsBundle

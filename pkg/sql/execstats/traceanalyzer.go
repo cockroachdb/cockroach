@@ -98,6 +98,7 @@ type NodeLevelStats struct {
 
 // QueryLevelStats returns all the query level stats that correspond to the
 // given traces and flow metadata.
+// NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
@@ -106,6 +107,19 @@ type QueryLevelStats struct {
 	KVTime           time.Duration
 	NetworkMessages  int64
 	ContentionTime   time.Duration
+}
+
+// Accumulate accumulates other's stats into the receiver.
+func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
+	s.NetworkBytesSent += other.NetworkBytesSent
+	if other.MaxMemUsage > s.MaxMemUsage {
+		s.MaxMemUsage = other.MaxMemUsage
+	}
+	s.KVBytesRead += other.KVBytesRead
+	s.KVRowsRead += other.KVRowsRead
+	s.KVTime += other.KVTime
+	s.NetworkMessages += other.NetworkMessages
+	s.ContentionTime += other.ContentionTime
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a

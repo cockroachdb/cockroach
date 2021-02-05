@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1041,6 +1042,17 @@ type connExecutor struct {
 		transactionStatementsHash util.FNV64
 
 		schemaChangerState SchemaChangerState
+
+		// shouldCollectExecutionStats specifies whether the statements in this
+		// transaction should collect execution stats.
+		shouldCollectExecutionStats bool
+		// accumulatedStats are the accumulated stats of all statements.
+		accumulatedStats execstats.QueryLevelStats
+		// rowsRead and bytesRead are separate from QueryLevelStats because they are
+		// accumulated independently since they are always collected, as opposed to
+		// QueryLevelStats which are sampled.
+		rowsRead  int64
+		bytesRead int64
 	}
 
 	// sessionData contains the user-configurable connection variables.
