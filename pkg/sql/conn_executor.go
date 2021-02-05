@@ -2239,6 +2239,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.AsOfTimestamp = nil
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
+	p.semaCtx.TableNameResolver = p
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 

@@ -361,3 +361,10 @@ func (r fkResolver) ResolveType(
 ) (*types.T, error) {
 	return nil, errSchemaResolver
 }
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) GetQualifiedTableNameByID(
+	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
+) (*tree.TableName, error) {
+	return nil, errSchemaResolver
+}
