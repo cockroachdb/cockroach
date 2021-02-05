@@ -67,5 +67,6 @@ go_test(
         "@com_github_opentracing_opentracing_go//:opentracing-go",
         "@com_github_opentracing_opentracing_go//log",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//metadata",
     ],
 )
