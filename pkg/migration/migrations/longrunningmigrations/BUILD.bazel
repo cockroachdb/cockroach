@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "longrunningmigrations",
+    srcs = ["long_running_migrations.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations/longrunningmigrations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/migration",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sqlmigrations",
+    ],
+)

@@ -22,9 +22,17 @@ import (
 // bump of the corresponding version gate.
 var registry = make(map[clusterversion.ClusterVersion]Migration)
 
-// Register is a short hand to Register a given migration within the global
+// RegisterKVMigration is a short hand to RegisterKVMigration a given migration within the global
 // registry.
-func Register(key clusterversion.Key, fn MigrationFn, desc string) {
+func RegisterKVMigration(key clusterversion.Key, fn KVMigrationFn, desc string) {
+	RegisterSQLMigration(key, func(
+		ctx context.Context, version clusterversion.ClusterVersion, deps SQLDeps,
+	) error {
+		return fn(ctx, version, deps.Cluster)
+	}, desc)
+}
+
+func RegisterSQLMigration(key clusterversion.Key, fn SQLMigrationFn, desc string) {
 	cv := clusterversion.ClusterVersion{Version: clusterversion.ByKey(key)}
 	if _, ok := registry[cv]; ok {
 		log.Fatalf(context.Background(), "doubly registering migration for %s", cv)
@@ -46,7 +54,7 @@ func GetMigration(key clusterversion.ClusterVersion) (Migration, bool) {
 // global state. This should instead be a testing knob that the migration
 // manager checks when search for attached migrations.
 func TestingRegisterMigrationInterceptor(
-	cv clusterversion.ClusterVersion, fn MigrationFn,
+	cv clusterversion.ClusterVersion, fn SQLMigrationFn,
 ) (unregister func()) {
 	registry[cv] = Migration{cv: cv, fn: fn}
 	return func() { delete(registry, cv) }

@@ -632,7 +632,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			Dialer:       cfg.nodeDialer,
 			DB:           cfg.db,
 		})
-		migrationMgr := migrationmanager.NewManager(c, cfg.circularInternalExecutor, jobRegistry)
+		migrationMgr := migrationmanager.NewManager(
+			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings,
+		)
 		execCfg.MigrationCluster = c
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
 	}

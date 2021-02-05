@@ -25,12 +25,12 @@ import (
 )
 
 func init() {
-	migration.Register(
+	migration.RegisterKVMigration(
 		clusterversion.TruncatedAndRangeAppliedStateMigration,
 		truncatedStateMigration,
 		"use unreplicated TruncatedState and RangeAppliedState for all ranges",
 	)
-	migration.Register(
+	migration.RegisterKVMigration(
 		clusterversion.PostTruncatedAndRangeAppliedStateMigration,
 		postTruncatedStateMigration,
 		"purge all replicas using the replicated TruncatedState",

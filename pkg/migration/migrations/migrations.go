@@ -14,5 +14,6 @@ package migrations
 
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/migration/migrationjob"
+	_ "github.com/cockroachdb/cockroach/pkg/migration/migrations/longrunningmigrations"
 	_ "github.com/cockroachdb/cockroach/pkg/migration/migrations/truncatedstate"
 )

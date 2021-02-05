@@ -12,6 +12,7 @@ package migrationmanager_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestAlreadyRunningJobsAreHandledProperly is a relatively low-level test to
@@ -65,7 +68,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 
 	ch := make(chan chan error)
 	defer migration.TestingRegisterMigrationInterceptor(endCV, func(
-		ctx context.Context, cv clusterversion.ClusterVersion, h migration.Cluster,
+		ctx context.Context, cv clusterversion.ClusterVersion, h migration.SQLDeps,
 	) error {
 		canResume := make(chan error)
 		ch <- canResume
@@ -197,15 +200,15 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 		t.Fatalf("got replica version %s, expected %s", got, startCV.Version)
 	}
 
-	// Register the below raft migration.
+	// RegisterKVMigration the below raft migration.
 	unregisterKVMigration := batcheval.TestingRegisterMigrationInterceptor(endCV.Version, func() {})
 	defer unregisterKVMigration()
 
-	// Register the top-level migration.
+	// RegisterKVMigration the top-level migration.
 	unregister := migration.TestingRegisterMigrationInterceptor(endCV, func(
-		ctx context.Context, cv clusterversion.ClusterVersion, c migration.Cluster,
+		ctx context.Context, cv clusterversion.ClusterVersion, d migration.SQLDeps,
 	) error {
-		return c.DB().Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
+		return d.Cluster.DB().Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
 	})
 	defer unregister()
 
@@ -232,4 +235,94 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	if got := repl.Version(); got != endCV.Version {
 		t.Fatalf("got replica version %s, expected %s", got, endCV.Version)
 	}
+}
+
+// TestConcurrentMigrationAttempts ensures that concurrent attempts to run
+// migrations over a number of versions exhibits reasonable behavior. Namely,
+// that each migration gets run one time and that migrations do not get run
+// again.
+func TestConcurrentMigrationAttempts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// We're going to be migrating from startKey to endKey. We end up needing
+	// to use real versions because the ListBetween uses the keys compiled into
+	// the clusterversion package.
+	const (
+		startKey = clusterversion.LongRunningMigrations
+		endKey   = clusterversion.PostTruncatedAndRangeAppliedStateMigration
+	)
+	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
+	var unregisterFuncs []func()
+	defer func() {
+		for _, f := range unregisterFuncs {
+			f()
+		}
+	}()
+
+	// RegisterKVMigration the migrations to update the map with run counts.
+	// There should definitely not be any concurrency of execution, so the race
+	// detector should not fire.
+	for key := startKey + 1; key <= endKey; key++ {
+		unregisterFuncs = append(unregisterFuncs,
+			migration.TestingRegisterMigrationInterceptor(
+				clusterversion.ClusterVersion{
+					Version: clusterversion.ByKey(key),
+				},
+				func(
+					ctx context.Context, cv clusterversion.ClusterVersion, c migration.SQLDeps,
+				) error {
+					migrationRunCounts[cv]++
+					return nil
+				}))
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettingsWithVersions(
+				clusterversion.ByKey(endKey),
+				clusterversion.ByKey(startKey),
+				false,
+			),
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(startKey),
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Run N instances of the migration concurrently on different connections.
+	// They should all eventually succeed; some may internally experience a
+	// serializable restart but cockroach will handle that transparently.
+	// Afterwards we'll ensure that no migration was run more than once.
+	N := 25
+	if util.RaceEnabled {
+		N = 5
+	}
+	db := tc.ServerConn(0)
+	db.SetMaxOpenConns(N)
+	conns := make([]*gosql.Conn, N)
+	for i := range conns {
+		var err error
+		conns[i], err = db.Conn(ctx)
+		require.NoError(t, err)
+	}
+	var g errgroup.Group
+	for i := 0; i < N; i++ {
+		conn := conns[i]
+		g.Go(func() error {
+			_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+				clusterversion.ByKey(endKey).String())
+			return err
+		})
+	}
+	require.Nil(t, g.Wait())
+	for k, c := range migrationRunCounts {
+		require.Equalf(t, 1, c, "version: %v", k)
+	}
+	require.Len(t, migrationRunCounts, len(unregisterFuncs))
 }

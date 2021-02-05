@@ -26,10 +26,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -165,22 +167,29 @@ type Cluster interface {
 // in #57445. Once that makes its way into master, this TODO can be removed.
 type Migration struct {
 	cv   clusterversion.ClusterVersion
-	fn   MigrationFn
+	fn   SQLMigrationFn
 	desc string
 }
 
-type MigrationFn func(context.Context, clusterversion.ClusterVersion, Cluster) error
+// SQLDeps are the dependencies of migrations which perform actions at the
+// SQL layer. Lower-level migrations may depend solely on the Cluster.
+type SQLDeps struct {
+	Cluster  Cluster
+	Codec    keys.SQLCodec
+	Settings *cluster.Settings
+}
+
+type KVMigrationFn func(context.Context, clusterversion.ClusterVersion, Cluster) error
+type SQLMigrationFn func(context.Context, clusterversion.ClusterVersion, SQLDeps) error
 
 // Run kickstarts the actual migration process. It's responsible for recording
 // the ongoing status of the migration into a system table.
-//
-// TODO(irfansharif): Introduce a `system.migrations` table, and populate it here.
 func (m *Migration) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, h Cluster,
+	ctx context.Context, cv clusterversion.ClusterVersion, d SQLDeps,
 ) (err error) {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
 
-	if err := m.fn(ctx, cv, h); err != nil {
+	if err := m.fn(ctx, cv, d); err != nil {
 		return err
 	}
 
