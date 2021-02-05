@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -62,8 +61,7 @@ func runGenerate(cmd *cobra.Command, targets []string) error {
 		case "bazel":
 			gen = generateBazel
 		default:
-			log.Errorf(ctx, "unrecognized target: %s", target)
-			return errors.Newf("unrecognized target")
+			return errors.Newf("unrecognized target: %s", target)
 		}
 
 		if err := gen(ctx, cmd); err != nil {
