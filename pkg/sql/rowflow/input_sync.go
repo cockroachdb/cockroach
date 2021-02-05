@@ -279,11 +279,10 @@ func (s *orderedSynchronizer) drainSources() {
 }
 
 // Start is part of the RowSource interface.
-func (s *orderedSynchronizer) Start(ctx context.Context) context.Context {
+func (s *orderedSynchronizer) Start(ctx context.Context) {
 	for _, src := range s.sources {
 		src.src.Start(ctx)
 	}
-	return ctx
 }
 
 // Next is part of the RowSource interface.

@@ -68,7 +68,7 @@ func newValuesProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (v *valuesProcessor) Start(ctx context.Context) context.Context {
+func (v *valuesProcessor) Start(ctx context.Context) {
 	ctx = v.StartInternal(ctx, valuesProcName)
 
 	// Add a bogus header to appease the StreamDecoder, which wants to receive a
@@ -79,11 +79,10 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 	}
 	if err := v.sd.AddMessage(ctx, m); err != nil {
 		v.MoveToDraining(err)
-		return ctx
+		return
 	}
 
 	v.rowBuf = make(rowenc.EncDatumRow, len(v.columns))
-	return ctx
 }
 
 // Next is part of the RowSource interface.

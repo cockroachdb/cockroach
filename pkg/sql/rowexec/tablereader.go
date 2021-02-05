@@ -176,7 +176,7 @@ func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.P
 }
 
 // Start is part of the RowSource interface.
-func (tr *tableReader) Start(ctx context.Context) context.Context {
+func (tr *tableReader) Start(ctx context.Context) {
 	if tr.FlowCtx.Txn == nil {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
@@ -204,7 +204,6 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	if err != nil {
 		tr.MoveToDraining(err)
 	}
-	return ctx
 }
 
 // Release releases this tableReader back to the pool.
