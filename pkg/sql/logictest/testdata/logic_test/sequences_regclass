@@ -1,0 +1,65 @@
+# Test that sequences referenced via their IDs are printed properly.
+subtest show_sequences
+
+statement ok
+CREATE SEQUENCE test_seq
+
+let $test_seq_id
+SELECT 'test_seq'::regclass::int
+
+statement ok
+CREATE TABLE test_table (a INT NOT NULL DEFAULT nextval($test_seq_id::regclass))
+
+query TT
+SHOW CREATE TABLE test_table
+----
+test_table  CREATE TABLE public.test_table (
+              a INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING),
+              FAMILY "primary" (a, rowid)
+)
+
+
+# Test that sequences created by SERIAL are referenced
+# via their IDs and are displayed properly.
+subtest serial_sequences
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE TABLE foo (i SERIAL PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN bar SERIAL
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING),
+     bar INT8 NOT NULL DEFAULT nextval('test.public.foo_bar_seq':::STRING),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i, bar)
+)
+
+
+# Test that references are still correctly created for
+# sequences referenced via their IDs.
+subtest sequence_references
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE dep_seq
+
+let $dep_seq_id
+SELECT 'dep_seq'::regclass::int
+
+statement ok
+CREATE TABLE seq_table (i SERIAL PRIMARY KEY, j INT NOT NULL DEFAULT nextval($dep_seq_id::regclass))
+
+query TT
+SELECT pg_get_serial_sequence('seq_table', 'i'), pg_get_serial_sequence('seq_table', 'j')
+----
+public.seq_table_i_seq  public.dep_seq

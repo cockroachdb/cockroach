@@ -76,10 +76,11 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	return doCreateSequence(
+	_, err = doCreateSequence(
 		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
+	return err
 }
 
 // doCreateSequence performs the creation of a sequence in KV. The
@@ -93,10 +94,10 @@ func doCreateSequence(
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
 	jobDesc string,
-) error {
+) (descpb.ID, error) {
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	privs := CreateInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User())
@@ -124,7 +125,7 @@ func doCreateSequence(
 		&params,
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// makeSequenceTableDesc already validates the table. No call to
@@ -140,7 +141,7 @@ func doCreateSequence(
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Initialize the sequence value.
@@ -148,17 +149,17 @@ func doCreateSequence(
 	b := &kv.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {
-		return err
+		return 0, err
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
 	if err := desc.Validate(params.ctx, dg); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Log Create Sequence event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return params.p.logEvent(params.ctx,
+	return id, params.p.logEvent(params.ctx,
 		desc.ID,
 		&eventpb.CreateSequence{
 			SequenceName: name.FQString(),

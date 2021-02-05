@@ -498,6 +498,25 @@ func (p *planner) getQualifiedTableName(
 	return &tbName, nil
 }
 
+// GetQualifiedTableNameByID returns the qualified name of the table,
+// view or sequence represented by the provided ID and table kind.
+func (p *planner) GetQualifiedTableNameByID(
+	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
+) (*tree.TableName, error) {
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags:    tree.CommonLookupFlags{Required: true},
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: requiredType,
+	}
+
+	table, err := p.Descriptors().GetImmutableTableByID(
+		ctx, p.txn, descpb.ID(id), lookupFlags)
+	if err != nil {
+		return nil, err
+	}
+	return p.getQualifiedTableName(ctx, table)
+}
+
 // getQualifiedSchemaName returns the database-qualified name of the
 // schema represented by the provided descriptor.
 func (p *planner) getQualifiedSchemaName(

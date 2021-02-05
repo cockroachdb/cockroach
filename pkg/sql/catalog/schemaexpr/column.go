@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // DequalifyColumnRefs returns a serialized expression with database and table
@@ -283,4 +284,49 @@ func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDes
 		ptrs[i] = &cols[i]
 	}
 	return ptrs
+}
+
+// replaceSequenceNames replaces occurrences of sequence regclasses in an expression with
+// the sequence's fully qualified names.
+func replaceSequenceNames(
+	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
+) (tree.Expr, error) {
+	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		// If it's not an AnnotateTypeExpr, don't do anything to this node.
+		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+
+		// If it's not a regclass, don't do anything to this node.
+		if typ, safe := tree.GetStaticallyKnownType(annotateTypeExpr.Type); !safe || typ.Oid() != oid.T_regclass {
+			return true, expr, nil
+		}
+
+		// If it's not a constant int, don't do anything to this node.
+		numVal, ok := annotateTypeExpr.Expr.(*tree.NumVal)
+		if !ok {
+			return true, expr, nil
+		}
+		id, err := numVal.AsInt64()
+		if err != nil {
+			return true, expr, nil //nolint:returnerrcheck
+		}
+
+		// If it's not a sequence or the resolution fails, don't do anything to this node.
+		seqName, err := semaCtx.TableNameResolver.GetQualifiedTableNameByID(ctx, id, tree.ResolveRequireSequenceDesc)
+		if err != nil {
+			return true, expr, nil //nolint:returnerrcheck
+		}
+
+		// Swap out this node to use the qualified table name for the sequence.
+		return false, &tree.AnnotateTypeExpr{
+			Type:       types.String,
+			SyntaxMode: tree.AnnotateShort,
+			Expr:       tree.NewStrVal(seqName.FQString()),
+		}, nil
+	}
+
+	newExpr, err := tree.SimpleVisit(rootExpr, replaceFn)
+	return newExpr, err
 }
