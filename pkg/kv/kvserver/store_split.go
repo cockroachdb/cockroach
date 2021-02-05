@@ -125,7 +125,7 @@ func splitPreApply(
 	// LHS part are below the current closed timestamp for the LHS would no
 	// longer be readable on the RHS after the split.
 	//
-	// It is necessary for correctness that the call to maxClosed used to
+	// It is necessary for correctness that the call to MaxClosedTimestamp used to
 	// determine the current closed timestamp happens during the splitPreApply
 	// so that it uses a LAI that is _before_ the index at which this split is
 	// applied. If it were to refer to a LAI equal to or after the split then
@@ -149,7 +149,7 @@ func splitPreApply(
 	// the hazard and ensures that no replica on the RHS is created with an
 	// initialMaxClosed that could be violated by a proposal on the RHS's
 	// initial leaseholder. See #44878.
-	initialMaxClosed, _ := r.maxClosed(ctx)
+	initialMaxClosed, _ := r.MaxClosedTimestamp(ctx)
 	rightRepl.mu.Lock()
 	rightRepl.mu.initialMaxClosed = initialMaxClosed
 	rightRepl.mu.Unlock()
