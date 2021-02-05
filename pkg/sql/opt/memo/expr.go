@@ -207,6 +207,13 @@ func (n *FiltersExpr) Sort() {
 	})
 }
 
+// Copy returns a copy of the FiltersExpr.
+func (n FiltersExpr) Copy() FiltersExpr {
+	newFilters := make(FiltersExpr, len(n))
+	copy(newFilters, n)
+	return newFilters
+}
+
 // Deduplicate removes all the duplicate filters from n.
 func (n *FiltersExpr) Deduplicate() {
 	dedup := (*n)[:0]

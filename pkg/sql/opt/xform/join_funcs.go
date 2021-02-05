@@ -480,7 +480,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	eqColsAndOptionalFiltersCalculated := false
 	var leftEqCols opt.ColList
 	var rightEqCols opt.ColList
-	var rightSideCols opt.ColList
 	var optionalFilters memo.FiltersExpr
 
 	var iter scanIndexIter
@@ -523,6 +522,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// values are joined with the input to create key columns for the
 		// InvertedJoin, similar to GenerateLookupJoins.
 		var constFilters memo.FiltersExpr
+		var rightSideCols opt.ColList
 		for i := 0; i < numPrefixCols; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
 
@@ -569,12 +569,29 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			invertedJoin.Input = join
 			invertedJoin.PrefixKeyCols = append(invertedJoin.PrefixKeyCols, constColID)
 			constFilters = append(constFilters, allFilters[allIdx])
+			rightSideCols = append(rightSideCols, prefixCol)
 		}
 
-		// Remove the redundant filters and update the ON condition if there are
-		// non-inverted prefix columns that have been constrained.
-		if len(rightSideCols) > 0 || len(constFilters) > 0 {
+		// Remove redundant filters from the ON condition if non-inverted prefix
+		// columns were constrained by equality filters.
+		filtersCopied := false
+		if len(rightSideCols) > 0 {
 			onFilters = memo.ExtractRemainingJoinFilters(onFilters, invertedJoin.PrefixKeyCols, rightSideCols)
+			// ExtractRemaininedJoinFilters creates a new copy of onFilters with
+			// the redundant filters left out, so set filtersCopied to true.
+			filtersCopied = true
+		}
+
+		// Remove redundant filters from the ON condition if non-inverted prefix
+		// columns were constrained by constant filters.
+		if len(constFilters) > 0 {
+			// RemoveCommonFilters mutates the FiltersExpr in-place. We cannot
+			// mutate onFilters (see the documentation for
+			// scanIndexIter.ForEach). So we must create a copy of the filters
+			// if ExtractRemainingJoinFilters did not run above.
+			if !filtersCopied {
+				onFilters = onFilters.Copy()
+			}
 			onFilters.RemoveCommonFilters(constFilters)
 			invertedJoin.ConstFilters = constFilters
 		}
