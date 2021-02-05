@@ -117,6 +117,22 @@ func (rec *SpanSetReplicaEvalContext) GetTracker() closedts.TrackerI {
 	return rec.i.GetTracker()
 }
 
+// FrozenClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) FrozenClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	// To capture a closed timestamp, all keys must be latched to prevent any
+	// concurrent writes (which could advance the closed timestamp).
+	desc := rec.i.Desc()
+	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
+		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
+	})
+	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+		Key:    desc.StartKey.AsRawKey(),
+		EndKey: desc.EndKey.AsRawKey(),
+	})
+	return rec.i.FrozenClosedTimestamp(ctx)
+}
+
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()

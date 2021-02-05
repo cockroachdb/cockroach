@@ -256,7 +256,7 @@ func (r *Replica) handleSplitResult(ctx context.Context, split *kvserverpb.Split
 
 func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge) {
 	if err := r.store.MergeRange(
-		ctx, r, merge.LeftDesc, merge.RightDesc, merge.FreezeStart,
+		ctx, r, merge.LeftDesc, merge.RightDesc, merge.FreezeStart, merge.RightClosedTimestamp,
 	); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.Fatalf(ctx, "failed to update store after merging range: %s", err)
