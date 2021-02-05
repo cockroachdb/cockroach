@@ -744,10 +744,11 @@ func (r *Replica) AdminMerge(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					LeftDesc:       updatedLeftDesc,
-					RightDesc:      rightDesc,
-					RightMVCCStats: rhsSnapshotRes.MVCCStats,
-					FreezeStart:    rhsSnapshotRes.FreezeStart,
+					LeftDesc:             updatedLeftDesc,
+					RightDesc:            rightDesc,
+					RightMVCCStats:       rhsSnapshotRes.MVCCStats,
+					FreezeStart:          rhsSnapshotRes.FreezeStart,
+					RightClosedTimestamp: rhsSnapshotRes.ClosedTimestamp,
 				},
 			},
 		})
