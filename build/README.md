@@ -57,10 +57,21 @@ which may or may not work (and are not officially supported).
 
 ## Basic Process
 
-- Edit `build/builder/Dockerfile` as desired
-- Run `build/builder.sh init` to test -- this will build the image locally. Beware this can take a lot of time. The result of `init` is a docker image version which you can subsequently stick into the `version` variable inside the `builder.sh` script for testing locally.
-- Once you are happy with the result, run `build/builder.sh push` which pushes your image towards Docker hub, so that it becomes available to others. The result is again a version number, which you then *must* copy back into `builder.sh`. Then commit the change to both Dockerfile and `builder.sh` and submit a PR.
-- Finally, use this version number to update the `builder.dockerImage` configuration parameter in TeamCity under the [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
+- Edit `build/builder/Dockerfile` as desired.
+- Run `build/builder.sh init` to test -- this will build the image locally.
+  Beware this can take a lot of time. The result of `init` is a docker image
+  version which you can subsequently stick into the `version` variable inside
+  the `builder.sh` script for testing locally.
+- When you're happy with the result, commit your changes, submit a pull request,
+  and have it reviewed.
+- Ask someone with permissions to run the `Build and Push new Builder Image`
+  build configuration in TeamCity. This will build and push the new Docker image
+  to [DockerHub](https://hub.docker.com/repository/docker/cockroachdb/builder).
+- Copy the tag of the new image (which will look like `YYYYMMDD-NNNNNN`) into
+  `build/builder.sh`, re-commit your changes, and update the pull request. You
+  can now merge the pull request once you've got a sign-off.
+- Finally, use the tag of the new image to update the `builder.dockerImage`
+  configuration parameter in TeamCity under the [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 
 ## Updating the golang version
 
