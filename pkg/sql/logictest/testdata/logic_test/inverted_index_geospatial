@@ -44,6 +44,7 @@ vectorized: <hidden>
     └── • index join
         │ actual row count: 2
         │ KV rows read: 2
+        │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -59,7 +60,7 @@ vectorized: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVdFO20oQfb9fMZoXQNdX2bVNbtiqUgqYNm0hyIlaoTpCxp6CheN1dzeVEcpn9Qf6ZdXaISVEmEaoVfOw0ZyZM9k5Z3dzi_pLjgJHwfvgYAzXcBQOj-GS5LmJL3KCj2-CMABtzrPCkNKUGL29NQoHhy_d7h7vvTgdDk7G2z5jjHlQfzFvZ0uI18HwOBiHZ47tNd2BYXgYhLB_BtfoYCFTOomnpFF8Qo4TB0slE9JaKgvd1gWDtELBHMyKcmYsPHEwkYpQ3KLJTE4ocGz3GFKckuowdDAlE2d53XY5Qt9u4DwrUqrQwVEZF1pAJ8L9KKo-p1FUcRZFFXtqwf825fAIIS5S8BhIc0VK42IYMLMyJy3AXSLaxHkOJpuSAPb9my1992EtTmRhqDCZLNZL65agKE4F-A12cWOWkOfCPjp4EZvkijTImSlnRoAVbUG9g1yczB1sooXs2sSXhILPnV-3ZlB8JWUoPcpyQ4pUh6_6c5cPqlKBLKDPBWhrjtVCGVGL7f2_G0XMZVHE2FMLAhXppjTr0ZpJQytDn6_Z5bfZRRUls3VrpnEFU5pKdQNxnsskNpQKYLUZNqcTZS2BNNPX6xXPssvdxK63MisWF8l97CKVKpvG6uanQk7f_WNn2n1c42ep5G2i0vIwe6saNbh4-E4yzrh9EV3mdrt77P7noPuK93zeBD3W4z3fD3y-Je4_nX13Z-U4_o75_U3mH0llSHX81en7_N-_8gLsbjJaSLqUhaaV0R7rzOYTBym9pObvSsuZSuhUyaT-mSYc1rwaSEmbJsubYFA0KbvB-2TeSnbbyW4r2Wsne61kv53st5J3H5An839-BAAA___pD7vn
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVdFO20oQfb9fMZoXQNdX2bVNbtiqUgqYNm0hyIlaoTpCxp6CheN1dzeVEcpn9Qf6ZdXaISVEmEaoVfOw0ZydM9k5Z3Zzi_pLjgJHwfvgYAzXcBQOj-GS5LmJL3KCj2-CMABtzrPCkNKUGL29NQoHhy_d7h7vvTgdDk7G2z5jjHlQfzFvZ0uI18HwOBiHZ46tNd2BYXgYhLB_BtfoYCFTOomnpFF8Qo4TB0slE9JaKgvd1gmDtELBHMyKcmYsPHEwkYpQ3KLJTE4ocGzPGFKckuowdDAlE2d5XXbZQt8e4DwrUqrQwVEZF1pAJ8L9KKo-p1FUcRZFFXtqwf825fAIIS5S8BhIc0VK46IZMLMyJy3AXSLaxHkOJpuSAPb9m01992EtTmRhqDCZLNZT65KgKE4F-A12cWOWkOfCPjp4EZvkijTImSlnRoAVbUG9g1yczB1sooXs2sSXhILPnV-3ZlB8JWUoPcpyQ4pUh6_6c7cfVKUCWUCfC9DWHKuFMqIW2_t_N4qYy6KIsacWBCrSTWnWozWThlaGPl-zy2-ziypKZuvWTOMKpjSV6gbiPJdJbCgVwGoz7J5OlLUE0kxfr2c8yy53E7veyqxYXCT3sYtUqmwaq5ufCjl994_NtLs-07xbi_SI8s_SzttEu-WIe6vKNbh4-Hoyzrh9J13mdrt77P7noPuK93zeBD3W4z3fD3y-Je4_qH13Z2VIf0f__ib9j6QypDr-avd9_u9feS12N2ktJF3KQtNKa49VZvOJg5ReUvMnpuVMJXSqZFL_TBMOa14NpKRNs8ubYFA0W_aA98m8ley2k91WstdO9lrJfjvZbyXvPiBP5v_8CAAA__-pQsIe
 ·
 WARNING: this statement is experimental!
 
@@ -113,6 +114,7 @@ vectorized: <hidden>
     └── • index join
         │ actual row count: 2
         │ KV rows read: 2
+        │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -128,7 +130,7 @@ vectorized: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVe1O40YU_d-nuLp_ANVVZmyThqkqpYBpUwpBTkSF6ggZ-xYsnBnvzGQVhPJY-wL7ZKuxQ5YQ4d0I7WrzY6L7cW7mnDMzeUTzrkSBo-if6GgM93ASD8_gltS1TW9Kgn__iuIIjL0upCVtKLNmd2cUD45_97sHvPfbxXBwPt4NGWMsgPqLBXs7QvwZDc-icXzluVnTPRjGx1EMh1dwjx5KldN5OiWD4j_kOPGw0iojY5R2qce6YZDPUTAPC1nNrEtPPMyUJhSPaAtbEgocuz3GlOakOww9zMmmRVmPXVHouw1cFzKnOXo4qlJpBHQSPEyS-f95ksxZ4Bb2hQV_2RbDE4RU5hAwUPaOtMElGbCzqiQjwF9ljE3LEmwxJQHs4wfXenq5EWdKWpK2UHKztR4JmtK8mXt6CTcPdpXiXThED29Sm92RATWz1cwKcKItoU8pHycLD5toKbux6S2h4Avv660ZyPekLeUnRWlJk-7wdX-e6tG80qAk9LkA48xxWmgrarGDX_eThDmxmdO0dUEgmW8Lcx5tmDR0MvT5dnbRnLLZpjXTdA5Tmir9AGlZqiy1lAtgtRmuZjLtLIG8MPebHW-yy9_Grr9VIZcXyX_tIlW6mKb64bNCXt__rmf6FY3fpFKwjUqrwxysa9Tkxct3knHG3YvoM7_bPWDPP0fdP3gv5E3QYz3eC8Mo5Dvi-dPZ9_fWjuO34B9uw3-ktCXdCdfZ9_nPP-QF2N-GWkymUtLQGrXXJrPFxEPKb6n5uzJqpjO60Cqrf6YJhzWuTuRkbFPlTTCQTclt8DmYt4L9drDfCg7awUErOGwHh63g_RfgyeKnTwEAAP__ByW76w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVe1O40YU_d-nuLp_ANVVZmyThqkqpYBpUwpBTkSF6ggZ-xYsnBnvzGQVhPJY-wL7ZKuxQ5YQ4d0IrUR-THQ_zs2cc2Ymj2g-lChwFP0THY3hHk7i4Rnckrq26U1J8O9fURyBsdeFtKQNZdbs7oziwfHvfveA9367GA7Ox7shY4wFUH-xYG9HiD-j4Vk0jq88N2u6B8P4OIrh8Aru0UOpcjpPp2RQ_IccJx5WWmVkjNIu9Vg3DPI5CuZhIauZdemJh5nShOIRbWFLQoFjt8eY0px0h6GHOdm0KOuxKwp9t4HrQuY0Rw9HVSqNgE6Ch0ky_z9PkjkL3MK-seAv22J4gpDKHAIGyt6RNrgkA3ZWlWQE-KuMsWlZgi2mJIB9_uRaTy834kxJS9IWSm621iNBU5o3c08v4ebBrlK8C4fo4U1qszsyoGa2mlkBTrQl9Cnl42ThYRMtZTc2vSUUfOF9vzUD-ZG0pfykKC1p0h2-7s9TPZpXGpSEPhdgnDlOC21FLXbw636SMCc2c5q2Lggk821hzqMNk4ZOhj7fzi6aUzbbtGaazmFKU6UfIC1LlaWWcgGsNsPVTKadJZAX5n6z4012-dvY9bcq5PIi-a9dpEoX01Q_fFXI6_vv4Ey_ovybtAu20W51xIN15Zq8ePl6Ms64eyd95ne7B-z556j7B--FvAl6rMd7YRiFfEc8f1D7_t7aIf0R_MNt-I-UtqQ74Tr7Pv_5XV6L_W2oxWQqJQ2tUXttMltMPKT8lpo_MaNmOqMLrbL6Z5pwWOPqRE7GNlXeBAPZlNwGn4N5K9hvB_ut4KAdHLSCw3Zw2ArefwGeLH76EgAA___HocIi
 ·
 WARNING: this statement is experimental!
 
@@ -158,6 +160,7 @@ vectorized: <hidden>
     └── • index join
         │ actual row count: 2
         │ KV rows read: 2
+        │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -173,6 +176,6 @@ vectorized: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVe1O40YU_d-nuLp_ANVVZmyThqkqpYBpUwpBTkSF6ggZ-xYsnBnvzGQVhPJY-wL7ZKuxQ5YQ4d0I7WrzY6L7cW7mnDMzeUTzrkSBo-if6GgM93ASD8_gltS1TW9Kgn__iuIIjL0upCVtKLNmd2cUD45_97sHvPfbxXBwPt4NGWMsgPqLBXs7QvwZDc-icXzluVnTPRjGx1EMh1dwjx5KldN5OiWD4j_kOPGw0iojY5R2qce6YZDPUTAPC1nNrEtPPMyUJhSPaAtbEgocuz3GlOakOww9zMmmRVmPXVHouw1cFzKnOXo4qlJpBHQSPEyS-f95ksxZ4Bb2hQV_2RbDE4RU5hAwUPaOtMElGbCzqiQjwF9ljE3LEmwxJQHs4wfXenq5EWdKWpK2UHKztR4JmtK8mXt6CTcPdpXiXThED29Sm92RATWz1cwKcKItoU8pHycLD5toKbux6S2h4Avv660ZyPekLeUnRWlJk-7wdX-e6tG80qAk9LkA48xxWmgrarGDX_eThDmxmdO0dUEgmW8Lcx5tmDR0MvT5dnbRnLLZpjXTdA5Tmir9AGlZqiy1lAtgtRmuZjLtLIG8MPebHW-yy9_Grr9VIZcXyX_tIlW6mKb64bNCXt__rmf6FY3fpFKwjUqrwxysa9Tkxct3knHG3YvoM7_bPWDPP0fdP3gv5E3QYz3eC8Mo5Dvi-dPZ9_fWjuO34B9uw3-ktCXdCdfZ9_nPP-QF2N-GWkymUtLQGrXXJrPFxEPKb6n5uzJqpjO60Cqrf6YJhzWuTuRkbFPlTTCQTclt8DmYt4L9drDfCg7awUErOGwHh63g_RfgyeKnTwEAAP__ByW76w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVe1O40YU_d-nuLp_ANVVZmyThqkqpYBpUwpBTkSF6ggZ-xYsnBnvzGQVhPJY-wL7ZKuxQ5YQ4d0IrUR-THQ_zs2cc2Ymj2g-lChwFP0THY3hHk7i4Rnckrq26U1J8O9fURyBsdeFtKQNZdbs7oziwfHvfveA9367GA7Ox7shY4wFUH-xYG9HiD-j4Vk0jq88N2u6B8P4OIrh8Aru0UOpcjpPp2RQ_IccJx5WWmVkjNIu9Vg3DPI5CuZhIauZdemJh5nShOIRbWFLQoFjt8eY0px0h6GHOdm0KOuxKwp9t4HrQuY0Rw9HVSqNgE6Ch0ky_z9PkjkL3MK-seAv22J4gpDKHAIGyt6RNrgkA3ZWlWQE-KuMsWlZgi2mJIB9_uRaTy834kxJS9IWSm621iNBU5o3c08v4ebBrlK8C4fo4U1qszsyoGa2mlkBTrQl9Cnl42ThYRMtZTc2vSUUfOF9vzUD-ZG0pfykKC1p0h2-7s9TPZpXGpSEPhdgnDlOC21FLXbw636SMCc2c5q2Lggk821hzqMNk4ZOhj7fzi6aUzbbtGaazmFKU6UfIC1LlaWWcgGsNsPVTKadJZAX5n6z4012-dvY9bcq5PIi-a9dpEoX01Q_fFXI6_vv4Ey_ovybtAu20W51xIN15Zq8ePl6Ms64eyd95ne7B-z556j7B--FvAl6rMd7YRiFfEc8f1D7_t7aIf0R_MNt-I-UtqQ74Tr7Pv_5XV6L_W2oxWQqJQ2tUXttMltMPKT8lpo_MaNmOqMLrbL6Z5pwWOPqRE7GNlXeBAPZlNwGn4N5K9hvB_ut4KAdHLSCw3Zw2ArefwGeLH76EgAA___HocIi
 ·
 WARNING: this statement is experimental!

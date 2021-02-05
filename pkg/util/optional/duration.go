@@ -51,3 +51,11 @@ func (d *Duration) Set(value time.Duration) {
 func (d *Duration) Add(delta time.Duration) {
 	*d = MakeTimeValue(d.Value() + delta)
 }
+
+// MaybeAdd adds the given value, if it is set. Does nothing if other is not
+// set.
+func (d *Duration) MaybeAdd(other Duration) {
+	if other.HasValue() {
+		*d = MakeTimeValue(d.Value() + other.Value())
+	}
+}
