@@ -1346,17 +1346,22 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 				noRowLocking,
 				mb.b.allocScope(),
 			)
+			// If the table has any virtual computed columns, buildScan
+			// constructs a Project on top of the Scan. This is problematic when
+			// building arbiter predicates because it relies on tableScope.expr
+			// being a Scan in order to normalize the arbiter predicate. So, if
+			// tableScope.expr is a Project, we set it to its input, a Scan.
+			if proj, ok := tableScope.expr.(*memo.ProjectExpr); ok {
+				tableScope.expr = proj.Input
+			}
 		}
 
 		// If the index is a pseudo-partial index, it can always be an arbiter.
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
-		// TODO(mgartner): Add UPSERT tests for partial index predicates with
-		// virtual computed columns once UPSERTs of virtual columns are
-		// supported. It's not necessary for virtual column expressions to be
-		// inlined, as long as virtual column expressions are also not inlined
-		// in arbiterFilters below, so we can consider passing a boolean to
-		// buildPartialIndexPredicate to prevent unnecessary inlining.
+		// TODO(mgartner): Building the partial index predicate here shouldn't
+		// be necessary. Partial index predicates should already be built on the
+		// table metadata via the buildScan call above.
 		predFilter, err := mb.b.buildPartialIndexPredicate(
 			tabMeta, tableScope, mb.parsePartialIndexPredicateExpr(idx), "index predicate",
 		)
@@ -1379,13 +1384,6 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 
 			// Build the arbiter filters once.
 			if arbiterFilters == nil {
-				// TODO(mgartner): Add UPSERT tests for arbiter predicates with
-				// virtual computed columns once UPSERTs of virtual columns are
-				// supported. It's not necessary for virtual column expressions
-				// to be inlined, as long as virtual column expressions are also
-				// not inlined in predFilter above, so we can consider passing a
-				// boolean to buildPartialIndexPredicate to prevent unnecessary
-				// inlining.
 				arbiterFilters, err = mb.b.buildPartialIndexPredicate(
 					tabMeta, tableScope, arbiterPredicate, "arbiter predicate",
 				)

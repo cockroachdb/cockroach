@@ -63,6 +63,12 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 	if scan != nil && tableScope.colSet().SubsetOf(scan.Relational().OutputCols) {
 		tableScope.expr = scan
 	} else {
+		// TODO(mgartner): This is a sketchy because computed columns won't
+		// exist in the scan table's metadata. Currently, the scan argument is
+		// nil when building partial index predicates for UPDATEs and UPSERTs
+		// table metadata (which are built in order to prune fetch columns). As
+		// a result, virtual columns referenced in partial index predicates
+		// might not be pruned in all cases that they can be pruned in theory.
 		tableScope.expr = b.factory.ConstructScan(&memo.ScanPrivate{
 			Table: tabMeta.MetaID,
 			Cols:  tableScope.colSet(),
@@ -110,6 +116,25 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
+	// A Scan is required as tableScope.expr in order to correctly normalize the
+	// partial index predicate. We normalize the predicate by constructing a
+	// Select with tableScope.expr as the input and the predicate as filters.
+	// This allows normalization rules that only apply to Selects to fire,
+	// mimicking query filter normalization. If the input to the Select is not a
+	// Scan, additional normalization rules may fire that break assumptions
+	// below. For example, if tableScope.expr is a Project expression, the
+	// result of constructing and normalizing the Select expression may be a
+	// Project expression, making it difficult to access the normalized
+	// predicate filters.
+	// TODO(mgartner): Consider building a FakeRel specifically for this
+	// normalization instead of using tableScope.expr.
+	if _, ok := tableScope.expr.(*memo.ScanExpr); !ok {
+		panic(errors.AssertionFailedf(
+			"can only build partial index predicates with Scan scope expressions, not %T",
+			tableScope.expr,
+		))
+	}
+
 	texpr := resolvePartialIndexPredicate(tableScope, expr)
 
 	var scalar opt.ScalarExpr
@@ -169,6 +194,13 @@ func (b *Builder) buildPartialIndexPredicate(
 		return memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}, nil
 	}
 
+	// TODO(mgartner): It is a bit dangerous to assume that if the normalized
+	// expression is not a Select and the cardinality is not zero, then the
+	// filter is equivalent to True. There should only be 3 types of relation
+	// normalized relational expressions: Scan, Values, and Select. Scan
+	// indicates the filters are always true and Values indicates the filters
+	// are always false. If the expression is a Select, use its filters. If the
+	// expression is none of the three, we should probably panic.
 	return memo.TrueFilter, nil
 }
 
