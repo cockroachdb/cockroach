@@ -848,18 +848,8 @@ if options.prod_release:
 if not hidedownloads:
     print("""Get future release notes emailed to you:
 
-<div class="hubspot-install-form install-form-1 clearfix">
-    <script>
-        hbspt.forms.create({
-            css: '',
-            cssClass: 'install-form',
-            portalId: '1753393',
-            formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
-            formInstanceId: 1,
-            target: '.install-form-1'
-        });
-    </script>
-</div>""")
+{% include marketo.html %}
+""")
     print()
 
     print("""### Downloads
