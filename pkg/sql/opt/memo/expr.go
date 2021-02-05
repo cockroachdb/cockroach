@@ -207,6 +207,13 @@ func (n *FiltersExpr) Sort() {
 	})
 }
 
+// Copy returns a copy of the FiltersExpr.
+func (n FiltersExpr) Copy() FiltersExpr {
+	newFilters := make(FiltersExpr, len(n))
+	copy(newFilters, n)
+	return newFilters
+}
+
 // Deduplicate removes all the duplicate filters from n.
 func (n *FiltersExpr) Deduplicate() {
 	dedup := (*n)[:0]
@@ -243,6 +250,28 @@ func (n FiltersExpr) RemoveFiltersItem(search *FiltersItem) FiltersExpr {
 		}
 	}
 	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
+}
+
+// Difference returns a new list filters containing the filters of n that are
+// not in other. If other is empty, n is returned.
+func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
+	if len(other) == 0 {
+		return n
+	}
+	newFilters := make(FiltersExpr, 0, len(n))
+	for i := range n {
+		found := false
+		for j := range other {
+			if n[i].Condition == other[j].Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newFilters = append(newFilters, n[i])
+		}
+	}
+	return newFilters
 }
 
 // RemoveCommonFilters removes the filters found in other from n.

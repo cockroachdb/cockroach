@@ -164,6 +164,11 @@ func (it *scanIndexIter) SetOriginalFilters(filters memo.FiltersExpr) {
 // index, the filters are the remaining filters after proving partial index
 // implication (see partialidx.Implicator). Otherwise, the filters are the same
 // filters that were passed to Init.
+//
+// Note that the filters argument CANNOT be mutated in the callback function
+// because these filters are used internally by scanIndexIter for partial index
+// implication while iterating over indexes. In tests the filtersMutateChecker
+// will detect a callback that mutates filters and panic.
 type enumerateIndexFunc func(idx cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool)
 
 // ForEach calls the given callback function for every index of the Scan
