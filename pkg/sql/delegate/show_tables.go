@@ -68,7 +68,10 @@ FROM %[1]s.pg_catalog.pg_class AS pc
 LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
 JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
 %[4]s
-LEFT JOIN crdb_internal.table_row_statistics AS s ON (s.table_id = pc.oid::INT8)
+LEFT JOIN
+(
+  SELECT DISTINCT ON (table_id) table_id, estimated_row_count FROM crdb_internal.table_row_statistics
+) AS s ON (s.table_id = pc.oid::INT8)
 LEFT JOIN crdb_internal.tables AS ct ON (pc.oid::int8 = ct.table_id)
 WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
 ORDER BY schema_name, table_name
