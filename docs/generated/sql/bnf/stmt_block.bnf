@@ -1968,7 +1968,7 @@ column_def ::=
 index_def ::=
 	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_with_storage_parameter_list opt_where_clause
+	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
 
 family_def ::=
 	'FAMILY' opt_family_name '(' name_list ')'
