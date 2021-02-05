@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -79,7 +80,7 @@ type crdbSpanMu struct {
 	tags opentracing.Tags
 
 	stats      SpanStats
-	structured []Structured
+	structured ring.Buffer // of Structured events
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -224,7 +225,11 @@ func (s *crdbSpan) record(msg string) {
 func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.structured = append(s.mu.structured, item)
+
+	if s.mu.structured.Len() == maxStructuredEventsPerSpan {
+		s.mu.structured.RemoveLast()
+	}
+	s.mu.structured.AddFirst(item)
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
@@ -300,10 +305,11 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		rs.DeprecatedStats = stats
 	}
 
-	if s.mu.structured != nil {
-		rs.InternalStructured = make([]*types.Any, 0, len(s.mu.structured))
-		for i := range s.mu.structured {
-			item, err := types.MarshalAny(s.mu.structured[i])
+	if numEvents := s.mu.structured.Len(); numEvents != 0 {
+		rs.InternalStructured = make([]*types.Any, 0, numEvents)
+		for i := 0; i < numEvents; i++ {
+			event := s.mu.structured.Get(i).(Structured)
+			item, err := types.MarshalAny(event)
 			if err != nil {
 				// An error here is an error from Marshal; these
 				// are unlikely to happen.
