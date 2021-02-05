@@ -116,25 +116,6 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
-	// A Scan is required as tableScope.expr in order to correctly normalize the
-	// partial index predicate. We normalize the predicate by constructing a
-	// Select with tableScope.expr as the input and the predicate as filters.
-	// This allows normalization rules that only apply to Selects to fire,
-	// mimicking query filter normalization. If the input to the Select is not a
-	// Scan, additional normalization rules may fire that break assumptions
-	// below. For example, if tableScope.expr is a Project expression, the
-	// result of constructing and normalizing the Select expression may be a
-	// Project expression, making it difficult to access the normalized
-	// predicate filters.
-	// TODO(mgartner): Consider building a FakeRel specifically for this
-	// normalization instead of using tableScope.expr.
-	if _, ok := tableScope.expr.(*memo.ScanExpr); !ok {
-		panic(errors.AssertionFailedf(
-			"can only build partial index predicates with Scan scope expressions, not %T",
-			tableScope.expr,
-		))
-	}
-
 	texpr := resolvePartialIndexPredicate(tableScope, expr)
 
 	var scalar opt.ScalarExpr
@@ -179,9 +160,16 @@ func (b *Builder) buildPartialIndexPredicate(
 	}
 
 	// Wrap the expression in a FiltersExpr and normalize it by constructing a
-	// Select expression.
+	// Select expression with a FakeRel as input. The FakeRel has the same
+	// logical properties as the tableScope's expression to aid in
+	// normalization.
 	filters := memo.FiltersExpr{filter}
-	selExpr := b.factory.ConstructSelect(tableScope.expr, filters)
+	selExpr := b.factory.ConstructSelect(
+		b.factory.ConstructFakeRel(
+			&memo.FakeRelPrivate{Props: tableScope.expr.Relational()},
+		),
+		filters,
+	)
 
 	// If the normalized relational expression is a Select, return the filters.
 	if sel, ok := selExpr.(*memo.SelectExpr); ok {
