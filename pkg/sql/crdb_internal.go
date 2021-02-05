@@ -1143,9 +1143,10 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   parent_span_id INT NOT NULL,    -- The span's parent ID.
   span_id        INT NOT NULL,    -- The span's ID.
   goroutine_id   INT NOT NULL,    -- The ID of the goroutine on which the span was created.
+  finished       BOOL NOT NULL,   -- True if the span has been Finish()ed, false otherwise.
   start_time     TIMESTAMPTZ,     -- The span's start time.
-  duration       INTERVAL,        -- The span's duration, measured by time of 
-                                  -- collection - start time for all in-flight spans.
+  duration       INTERVAL,        -- The span's duration, calculated by (time of 
+                                  -- collection - start time) for all in-flight spans.
   operation      STRING NULL      -- The span's operation.
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -1155,6 +1156,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID
 				goroutineID := rec.GoroutineID
+				finished := rec.Finished
 
 				startTime, err := tree.MakeDTimestampTZ(rec.StartTime, time.Microsecond)
 				if err != nil {
@@ -1169,6 +1171,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 					tree.NewDInt(tree.DInt(parentSpanID)),
 					tree.NewDInt(tree.DInt(spanID)),
 					tree.NewDInt(tree.DInt(goroutineID)),
+					tree.MakeDBool(tree.DBool(finished)),
 					startTime,
 					tree.NewDInterval(
 						duration.MakeDuration(spanDuration.Nanoseconds(), 0, 0),

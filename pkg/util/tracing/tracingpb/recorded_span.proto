@@ -79,6 +79,9 @@ message RecordedSpan {
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
+
+  // True if the span has been Finish()ed, false otherwise.
+  bool finished = 13;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
