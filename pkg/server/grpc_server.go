@@ -54,6 +54,10 @@ const (
 	modeDraining
 )
 
+func (s *grpcServer) ForSubsystem(subsystemName string) {
+
+}
+
 func (s *grpcServer) setMode(mode serveMode) {
 	s.mode.set(mode)
 }

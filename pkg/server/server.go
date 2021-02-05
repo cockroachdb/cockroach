@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	runtimepprof "runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -2032,8 +2031,7 @@ func (s *SQLServer) startServeSQL(
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
-	pgCtx := runtimepprof.WithLabels(s.pgServer.AmbientCtx.AnnotateCtx(context.Background()),
-		runtimepprof.Labels("appname", "pgconn"))
+	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := tcpKeepAliveManager{
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}

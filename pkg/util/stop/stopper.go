@@ -15,14 +15,13 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
-	"sync"
+	"runtime/pprof"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -331,14 +330,11 @@ func (s *Stopper) RunTaskWithErr(
 	return f(ctx)
 }
 
-var goroutineLabelsCache sync.Map
-
 // RunAsyncTask is like RunTask, except the callback is run in a goroutine. The
 // method doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTask(
 	ctx context.Context, taskName string, f func(context.Context),
 ) error {
-	ctx = util.AssertHasLabel(ctx)
 	taskName = asyncTaskNamePrefix + taskName
 	if !s.runPrelude() {
 		return ErrUnavailable
@@ -351,7 +347,7 @@ func (s *Stopper) RunAsyncTask(
 		defer s.Recover(ctx)
 		defer s.runPostlude()
 		defer span.Finish()
-		f(ctx)
+		pprof.Do(ctx, pprof.Labels("task", taskName), f)
 	}()
 	return nil
 }

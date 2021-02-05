@@ -102,14 +102,16 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast)
 
 	case stateOpen:
-		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+		// HACK
+		if true || ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 			remoteAddr := "internal"
 			if rAddr := ex.sessionData.RemoteAddr; rAddr != nil {
 				remoteAddr = rAddr.String()
 			}
+			_ = remoteAddr
 			labels := pprof.Labels(
 				"appname", ex.sessionData.ApplicationName,
-				"addr", remoteAddr,
+				//"addr", remoteAddr,
 				"stmt.tag", ast.StatementTag(),
 				"stmt.anonymized", anonymizeStmt(ast),
 			)

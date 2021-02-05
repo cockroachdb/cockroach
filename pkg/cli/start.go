@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -274,10 +273,10 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // If the argument startSingleNode is set the replication factor
 // will be set to 1 all zone configs (see initial_sql.go).
 func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnErr error) {
-	ctx := runtimepprof.WithLabels(context.Background(), runtimepprof.Labels("appname", "world"))
+	// TODO(tbg): find a better way to do this.
+	ctx := runtimepprof.WithLabels(context.Background(), runtimepprof.Labels("task", "none"))
 	runtimepprof.SetGoroutineLabels(ctx)
 	tBegin := timeutil.Now()
-	ctx = util.AssertHasLabel(ctx)
 
 	// First things first: if the user wants background processing,
 	// relinquish the terminal ASAP by forking and exiting.

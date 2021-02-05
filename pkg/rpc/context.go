@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -158,6 +159,12 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	// The last element will wrap the actual handler.
 	var unaryInterceptor []grpc.UnaryServerInterceptor
 	var streamInterceptor []grpc.StreamServerInterceptor
+
+	{
+		lblIC := ctx.goroutineLabelInterceptor
+		unaryInterceptor = append(unaryInterceptor, lblIC.UnaryServerInterceptor)
+		streamInterceptor = append(streamInterceptor, lblIC.StreamServerInterceptor)
+	}
 
 	if !ctx.Config.Insecure {
 		a := kvAuth{}
@@ -302,7 +309,8 @@ type Context struct {
 	ClusterID base.ClusterIDContainer
 	NodeID    base.NodeIDContainer
 
-	metrics Metrics
+	metrics                   Metrics
+	goroutineLabelInterceptor *pprofutil.GoroutineLabelingInterceptor
 
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
@@ -389,10 +397,11 @@ func NewContext(opts ContextOptions) *Context {
 		},
 		RemoteClocks: newRemoteClockMonitor(
 			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
-		rpcCompression:   enableRPCCompression,
-		masterCtx:        masterCtx,
-		metrics:          makeMetrics(),
-		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
+		rpcCompression:            enableRPCCompression,
+		masterCtx:                 masterCtx,
+		metrics:                   makeMetrics(),
+		goroutineLabelInterceptor: pprofutil.NewGoroutineLabelingInterceptor(),
+		heartbeatTimeout:          2 * opts.Config.RPCHeartbeatInterval,
 	}
 	if id := opts.Knobs.ClusterID; id != nil {
 		ctx.ClusterID.Set(masterCtx, *id)
@@ -448,7 +457,8 @@ func (ctx *Context) Metrics() *Metrics {
 func (ctx *Context) GetLocalInternalClientForAddr(
 	target string, nodeID roachpb.NodeID,
 ) roachpb.InternalClient {
-	if target == ctx.Config.AdvertiseAddr && nodeID == ctx.NodeID.Get() {
+	// HACK(tbg): disable LocalInternalClient optimization for now.
+	if false && target == ctx.Config.AdvertiseAddr && nodeID == ctx.NodeID.Get() {
 		return ctx.localInternalClient
 	}
 	return nil
@@ -717,6 +727,12 @@ func (ctx *Context) grpcDialOptions(
 
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 	var streamInterceptors []grpc.StreamClientInterceptor
+
+	{
+		lblIC := ctx.goroutineLabelInterceptor
+		unaryInterceptors = append(unaryInterceptors, lblIC.UnaryClientInterceptor)
+		streamInterceptors = append(streamInterceptors, lblIC.StreamClientInterceptor)
+	}
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// TODO(tbg): re-write all of this for our tracer.

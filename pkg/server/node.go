@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -170,6 +171,8 @@ type Node struct {
 	additionalStoreInitCh chan struct{}
 
 	perReplicaServer kvserver.Server
+
+	localRPCGoroutineLabelingInterceptor *pprofutil.GoroutineLabelingInterceptor
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -295,14 +298,15 @@ func NewNode(
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:   cfg,
-		stopper:    stopper,
-		recorder:   recorder,
-		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
-		txnMetrics: txnMetrics,
-		sqlExec:    sqlExec,
-		clusterID:  clusterID,
+		storeCfg:                             cfg,
+		stopper:                              stopper,
+		recorder:                             recorder,
+		metrics:                              makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:                               kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
+		txnMetrics:                           txnMetrics,
+		sqlExec:                              sqlExec,
+		clusterID:                            clusterID,
+		localRPCGoroutineLabelingInterceptor: pprofutil.NewGoroutineLabelingInterceptor("local", "1"),
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -862,8 +866,9 @@ func (n *Node) batchInternal(
 	var br *roachpb.BatchResponse
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
+		isLocalReq := grpcutil.IsLocalRequestContext(ctx)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, grpcutil.IsLocalRequestContext(ctx))
+		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, isLocalReq)
 		// NB: wrapped to delay br evaluation to its value when returning.
 		defer func() { finishSpan(br) }()
 		if log.HasSpanOrEvent(ctx) {
@@ -872,7 +877,13 @@ func (n *Node) batchInternal(
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
+		if isLocalReq {
+			n.localRPCGoroutineLabelingInterceptor.Do(ctx, "/cockroach.roachpb.Internal/Batch", func(ctx context.Context) {
+				br, pErr = n.stores.Send(ctx, *args)
+			})
+		} else {
+			br, pErr = n.stores.Send(ctx, *args)
+		}
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
 			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
