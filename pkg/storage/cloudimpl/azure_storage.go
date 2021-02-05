@@ -101,6 +101,7 @@ func (s *azureStorage) WriteFile(
 			blob := s.getBlob(basename)
 			_, err := blob.Upload(
 				ctx, content, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{},
+				azblob.DefaultAccessTier, nil /* blobTagsMap */, azblob.ClientProvidedKeyOptions{},
 			)
 			return err
 		})
@@ -118,7 +119,9 @@ func (s *azureStorage) ReadFileAt(
 ) (io.ReadCloser, int64, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	blob := s.getBlob(basename)
-	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{},
+		false /* rangeGetContentMD5 */, azblob.ClientProvidedKeyOptions{},
+	)
 	if err != nil {
 		if azerr := (azblob.StorageError)(nil); errors.As(err, &azerr) {
 			switch azerr.ServiceCode() {
@@ -203,7 +206,7 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			var err error
-			props, err = blob.GetProperties(ctx, azblob.BlobAccessConditions{})
+			props, err = blob.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 			return err
 		})
 	if err != nil {

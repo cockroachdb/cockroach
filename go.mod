@@ -5,7 +5,7 @@ go 1.15
 require (
 	cloud.google.com/go v0.34.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
-	github.com/Azure/azure-storage-blob-go v0.0.0-20190104215108-45d0c5e3638e
+	github.com/Azure/azure-storage-blob-go v0.12.0
 	github.com/Azure/go-autorest/autorest v0.10.2
 	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
 	github.com/Azure/go-autorest/autorest/to v0.3.0
@@ -80,6 +80,7 @@ require (
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
+	github.com/google/uuid v1.2.0 // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
@@ -150,12 +151,12 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/exp v0.0.0-20210201131500-d352d2db2ceb
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
-	golang.org/x/term v0.0.0-20201117132131-f5c789dd3221
+	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.1.0
