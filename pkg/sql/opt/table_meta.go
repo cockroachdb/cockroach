@@ -172,8 +172,7 @@ func (tm *TableMeta) clearAnnotations() {
 	}
 }
 
-// IndexColumns returns the metadata IDs for the set of table columns in the
-// given index.
+// IndexColumns returns the set of table columns in the given index.
 // TODO(justin): cache this value in the table metadata.
 func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
@@ -186,9 +185,8 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexColumnsMapVirtual returns the metadata IDs for the set of table columns
-// in the given index. Virtual inverted index columns are mapped to their source
-// column.
+// IndexColumnsMapVirtual returns the set of table columns in the given index.
+// Virtual inverted index columns are mapped to their source column.
 func (tm *TableMeta) IndexColumnsMapVirtual(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
@@ -204,8 +202,7 @@ func (tm *TableMeta) IndexColumnsMapVirtual(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexKeyColumns returns the metadata IDs for the set of strict key columns in
-// the given index.
+// IndexKeyColumns returns the set of strict key columns in the given index.
 func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
@@ -217,9 +214,8 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexKeyColumnsMapVirtual returns the metadata IDs for the set of strict key
-// columns in the given index. Inverted index columns are mapped to their source
-// column.
+// IndexKeyColumnsMapVirtual returns the set of strict key columns in the given
+// index. Inverted index columns are mapped to their source column.
 func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
@@ -282,6 +278,18 @@ func (tm *TableMeta) PartialIndexPredicate(ord cat.IndexOrdinal) (pred ScalarExp
 // opt expressions. Use PartialIndexPredicate in all other cases.
 func (tm *TableMeta) PartialIndexPredicatesForFormattingOnly() map[cat.IndexOrdinal]ScalarExpr {
 	return tm.partialIndexPredicates
+}
+
+// VirtualComputedColumns returns the set of virtual computed table columns.
+func (tm *TableMeta) VirtualComputedColumns() ColSet {
+	var virtualCols ColSet
+	for col := range tm.ComputedCols {
+		ord := tm.MetaID.ColumnOrdinal(col)
+		if tm.Table.Column(ord).IsVirtualComputed() {
+			virtualCols.Add(col)
+		}
+	}
+	return virtualCols
 }
 
 // TableAnnotation returns the given annotation that is associated with the
