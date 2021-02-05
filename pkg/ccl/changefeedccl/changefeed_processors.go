@@ -197,7 +197,7 @@ func newChangeAggregatorProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (ca *changeAggregator) Start(ctx context.Context) context.Context {
+func (ca *changeAggregator) Start(ctx context.Context) {
 	ctx, ca.cancel = context.WithCancel(ctx)
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
@@ -216,7 +216,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
-		return ctx
+		return
 	}
 
 	// This is the correct point to set up certain hooks depending on the sink
@@ -259,8 +259,6 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.eventConsumer = newKVEventToRowConsumer(ctx, cfg, ca.spanFrontier, kvfeedCfg.InitialHighWater,
 		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs)
 	ca.startKVFeed(ctx, kvfeedCfg)
-
-	return ctx
 }
 
 func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Config) {
@@ -852,7 +850,7 @@ func newChangeFrontierProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (cf *changeFrontier) Start(ctx context.Context) context.Context {
+func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.input.Start(ctx)
 
 	// StartInternal called at the beginning of the function because there are
@@ -870,7 +868,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	if err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
-		return ctx
+		return
 	}
 
 	if b, ok := cf.sink.(*bufferSink); ok {
@@ -889,7 +887,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
 		if err != nil {
 			cf.MoveToDraining(err)
-			return ctx
+			return
 		}
 		cf.jobProgressedFn = job.HighWaterProgressed
 
@@ -915,8 +913,6 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 		<-ctx.Done()
 		cf.closeMetrics()
 	}()
-
-	return ctx
 }
 
 func (cf *changeFrontier) close() {

@@ -67,9 +67,10 @@ func newCountAggregator(
 	return ag, nil
 }
 
-func (ag *countAggregator) Start(ctx context.Context) context.Context {
+func (ag *countAggregator) Start(ctx context.Context) {
 	ag.input.Start(ctx)
-	return ag.StartInternal(ctx, countRowsProcName)
+	ctx = ag.StartInternal(ctx, countRowsProcName)
+	_ = ctx // make linter happy
 }
 
 func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {

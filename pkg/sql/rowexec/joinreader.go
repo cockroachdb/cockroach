@@ -651,11 +651,11 @@ func (jr *joinReader) emitRow() (
 }
 
 // Start is part of the RowSource interface.
-func (jr *joinReader) Start(ctx context.Context) context.Context {
+func (jr *joinReader) Start(ctx context.Context) {
 	jr.input.Start(ctx)
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
+	_ = ctx // make linter happy
 	jr.runningState = jrReadingInput
-	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.

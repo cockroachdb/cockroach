@@ -141,15 +141,17 @@ func newDistinct(
 }
 
 // Start is part of the RowSource interface.
-func (d *distinct) Start(ctx context.Context) context.Context {
+func (d *distinct) Start(ctx context.Context) {
 	d.input.Start(ctx)
-	return d.StartInternal(ctx, distinctProcName)
+	ctx = d.StartInternal(ctx, distinctProcName)
+	_ = ctx // make linter happy
 }
 
 // Start is part of the RowSource interface.
-func (d *sortedDistinct) Start(ctx context.Context) context.Context {
+func (d *sortedDistinct) Start(ctx context.Context) {
 	d.input.Start(ctx)
-	return d.StartInternal(ctx, sortedDistinctProcName)
+	ctx = d.StartInternal(ctx, sortedDistinctProcName)
+	_ = ctx // make linter happy
 }
 
 func (d *distinct) matchLastGroupKey(row rowenc.EncDatumRow) (bool, error) {

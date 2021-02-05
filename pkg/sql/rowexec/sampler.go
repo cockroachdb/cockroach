@@ -219,7 +219,8 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 // Run is part of the Processor interface.
 func (s *samplerProcessor) Run(ctx context.Context) {
 	s.input.Start(ctx)
-	s.StartInternal(ctx, samplerProcName)
+	ctx = s.StartInternal(ctx, samplerProcName)
+	_ = ctx // make linter happy
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {

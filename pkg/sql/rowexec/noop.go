@@ -63,9 +63,10 @@ func newNoopProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (n *noopProcessor) Start(ctx context.Context) context.Context {
+func (n *noopProcessor) Start(ctx context.Context) {
 	n.input.Start(ctx)
-	return n.StartInternal(ctx, noopProcName)
+	ctx = n.StartInternal(ctx, noopProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

@@ -226,15 +226,15 @@ func newSortAllProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (s *sortAllProcessor) Start(ctx context.Context) context.Context {
+func (s *sortAllProcessor) Start(ctx context.Context) {
 	s.input.Start(ctx)
 	ctx = s.StartInternal(ctx, sortAllProcName)
+	_ = ctx // make linter happy
 
 	valid, err := s.fill()
 	if !valid || err != nil {
 		s.MoveToDraining(err)
 	}
-	return ctx
 }
 
 // fill fills s.rows with the input's rows.
@@ -339,7 +339,7 @@ func newSortTopKProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
+func (s *sortTopKProcessor) Start(ctx context.Context) {
 	s.input.Start(ctx)
 	ctx = s.StartInternal(ctx, sortTopKProcName)
 
@@ -384,7 +384,6 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 	s.rows.Sort(ctx)
 	s.i = s.rows.NewFinalIterator(ctx)
 	s.i.Rewind()
-	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -523,9 +522,10 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 }
 
 // Start is part of the RowSource interface.
-func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
+func (s *sortChunksProcessor) Start(ctx context.Context) {
 	s.input.Start(ctx)
-	return s.StartInternal(ctx, sortChunksProcName)
+	ctx = s.StartInternal(ctx, sortChunksProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

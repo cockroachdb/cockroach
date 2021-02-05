@@ -79,9 +79,10 @@ func newRestoreDataProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (rd *restoreDataProcessor) Start(ctx context.Context) context.Context {
+func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.input.Start(ctx)
-	return rd.StartInternal(ctx, restoreDataProcName)
+	ctx = rd.StartInternal(ctx, restoreDataProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

@@ -108,12 +108,13 @@ func newBackupDataProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (bp *backupDataProcessor) Start(ctx context.Context) context.Context {
+func (bp *backupDataProcessor) Start(ctx context.Context) {
 	go func() {
 		defer close(bp.progCh)
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
 	}()
-	return bp.StartInternal(ctx, backupProcessorName)
+	ctx = bp.StartInternal(ctx, backupProcessorName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

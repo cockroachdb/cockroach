@@ -287,11 +287,11 @@ func (ifr *invertedFilterer) emitRow() (
 }
 
 // Start is part of the RowSource interface.
-func (ifr *invertedFilterer) Start(ctx context.Context) context.Context {
+func (ifr *invertedFilterer) Start(ctx context.Context) {
 	ifr.input.Start(ctx)
 	ctx = ifr.StartInternal(ctx, invertedFiltererProcName)
+	_ = ctx // make linter happy
 	ifr.runningState = ifrReadingInput
-	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.

@@ -70,9 +70,10 @@ func newFiltererProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (f *filtererProcessor) Start(ctx context.Context) context.Context {
+func (f *filtererProcessor) Start(ctx context.Context) {
 	f.input.Start(ctx)
-	return f.StartInternal(ctx, filtererProcName)
+	ctx = f.StartInternal(ctx, filtererProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

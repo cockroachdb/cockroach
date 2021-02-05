@@ -87,9 +87,10 @@ func newStreamIngestionFrontierProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (sf *streamIngestionFrontier) Start(ctx context.Context) context.Context {
+func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	sf.input.Start(ctx)
-	return sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

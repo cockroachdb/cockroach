@@ -327,21 +327,20 @@ func newOrderedAggregator(
 }
 
 // Start is part of the RowSource interface.
-func (ag *hashAggregator) Start(ctx context.Context) context.Context {
-	return ag.start(ctx, hashAggregatorProcName)
+func (ag *hashAggregator) Start(ctx context.Context) {
+	ag.start(ctx, hashAggregatorProcName)
 }
 
 // Start is part of the RowSource interface.
-func (ag *orderedAggregator) Start(ctx context.Context) context.Context {
-	return ag.start(ctx, orderedAggregatorProcName)
+func (ag *orderedAggregator) Start(ctx context.Context) {
+	ag.start(ctx, orderedAggregatorProcName)
 }
 
-func (ag *aggregatorBase) start(ctx context.Context, procName string) context.Context {
+func (ag *aggregatorBase) start(ctx context.Context, procName string) {
 	ag.input.Start(ctx)
 	ctx = ag.StartInternal(ctx, procName)
 	ag.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	ag.runningState = aggAccumulating
-	return ctx
 }
 
 func (ag *hashAggregator) close() {

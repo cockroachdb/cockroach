@@ -75,9 +75,10 @@ func newOrdinalityProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (o *ordinalityProcessor) Start(ctx context.Context) context.Context {
+func (o *ordinalityProcessor) Start(ctx context.Context) {
 	o.input.Start(ctx)
-	return o.StartInternal(ctx, ordinalityProcName)
+	ctx = o.StartInternal(ctx, ordinalityProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

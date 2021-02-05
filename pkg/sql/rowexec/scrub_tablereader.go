@@ -209,7 +209,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 }
 
 // Start is part of the RowSource interface.
-func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
+func (tr *scrubTableReader) Start(ctx context.Context) {
 	if tr.FlowCtx.Txn == nil {
 		tr.MoveToDraining(errors.Errorf("scrubTableReader outside of txn"))
 	}
@@ -224,8 +224,6 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 	); err != nil {
 		tr.MoveToDraining(err)
 	}
-
-	return ctx
 }
 
 // Next is part of the RowSource interface.

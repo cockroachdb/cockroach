@@ -182,7 +182,8 @@ func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
 // Run is part of the Processor interface.
 func (s *sampleAggregator) Run(ctx context.Context) {
 	s.input.Start(ctx)
-	s.StartInternal(ctx, sampleAggregatorProcName)
+	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
+	_ = ctx // make linter happy
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {

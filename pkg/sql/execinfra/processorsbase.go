@@ -376,7 +376,7 @@ type ProcessorConstructor func(
 //   }
 //
 //   // Start is part of the RowSource interface.
-//   func (p *concatProcessor) Start(ctx context.Context) context.Context {
+//   func (p *concatProcessor) Start(ctx context.Context) {
 //     p.l.Start(ctx)
 //     p.r.Start(ctx)
 //     return p.StartInternal(ctx, concatProcName)
@@ -761,8 +761,8 @@ func (pb *ProcessorBase) Run(ctx context.Context) {
 	if pb.Out.output == nil {
 		panic("processor output not initialized for emitting rows")
 	}
-	ctx = pb.self.Start(ctx)
-	Run(ctx, pb.self, pb.Out.output)
+	pb.self.Start(ctx)
+	Run(pb.Ctx, pb.self, pb.Out.output)
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions
@@ -857,6 +857,12 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
 // annotated context that's also stored in pb.Ctx.
+//
+// It is likely that this method is called from RowSource.Start implementation,
+// and the recommended layout is the following:
+//   ctx = pb.StartInternal(ctx, name)
+//   < other initialization >
+// so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
 	pb.origCtx = ctx
 	pb.Ctx, pb.span = ProcessorSpan(ctx, name)

@@ -139,9 +139,10 @@ func (mtr *MetadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMeta
 }
 
 // Start is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
+func (mtr *MetadataTestReceiver) Start(ctx context.Context) {
 	mtr.input.Start(ctx)
-	return mtr.StartInternal(ctx, metadataTestReceiverProcName)
+	ctx = mtr.StartInternal(ctx, metadataTestReceiverProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

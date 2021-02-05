@@ -99,7 +99,7 @@ func newReadImportDataProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (idp *readImportDataProcessor) Start(ctx context.Context) context.Context {
+func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
 	go func() {
@@ -107,7 +107,8 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) context.Context {
 		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
 	}()
-	return idp.StartInternal(ctx, readImportDataProcessorName)
+	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.

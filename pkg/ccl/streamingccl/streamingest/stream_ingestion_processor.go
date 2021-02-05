@@ -139,7 +139,7 @@ func newStreamIngestionDataProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context {
+func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
 	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
@@ -152,8 +152,6 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 		eventChs[partitionAddress] = eventCh
 	}
 	sip.eventCh = merge(ctx, eventChs)
-
-	return ctx
 }
 
 // Next is part of the RowSource interface.

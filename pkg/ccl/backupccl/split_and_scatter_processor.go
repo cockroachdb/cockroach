@@ -186,7 +186,7 @@ func newSplitAndScatterProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (ssp *splitAndScatterProcessor) Start(ctx context.Context) context.Context {
+func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 	go func() {
 		// Note that the loop over doneScatterCh in Next should prevent this
 		// goroutine from leaking when there are no errors. However, if that loop
@@ -197,7 +197,8 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) context.Context 
 		defer close(ssp.doneScatterCh)
 		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
 	}()
-	return ssp.StartInternal(ctx, splitAndScatterProcessorName)
+	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
+	_ = ctx // make linter happy
 }
 
 type entryNode struct {

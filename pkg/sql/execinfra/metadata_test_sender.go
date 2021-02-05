@@ -74,9 +74,10 @@ func NewMetadataTestSender(
 }
 
 // Start is part of the RowSource interface.
-func (mts *MetadataTestSender) Start(ctx context.Context) context.Context {
+func (mts *MetadataTestSender) Start(ctx context.Context) {
 	mts.input.Start(ctx)
-	return mts.StartInternal(ctx, metadataTestSenderProcName)
+	ctx = mts.StartInternal(ctx, metadataTestSenderProcName)
+	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.
