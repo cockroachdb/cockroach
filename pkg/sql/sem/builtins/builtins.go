@@ -4739,6 +4739,25 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.increment_feature_counter": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categorySystemInfo,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"feature", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				feature := string(*args[0].(*tree.DString))
+				telemetry.Inc(sqltelemetry.HashedFeatureCounter(feature))
+				return tree.DBoolTrue, nil
+			},
+			Info: "This function can be used to report the usage of an arbitrary feature. The " +
+				"feature name is hashed for privacy purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"num_nulls": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryComparison,
