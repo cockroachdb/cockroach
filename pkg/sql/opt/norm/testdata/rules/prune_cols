@@ -182,6 +182,21 @@ CREATE TABLE virt_idx3 (
 )
 ----
 
+exec-ddl
+CREATE TABLE virt_partial_idx (
+    a INT PRIMARY KEY,
+    b INT,
+    v INT AS (b + 1) VIRTUAL,
+    c INT,
+    d INT,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (d),
+    INDEX (c) WHERE v > 1
+)
+----
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -2480,6 +2495,439 @@ delete partial_indexes
       │         └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
       └── projections
            └── b:7 > 1 [as=partial_index_del1:11, outer=(7)]
+
+# Prune UPDATE fetch columns when neither the column indexed by the partial
+# index nor the virtual columns referenced in the partial index predicate are
+# mutating.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPDATE virt_partial_idx SET d = d + 1 WHERE a = 1
+----
+update virt_partial_idx
+ ├── columns: <none>
+ ├── fetch columns: a:7 d:11
+ ├── update-mapping:
+ │    └── d_new:13 => d:5
+ ├── partial index put columns: partial_index_put1:15
+ ├── partial index del columns: partial_index_put1:15
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:15!null d_new:13 a:7!null d:11
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7,11,13,15)
+      ├── select
+      │    ├── columns: a:7!null d:11
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,11)
+      │    ├── scan virt_partial_idx
+      │    │    ├── columns: a:7!null d:11
+      │    │    ├── computed column expressions
+      │    │    │    └── v:9
+      │    │    │         └── b:8 + 1
+      │    │    ├── partial index predicates
+      │    │    │    └── secondary: filters
+      │    │    │         └── b:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(11)
+      │    └── filters
+      │         └── a:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           ├── false [as=partial_index_put1:15]
+           └── d:11 + 1 [as=d_new:13, outer=(11), immutable]
+
+# Do not prune the indexed column c because a column referenced in the partial
+# index predicate, v, is mutating because it is dependent on the value of b.
+norm expect-not=PruneMutationFetchCols
+UPDATE virt_partial_idx SET d = d + 1, b = 2 WHERE a = 1
+----
+update virt_partial_idx
+ ├── columns: <none>
+ ├── fetch columns: a:7 b:8 v:9 c:10 d:11
+ ├── update-mapping:
+ │    ├── b_new:14 => b:2
+ │    ├── column15:15 => v:3
+ │    └── d_new:13 => d:5
+ ├── partial index put columns: partial_index_put1:16
+ ├── partial index del columns: partial_index_del1:17
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:16!null partial_index_del1:17 a:7!null b:8 v:9 c:10 d:11 d_new:13 b_new:14!null column15:15!null
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7-11,13-17)
+      ├── project
+      │    ├── columns: column15:15!null d_new:13 b_new:14!null v:9 a:7!null b:8 c:10 d:11
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-11,13-15)
+      │    ├── select
+      │    │    ├── columns: a:7!null b:8 c:10 d:11
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8,10,11)
+      │    │    ├── scan virt_partial_idx
+      │    │    │    ├── columns: a:7!null b:8 c:10 d:11
+      │    │    │    ├── computed column expressions
+      │    │    │    │    └── v:9
+      │    │    │    │         └── b:8 + 1
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         └── b:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    │    │    ├── key: (7)
+      │    │    │    └── fd: (7)-->(8,10,11)
+      │    │    └── filters
+      │    │         └── a:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │    └── projections
+      │         ├── 3 [as=column15:15]
+      │         ├── d:11 + 1 [as=d_new:13, outer=(11), immutable]
+      │         ├── 2 [as=b_new:14]
+      │         └── b:8 + 1 [as=v:9, outer=(8), immutable]
+      └── projections
+           ├── true [as=partial_index_put1:16]
+           └── v:9 > 1 [as=partial_index_del1:17, outer=(9)]
+
+# Prune UPSERT fetch columns when neither the column indexed by the partial
+# index nor the virtual columns referenced in the partial index predicate are
+# mutating.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPSERT INTO virt_partial_idx (a, d) VALUES (1, 2)
+----
+upsert virt_partial_idx
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:11
+ ├── fetch columns: a:11 d:15
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column9:9 => b:2
+ │    ├── column10:10 => v:3
+ │    ├── column9:9 => c:4
+ │    └── column2:8 => d:5
+ ├── update-mapping:
+ │    └── column2:8 => d:5
+ ├── partial index put columns: partial_index_put1:22
+ ├── partial index del columns: partial_index_del1:23
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:22 partial_index_del1:23 column1:7!null column2:8!null column9:9 column10:10 a:11 d:15
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7-11,15,22,23)
+      ├── left-join (cross)
+      │    ├── columns: column1:7!null column2:8!null column9:9 column10:10 a:11 v:13 d:15
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-11,13,15)
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7-10)
+      │    │    └── (1, 2, NULL, NULL)
+      │    ├── project
+      │    │    ├── columns: v:13 a:11!null d:15
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11,13,15)
+      │    │    ├── select
+      │    │    │    ├── columns: a:11!null b:12 d:15
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(11,12,15)
+      │    │    │    ├── scan virt_partial_idx
+      │    │    │    │    ├── columns: a:11!null b:12 d:15
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:13
+      │    │    │    │    │         └── b:12 + 1
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │         └── b:12 > 0 [outer=(12), constraints=(/12: [/1 - ]; tight)]
+      │    │    │    │    ├── key: (11)
+      │    │    │    │    └── fd: (11)-->(12,15)
+      │    │    │    └── filters
+      │    │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      │    │    └── projections
+      │    │         └── b:12 + 1 [as=v:13, outer=(12), immutable]
+      │    └── filters (true)
+      └── projections
+           ├── CASE WHEN a:11 IS NULL THEN column10:10 ELSE v:13 END > 1 [as=partial_index_put1:22, outer=(10,11,13)]
+           └── v:13 > 1 [as=partial_index_del1:23, outer=(13)]
+
+# Do not prune the indexed column c because a column referenced in the partial
+# index predicate, v, is mutating because it is dependent on the value of b.
+norm expect-not=PruneMutationFetchCols
+UPSERT INTO virt_partial_idx (a, b, d) VALUES (1, 2, 3)
+----
+upsert virt_partial_idx
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:12
+ ├── fetch columns: a:12 b:13 v:14 c:15 d:16
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column11:11 => v:3
+ │    ├── column10:10 => c:4
+ │    └── column3:9 => d:5
+ ├── update-mapping:
+ │    ├── column2:8 => b:2
+ │    ├── column11:11 => v:3
+ │    └── column3:9 => d:5
+ ├── partial index put columns: partial_index_put1:20
+ ├── partial index del columns: partial_index_del1:21
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:20!null partial_index_del1:21 column1:7!null column2:8!null column3:9!null column10:10 column11:11!null a:12 b:13 v:14 c:15 d:16
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7-16,20,21)
+      ├── left-join (cross)
+      │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null a:12 b:13 v:14 c:15 d:16
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-16)
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7-11)
+      │    │    └── (1, 2, 3, NULL, 3)
+      │    ├── project
+      │    │    ├── columns: v:14 a:12!null b:13 c:15 d:16
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(12-16)
+      │    │    ├── select
+      │    │    │    ├── columns: a:12!null b:13 c:15 d:16
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(12,13,15,16)
+      │    │    │    ├── scan virt_partial_idx
+      │    │    │    │    ├── columns: a:12!null b:13 c:15 d:16
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:14
+      │    │    │    │    │         └── b:13 + 1
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    ├── key: (12)
+      │    │    │    │    └── fd: (12)-->(13,15,16)
+      │    │    │    └── filters
+      │    │    │         └── a:12 = 1 [outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+      │    │    └── projections
+      │    │         └── b:13 + 1 [as=v:14, outer=(13), immutable]
+      │    └── filters (true)
+      └── projections
+           ├── column11:11 > 1 [as=partial_index_put1:20, outer=(11)]
+           └── v:14 > 1 [as=partial_index_del1:21, outer=(14)]
+
+# Prune INSERT ON CONFLICT DO UPDATE fetch columns when neither the column
+# indexed by the partial index nor the virtual columns referenced in the partial
+# index predicate are mutating.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET d = 3
+----
+upsert virt_partial_idx
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:11
+ ├── fetch columns: a:11 d:15
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column9:9 => b:2
+ │    ├── column10:10 => v:3
+ │    ├── column9:9 => c:4
+ │    └── column2:8 => d:5
+ ├── update-mapping:
+ │    └── upsert_d:23 => d:5
+ ├── partial index put columns: partial_index_put1:24
+ ├── partial index del columns: partial_index_del1:25
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:24 partial_index_del1:25 upsert_d:23!null column1:7!null column2:8!null column9:9 column10:10 a:11 d:15
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7-11,15,23-25)
+      ├── left-join (cross)
+      │    ├── columns: column1:7!null column2:8!null column9:9 column10:10 a:11 v:13 d:15
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-11,13,15)
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7-10)
+      │    │    └── (1, 2, NULL, NULL)
+      │    ├── project
+      │    │    ├── columns: v:13 a:11!null d:15
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11,13,15)
+      │    │    ├── select
+      │    │    │    ├── columns: a:11!null b:12 d:15
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(11,12,15)
+      │    │    │    ├── scan virt_partial_idx
+      │    │    │    │    ├── columns: a:11!null b:12 d:15
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:13
+      │    │    │    │    │         └── b:12 + 1
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │         └── b:12 > 0 [outer=(12), constraints=(/12: [/1 - ]; tight)]
+      │    │    │    │    ├── key: (11)
+      │    │    │    │    └── fd: (11)-->(12,15)
+      │    │    │    └── filters
+      │    │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      │    │    └── projections
+      │    │         └── b:12 + 1 [as=v:13, outer=(12), immutable]
+      │    └── filters (true)
+      └── projections
+           ├── CASE WHEN a:11 IS NULL THEN column10:10 ELSE v:13 END > 1 [as=partial_index_put1:24, outer=(10,11,13)]
+           ├── v:13 > 1 [as=partial_index_del1:25, outer=(13)]
+           └── CASE WHEN a:11 IS NULL THEN column2:8 ELSE 3 END [as=upsert_d:23, outer=(8,11)]
+
+# Do not prune the indexed column c because a column referenced in the partial
+# index predicate, v, is mutating because it is dependent on the value of b.
+norm expect-not=PruneMutationFetchCols
+INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = 3, d = 4
+----
+upsert virt_partial_idx
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 v:13 c:14 d:15
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column9:9 => b:2
+ │    ├── column10:10 => v:3
+ │    ├── column9:9 => c:4
+ │    └── column2:8 => d:5
+ ├── update-mapping:
+ │    ├── upsert_b:21 => b:2
+ │    ├── upsert_v:22 => v:3
+ │    └── upsert_d:24 => d:5
+ ├── partial index put columns: partial_index_put1:25
+ ├── partial index del columns: partial_index_del1:26
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:25 partial_index_del1:26 column1:7!null column2:8!null column9:9 column10:10 a:11 b:12 v:13 c:14 d:15 upsert_b:21 upsert_v:22 upsert_d:24!null
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(7-15,21,22,24-26)
+      ├── project
+      │    ├── columns: upsert_b:21 upsert_v:22 upsert_d:24!null column1:7!null column2:8!null column9:9 column10:10 a:11 b:12 v:13 c:14 d:15
+      │    ├── cardinality: [1 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-15,21,22,24)
+      │    ├── left-join (cross)
+      │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10 a:11 b:12 v:13 c:14 d:15
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7-15)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(7-10)
+      │    │    │    └── (1, 2, NULL, NULL)
+      │    │    ├── project
+      │    │    │    ├── columns: v:13 a:11!null b:12 c:14 d:15
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── immutable
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(11-15)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: a:11!null b:12 c:14 d:15
+      │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    ├── key: ()
+      │    │    │    │    ├── fd: ()-->(11,12,14,15)
+      │    │    │    │    ├── scan virt_partial_idx
+      │    │    │    │    │    ├── columns: a:11!null b:12 c:14 d:15
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:13
+      │    │    │    │    │    │         └── b:12 + 1
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    │         └── b:12 > 0 [outer=(12), constraints=(/12: [/1 - ]; tight)]
+      │    │    │    │    │    ├── key: (11)
+      │    │    │    │    │    └── fd: (11)-->(12,14,15)
+      │    │    │    │    └── filters
+      │    │    │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      │    │    │    └── projections
+      │    │    │         └── b:12 + 1 [as=v:13, outer=(12), immutable]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── CASE WHEN a:11 IS NULL THEN column9:9 ELSE 3 END [as=upsert_b:21, outer=(9,11)]
+      │         ├── CASE WHEN a:11 IS NULL THEN column10:10 ELSE 4 END [as=upsert_v:22, outer=(10,11)]
+      │         └── CASE WHEN a:11 IS NULL THEN column2:8 ELSE 4 END [as=upsert_d:24, outer=(8,11)]
+      └── projections
+           ├── upsert_v:22 > 1 [as=partial_index_put1:25, outer=(22)]
+           └── v:13 > 1 [as=partial_index_del1:26, outer=(13)]
+
+# Do not prune DELETE fetch columns when the partial index predicate references
+# virtual columns.
+norm
+DELETE FROM virt_partial_idx WHERE a = 1
+----
+delete virt_partial_idx
+ ├── columns: <none>
+ ├── fetch columns: a:7 c:10
+ ├── partial index del columns: partial_index_del1:13
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_del1:13 a:7!null c:10
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,10,13)
+      ├── select
+      │    ├── columns: a:7!null b:8 c:10
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,8,10)
+      │    ├── scan virt_partial_idx
+      │    │    ├── columns: a:7!null b:8 c:10
+      │    │    ├── computed column expressions
+      │    │    │    └── v:9
+      │    │    │         └── b:8 + 1
+      │    │    ├── partial index predicates
+      │    │    │    └── secondary: filters
+      │    │    │         └── b:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8,10)
+      │    └── filters
+      │         └── a:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           └── b:8 > 0 [as=partial_index_del1:13, outer=(8)]
 
 # Do not prune columns that are required for evaluating partial index
 # predicates.
