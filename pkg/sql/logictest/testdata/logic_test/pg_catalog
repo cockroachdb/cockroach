@@ -796,6 +796,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
 2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL
+2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL
 2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
 2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3403232968 0               0 0       2 2        NULL      NULL
@@ -852,6 +853,10 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2101708905  0                           1
 2148104569  0                           1
 2148104569  0                           2
+2268653844  0                           1
+2268653844  0                           2
+2268653844  0                           3
+2268653844  0                           4
 2361445172  0                           1
 2407840836  0                           1
 2407840836  0                           2

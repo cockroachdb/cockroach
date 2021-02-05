@@ -803,9 +803,10 @@ type ExecutorConfig struct {
 	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
 	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
 
-	// MigrationCluster is used to drive KV-level, long-running migrations.
-	// It will only be populated on the system tenant.
-	MigrationCluster migration.Cluster
+	// MigrationJobDeps is used to drive migrations.
+	//
+	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
+	MigrationJobDeps migration.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
 	// object which mostly just holds on to an ExecConfig.

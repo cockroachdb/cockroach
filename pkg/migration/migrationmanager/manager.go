@@ -18,13 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	_ "github.com/cockroachdb/cockroach/pkg/migration/migrationjob"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationjob"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -37,19 +38,55 @@ import (
 // Manager is the instance responsible for executing migrations across the
 // cluster.
 type Manager struct {
-	c  migration.Cluster
-	ie sqlutil.InternalExecutor
-	jr *jobs.Registry
+	c        migration.Cluster
+	ie       sqlutil.InternalExecutor
+	jr       *jobs.Registry
+	codec    keys.SQLCodec
+	settings *cluster.Settings
+	knobs    TestingKnobs
 }
 
-// NewManager constructs a new Manager.
-func NewManager(c migration.Cluster, ie sqlutil.InternalExecutor, jr *jobs.Registry) *Manager {
+// GetMigration returns the migration associated with this key.
+func (m *Manager) GetMigration(key clusterversion.ClusterVersion) (migration.Migration, bool) {
+	if m.knobs.RegistryOverride != nil {
+		if m, ok := m.knobs.RegistryOverride(key); ok {
+			return m, ok
+		}
+	}
+	return migrations.GetMigration(key)
+}
+
+// Cluster returns the cluster associated with this manager. It may be nil
+// in a secondary tenant.
+func (m *Manager) Cluster() migration.Cluster {
+	return m.c
+}
+
+// NewManager constructs a new Manager. The Cluster parameter may be nil in
+// secondary tenants. The testingKnobs parameter may be nil.
+func NewManager(
+	c migration.Cluster,
+	ie sqlutil.InternalExecutor,
+	jr *jobs.Registry,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	testingKnobs *TestingKnobs,
+) *Manager {
+	var knobs TestingKnobs
+	if testingKnobs != nil {
+		knobs = *testingKnobs
+	}
 	return &Manager{
-		c:  c,
-		ie: ie,
-		jr: jr,
+		c:        c,
+		ie:       ie,
+		jr:       jr,
+		codec:    codec,
+		settings: settings,
+		knobs:    knobs,
 	}
 }
+
+var _ migration.JobDeps = (*Manager)(nil)
 
 // Migrate runs the set of migrations required to upgrade the cluster version
 // from the current version to the target one.
@@ -65,28 +102,11 @@ func (m *Manager) Migrate(
 		return nil
 	}
 
-	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
-	// throughout during the migration to ensure mutual exclusion.
-
-	// TODO(irfansharif): We'll need to create a system table to store
-	// in-progress state of long running migrations, for introspection.
-
-	clusterVersions := clusterversion.ListBetween(from, to)
-	if len(clusterVersions) == 0 {
-		// We're attempt to migrate to something that's not defined in cluster
-		// versions. This only happens in tests, when we're exercising version
-		// upgrades over non-existent versions (like in the cluster_version
-		// logictest). These tests explicitly override the
-		// binary{,MinSupportedVersion} in order to work. End-user attempts to
-		// do something similar would be caught at the sql layer (also tested in
-		// the same logictest). We'll just explicitly append the target version
-		// here instead, so that we're able to actually migrate into it.
-		clusterVersions = append(clusterVersions, to)
-	}
+	clusterVersions := m.listBetween(from, to)
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 
 	for _, clusterVersion := range clusterVersions {
-		log.Infof(ctx, "stepping through %s to %s (%s)", from, to, clusterVersions)
+		log.Infof(ctx, "stepping through %s", clusterVersion)
 		// First, run the actual migration if any.
 		if err := m.runMigration(ctx, user, clusterVersion); err != nil {
 			return err
@@ -218,11 +238,25 @@ func (m *Manager) Migrate(
 func (m *Manager) runMigration(
 	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
 ) error {
-	if _, exists := migrations.GetMigration(version); !exists {
+	mig, exists := m.GetMigration(version)
+	if !exists {
 		return nil
 	}
-	id, err := m.getOrCreateMigrationJob(ctx, user, version)
-	if err != nil {
+	// The migration which introduces the infrastructure for running other long
+	// running migrations in jobs. It needs to be special-cased and run without
+	// a job or leasing for bootstrapping purposes. Fortunately it has been
+	// designed to be idempotent and cheap.
+	//
+	// TODO(ajwerner): Remove in 21.2.
+	if version.Version == clusterversion.ByKey(clusterversion.LongRunningMigrations) {
+		return mig.(*migration.SQLMigration).Run(ctx, version, migration.SQLDeps{
+			DB:       m.c.DB(),
+			Codec:    m.codec,
+			Settings: m.settings,
+		})
+	}
+	alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version)
+	if alreadyCompleted || err != nil {
 		return err
 	}
 	return m.jr.Run(ctx, m.ie, []int64{id})
@@ -230,9 +264,12 @@ func (m *Manager) runMigration(
 
 func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
-) (jobID int64, _ error) {
-
+) (alreadyCompleted bool, jobID int64, _ error) {
 	if err := m.c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		alreadyCompleted, err = migrationjob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
+		if alreadyCompleted || err != nil {
+			return err
+		}
 		var found bool
 		found, jobID, err = m.getRunningMigrationJob(ctx, txn, version)
 		if err != nil {
@@ -242,24 +279,16 @@ func (m *Manager) getOrCreateMigrationJob(
 			return nil
 		}
 		var j *jobs.Job
-		j, err = m.jr.CreateJobWithTxn(ctx, jobs.Record{
-			Description: "migration",
-			Details: jobspb.MigrationDetails{
-				ClusterVersion: &version,
-			},
-			Username:      user,
-			Progress:      jobspb.MigrationProgress{},
-			NonCancelable: true,
-		}, txn)
+		j, err = m.jr.CreateJobWithTxn(ctx, migrationjob.NewRecord(version, user), txn)
 		if err != nil {
 			return err
 		}
 		jobID = *j.ID()
 		return nil
 	}); err != nil {
-		return 0, err
+		return false, 0, err
 	}
-	return jobID, nil
+	return alreadyCompleted, jobID, nil
 }
 
 func (m *Manager) getRunningMigrationJob(
@@ -272,14 +301,14 @@ SELECT id, status
 		status,
 		crdb_internal.pb_to_json(
 			'cockroach.sql.jobs.jobspb.Payload',
-			payload
+			payload,
+      false -- emit_defaults
 		) AS pl
 	FROM system.jobs
   WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 	)
 	WHERE pl->'migration'->'clusterVersion' = $1::JSON;`
-	// TODO(ajwerner): Flip the emitDefaults flag once this is rebased on master.
-	jsonMsg, err := protoreflect.MessageToJSON(&version, true /* emitDefaults */)
+	jsonMsg, err := protoreflect.MessageToJSON(&version, false /* emitDefaults */)
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
 	}
@@ -311,4 +340,13 @@ SELECT id, status
 		log.Errorf(ctx, "%s", buf)
 		return false, 0, errors.AssertionFailedf("%s", buf)
 	}
+}
+
+func (m *Manager) listBetween(
+	from clusterversion.ClusterVersion, to clusterversion.ClusterVersion,
+) []clusterversion.ClusterVersion {
+	if m.knobs.ListBetweenOverride != nil {
+		return m.knobs.ListBetweenOverride(from, to)
+	}
+	return clusterversion.ListBetween(from, to)
 }
