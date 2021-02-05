@@ -629,15 +629,20 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	return nil
 }
 
-// ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
-// that "follows from" the original Span. This allows the resulting context to be
-// used in an async task that might outlive the original operation.
+// ForkSpan forks the current span, if any[1]. Forked spans "follow from" the
+// original, and are typically used to trace operations that may outlive the
+// parent (think async tasks). See the package-level documentation for more
+// details.
 //
-// Returns the new context and the new Span (if any). The Span should be
-// closed via FinishSpan.
+// The recordings from these spans will be automatically propagated to the
+// parent span. Also see `ChildSpan`, for the other kind of derived span
+// relation.
 //
-// See also ChildSpan() for a "parent-child relationship".
-func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
+// A context wrapping the newly created span is returned, along with the span
+// itself. If non-nil, the caller is responsible for eventually Finish()ing it.
+//
+// [1]: Looking towards the provided context to see if one exists.
+func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
@@ -647,12 +652,13 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	)
 }
 
-// ChildSpan opens a Span as a child of the current Span in the context (if
-// there is one), via the WithParentAndAutoCollection option.
-// The Span's tags are inherited from the ctx's log tags automatically.
+// ChildSpan creates a child span of the current one, if any. Recordings from
+// child spans are automatically propagated to the parent span, and the tags are
+// inherited from the context's log tags automatically. Also see `ForkSpan`,
+// for the other kind of derived span relation.
 //
-// Returns the new context and the new Span (if any). If a non-nil Span is
-// returned, it is the caller's duty to eventually call Finish() on it.
+// A context wrapping the newly created span is returned, along with the span
+// itself. If non-nil, the caller is responsible for eventually Finish()ing it.
 func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
@@ -661,9 +667,10 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	return sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndAutoCollection(sp))
 }
 
-// ChildSpanRemote is like ChildSpan but the new Span is created using WithParentAndManualCollection
-// instead of WithParentAndAutoCollection. When this is used, it's the caller's duty to collect this span's
-// recording and return it to the root span of the trace.
+// ChildSpanRemote is like ChildSpan but the new Span is created using
+// WithParentAndManualCollection instead of WithParentAndAutoCollection. When
+// this is used, it's the caller's duty to collect this span's recording and
+// return it to the root span of the trace.
 func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {

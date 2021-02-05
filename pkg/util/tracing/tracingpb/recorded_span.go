@@ -31,7 +31,7 @@ func (s *RecordedSpan) String() string {
 	return sb.String()
 }
 
-// Structured visits the data passed to LogStructured for the Span from which
+// Structured visits the data passed to RecordStructured for the Span from which
 // the RecordedSpan was created.
 func (s *RecordedSpan) Structured(visit func(*types.Any)) {
 	if s.DeprecatedStats != nil {

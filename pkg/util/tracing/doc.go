@@ -90,7 +90,7 @@
 // [2]: https://opentracing.io/specification/
 // [3]: `Recording.String`
 // [4]: `ChildSpan`
-// [5]: `ForkCtxSpan`. "forking" a Span is the same as creating a new one
+// [5]: `ForkSpan`. "forking" a Span is the same as creating a new one
 //      with a "follows from" relation.
 // [6]: `crdbSpan`
 // [7]: `Span.SetVerbose`. To understand the specifics of what exactly is
