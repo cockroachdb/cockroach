@@ -224,7 +224,8 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, errToSend error) {
 	if o.runnerCtx == nil {
-		o.runnerCtx = ctx
+		// The runnerCtx must have been set in Run() method.
+		return false, errors.AssertionFailedf("unexpectedly runnerCtx is nil in sendBatches")
 	}
 	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
 		o.Input().Init()
