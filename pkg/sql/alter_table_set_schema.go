@@ -75,15 +75,15 @@ func (p *planner) AlterTableSetSchema(
 		return nil, err
 	}
 
-	// Check if any views depend on this table/view. Because our views
-	// are currently just stored as strings, they explicitly specify the name
-	// of everything they depend on. Rather than trying to rewrite the view's
-	// query with the new name, we simply disallow such renames for now.
-	if len(tableDesc.DependedOnBy) > 0 {
-		return nil, p.dependentViewError(
-			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, tableDesc.DependedOnBy[0].ID,
-			"set schema on",
-		)
+	// Check if any objects depend on this table/view/sequence via its name.
+	// If so, then we disallow renaming, otherwise we allow it.
+	for _, dependent := range tableDesc.DependedOnBy {
+		if !dependent.ByID {
+			return nil, p.dependentViewError(
+				ctx, tableDesc.TypeName(), tableDesc.Name,
+				tableDesc.ParentID, dependent.ID, "set schema on",
+			)
+		}
 	}
 
 	return &alterTableSetSchemaNode{
