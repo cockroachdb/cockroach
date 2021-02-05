@@ -402,7 +402,7 @@ func (r *Registry) NewJob(record Record) *Job {
 		UsernameProto: record.Username.EncodeProto(),
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
-		Noncancelable: record.NonCancelable,
+		Completable:   record.Completable,
 	}
 	job.mu.progress = jobspb.Progress{
 		Details:       jobspb.WrapProgressDetails(record.Progress),
@@ -655,15 +655,15 @@ UPDATE system.jobs
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
-	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {
-		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
+	serveJobsInRequestedStates := func(ctx context.Context, s sqlliveness.Session) {
+		if err := r.serveJobsInRequestedStates(ctx, s); err != nil {
 			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
 		}
 	}
 	cancelLoopTask := withSession(func(ctx context.Context, s sqlliveness.Session) {
 		removeClaimsFromDeadSessions(ctx, s)
 		r.maybeCancelJobs(ctx, s)
-		servePauseAndCancelRequests(ctx, s)
+		serveJobsInRequestedStates(ctx, s)
 	})
 	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.claimJobs(ctx, s); err != nil {
@@ -934,7 +934,7 @@ func (r *Registry) cleanupOldJobsPage(
 				return false, 0, err
 			}
 			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
-		case StatusSucceeded, StatusCanceled, StatusFailed:
+		case StatusSucceeded, StatusCanceled, StatusFailed, StatusCompleted:
 			remove = payload.FinishedMicros < oldMicros
 		}
 		if remove {
@@ -970,6 +970,15 @@ func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, R
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
 	return job, resumer, nil
+}
+
+// CompleteRequested marks the job as complete-requested using the specified txn (may be nil).
+func (r *Registry) CompleteRequested(ctx context.Context, txn *kv.Txn, id int64) error {
+	job, _, err := r.getJobFn(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).completeRequested(ctx, nil)
 }
 
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
@@ -1056,6 +1065,19 @@ type Resumer interface {
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
 	OnFailOrCancel(ctx context.Context, execCtx interface{}) error
+}
+
+// CompleteRequester is an extension of Resumer which allows job implementers to
+// specify logic to to run when the registry notices the complete request. This
+// logic is not guaranteed to run on the node where the job is running, so it
+// cannot assume that any other methods have been called on this
+// CompleteRequester object.
+type CompleteRequester interface {
+	Resumer
+
+	// OnComplete is called when a job is complete-requested and the registry
+	// notices this state, thus moving the job to a completing state.
+	OnComplete(ctx context.Context, execCtx interface{}) error
 }
 
 // PauseRequester is an extension of Resumer which allows job implementers to inject
@@ -1185,6 +1207,8 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.Errorf("job %s", status)
 	case StatusCancelRequested:
 		return errors.Errorf("job %s", status)
+	case StatusCompleteRequested:
+		return errors.Errorf("job %s", status)
 	case StatusPaused:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: unexpected status %s provided to state machine", *job.ID(), status)
@@ -1209,6 +1233,55 @@ func (r *Registry) stepThroughStateMachine(
 			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
 		}
 		return nil
+	case StatusCompleted:
+		if err := job.completed(ctx, nil); err != nil {
+			// If we can't transactionally mark the job as completed then it will be
+			// restarted during the next adopt loop and completing will be retried.
+			return errors.Wrapf(err, "job %d: could not mark as completed: %v", *job.ID(), jobErr)
+		}
+		// TODO(adityamaru): Should we return nil instead?
+		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
+	case StatusCompleting:
+		if err := job.completing(ctx, jobErr, nil); err != nil {
+			// If we can't transactionally mark the job as completing then it will be
+			// restarted during the next adopt loop and it will be retried.
+			return errors.Wrapf(err, "job %d: could not mark as completing: %s", *job.ID(), jobErr)
+		}
+		onCompleteCtx := logtags.AddTag(ctx, "job", *job.ID())
+		var err error
+		func() {
+			jm.CurrentlyRunning.Inc(1)
+			defer jm.CurrentlyRunning.Dec(1)
+			if cr, ok := resumer.(CompleteRequester); ok {
+				fmt.Println("COMING HERE")
+				err = cr.OnComplete(onCompleteCtx, execCtx)
+			}
+		}()
+		if successOnComplete := err == nil; successOnComplete {
+			jm.CompleteCompleted.Inc(1)
+			nextStatus := StatusCompleted
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, nextStatus, jobErr)
+		}
+		if onCompleteCtx.Err() != nil {
+			jm.CompleteRetryError.Inc(1)
+			// The context was canceled. Tell the user, but don't attempt to
+			// mark the job as failed because it can be resumed by another node.
+			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
+		}
+		if errors.Is(err, retryJobErrorSentinel) {
+			jm.CompleteRetryError.Inc(1)
+			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
+		}
+		jm.CompleteFailed.Inc(1)
+		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
+			if sErr.status != StatusPauseRequested && sErr.status != StatusCancelRequested {
+				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+					"job %d: unexpected status %s provided for a completing job", *job.ID(), sErr.status)
+			}
+			return sErr
+		}
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting,
+			errors.Wrapf(err, "job %d: cannot be completed, job is now reverting", *job.ID()))
 	case StatusReverting:
 		if err := job.reverted(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be

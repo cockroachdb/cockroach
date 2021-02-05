@@ -36,6 +36,9 @@ type JobTypeMetrics struct {
 	FailOrCancelCompleted  *metric.Counter
 	FailOrCancelRetryError *metric.Counter
 	FailOrCancelFailed     *metric.Counter
+	CompleteCompleted      *metric.Counter
+	CompleteRetryError     *metric.Counter
+	CompleteFailed         *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -121,6 +124,42 @@ func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
 	}
 }
 
+func makeMetaCompleteCompeted(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name: fmt.Sprintf("jobs.%s.complete_completed", typeStr),
+		Help: fmt.Sprintf("Number of %s jobs which successfully completed "+
+			"their completion process",
+			typeStr),
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaCompleteRetryError(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name: fmt.Sprintf("jobs.%s.complete_retry_error", typeStr),
+		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable "+
+			"error on their completion process",
+			typeStr),
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaCompleteFailed(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name: fmt.Sprintf("jobs.%s.complete_failed", typeStr),
+		Help: fmt.Sprintf("Number of %s jobs which failed with a "+
+			"non-retriable error on their completion process",
+			typeStr),
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
 // MetricStruct implements the metric.Struct interface.
 func (Metrics) MetricStruct() {}
 
@@ -143,6 +182,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(typeStr)),
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(typeStr)),
 			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(typeStr)),
+			CompleteCompleted:      metric.NewCounter(makeMetaCompleteCompeted(typeStr)),
+			CompleteRetryError:     metric.NewCounter(makeMetaCompleteRetryError(typeStr)),
+			CompleteFailed:         metric.NewCounter(makeMetaCompleteFailed(typeStr)),
 		}
 	}
 }

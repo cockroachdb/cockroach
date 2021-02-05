@@ -22,6 +22,7 @@ import (
 type FakeResumer struct {
 	OnResume     func(context.Context) error
 	FailOrCancel func(context.Context) error
+	Complete     func(ctx context.Context) error
 	Success      func() error
 	PauseRequest onPauseRequestFunc
 }
@@ -43,6 +44,13 @@ func (d FakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 	if d.FailOrCancel != nil {
 		return d.FailOrCancel(ctx)
+	}
+	return nil
+}
+
+func (d FakeResumer) OnComplete(ctx context.Context, _ interface{}) error {
+	if d.Complete != nil {
+		return d.Complete(ctx)
 	}
 	return nil
 }
@@ -79,6 +87,12 @@ func (j *Job) Created(ctx context.Context) error {
 // paused state.
 func (j *Job) Paused(ctx context.Context) error {
 	return j.paused(ctx, nil /* fn */)
+}
+
+// Completed is a wrapper around the internal function that moves a job to the
+// completed state.
+func (j *Job) Completed(ctx context.Context) error {
+	return j.completed(ctx, nil /* fn */)
 }
 
 // Failed is a wrapper around the internal function that moves a job to the

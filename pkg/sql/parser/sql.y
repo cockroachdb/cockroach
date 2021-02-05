@@ -855,6 +855,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
+%type <tree.Statement> complete_stmt complete_jobs_stmt
 %type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> reassign_owned_by_stmt
 %type <tree.Statement> drop_owned_by_stmt
@@ -3703,6 +3704,7 @@ preparable_stmt:
   alter_stmt     // help texts in sub-rule
 | backup_stmt    // EXTEND WITH HELP: BACKUP
 | cancel_stmt    // help texts in sub-rule
+| complete_stmt  // help texts in sub-rule
 | create_stmt    // help texts in sub-rule
 | delete_stmt    // EXTEND WITH HELP: DELETE
 | drop_stmt      // help texts in sub-rule
@@ -5537,6 +5539,17 @@ resume_stmt:
 | resume_schedules_stmt  // EXTEND WITH HELP: RESUME SCHEDULES
 | RESUME error           // SHOW HELP: RESUME
 
+// %Help: COMPLETE
+// %Category: Misc
+// %Text:
+//
+// Mark various background tasks and activities as completed.
+//
+// COMPLETE JOBS
+complete_stmt:
+  complete_jobs_stmt     // EXTEND WITH HELP: COMPLETE JOBS
+| COMPLETE error         // SHOW HELP: COMPLETE
+
 // %Help: PAUSE JOBS - pause background jobs
 // %Category: Misc
 // %Text:
@@ -5564,6 +5577,28 @@ pause_jobs_stmt:
   }
 | PAUSE JOBS error // SHOW HELP: PAUSE JOBS
 
+// %Help: COMPLETE JOBS - mark background jobs as completed
+// %Category: Misc
+// %Text:
+// COMPLETE JOBS <selectclause>
+// COMPLETE JOB <jobid>
+// %SeeAlso: SHOW JOBS, CANCEL JOBS, RESUME JOBS, PAUSE JOBS
+complete_jobs_stmt:
+  COMPLETE JOB a_expr
+  {
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.CompleteJob,
+    }
+  }
+| COMPLETE JOB error // SHOW HELP: COMPLETE JOBS
+| COMPLETE JOBS select_stmt
+  {
+    $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.CompleteJob}
+  }
+| COMPLETE JOBS error // SHOW HELP: COMPLETE JOBS
 
 for_schedules_clause:
   FOR SCHEDULES select_stmt

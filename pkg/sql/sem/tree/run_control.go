@@ -26,13 +26,15 @@ const (
 	PauseJob JobCommand = iota
 	CancelJob
 	ResumeJob
+	CompleteJob
 )
 
 // JobCommandToStatement translates a job command integer to a statement prefix.
 var JobCommandToStatement = map[JobCommand]string{
-	PauseJob:  "PAUSE",
-	CancelJob: "CANCEL",
-	ResumeJob: "RESUME",
+	PauseJob:    "PAUSE",
+	CancelJob:   "CANCEL",
+	ResumeJob:   "RESUME",
+	CompleteJob: "COMPLETE",
 }
 
 // Format implements the NodeFormatter interface.

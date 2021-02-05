@@ -98,6 +98,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		DescriptorIDs: payload.DescriptorIDs,
 		Username:      payload.UsernameProto.Decode(),
 		Progress:      progressDetail,
+		Completable:   payload.Completable,
 	}); !reflect.DeepEqual(e, a) {
 		diff := strings.Join(pretty.Diff(e, a), "\n")
 		return errors.Errorf("Records do not match:\n%s", diff)
@@ -147,7 +148,8 @@ func TestJobsTableProgressFamily(t *testing.T) {
 type counters struct {
 	ResumeExit int
 	// These sometimes retry so just use bool.
-	ResumeStart, OnFailOrCancelStart, OnFailOrCancelExit, Success bool
+	ResumeStart, OnFailOrCancelStart, OnFailOrCancelExit, OnCompleteStart, OnCompleteExit,
+	Success bool
 }
 
 type registryTestSuite struct {
@@ -168,8 +170,10 @@ type registryTestSuite struct {
 	resumeCh            chan error
 	progressCh          chan struct{}
 	failOrCancelCh      chan error
+	completeCh          chan error
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
+	completeCheckCh     chan struct{}
 	onPauseRequest      jobs.OnPauseRequestFunc
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
@@ -194,6 +198,8 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.resumeCh = make(chan error)
 	rts.progressCh = make(chan struct{})
 	rts.failOrCancelCh = make(chan error)
+	rts.completeCheckCh = make(chan struct{})
+	rts.completeCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
 	rts.onPauseRequest = noopPauseRequestFunc
@@ -246,6 +252,27 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					rts.mu.a.OnFailOrCancelExit = true
 					rts.mu.Unlock()
 					t.Log("Exiting OnFailOrCancel")
+					return err
+				}
+			},
+
+			Complete: func(ctx context.Context) error {
+				t.Log("Starting OnComplete")
+				rts.mu.Lock()
+				rts.mu.a.OnCompleteStart = true
+				rts.mu.Unlock()
+				<-rts.completeCheckCh
+				select {
+				case <-ctx.Done():
+					rts.mu.Lock()
+					rts.mu.a.OnCompleteExit = false
+					rts.mu.Unlock()
+					return ctx.Err()
+				case err := <-rts.completeCh:
+					rts.mu.Lock()
+					rts.mu.a.OnCompleteExit = true
+					rts.mu.Unlock()
+					t.Log("Exiting OnComplete")
 					return err
 				}
 			},
@@ -426,6 +453,45 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.check(t, jobs.StatusFailed)
 	})
 
+	t.Run("pause completing", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.completeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
+		rts.completeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusCompleting)
+		close(rts.completeCheckCh)
+
+		rts.completeCh <- nil
+		close(rts.completeCh)
+		rts.mu.e.OnCompleteExit = true
+		rts.check(t, jobs.StatusCompleted)
+	})
+
 	t.Run("cancel running", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -476,6 +542,157 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		close(rts.failOrCancelCheckCh)
 		close(rts.failOrCancelCh)
+	})
+
+	t.Run("cancel completing", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.sqlDB.ExpectErr(t, "status completing cannot be requested to be canceled",
+			"CANCEL JOB $1", *j.ID())
+		rts.check(t, jobs.StatusCompleting)
+
+		close(rts.completeCheckCh)
+		close(rts.completeCh)
+	})
+
+	t.Run("complete running", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		require.NoError(t, err)
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.completeCheckCh <- struct{}{}
+		close(rts.completeCheckCh)
+		rts.completeCh <- nil
+		close(rts.completeCh)
+		rts.mu.e.OnCompleteExit = true
+
+		rts.check(t, jobs.StatusCompleted)
+	})
+
+	t.Run("complete reverting", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		require.NoError(t, err)
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("resume failed")
+		rts.mu.e.ResumeExit++
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.sqlDB.ExpectErr(t, "status reverting cannot be requested to be completed",
+			"COMPLETE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusReverting)
+
+		close(rts.failOrCancelCheckCh)
+		close(rts.failOrCancelCh)
+	})
+
+	t.Run("complete paused", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		require.NoError(t, err)
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.completeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusCompleting)
+
+		close(rts.completeCheckCh)
+		rts.completeCh <- nil
+		close(rts.completeCh)
+		rts.mu.e.OnCompleteExit = true
+
+		rts.check(t, jobs.StatusCompleted)
+	})
+
+	t.Run("failed completing", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.check(t, jobs.StatusRunning)
+		rts.resumeCheckCh <- struct{}{}
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.completeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.completeCh <- errors.New("complete failed")
+		rts.mu.e.OnCompleteExit = true
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit = true
+		close(rts.failOrCancelCh)
+		rts.check(t, jobs.StatusFailed)
 	})
 
 	t.Run("cancel pause running", func(t *testing.T) {
@@ -533,7 +750,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
 		rts.check(t, jobs.StatusPaused)
 
-		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError resume", "CANCEL JOB $1", *j.ID())
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError", "CANCEL JOB $1", *j.ID())
 		rts.check(t, jobs.StatusPaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
@@ -547,12 +764,94 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.check(t, jobs.StatusFailed)
 	})
 
-	// Verify that pause and cancel in a rollback do nothing.
+	t.Run("cancel pause completing", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "COMPLETE JOB $1", *j.ID())
+		rts.mu.e.OnCompleteStart = true
+		rts.completeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError", "CANCEL JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
+		rts.completeCheckCh <- struct{}{}
+		close(rts.completeCheckCh)
+		rts.check(t, jobs.StatusCompleting)
+
+		rts.completeCh <- nil
+		close(rts.completeCh)
+		rts.mu.e.OnCompleteExit = true
+		rts.check(t, jobs.StatusCompleted)
+	})
+
+	t.Run("complete pause reverting", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("resume failed")
+		rts.mu.e.ResumeExit++
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError", "COMPLETE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
+		rts.failOrCancelCheckCh <- struct{}{}
+		close(rts.failOrCancelCheckCh)
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCh <- nil
+		close(rts.failOrCancelCh)
+		rts.mu.e.OnFailOrCancelExit = true
+		rts.check(t, jobs.StatusFailed)
+	})
+
+	// Verify that pause, cancel and complete in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		job, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		completableJobRecord := rts.mockJob
+		completableJobRecord.Completable = true
+		job, err := rts.registry.CreateAndStartJob(rts.ctx, nil, completableJobRecord)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -588,6 +887,22 @@ func TestRegistryLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := txn.Exec("PAUSE JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := txn.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			rts.progressCh <- struct{}{}
+			rts.resumeCheckCh <- struct{}{}
+			rts.check(t, jobs.StatusRunning)
+		}
+		// Rollback a COMPLETE.
+		{
+			txn, err := rts.outerDB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("COMPLETE JOB $1", *job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := txn.Rollback(); err != nil {
@@ -1163,6 +1478,60 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("completable jobs can be marked completed until finished", func(t *testing.T) {
+		completableRecord := defaultRecord
+		completableRecord.Completable = true
+		{
+			job, exp := startLeasedJob(t, completableRecord)
+			if err := registry.CompleteRequested(ctx, nil, *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := exp.verify(job.ID(), jobs.StatusCompleteRequested); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		{
+			job, exp := startLeasedJob(t, completableRecord)
+			if err := job.Started(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := registry.CompleteRequested(ctx, nil, *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := exp.verify(job.ID(), jobs.StatusCompleteRequested); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		{
+			job, exp := startLeasedJob(t, completableRecord)
+			if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := job.Paused(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := registry.CompleteRequested(ctx, nil, *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := exp.verify(job.ID(), jobs.StatusCompleteRequested); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		{
+			job, _ := startLeasedJob(t, completableRecord)
+			if err := job.Succeeded(ctx); err != nil {
+				t.Fatal(err)
+			}
+			expectedErr := "job with status succeeded cannot be requested to be completed"
+			if err := registry.CompleteRequested(ctx, nil, *job.ID()); !testutils.IsError(err, expectedErr) {
+				t.Fatalf("expected '%s', but got '%s'", expectedErr, err)
+			}
+		}
+	})
+
 	t.Run("unpaused jobs cannot be resumed", func(t *testing.T) {
 		{
 			job, _ := startLeasedJob(t, defaultRecord)
@@ -1315,6 +1684,18 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on cancel-requested job \(id \d+\)`,
+		) {
+			t.Fatalf("expected progress error, but got %v", err)
+		}
+	})
+
+	t.Run("progress on completed job fails", func(t *testing.T) {
+		job, _ := startLeasedJob(t, defaultRecord)
+		if err := registry.CompleteRequested(ctx, nil, *job.ID()); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
+			err, `cannot update progress on complete-requested job \(id \d+\)`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
 		}

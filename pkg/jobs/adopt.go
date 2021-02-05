@@ -30,6 +30,8 @@ const claimableStatusTupleString = `(` +
 	`'` + string(StatusPending) + `', ` +
 	`'` + string(StatusCancelRequested) + `', ` +
 	`'` + string(StatusPauseRequested) + `', ` +
+	`'` + string(StatusCompleteRequested) + `', ` +
+	`'` + string(StatusCompleting) + `', ` +
 	`'` + string(StatusReverting) + `'` +
 	`)`
 
@@ -64,8 +66,8 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT id FROM system.jobs
-WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
-		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
+WHERE (status = $1 OR status = $2 OR status = $3) AND (claim_session_id = $4 AND claim_instance_id = $5)`,
+		StatusRunning, StatusReverting, StatusCompleting, s.ID().UnsafeBytes(), r.ID(),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could query for claimed jobs")
@@ -132,6 +134,10 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	}
 }
 
+func isResumable(status Status) bool {
+	return status == StatusRunning || status == StatusReverting || status == StatusCompleting
+}
+
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
@@ -150,7 +156,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	}
 
 	status := Status(*row[0].(*tree.DString))
-	if status != StatusRunning && status != StatusReverting {
+	if !isResumable(status) {
 		// A concurrent registry could have requested the job to be paused or canceled.
 		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
 	}
@@ -244,21 +250,27 @@ func (r *Registry) runJob(
 	return err
 }
 
-func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
+// serveJobsInRequestedStates transitions all jobs in a CancelRequested,
+// PauseRequested or CompleteRequested state to the next state in the job
+// lifecycle.
+func (r *Registry) serveJobsInRequestedStates(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.QueryEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
+			ctx, "serving-requested-state-jobs", txn, sessiondata.InternalExecutorOverride{
+				User: security.NodeUserName()}, `
 UPDATE system.jobs
 SET status =
 		CASE
 			WHEN status = $1 THEN $2
 			WHEN status = $3 THEN $4
+			WHEN status = $5 THEN $6
 			ELSE status
 		END
-WHERE (status IN ($1, $3)) AND (claim_session_id = $5 AND claim_instance_id = $6)
+WHERE (status IN ($1, $3, $5)) AND (claim_session_id = $7 AND claim_instance_id = $8)
 RETURNING id, status`,
 			StatusPauseRequested, StatusPaused,
 			StatusCancelRequested, StatusReverting,
+			StatusCompleteRequested, StatusCompleting,
 			s.ID().UnsafeBytes(), r.ID(),
 		)
 		if err != nil {
@@ -275,6 +287,9 @@ RETURNING id, status`,
 			case StatusReverting:
 				if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 					r.unregister(id)
+					// Set the FinalResumeError to the special "user canceled job" error.
+					// This is used as a sentinel value when unpausing a job to determine
+					// the state the job should be resumed into.
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
@@ -284,6 +299,23 @@ RETURNING id, status`,
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting: %s", id, err)
 				}
 				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
+					id, s.ID())
+			case StatusCompleting:
+				if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+					r.unregister(id)
+					// Set the FinalResumeError to the special "user marked job completed"
+					// error. This is used as a sentinel value when unpausing a job to
+					// determine the state the job should be resumed into.
+					md.Payload.Error = errJobCompleted.Error()
+					encodedErr := errors.EncodeError(ctx, errJobCompleted)
+					md.Payload.FinalResumeError = &encodedErr
+					ju.UpdatePayload(md.Payload)
+					return nil
+				}); err != nil {
+					return errors.Wrapf(err,
+						"job %d: tried to complete but could not mark as completing: %s", id, err)
+				}
+				log.Infof(ctx, "job %d, session id: %s marked completed: the job is now completing",
 					id, s.ID())
 			default:
 				return errors.AssertionFailedf("unexpected job status %s: %v", statusString, job)

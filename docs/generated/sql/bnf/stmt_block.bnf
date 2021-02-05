@@ -27,6 +27,7 @@ preparable_stmt ::=
 	alter_stmt
 	| backup_stmt
 	| cancel_stmt
+	| complete_stmt
 	| create_stmt
 	| delete_stmt
 	| drop_stmt
@@ -129,6 +130,9 @@ cancel_stmt ::=
 	cancel_jobs_stmt
 	| cancel_queries_stmt
 	| cancel_sessions_stmt
+
+complete_stmt ::=
+	complete_jobs_stmt
 
 create_stmt ::=
 	create_role_stmt
@@ -420,6 +424,10 @@ cancel_sessions_stmt ::=
 	| 'CANCEL' 'SESSION' 'IF' 'EXISTS' a_expr
 	| 'CANCEL' 'SESSIONS' select_stmt
 	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt
+
+complete_jobs_stmt ::=
+	'COMPLETE' 'JOB' a_expr
+	| 'COMPLETE' 'JOBS' select_stmt
 
 create_role_stmt ::=
 	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options

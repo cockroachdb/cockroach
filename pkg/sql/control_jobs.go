@@ -30,9 +30,10 @@ type controlJobsNode struct {
 }
 
 var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
-	tree.CancelJob: jobs.StatusCanceled,
-	tree.ResumeJob: jobs.StatusRunning,
-	tree.PauseJob:  jobs.StatusPaused,
+	tree.CancelJob:   jobs.StatusCanceled,
+	tree.ResumeJob:   jobs.StatusRunning,
+	tree.PauseJob:    jobs.StatusPaused,
+	tree.CompleteJob: jobs.StatusCompleted,
 }
 
 // FastPathResults implements the planNodeFastPath inteface.
@@ -46,8 +47,8 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		return err
 	}
 
-	// users can pause/resume/cancel jobs owned by non-admin users
-	// if they have CONTROLJOBS privilege.
+	// users can control jobs owned by non-admin users if they have CONTROLJOBS
+	// privilege.
 	if !userIsAdmin {
 		hasControlJob, err := params.p.HasRoleOption(params.ctx, roleoption.CONTROLJOB)
 		if err != nil {
@@ -110,6 +111,8 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			err = reg.Unpause(params.ctx, params.p.txn, int64(jobID))
 		case jobs.StatusCanceled:
 			err = reg.CancelRequested(params.ctx, params.p.txn, int64(jobID))
+		case jobs.StatusCompleted:
+			err = reg.CompleteRequested(params.ctx, params.p.txn, int64(jobID))
 		default:
 			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}
@@ -125,6 +128,8 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("resume"))
 	case jobs.StatusCanceled:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("cancel"))
+	case jobs.StatusCompleted:
+		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("complete"))
 	}
 	return nil
 }

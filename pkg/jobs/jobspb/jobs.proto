@@ -608,6 +608,8 @@ message Payload {
   // a version < 20.1, so it can only be used in cases where all nodes having
   // versions >= 20.1 is guaranteed.
   bool noncancelable = 20;
+  // Completable is used to denote when a job can be marked as completed.
+  bool completable = 25;
   oneof details {
     BackupDetails backup = 10;
     RestoreDetails restore = 11;

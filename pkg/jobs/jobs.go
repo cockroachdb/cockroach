@@ -75,6 +75,8 @@ type Record struct {
 	// a version < 20.1, so it can only be used in cases where all nodes having
 	// versions >= 20.1 is guaranteed.
 	NonCancelable bool
+	// Completable is used to denote when a job can be marked as completed.
+	Completable bool
 	// CreatedBy, if set, annotates this record with the information on
 	// this job creator.
 	CreatedBy *CreatedByInfo
@@ -135,30 +137,48 @@ const (
 	// StatusReverting is for jobs that failed or were canceled and their changes are being
 	// being reverted.
 	StatusReverting Status = "reverting"
+	// StatusCompleting is for jobs that were marked as complete and their changes
+	// are being completed.
+	StatusCompleting Status = "completing"
 	// StatusSucceeded is for jobs that have successfully completed.
 	StatusSucceeded Status = "succeeded"
 	// StatusCanceled is for jobs that were explicitly canceled by the user and
 	// cannot be resumed.
 	StatusCanceled Status = "canceled"
+	// StatusCompleted is for jobs that were explicitly marked as completed by the
+	// user and cannot be resumed.
+	StatusCompleted Status = "completed"
 	// StatusCancelRequested is for jobs that were requested to be canceled by
 	// the user but may be still running Resume. The node that is running the job
-	// will change it to StatusReverting the next time it runs maybeAdoptJobs.
+	// will change it to StatusReverting the next time it adopts the job.
 	StatusCancelRequested Status = "cancel-requested"
 	// StatusPauseRequested is for jobs that were requested to be paused by the
-	// user but may be still resuming or reverting. The node that is running the
-	// job will change its state to StatusPaused the next time it runs
-	// maybeAdoptJobs and will stop running it.
+	// user but may be still resuming, reverting or completing. The node that is
+	// running the job will change its state to StatusPaused the next time it runs
+	// adopts the job, and will stop running it.
 	StatusPauseRequested Status = "pause-requested"
+	// StatusCompleteRequested is for jobs that were requested to be completed by
+	// the user but may be still running or are paused. The node that is running
+	// the job will change its state to StatusCompleting the next time it adopts
+	// the job.
+	StatusCompleteRequested Status = "complete-requested"
 )
 
 var (
-	errJobCanceled = errors.New("job canceled by user")
+	errJobCanceled  = errors.New("job canceled by user")
+	errJobCompleted = errors.New("job marked completed by user")
 )
 
 // HasErrJobCanceled returns true if the error contains the error set as the
-// job's FinalResumError when it has been canceled.
+// job's FinalResumeError when it has been canceled.
 func HasErrJobCanceled(err error) bool {
 	return errors.Is(err, errJobCanceled)
+}
+
+// HasErrJobCompleted returns true if the error contains the error set as the
+// job's FinalResumeError when it has been completed.
+func HasErrJobCompleted(err error) bool {
+	return errors.Is(err, errJobCompleted)
 }
 
 // deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
@@ -174,7 +194,7 @@ func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
-	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled
+	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusCompleted
 }
 
 // InvalidStatusError is the error returned when the desired operation is
@@ -393,10 +413,10 @@ func (j *Job) paused(ctx context.Context, fn func(context.Context, *kv.Txn) erro
 	})
 }
 
-// unpaused sets the status of the tracked job to running or reverting iff the
-// job is currently paused. It does not directly resume the job; rather, it
-// expires the job's lease so that a Registry adoption loop detects it and
-// resumes it.
+// unpaused sets the status of the tracked job to running, reverting or
+// completing iff the job is currently paused. It does not directly resume the
+// job; rather, it expires the job's lease so that a Registry adoption loop
+// detects it and resumes it.
 func (j *Job) unpaused(ctx context.Context) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusRunning || md.Status == StatusReverting {
@@ -411,7 +431,13 @@ func (j *Job) unpaused(ctx context.Context) error {
 		if md.Payload.FinalResumeError == nil {
 			ju.UpdateStatus(StatusRunning)
 		} else {
-			ju.UpdateStatus(StatusReverting)
+			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
+			if HasErrJobCompleted(decodedErr) {
+				ju.UpdateStatus(StatusCompleting)
+			} else {
+				// User canceled or failed jobs should move to reverting on resume.
+				ju.UpdateStatus(StatusReverting)
+			}
 		}
 		// NB: A nil lease indicates the job is not resumable, whereas an empty
 		// lease is always considered expired.
@@ -424,7 +450,7 @@ func (j *Job) unpaused(ctx context.Context) error {
 // cancelRequested sets the status of the tracked job to cancel-requested. It
 // does not directly cancel the job; like job.Paused, it expects the job to call
 // job.Progressed soon, observe a "job is cancel-requested" error, and abort.
-// Further the node the runs the job will actively cancel it when it notices
+// Further the node that runs the job will actively cancel it when it notices
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
 func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
@@ -496,7 +522,9 @@ func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
-		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusReverting {
+		isPausable := md.Status == StatusPending || md.Status == StatusRunning ||
+			md.Status == StatusReverting || md.Status == StatusCompleting
+		if !isPausable {
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
@@ -513,6 +541,77 @@ func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 	})
 }
 
+// completeRequested sets the status of the tracked job to complete-requested.
+// It does not directly mark the job as completed; it expects the node that runs
+// the job will actively cancel it when it notices that it is in state
+// StatusCompleteRequested and will move it to state StatusCompleting.
+func (j *Job) completeRequested(
+	ctx context.Context, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Payload.Noncancelable {
+			return errors.Newf("job %d: cannot be marked as completed", *j.ID())
+		}
+		if md.Status == StatusCompleteRequested || md.Status == StatusCompleted {
+			return nil
+		}
+		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
+			return fmt.Errorf("job with status %s cannot be requested to be completed", md.Status)
+		}
+		// If the job is paused, but has a non-nil FinalResumeError then we should
+		// not transition it to complete-requested. It will be transitioned to
+		// either reverting or completing based on the error when unpaused.
+		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
+			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
+			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be"+
+				"marked as complete-requested. Unpause will transition to either reverting or completing",
+				*j.ID(), decodedErr.Error())
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusCompleteRequested)
+		log.Infof(ctx, "job %d: complete requested recorded", *j.ID())
+		return nil
+	})
+}
+
+func (j *Job) completing(
+	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusCompleting {
+			return nil
+		}
+		// TODO(adityamaru): Think about if there is any other state that we can
+		// come from? Also understand how we can come from Pending, I don't get this
+		// even in reverted().
+		if md.Status != StatusCompleteRequested && md.Status != StatusPending {
+			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			md.Payload.Error = err.Error()
+			encodedErr := errors.EncodeError(ctx, err)
+			md.Payload.FinalResumeError = &encodedErr
+			ju.UpdatePayload(md.Payload)
+		} else {
+			if md.Payload.FinalResumeError == nil {
+				return errors.AssertionFailedf(
+					"tried to mark job as completing, but no error was provided or recorded")
+			}
+		}
+		ju.UpdateStatus(StatusCompleting)
+		return nil
+	})
+}
+
 // reverted sets the status of the tracked job to reverted.
 func (j *Job) reverted(
 	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
@@ -521,7 +620,9 @@ func (j *Job) reverted(
 		if md.Status == StatusReverting {
 			return nil
 		}
-		if md.Status != StatusCancelRequested && md.Status != StatusRunning && md.Status != StatusPending {
+		canBeReverted := md.Status == StatusCancelRequested || md.Status == StatusRunning ||
+			md.Status == StatusPending || md.Status == StatusCompleting
+		if !canBeReverted {
 			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
 		}
 		if fn != nil {
@@ -611,6 +712,25 @@ func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) e
 			FractionCompleted: 1.0,
 		}
 		ju.UpdateProgress(md.Progress)
+		return nil
+	})
+}
+
+// completed marks the tracked job as having completed.
+func (j *Job) completed(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusCompleting {
+			return fmt.Errorf("job with status %s cannot be marked as completed", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusCompleted)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		ju.UpdatePayload(md.Payload)
+		// TODO(adityamaru): Should we update progress to 1, as in succeeded?
 		return nil
 	})
 }
