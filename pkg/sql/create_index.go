@@ -169,10 +169,6 @@ func MakeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support interleaved tables")
 		}
 
-		if n.PartitionByIndex.ContainsPartitions() {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support partitioning")
-		}
-
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
 		}
