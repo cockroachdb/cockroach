@@ -99,7 +99,8 @@ type Config struct {
 	TestingKnobs         kvserverbase.IntentResolverTestingKnobs
 	RangeDescriptorCache RangeCache
 
-	TaskLimit                    int
+	IntentResolutionTaskLimit    int
+	TransactionCleanupTaskLimit  int
 	MaxGCBatchWait               time.Duration
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
@@ -122,7 +123,8 @@ type IntentResolver struct {
 	stopper      *stop.Stopper
 	testingKnobs kvserverbase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
-	sem          *quotapool.IntPool // semaphore to limit async goroutines
+	irSem        *quotapool.IntPool // semaphore to limit async goroutines for intent resolution
+	gcSem        *quotapool.IntPool // semaphore to limit async goroutines for txn cleanup
 
 	rdc RangeCache
 
@@ -144,11 +146,14 @@ type IntentResolver struct {
 }
 
 func setConfigDefaults(c *Config) {
-	if c.TaskLimit == 0 {
-		c.TaskLimit = defaultTaskLimit
+	if c.IntentResolutionTaskLimit == 0 {
+		c.IntentResolutionTaskLimit = defaultTaskLimit
 	}
-	if c.TaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
-		c.TaskLimit = 0
+	if c.TransactionCleanupTaskLimit == 0 {
+		c.TransactionCleanupTaskLimit = defaultTaskLimit
+	}
+	if c.IntentResolutionTaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
+		c.IntentResolutionTaskLimit = 0
 	}
 	if c.MaxGCBatchIdle == 0 {
 		c.MaxGCBatchIdle = defaultGCBatchIdle
@@ -182,13 +187,15 @@ func New(c Config) *IntentResolver {
 		clock:        c.Clock,
 		db:           c.DB,
 		stopper:      c.Stopper,
-		sem:          quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
+		irSem:        quotapool.NewIntPool("intent resolver", uint64(c.IntentResolutionTaskLimit)),
+		gcSem:        quotapool.NewIntPool("txn cleanup", uint64(c.TransactionCleanupTaskLimit)),
 		every:        log.Every(time.Minute),
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
 	}
-	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
+	c.Stopper.AddCloser(ir.irSem.Closer("stopper"))
+	c.Stopper.AddCloser(ir.gcSem.Closer("stopper"))
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	gcBatchSize := gcBatchSize
@@ -404,7 +411,7 @@ func (ir *IntentResolver) runAsyncTask(
 		// this work from our caller's context and timeout.
 		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: processing intents",
-		ir.sem,
+		ir.irSem,
 		false, /* wait */
 		taskFn,
 	)
@@ -599,7 +606,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 		// timeout.
 		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"processing txn intents",
-		ir.sem,
+		ir.irSem,
 		// We really do not want to hang up the GC queue on this kind of
 		// processing, so it's better to just skip txns which we can't
 		// pass to the async processor (wait=false). Their intents will
@@ -739,20 +746,30 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
 	// Run transaction record GC outside of ir.sem.
-	return ir.stopper.RunAsyncTask(
+	pErr := ir.stopper.RunLimitedAsyncTask(
 		ctx,
 		"storage.IntentResolver: cleanup txn records",
+		ir.gcSem,
+		false,
 		func(ctx context.Context) {
 			err := ir.gcTxnRecord(ctx, rangeID, txn)
 			if onComplete != nil {
 				onComplete(err)
 			}
-			if err != nil {
-				if ir.every.ShouldLog() {
+			if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to gc transaction record: %v", err)
-				}
 			}
 		})
+	if pErr != nil {
+		if errors.Is(err, stop.ErrThrottled) {
+			ir.Metrics.TxnRecordCleanupDropped.Inc(1)
+			if ir.every.ShouldLog() {
+				log.Warningf(ctx, "Dropping request to cleanup txn record for %v", txn)
+			}
+			return nil
+		}
+	}
+	return pErr
 }
 
 // ResolveOptions is used during intent resolution.
