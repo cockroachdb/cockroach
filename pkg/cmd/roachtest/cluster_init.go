@@ -155,7 +155,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			}
 
 			// This will only succeed if 3 nodes joined the cluster.
-			waitForFullReplication(t, dbs[0])
+			waitForFullReplication(t, dbs[0], 3)
 
 			execCLI := func(runNode int, extraArgs ...string) (string, error) {
 				args := []string{"./cockroach"}

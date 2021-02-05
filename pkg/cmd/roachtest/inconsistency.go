@@ -44,7 +44,7 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		waitForFullReplication(t, db)
+		waitForFullReplication(t, db, 3)
 		_, db = db.Close(), nil
 	}
 

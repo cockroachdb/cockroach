@@ -29,17 +29,39 @@ import (
 
 func registerFollowerReads(r *testRegistry) {
 	r.Add(testSpec{
-		Name:       "follower-reads/nodes=3",
+		Name:       "follower-reads/voters=3/non-voters=0",
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(3 /* nodeCount */, cpu(2), geo()),
 		MinVersion: "v19.1.0",
-		Run:        runFollowerReadsTest,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runFollowerReadsTest(ctx, t, c, 3, 0)
+		},
+	})
+	r.Add(testSpec{
+		Name:       "follower-reads/voters=1/non-voters=2",
+		Owner:      OwnerKV,
+		Cluster:    makeClusterSpec(3 /* nodeCount */, cpu(2), geo()),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runFollowerReadsTest(ctx, t, c, 1, 2)
+		},
+	})
+	r.Add(testSpec{
+		Name:       "follower-reads/voters=3/non-voters=2",
+		Owner:      OwnerKV,
+		Cluster:    makeClusterSpec(5 /* nodeCount */, cpu(2), geo()),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runFollowerReadsTest(ctx, t, c, 3, 2)
+		},
 	})
 }
 
 // runFollowerReadsTest is a basic litmus test that follower reads work.
 // The test does the following:
 //
+//  * Alters the default zone configuration to create the desired number of
+//    voting/non-voting replicas.
 //  * Creates a database and table.
 //  * Installs a number of rows into that table.
 //  * Queries the data initially with a recent timestamp and expecting an
@@ -55,7 +77,9 @@ func registerFollowerReads(r *testRegistry) {
 //    rate for 20 seconds, ensure that the 90-%ile SQL latencies during that
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
-func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
+func runFollowerReadsTest(
+	ctx context.Context, t *test, c *cluster, numVoters int, numNonVoters int,
+) {
 	crdbNodes := c.Range(1, c.spec.NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Wipe(ctx, crdbNodes)
@@ -67,6 +91,13 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 		defer conns[i].Close()
 	}
 	db := conns[0]
+
+	numReplicas := numVoters + numNonVoters
+	if _, err := db.ExecContext(ctx,
+		"ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = $1, num_voters = $2",
+		numReplicas, numVoters); err != nil {
+		t.Fatalf("failed to alter zone configuration to create non-voting replicas: %v", err)
+	}
 
 	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = 'true'"); err != nil {
 		t.Fatalf("failed to enable follower reads: %v", err)
@@ -89,7 +120,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	if r, err := db.ExecContext(ctx, "CREATE TABLE test.test ( k INT8, v INT8, PRIMARY KEY (k) )"); err != nil {
 		t.Fatalf("failed to create table: %v %v", err, r)
 	}
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, numReplicas)
 	const rows = 100
 	const concurrency = 32
 	sem := make(chan struct{}, concurrency)
@@ -179,7 +210,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	if err := g.Wait(); err != nil {
 		t.Fatalf("error verifying node values: %v", err)
 	}
-	// Verify that the follower read count increments on at least two nodes.
+	// Verify that the follower read count increments on at least n-1 nodes.
 	followerReadsAfter, err := getFollowerReadCounts(ctx, c)
 	if err != nil {
 		t.Fatalf("failed to get follower read counts: %v", err)
@@ -190,9 +221,9 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 			nodesWhichSawFollowerReads++
 		}
 	}
-	if nodesWhichSawFollowerReads < 2 {
-		t.Fatalf("fewer than 2 follower reads occurred: saw %v before and %v after",
-			followerReadsBefore, followerReadsAfter)
+	if nodesWhichSawFollowerReads < numReplicas-1 {
+		t.Fatalf("fewer than %d follower reads occurred: saw %v before and %v after",
+			numReplicas-1, followerReadsBefore, followerReadsAfter)
 	}
 	// Run reads for 3m which given the metrics window of 10s should guarantee
 	// that the most recent SQL latency time series data should relate to at least

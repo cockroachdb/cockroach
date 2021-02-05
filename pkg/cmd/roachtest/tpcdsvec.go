@@ -112,7 +112,7 @@ func registerTPCDSVec(r *testRegistry) {
 		}
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
-		waitForFullReplication(t, clusterConn)
+		waitForFullReplication(t, clusterConn, 3)
 		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 		if err != nil {
 			t.Fatal(err)

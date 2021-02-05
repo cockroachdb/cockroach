@@ -28,7 +28,7 @@ func runManySplits(ctx context.Context, t *test, c *cluster) {
 	defer db.Close()
 
 	// Wait for upreplication then create many ranges.
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {

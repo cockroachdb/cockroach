@@ -43,7 +43,7 @@ func registerYCSB(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, t, c.Range(1, nodes))
-		waitForFullReplication(t, c.Conn(ctx, 1))
+		waitForFullReplication(t, c.Conn(ctx, 1), 3)
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))

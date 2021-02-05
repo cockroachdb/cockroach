@@ -24,7 +24,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	lastWords := func(s string) []string {
 		var result []string
@@ -107,7 +107,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 	c.Start(ctx, t, c.Range(1, 2))
 
 	// Wait for the cluster to come back up.
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	waitUntil([]string{
 		"is_available is_live",

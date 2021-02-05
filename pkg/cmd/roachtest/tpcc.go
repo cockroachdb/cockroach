@@ -105,7 +105,7 @@ func setupTPCC(
 		opts.Start(ctx, t, c)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]), 3)
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
@@ -679,7 +679,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err

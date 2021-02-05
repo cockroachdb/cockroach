@@ -36,7 +36,7 @@ func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 
 	db := c.Conn(ctx, 1) // unaffected by toxiproxy
 	defer db.Close()
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	// NB: we're generous with latency in this test because we're checking that
 	// the upstream connections aren't affected by latency below, but the fixed
@@ -112,7 +112,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	duration := time.Hour
 	if local {

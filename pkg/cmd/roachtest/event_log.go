@@ -33,7 +33,7 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 	// a node starts and contacts the cluster.
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	waitForFullReplication(t, db)
+	waitForFullReplication(t, db, 3)
 
 	err := retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
