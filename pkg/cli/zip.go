@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -113,6 +114,10 @@ var customSelectClause = map[string]string{
 }
 
 type zipper struct {
+	// zipper implements Mutex because it's not possible for multiple
+	// goroutines to write concurrently to a zip.Writer.
+	syncutil.Mutex
+
 	f *os.File
 	z *zip.Writer
 }
@@ -125,12 +130,18 @@ func newZipper(f *os.File) *zipper {
 }
 
 func (z *zipper) close() error {
+	z.Lock()
+	defer z.Unlock()
+
 	err1 := z.z.Close()
 	err2 := z.f.Close()
 	return errors.CombineErrors(err1, err2)
 }
 
-func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
+// createLocked opens a new entry in the zip file. The caller is
+// responsible for locking the zipper beforehand.
+// Unsafe for concurrent use otherwise.
+func (z *zipper) createLocked(name string, mtime time.Time) (io.Writer, error) {
 	fmt.Printf("writing: %s\n", name)
 	if mtime.IsZero() {
 		mtime = timeutil.Now()
@@ -142,8 +153,13 @@ func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
 	})
 }
 
+// createRaw creates an entry and writes its contents as a byte slice.
+// Safe for concurrent use.
 func (z *zipper) createRaw(name string, b []byte) error {
-	w, err := z.create(name, time.Time{})
+	z.Lock()
+	defer z.Unlock()
+
+	w, err := z.createLocked(name, time.Time{})
 	if err != nil {
 		return err
 	}
@@ -151,6 +167,8 @@ func (z *zipper) createRaw(name string, b []byte) error {
 	return err
 }
 
+// createJSON creates an entry and writes its contents from a struct payload, converted to JSON.
+// Safe for concurrent use.
 func (z *zipper) createJSON(name string, m interface{}) error {
 	if !strings.HasSuffix(name, ".json") {
 		return errors.Errorf("%s does not have .json suffix", name)
@@ -162,8 +180,13 @@ func (z *zipper) createJSON(name string, m interface{}) error {
 	return z.createRaw(name, b)
 }
 
+// createError reports an error payload.
+// Safe for concurrent use.
 func (z *zipper) createError(name string, e error) error {
-	w, err := z.create(name+".err.txt", time.Time{})
+	z.Lock()
+	defer z.Unlock()
+
+	w, err := z.createLocked(name+".err.txt", time.Time{})
 	if err != nil {
 		return err
 	}
@@ -172,6 +195,9 @@ func (z *zipper) createError(name string, e error) error {
 	return nil
 }
 
+// createJSONOrError calls either createError() or createJSON()
+// depending on whether the error argument is nil.
+// Safe for concurrent use.
 func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
 	if e != nil {
 		return z.createError(name, e)
@@ -179,6 +205,9 @@ func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
 	return z.createJSON(name, m)
 }
 
+// createJSONOrError calls either createError() or createRaw()
+// depending on whether the error argument is nil.
+// Safe for concurrent use.
 func (z *zipper) createRawOrError(name string, b []byte, e error) error {
 	if filepath.Ext(name) == "" {
 		return errors.Errorf("%s has no extension", name)
@@ -484,6 +513,10 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				continue
 			}
 
+			if err := z.createJSON(prefix+"/status.json", node); err != nil {
+				return err
+			}
+
 			// Don't use sqlConn because that's only for is the node `debug
 			// zip` was pointed at, but here we want to connect to nodes
 			// individually to grab node- local SQL tables. Try to guess by
@@ -493,9 +526,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// still happen.
 			sqlAddr := node.Desc.CheckedSQLAddress()
 			curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
-			if err := z.createJSON(prefix+"/status.json", node); err != nil {
-				return err
-			}
 			fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
 
 			for _, table := range debugZipTablesPerNode {
@@ -657,30 +687,38 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 						}
 						continue
 					}
-					logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
-					if err != nil {
-						return err
-					}
 					warnRedactLeak := false
-					for _, e := range entries.Entries {
-						// If the user requests redaction, and some non-redactable
-						// data was found in the log, *despite KeepRedactable
-						// being set*, this means that this zip client is talking
-						// to a node that doesn't yet know how to redact. This
-						// also means that node may be leaking sensitive data.
-						//
-						// In that case, we do the redaction work ourselves in the
-						// most conservative way possible. (It's not great that
-						// possibly confidential data flew over the network, but
-						// at least it stops here.)
-						if zipCtx.redactLogs && !e.Redactable {
-							e.Message = "REDACTEDBYZIP"
-							// We're also going to print a warning at the end.
-							warnRedactLeak = true
-						}
-						if err := log.FormatLegacyEntry(e, logOut); err != nil {
+					if err := func() error {
+						z.Lock()
+						defer z.Unlock()
+
+						logOut, err := z.createLocked(name, timeutil.Unix(0, file.ModTimeNanos))
+						if err != nil {
 							return err
 						}
+						for _, e := range entries.Entries {
+							// If the user requests redaction, and some non-redactable
+							// data was found in the log, *despite KeepRedactable
+							// being set*, this means that this zip client is talking
+							// to a node that doesn't yet know how to redact. This
+							// also means that node may be leaking sensitive data.
+							//
+							// In that case, we do the redaction work ourselves in the
+							// most conservative way possible. (It's not great that
+							// possibly confidential data flew over the network, but
+							// at least it stops here.)
+							if zipCtx.redactLogs && !e.Redactable {
+								e.Message = "REDACTEDBYZIP"
+								// We're also going to print a warning at the end.
+								warnRedactLeak = true
+							}
+							if err := log.FormatLegacyEntry(e, logOut); err != nil {
+								return err
+							}
+						}
+						return nil
+					}(); err != nil {
+						return err
 					}
 					if warnRedactLeak {
 						// Defer the warning, so that it does not get "drowned" as
@@ -843,13 +881,18 @@ func dumpTableDataForZip(
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + ".txt"
-		w, err := z.create(name, time.Time{})
-		if err != nil {
-			return err
-		}
-		// Pump the SQL rows directly into the zip writer, to avoid
-		// in-RAM buffering.
-		if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
+		if err := func() error {
+			z.Lock()
+			defer z.Unlock()
+
+			w, err := z.createLocked(name, time.Time{})
+			if err != nil {
+				return err
+			}
+			// Pump the SQL rows directly into the zip writer, to avoid
+			// in-RAM buffering.
+			return runQueryAndFormatResults(conn, w, makeQuery(query))
+		}(); err != nil {
 			if cErr := z.createError(name, err); cErr != nil {
 				return cErr
 			}
