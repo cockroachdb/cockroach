@@ -224,6 +224,9 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, errToSend error) {
 	if o.runnerCtx == nil {
+		// In the non-testing path, runnerCtx has been set in Run() method;
+		// however, the tests might use runWithStream() directly in which case
+		// runnerCtx will remain unset, so we have this check.
 		o.runnerCtx = ctx
 	}
 	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
