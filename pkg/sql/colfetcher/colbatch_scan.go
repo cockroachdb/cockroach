@@ -207,7 +207,8 @@ func NewColBatchScan(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
+		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+		fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
 	); err != nil {
 		return nil, err
 	}
@@ -241,6 +242,7 @@ func NewColBatchScan(
 func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
+	memoryLimit int64,
 	fetcher *cFetcher,
 	desc catalog.TableDescriptor,
 	colIdxMap catalog.TableColMap,
@@ -266,7 +268,7 @@ func initCRowFetcher(
 	tableArgs.InitCols(desc, spec.Visibility, systemColumnDescs, spec.VirtualColumn)
 
 	if err := fetcher.Init(
-		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
+		codec, allocator, memoryLimit, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

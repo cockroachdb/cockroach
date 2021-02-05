@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -268,7 +269,13 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			// at coldata.BatchSize(), so we can just try asking for
 			// len(op.buckets) capacity. Note that in hashAggregatorOutputting
 			// state we always have at least 1 bucket.
-			op.output, _ = op.allocator.ResetMaybeReallocate(op.outputTypes, op.output, len(op.buckets))
+			//
+			// For now, we don't enforce any footprint-based memory limit.
+			// TODO(yuzefovich): refactor this.
+			const maxBatchMemSize = math.MaxInt64
+			op.output, _ = op.allocator.ResetMaybeReallocate(
+				op.outputTypes, op.output, len(op.buckets), maxBatchMemSize,
+			)
 			curOutputIdx := 0
 			op.allocator.PerformOperation(op.output.ColVecs(), func() {
 				for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
