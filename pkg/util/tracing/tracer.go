@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
@@ -451,6 +452,68 @@ func (t *Tracer) startSpanGeneric(
 	return maybeWrapCtx(ctx, &helper.octx, s)
 }
 
+// serializationFormat is the format used by the Tracer to {de,}serialize span
+// metadata across process boundaries. This takes place within
+// Tracer.{InjectMetaInto,ExtractMetaFrom}. Each format is inextricably linked
+// to a corresponding Carrier, which is the thing that actually captures the
+// serialized data and crosses process boundaries.
+//
+// The usage pattern is as follows:
+//
+//     // One end of the RPC.
+//     carrier := MapCarrier{...}
+//     tracer.InjectMetaInto(sp.Meta(), carrier)
+//
+//     // carrier crosses RPC boundary.
+//
+//     // Other end of the RPC.
+//     spMeta, _ := Tracer.ExtractMetaFrom(carrier)
+//     ctx, sp := tracer.StartSpanCtx(..., spMeta)
+//
+type serializationFormat = opentracing.BuiltinFormat
+
+const (
+	_ serializationFormat = iota
+
+	// metadataFormat is used to {de,}serialize data as HTTP header string
+	// pairs. It's used with gRPC (the carrier must be metadataCarrier), for
+	// when operations straddle RPC boundaries.
+	metadataFormat = opentracing.HTTPHeaders
+
+	// mapFormat is used to serialize data as a map of string pairs. The carrier
+	// must be MapCarrier.
+	mapFormat = opentracing.TextMap
+)
+
+// Carrier is what's used to capture the serialized data. Each carrier is
+// inextricably linked to a corresponding format. See serializationFormat for
+// more details.
+type Carrier interface {
+	Set(key, val string)
+	ForEach(fn func(key, val string) error) error
+}
+
+// MapCarrier is an implementation of the Carrier interface for a map of string
+// pairs.
+type MapCarrier struct {
+	Map map[string]string
+}
+
+// Set implements the Carrier interface.
+func (c MapCarrier) Set(key, val string) {
+	c.Map[key] = val
+}
+
+// ForEach implements the Carrier interface.
+func (c MapCarrier) ForEach(fn func(key, val string) error) error {
+	for k, v := range c.Map {
+		if err := fn(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type textMapWriterFn func(key, val string)
 
 var _ opentracing.TextMapWriter = textMapWriterFn(nil)
@@ -460,29 +523,31 @@ func (fn textMapWriterFn) Set(key, val string) {
 	fn(key, val)
 }
 
-// Inject is part of the opentracing.Tracer interface.
-func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) error {
-	if sc.isNilOrNoop() {
-		// Fast path when tracing is disabled. Extract will accept an empty map as a
-		// noop context.
+// InjectMetaInto is used to serialize the given span metadata into the given
+// Carrier. This, alongside ExtractMetaFrom, can be used to carry span metadata
+// across process boundaries. See serializationFormat for more details.
+func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
+	if sm.isNilOrNoop() {
+		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
+		// empty map as a noop context.
 		return nil
 	}
 
-	// We only support the HTTPHeaders/TextMap format.
-	if format != opentracing.HTTPHeaders && format != opentracing.TextMap {
-		return opentracing.ErrUnsupportedFormat
+	var format serializationFormat
+	switch carrier.(type) {
+	case MapCarrier:
+		format = mapFormat
+	case metadataCarrier:
+		format = metadataFormat
+	default:
+		return errors.New("unsupported carrier")
 	}
 
-	mapWriter, ok := carrier.(opentracing.TextMapWriter)
-	if !ok {
-		return opentracing.ErrInvalidCarrier
-	}
+	carrier.Set(fieldNameTraceID, strconv.FormatUint(sm.traceID, 16))
+	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
 
-	mapWriter.Set(fieldNameTraceID, strconv.FormatUint(sc.traceID, 16))
-	mapWriter.Set(fieldNameSpanID, strconv.FormatUint(sc.spanID, 16))
-
-	for k, v := range sc.Baggage {
-		mapWriter.Set(prefixBaggage+k, v)
+	for k, v := range sm.Baggage {
+		carrier.Set(prefixBaggage+k, v)
 	}
 
 	shadowTr := t.getShadowTracer()
@@ -491,11 +556,11 @@ func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) e
 		// to put information on the wire. If something changes out from under us, forget
 		// about shadow tracing.
 		curTyp, _ := shadowTr.Type()
-		if typ := sc.shadowTracerType; typ == curTyp {
-			mapWriter.Set(fieldNameShadowType, sc.shadowTracerType)
+		if typ := sm.shadowTracerType; typ == curTyp {
+			carrier.Set(fieldNameShadowType, sm.shadowTracerType)
 			// Encapsulate the shadow text map, prepending a prefix to the keys.
-			if err := shadowTr.Inject(sc.shadowCtx, format, textMapWriterFn(func(key, val string) {
-				mapWriter.Set(prefixShadow+key, val)
+			if err := shadowTr.Inject(sm.shadowCtx, format, textMapWriterFn(func(key, val string) {
+				carrier.Set(prefixShadow+key, val)
 			})); err != nil {
 				return err
 			}
@@ -505,20 +570,20 @@ func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) e
 	return nil
 }
 
-var noopSpanContext = &SpanMeta{}
+var noopSpanMeta = &SpanMeta{}
 
-// Extract is part of the opentracing.Tracer interface.
-// It always returns a valid context, even in error cases (this is assumed by the
-// grpc-opentracing interceptor).
-func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, error) {
-	// We only support the HTTPHeaders/TextMap format.
-	if format != opentracing.HTTPHeaders && format != opentracing.TextMap {
-		return noopSpanContext, opentracing.ErrUnsupportedFormat
-	}
-
-	mapReader, ok := carrier.(opentracing.TextMapReader)
-	if !ok {
-		return noopSpanContext, opentracing.ErrInvalidCarrier
+// ExtractMetaFrom is used to deserialize a span metadata (if any) from the
+// given Carrier. This, alongside InjectMetaFrom, can be used to carry span
+// metadata across process boundaries. See serializationFormat for more details.
+func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
+	var format serializationFormat
+	switch carrier.(type) {
+	case MapCarrier:
+		format = mapFormat
+	case metadataCarrier:
+		format = metadataFormat
+	default:
+		return noopSpanMeta, errors.New("unsupported carrier")
 	}
 
 	var shadowType string
@@ -530,7 +595,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 
 	// TODO(tbg): ForeachKey forces things on the heap. We can do better
 	// by using an explicit carrier.
-	err := mapReader.ForeachKey(func(k, v string) error {
+	err := carrier.ForEach(func(k, v string) error {
 		switch k = strings.ToLower(k); k {
 		case fieldNameTraceID:
 			var err error
@@ -563,10 +628,10 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 		return nil
 	})
 	if err != nil {
-		return noopSpanContext, err
+		return noopSpanMeta, err
 	}
 	if traceID == 0 && spanID == 0 {
-		return noopSpanContext, nil
+		return noopSpanMeta, nil
 	}
 
 	var recordingType RecordingType
@@ -591,7 +656,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 			// Extract the shadow context using the un-encapsulated textmap.
 			shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
 			if err != nil {
-				return noopSpanContext, err
+				return noopSpanMeta, err
 			}
 		}
 	}
