@@ -1,0 +1,70 @@
+# LogicTest: !local-vec-off !fakedist-vec-off !fakedist-metadata
+
+# Regression test for not closing the subqueries in the apply join when a panic
+# occurs but is caught by the vectorized engine. This can only run when the
+# configs when the vectorized engine is used (-vec-off and -metadata configs are
+# prohibited).
+
+query error pgcode XX000 invalid datum type given: string, expected varbit
+WITH
+  with_2675 (col_14424, col_14425)
+    AS (
+      SELECT
+        *
+      FROM
+        (VALUES ('88fa04ac-c1a9-498a-ae30-e04d37b6ec55':::UUID, (SELECT 'Y':::STRING AS col_14423 LIMIT 1:::INT8)))
+          AS tab_8229 (col_14424, col_14425)
+    )
+SELECT
+  (
+    SELECT
+      cte_ref_793.col_14424 AS col_14439
+    FROM
+      (VALUES ('%':::STRING), (cte_ref_793.col_14425)) AS tab_8233 (col_14429)
+    WHERE
+      (
+        EXISTS(
+          SELECT
+            e'\\x':::BYTES AS col_14438
+          FROM
+            (VALUES (tab_8233.col_14429), (NULL)) AS tab_8234 (col_14430)
+          WHERE
+            '294276-12-31 23:59:59.999999':::TIMESTAMP::TIMESTAMP
+            IN (
+                (
+                  SELECT
+                    '2012-07-02 22:25:26.000871':::TIMESTAMP AS col_14437
+                  FROM
+                    (
+                      VALUES
+                        (NULL),
+                        (
+                          (
+                            SELECT
+                              B'101100110111011110011100101001110000111001110' AS col_14435
+                            FROM
+                              (VALUES (2527294577:::OID), (COALESCE(3832050751:::OID, 1902695040:::OID)), (NULL)) AS tab_8235 (col_14431)
+                              JOIN (VALUES (3694495664:::OID), (1120971750:::OID), (2123004396:::OID), (2160238395:::OID))
+                                  AS tab_8238 (col_14434) ON (tab_8235.col_14431) = (tab_8238.col_14434)
+                            ORDER BY
+                              tab_8238.col_14434 ASC, tab_8238.col_14434 DESC
+                            LIMIT
+                              1:::INT8
+                          )
+                        )
+                    )
+                      AS tab_8239 (col_14436)
+                  ORDER BY
+                    tab_8239.col_14436 DESC, tab_8239.col_14436 ASC, tab_8239.col_14436
+                  LIMIT
+                    1:::INT8
+                ),
+                '1986-08-01 02:05:05.000516':::TIMESTAMP
+              )
+        )
+      )
+  )
+    AS col_14440,
+  cte_ref_793.col_14425 AS col_14441
+FROM
+  with_2675 AS cte_ref_793

@@ -50,6 +50,10 @@ type applyJoinNode struct {
 
 	planRightSideFn exec.ApplyJoinPlanRightSideFn
 
+	// lastRightSidePlan is the last plan created by planRightSideFn and will be
+	// closed when the applyJoinNode is closed if set.
+	lastRightSidePlan *planComponents
+
 	run struct {
 		// emptyRight is a cached, all-NULL slice that's used for left outer joins
 		// in the case of finding no match on the left.
@@ -205,11 +209,14 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		plan := p.(*planComponents)
+		a.lastRightSidePlan = p.(*planComponents)
 
-		if err := a.runRightSidePlan(params, plan); err != nil {
+		if err := a.runRightSidePlan(params, a.lastRightSidePlan); err != nil {
 			return false, err
 		}
+		// runRightSidePlan call succeeded, so the plan has already been closed
+		// automatically.
+		a.lastRightSidePlan = nil
 
 		// We've got fresh right rows. Continue along in the loop, which will deal
 		// with joining the right plan's output with our left row.
@@ -286,5 +293,8 @@ func (a *applyJoinNode) Close(ctx context.Context) {
 	a.input.plan.Close(ctx)
 	if a.run.rightRows != nil {
 		a.run.rightRows.Close(ctx)
+	}
+	if a.lastRightSidePlan != nil {
+		a.lastRightSidePlan.close(ctx)
 	}
 }
