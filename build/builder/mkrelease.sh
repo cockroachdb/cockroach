@@ -32,6 +32,10 @@ shopt -s extglob
 cd "$(dirname "$(readlink -f "$0")")/../.."
 source build/shlib.sh
 
+# Callers can set the MKRELEASE_BUILDTYPE environment variable to configure a
+# custom build type.
+BUILDTYPE="${MKRELEASE_BUILDTYPE:-release}"
+
 case "${1-}" in
   ""|?(amd64-)linux?(-gnu))
     args=(
@@ -113,4 +117,4 @@ if [ $# -ge 1 ]; then
     shift
 fi
 
-(set -x && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
+(set -x && CGO_ENABLED=1 make BUILDTYPE=$BUILDTYPE "${args[@]}" "$@")
