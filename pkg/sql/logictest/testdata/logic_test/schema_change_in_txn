@@ -278,7 +278,9 @@ SHOW CREATE TABLE b
 ----
 b  CREATE TABLE public.b (
    parent_id INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    d INT8 NULL DEFAULT 23:::INT8,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(id),
    INDEX foo (parent_id ASC),
    UNIQUE INDEX bar (parent_id ASC),

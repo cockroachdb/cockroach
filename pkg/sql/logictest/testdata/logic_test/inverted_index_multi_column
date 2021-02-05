@@ -62,6 +62,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
 CREATE TABLE public.drop_j (
    a INT8 NULL,
    b INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY fam_0_a_b_j_rowid (a, b, rowid)
 )
 
@@ -83,6 +85,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
 CREATE TABLE public.drop_a (
    b INT8 NULL,
    j JSONB NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY fam_0_a_b_j_rowid (b, j, rowid)
 )
 
@@ -98,6 +102,8 @@ CREATE TABLE public.dst (
    a INT8 NULL,
    b INT8 NULL,
    j JSONB NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    INVERTED INDEX src_a_j_idx (a, j),
    INVERTED INDEX src_a_b_j_idx (a, b, j),
    FAMILY "primary" (a, b, j, rowid)
