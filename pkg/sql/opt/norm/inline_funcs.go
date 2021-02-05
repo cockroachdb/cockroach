@@ -216,6 +216,147 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 	return false
 }
 
+// InlinedVirtualColumnFiltersPair represents a pair of filters where virtual
+// columns have been inlined in one of the filters, and virtual columns have not
+// been inlined in the other filters. This pair is built by
+// InlineSelectVirtualColumns.
+type InlinedVirtualColumnFiltersPair struct {
+	inlined    memo.FiltersExpr
+	notInlined memo.FiltersExpr
+}
+
+// InlinedFilters returns the filters in the pair where virtual columns were
+// inlined.
+func (c *CustomFuncs) InlinedFilters(pair *InlinedVirtualColumnFiltersPair) memo.FiltersExpr {
+	return pair.inlined
+}
+
+// NotInlinedFilters returns the filters in the pair where virtual columns were
+// not inlined.
+func (c *CustomFuncs) NotInlinedFilters(pair *InlinedVirtualColumnFiltersPair) memo.FiltersExpr {
+	return pair.notInlined
+}
+
+// InlineSelectVirtualColumnsSucceeded returns true if the pair is not nil,
+// indicating that InlineSelectVirtualColumns successfully inlined virtual
+// columns into some of the filters.
+func (c *CustomFuncs) InlineSelectVirtualColumnsSucceeded(
+	pair *InlinedVirtualColumnFiltersPair,
+) bool {
+	return pair != nil
+}
+
+// InlineSelectVirtualColumns attempts to inline virtual computed column
+// projection expressions into the given filters. Virtual computed columns are
+// only inlined if they are key columns of indexes in the scanPrivate's table.
+// If successful, a pair of filters is returned; the first containing filters
+// items in which virtual columns have been inlined, the second contains filters
+// that were unaffected by inlining. If unsuccessful, nil is returned,
+// indicating that the InlineSelectVirtualColumns should not fire.
+//
+// TODO(mgartner): Inline virtual computed columns that are referenced in
+// partial index predicates.
+func (c *CustomFuncs) InlineSelectVirtualColumns(
+	filters memo.FiltersExpr, projections memo.ProjectionsExpr, scanPrivate *memo.ScanPrivate,
+) *InlinedVirtualColumnFiltersPair {
+
+	// Collect the set of columns that are virtual columns and key columns of
+	// indexes on the scanPrivate's table.
+	indexedVirtualColumns := c.indexedVirtualColumns(scanPrivate)
+	if indexedVirtualColumns.Empty() {
+		return nil
+	}
+
+	// Collect the projections for the indexed virtual columns.
+	var inlinableCols opt.ColSet
+	inlinableProjections := make(memo.ProjectionsExpr, 0, len(projections))
+	for i := range projections {
+		col := projections[i].Col
+
+		// If the projected expression is volatile, it cannot be inlined. This
+		// should be impossible (computed column expressions cannot be
+		// volatile), but adds additional safety in case this function is
+		// expanded to inline non-virtual columns in the future.
+		if projections[i].ScalarProps().VolatilitySet.HasVolatile() {
+			continue
+		}
+
+		if indexedVirtualColumns.Contains(col) {
+			inlinableCols.Add(col)
+			inlinableProjections = append(inlinableProjections, projections[i])
+		}
+	}
+	if len(inlinableProjections) == 0 {
+		return nil
+	}
+
+	// For each filter, determine if there are any virtual columns to inline.
+	// Collect the inlined filters and the filters where there was nothing to
+	// inline into separate filters expressions.
+	inlined := make(memo.FiltersExpr, 0, len(filters))
+	notInlined := make(memo.FiltersExpr, 0, len(filters))
+	for i := range filters {
+		item := &filters[i]
+
+		// Correlated subqueries cannot be inlined.
+		if item.ScalarProps().HasCorrelatedSubquery {
+			notInlined = append(notInlined, *item)
+			continue
+		}
+
+		// There is nothing to inline if the filter does not reference an
+		// inlinable virtual column.
+		if !item.ScalarProps().OuterCols.Intersects(inlinableCols) {
+			notInlined = append(notInlined, *item)
+			continue
+		}
+
+		// Inline the virtual column expressions in the filter.
+		filter := c.f.ConstructFiltersItem(
+			c.inlineProjections(item.Condition, inlinableProjections).(opt.ScalarExpr),
+		)
+		inlined = append(inlined, filter)
+	}
+
+	// If nothing was inlined, return nil.
+	if len(inlined) == 0 {
+		return nil
+	}
+
+	return &InlinedVirtualColumnFiltersPair{
+		inlined:    inlined,
+		notInlined: notInlined,
+	}
+}
+
+// indexedVirtualColumns returns the set of column IDs in the scanPrivate's
+// table that are both virtual computed columns and key columns of a secondary
+// index.
+//
+// TODO(mgartner): Include virtual computed columns that are referenced in
+// partial index predicates.
+func (c *CustomFuncs) indexedVirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
+	md := c.mem.Metadata()
+	tab := md.Table(scanPrivate.Table)
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	virtualCols := tabMeta.VirtualComputedColumns()
+	if virtualCols.Empty() {
+		// Return early if there are no virtual columns to avoid unnecessarily
+		// calculating the index key columns.
+		return opt.ColSet{}
+	}
+
+	var indexCols opt.ColSet
+	for i, n := 0, tab.IndexCount(); i < n; i++ {
+		// TODO(mgartner): Use key columns where the virtual columns are mapped
+		// to source columns to support inverted indexes on virtual columns.
+		indexCols.UnionWith(tabMeta.IndexKeyColumns(i))
+	}
+
+	return virtualCols.Intersection(indexCols)
+}
+
 // InlineSelectProject searches the filter conditions for any variable
 // references to columns from the given projections expression. Each variable is
 // replaced by the corresponding inlined projection expression.
