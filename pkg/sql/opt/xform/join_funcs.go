@@ -318,9 +318,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// is sufficient.
 		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
 
-		// Remove the redundant filters and update the lookup condition.
-		lookupJoin.On = memo.ExtractRemainingJoinFilters(onFilters, lookupJoin.KeyCols, rightSideCols)
-		lookupJoin.On.RemoveCommonFilters(constFilters)
+		// Remove redundant filters from the ON condition if columns were
+		// constrained by equality filters or constant filters.
+		lookupJoin.On = onFilters
+		lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
+		lookupJoin.On = lookupJoin.On.Difference(constFilters)
 		lookupJoin.ConstFilters = constFilters
 
 		if isCovering {
@@ -574,11 +576,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 		// Remove redundant filters from the ON condition if non-inverted prefix
 		// columns were constrained by equality filters or constant filters.
-		if len(rightSideCols) > 0 || len(constFilters) > 0 {
-			onFilters = memo.ExtractRemainingJoinFilters(onFilters, invertedJoin.PrefixKeyCols, rightSideCols)
-			onFilters = onFilters.Difference(constFilters)
-			invertedJoin.ConstFilters = constFilters
-		}
+		onFilters = memo.ExtractRemainingJoinFilters(onFilters, invertedJoin.PrefixKeyCols, rightSideCols)
+		onFilters = onFilters.Difference(constFilters)
+		invertedJoin.ConstFilters = constFilters
 
 		// Check whether the filter can constrain the inverted column.
 		invertedExpr := invertedidx.TryJoinInvertedIndex(
