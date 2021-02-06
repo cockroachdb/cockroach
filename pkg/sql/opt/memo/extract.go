@@ -257,6 +257,9 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 	if len(leftEq) != len(rightEq) {
 		panic(errors.AssertionFailedf("leftEq and rightEq have different lengths"))
 	}
+	if len(leftEq) == 0 {
+		return on
+	}
 	var newFilters FiltersExpr
 	for i := range on {
 		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
