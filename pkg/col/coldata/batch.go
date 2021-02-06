@@ -82,8 +82,8 @@ var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
 	"coldata-batch-size",
 	1024, /* defaultValue */
 	// min is set to 3 to match colexec's minBatchSize setting.
-	1024, /* min */
-	1024,
+	3, /* min */
+	MaxBatchSize,
 ))
 
 var batchSize = defaultBatchSize
