@@ -201,15 +201,13 @@ func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return rec.i.GetLease()
 }
 
-// GetDescAndLease is part of the EvalContext interface.
-func (rec SpanSetReplicaEvalContext) GetDescAndLease(
-	ctx context.Context,
-) (roachpb.RangeDescriptor, roachpb.Lease) {
+// GetRangeInfo is part of the EvalContext interface.
+func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	// Do the latching checks and ignore the results.
 	rec.Desc()
 	rec.GetLease()
 
-	return rec.i.GetDescAndLease(ctx)
+	return rec.i.GetRangeInfo(ctx)
 }
 
 // GetLimiters returns the per-store limiters.
