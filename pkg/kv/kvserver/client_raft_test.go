@@ -1089,7 +1089,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	rngDesc, err := tc.Servers[0].ScratchRangeEx()
+	_, rngDesc, err := tc.Servers[0].ScratchRangeEx()
 	require.NoError(t, err)
 	key := rngDesc.StartKey.AsRawKey()
 	// Add replicas on all the stores.

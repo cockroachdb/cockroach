@@ -3353,12 +3353,15 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	// Use a manual clock so we can efficiently force leases to expire.
+	// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+	manual := hlc.NewHybridManualClock()
+
 	// Detect when txn2 has completed its read of txn1's intent and block.
 	var txn2ID atomic.Value
 	var txn2BBlockOnce sync.Once
 	txn2BlockedC := make(chan chan struct{})
-	knobs := &kvserver.StoreTestingKnobs{}
-	knobs.EvalKnobs.TestingPostEvalFilter = func(args kvserverbase.FilterArgs) *roachpb.Error {
+	postEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
 		if txn := args.Hdr.Txn; txn != nil && txn.ID == txn2ID.Load() {
 			txn2BBlockOnce.Do(func() {
 				if !errors.HasType(args.Err, (*roachpb.WriteIntentError)(nil)) {
@@ -3376,7 +3379,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	// Detect when txn4 discovers txn3's intent and begins to push.
 	var txn4ID atomic.Value
 	txn4PushingC := make(chan struct{}, 1)
-	knobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	requestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if !ba.IsSinglePushTxnRequest() {
 			return nil
 		}
@@ -3390,7 +3393,19 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}},
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingPostEvalFilter: postEvalFilter,
+				},
+				TestingRequestFilter: requestFilter,
+				// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+				AllowLeaseRequestProposalsWhenNotLeader: true,
+			},
+			Server: &server.TestingKnobs{
+				ClockSource: manual.UnixNano,
+			},
+		}},
 	})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Servers[0].DB()
@@ -3418,8 +3433,16 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	}()
 	txn2UnblockC := <-txn2BlockedC
 
-	// Transfer the lease to Server 1.
-	err = tc.TransferRangeLease(rangeDesc, tc.Target(1))
+	// Transfer the lease to Server 1. Do so non-cooperatively instead of using
+	// a lease transfer, because the cooperative lease transfer would get stuck
+	// acquiring latches, which are held by txn2.
+	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
+	require.NoError(t, err)
+
+	// Send an arbitrary request to the range to update the range descriptor
+	// cache with the new lease. This prevents the rollback from getting stuck
+	// waiting on latches held by txn2's read on the old leaseholder.
+	_, err = kvDB.Get(ctx, "c")
 	require.NoError(t, err)
 
 	// Roll back txn1.

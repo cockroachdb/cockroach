@@ -316,6 +316,7 @@ const (
 	MergeInProgressErrType                  ErrorDetailType = 37
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
+	InvalidLeaseErrType                     ErrorDetailType = 40
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -325,7 +326,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 40
+	NumErrors int = 41
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1238,3 +1239,18 @@ func (e *IndeterminateCommitError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
+
+func (e *InvalidLeaseError) Error() string {
+	return e.message(nil)
+}
+
+func (e *InvalidLeaseError) message(_ *Error) string {
+	return "invalid lease"
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *InvalidLeaseError) Type() ErrorDetailType {
+	return InvalidLeaseErrType
+}
+
+var _ ErrorDetailInterface = &InvalidLeaseError{}

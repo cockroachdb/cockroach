@@ -41,12 +41,6 @@ type StoreTestingKnobs struct {
 	// returns an error, the command will not be evaluated.
 	TestingRequestFilter kvserverbase.ReplicaRequestFilter
 
-	// TestingLatchFilter is called before evaluating each command on a replica
-	// but after acquiring latches for the command. Blocking in the filter will
-	// block interfering requests. If it returns an error, the command will not
-	// be evaluated.
-	TestingLatchFilter kvserverbase.ReplicaRequestFilter
-
 	// TestingConcurrencyRetryFilter is called before a concurrency retry error is
 	// handled and the batch is retried.
 	TestingConcurrencyRetryFilter kvserverbase.ReplicaConcurrencyRetryFilter

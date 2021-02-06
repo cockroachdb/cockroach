@@ -177,8 +177,8 @@ var _ = [...]interface{}{
 	//	  `LocalRangeLockTablePrefix`.
 	//
 	// `LocalRangeIDPrefix`, `localRangePrefix`, `localStorePrefix`, and
-	// `LocalRangeLockTablePrefix` all in turn share `localPrefix`.
-	// `localPrefix` was chosen arbitrarily. Local keys would work just as well
+	// `LocalRangeLockTablePrefix` all in turn share `LocalPrefix`.
+	// `LocalPrefix` was chosen arbitrarily. Local keys would work just as well
 	// with a different prefix, like 0xff, or even with a suffix.
 
 	//   1. Replicated range-ID local keys: These store metadata pertaining to a

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -64,7 +65,7 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
@@ -75,14 +76,16 @@ func (r *Replica) executeWriteBatch(
 	// if we hit an error during evaluation (e.g. a ConditionFailedError)?
 
 	// Verify that the batch can be executed.
-	// NB: we only need to check that the request is in the Range's key bounds
-	// at proposal time, not at application time, because the spanlatch manager
-	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
-	// cause this condition to change.
-	mergeInProgress, err := r.checkExecutionCanProceed(ctx, ba, g, &st)
+	st, err := r.checkExecutionCanProceed(ctx, ba, g)
 	if err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
+
+	// Limit the transaction's maximum timestamp using observed timestamps.
+	// TODO(nvanbenschoten): now that we've pushed this down here, consider
+	// keeping the "local max timestamp" on the stack and never modifying the
+	// batch.
+	ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, st)
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
@@ -116,19 +119,6 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
 	}
 
-	// Check that the lease is still valid before proposing to avoid discovering
-	// this after replication and potentially missing out on the chance to retry
-	// if the request is using AsyncConsensus. This is best-effort, but can help
-	// in cases where the request waited arbitrarily long for locks acquired by
-	// other transactions to be released while sequencing in the concurrency
-	// manager.
-	if curLease, _ := r.GetLease(); curLease.Sequence > st.Lease.Sequence {
-		err := newNotLeaseHolderError(curLease, r.store.StoreID(), r.Desc(),
-			"stale lease discovered before proposing")
-		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, roachpb.NewError(err)
-	}
-
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
@@ -150,18 +140,6 @@ func (r *Replica) executeWriteBatch(
 	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI
 	// explicitly as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
-		if mergeInProgress {
-			// The correctness of range merges relies on the invariant that the
-			// LeaseAppliedIndex of the range is not bumped while a range is in its
-			// subsumed state. If this invariant is ever violated, the follower
-			// replicas of the subsumed range (RHS) are free to activate any future
-			// closed timestamp updates even before the merge completes. This would be
-			// a serializability violation.
-			//
-			// See comment block in Subsume() in cmd_subsume.go for details.
-			log.Fatalf(ctx,
-				"lease applied index bumped by %v while the range was subsumed", ba)
-		}
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
