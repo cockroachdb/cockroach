@@ -318,10 +318,14 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// is sufficient.
 		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
 
-		// Remove the redundant filters and update the lookup condition.
-		lookupJoin.On = memo.ExtractRemainingJoinFilters(onFilters, lookupJoin.KeyCols, rightSideCols)
-		lookupJoin.On.RemoveCommonFilters(constFilters)
-		lookupJoin.ConstFilters = constFilters
+		// Remove redundant filters from the ON condition if columns were
+		// constrained by equality filters or constant filters.
+		lookupJoin.On = onFilters
+		if len(rightSideCols) > 0 || len(constFilters) > 0 {
+			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
+			lookupJoin.On = lookupJoin.On.Difference(constFilters)
+			lookupJoin.ConstFilters = constFilters
+		}
 
 		if isCovering {
 			// Case 1 (see function comment).

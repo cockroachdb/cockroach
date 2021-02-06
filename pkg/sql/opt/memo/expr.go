@@ -274,28 +274,6 @@ func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
 	return newFilters
 }
 
-// RemoveCommonFilters removes the filters found in other from n.
-func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
-	if len(other) == 0 {
-		return
-	}
-	// TODO(ridwanmsharif): Faster intersection using a map
-	common := (*n)[:0]
-	for _, filter := range *n {
-		found := false
-		for _, otherFilter := range other {
-			if filter.Condition == otherFilter.Condition {
-				found = true
-				break
-			}
-		}
-		if !found {
-			common = append(common, filter)
-		}
-	}
-	*n = common
-}
-
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
