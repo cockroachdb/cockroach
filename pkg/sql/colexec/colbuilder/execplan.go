@@ -318,7 +318,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.ProjectSet != nil:
 	case spec.Core.Windower != nil:
 	case spec.Core.LocalPlanNode != nil:
-		return errors.New("temporarily disabled")
 	case spec.Core.ChangeAggregator != nil:
 		// Currently, there is an issue with cleaning up the changefeed flows
 		// (#55408), so we fallback to the row-by-row engine.
