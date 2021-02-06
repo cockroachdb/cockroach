@@ -849,7 +849,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 // is enabled and the TTL has passed. If this is an admin command or this range
 // contains data outside of the user keyspace, we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
-	st *kvserverpb.LeaseStatus, isAdmin bool,
+	st kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	threshold := *r.mu.state.GCThreshold
 
@@ -1154,50 +1154,98 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 	}
 }
 
+// TODO(nvanbenschoten): move the following 5 methods to replica_send.go.
+
 // checkExecutionCanProceed returns an error if a batch request cannot be
 // executed by the Replica. An error indicates that the Replica is not live and
 // able to serve traffic or that the request is not compatible with the state of
-// the Range.
+// the Range due to the range's key bounds, the range's lease, or the ranges GC
+// threshold.
 //
 // The method accepts a concurrency Guard, which is used to indicate whether the
 // caller has acquired latches. When this condition is false, the batch request
-// will not wait for a pending merge to conclude before proceeding. Callers might
-// be ok with this if they know that they will end up checking for a pending
-// merge at some later time.
-//
-// NB: We record and return the result of `mergeInProgress()` here because we use
-// it to assert that no request that bumps the LeaseAppliedIndex of a range is
-// proposed to Raft while a range is subsumed. This is a correctness invariant
-// for range merges. See comment block inside Subsume() in cmd_subsume.go for
-// more details.
+// will not wait for a pending merge to conclude before proceeding. Callers
+// might be ok with this if they know that they will end up checking for a
+// pending merge at some later time.
 func (r *Replica) checkExecutionCanProceed(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
-) (bool, error) {
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+) (kvserverpb.LeaseStatus, error) {
+	var st kvserverpb.LeaseStatus
+	var shouldExtend bool
+	defer func() {
+		if shouldExtend {
+			r.maybeExtendLeaseAsync(ctx, st)
+		}
+	}()
+
+	now := r.Clock().NowAsClockTimestamp()
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
-		return false, err
+		return kvserverpb.LeaseStatus{}, err
 	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	mergeInProgress := r.mergeInProgressRLocked()
+
+	// Is the replica destroyed?
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return mergeInProgress, err
-	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
-		return mergeInProgress, err
-	} else if err := r.checkTSAboveGCThresholdRLocked(
-		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
-	); err != nil {
-		return mergeInProgress, err
-	} else if mergeInProgress && g.HoldingLatches() {
-		// We only call `shouldWaitForPendingMergeRLocked` if we're currently holding
-		// latches. In practice, this means that any request where
-		// concurrency.shouldAcquireLatches() == false (e.g. RequestLeaseRequests) will
-		// not wait for a pending merge before executing and, as such, can execute while
-		// a range is in a merge's critical phase (i.e. while the RHS of the merge is
-		// subsumed).
-		return mergeInProgress, r.shouldWaitForPendingMergeRLocked(ctx, ba)
+		return kvserverpb.LeaseStatus{}, err
 	}
-	return mergeInProgress, nil
+
+	// Is the request fully contained in the range?
+	// NB: we only need to check that the request is in the Range's key bounds
+	// at evaluation time, not at application time, because the spanlatch manager
+	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
+	// cause this condition to change.
+	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+
+	// Is the lease valid?
+	if !ba.ReadConsistency.RequiresReadLease() {
+		// For INCONSISTENT requests, we don't need the lease.
+		st = kvserverpb.LeaseStatus{
+			Now: now,
+		}
+	} else if ba.IsSingleSkipLeaseCheckRequest() {
+		// For lease commands, use the provided previous lease for verification.
+		st = kvserverpb.LeaseStatus{
+			Lease: ba.GetPrevLeaseForLeaseRequest(),
+			Now:   now,
+		}
+	} else {
+		// If the request is a write or a consistent read, it requires the
+		// replica serving it to hold the range lease.
+		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.Timestamp)
+		if err != nil {
+			// If not, can we serve this request on a follower?
+			// TODO(nvanbenschoten): once we make this check cheaper
+			// than leaseGoodToGoRLocked, invert these checks.
+			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
+				return st, err
+			}
+		}
+	}
+
+	// Is the request below the GC threshold?
+	if err := r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+
+	// Is there a merge in progress?
+	if r.mergeInProgressRLocked() && g.HoldingLatches() {
+		// We only check for a merge if we are holding latches. In practice,
+		// this means that any request where concurrency.shouldAcquireLatches()
+		// is false (e.g. RequestLeaseRequests) will not wait for a pending
+		// merge before executing and, as such, can execute while a range is in
+		// a merge's critical phase (i.e. while the RHS of the merge is
+		// subsumed).
+		if err := r.shouldWaitForPendingMergeRLocked(ctx, ba); err != nil {
+			return kvserverpb.LeaseStatus{}, err
+		}
+	}
+
+	return st, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
@@ -1213,7 +1261,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts, &status, false /* isAdmin */); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
 	} else if r.requiresExpiringLeaseRLocked() {
 		// Ensure that the range does not require an expiration-based lease. If it
@@ -1239,7 +1287,7 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st *kvserverpb.LeaseStatus, isAdmin bool,
+	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
@@ -1268,6 +1316,9 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 		return nil
 	}
 
+	// TODO(nvanbenschoten): this isn't quite right. We shouldn't allow non-txn
+	// requests through here for the same reason why lease transfers can only
+	// allow concurrent reads > max_offset below the lease transfer time.
 	if ba.IsReadOnly() {
 		freezeStart := r.getFreezeStartRLocked()
 		ts := ba.Timestamp
@@ -1405,6 +1456,8 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		// split replica ID.
 		r.mu.replicaID > rightDesc.ReplicaID
 }
+
+// TODO(nvanbenschoten): move endCmds to replica_send.go.
 
 // endCmds holds necessary information to end a batch after Raft
 // command processing.

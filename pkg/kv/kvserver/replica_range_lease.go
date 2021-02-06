@@ -477,13 +477,12 @@ func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
 	return llHandle
 }
 
-// TransferInProgress returns the next lease, if the replica is in the process
-// of transferring away its range lease. This next lease indicates the next
-// lease holder. The second return val is true if a transfer is in progress.
-// Note that the return values are best-effort and shouldn't be relied upon for
-// correctness: if a previous transfer has returned an error, TransferInProgress
-// will return `false`, but that doesn't necessarily mean that the transfer
-// cannot still apply (see replica.mu.minLeaseProposedTS).
+// TransferInProgress returns whether the replica is in the process of
+// transferring away its range lease. Note that the return values are
+// best-effort and shouldn't be relied upon for correctness: if a previous
+// transfer has returned an error, TransferInProgress will return `false`, but
+// that doesn't necessarily mean that the transfer cannot still apply (see
+// replica.mu.minLeaseProposedTS).
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the
 // LeaderLease.
@@ -491,16 +490,12 @@ func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
 // replicaID is the ID of the parent replica.
 //
 // Requires repl.mu is read locked.
-func (p *pendingLeaseRequest) TransferInProgress(
-	replicaID roachpb.ReplicaID,
-) (roachpb.Lease, bool) {
+func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) bool {
 	if nextLease, ok := p.RequestPending(); ok {
 		// Is the lease being transferred? (as opposed to just extended)
-		if replicaID != nextLease.Replica.ReplicaID {
-			return nextLease, true
-		}
+		return replicaID != nextLease.Replica.ReplicaID
 	}
-	return roachpb.Lease{}, false
+	return false
 }
 
 // newHandle creates a new leaseRequestHandle referencing the pending lease
@@ -714,8 +709,6 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 // there's already a request in progress, we join in waiting for the results of
 // that request. Unless an error is returned, the obtained lease will be valid
 // for a time interval containing the requested timestamp.
-// If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
-// sent on the returned chan.
 func (r *Replica) requestLeaseLocked(
 	ctx context.Context, status kvserverpb.LeaseStatus,
 ) *leaseRequestHandle {
@@ -723,16 +716,6 @@ func (r *Replica) requestLeaseLocked(
 		if err := r.store.TestingKnobs().LeaseRequestEvent(status.Now.ToTimestamp(), r.StoreID(), r.GetRangeID()); err != nil {
 			return r.mu.pendingLeaseRequest.newResolvedHandle(err)
 		}
-	}
-	// Propose a Raft command to get a lease for this replica.
-	repDesc, err := r.getReplicaDescriptorRLocked()
-	if err != nil {
-		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(err))
-	}
-	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
-		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
-			newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc,
-				"lease transfer in progress")))
 	}
 	// If we're draining, we'd rather not take any new leases (since we're also
 	// trying to move leases away elsewhere). But if we're the leader, we don't
@@ -746,27 +729,35 @@ func (r *Replica) requestLeaseLocked(
 			newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 				"refusing to take the lease; node is draining")))
 	}
+	// Propose a Raft command to get a lease for this replica.
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
+		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(err))
+	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
-// AdminTransferLease transfers the LeaderLease to another replica. A
-// valid LeaseStatus must be supplied. Only the current holder of the
-// LeaderLease can do a transfer, because it needs to stop serving
-// reads and proposing Raft commands (CPut is a read) after sending
-// the transfer command. If it did not stop serving reads immediately,
-// it would potentially serve reads with timestamps greater than the
-// start timestamp of the new (transferred) lease. More subtly, the
-// replica can't even serve reads or propose commands with timestamps
-// lower than the start of the new lease because it could lead to read
-// your own write violations (see comments on the stasis period in
-// IsLeaseValid). We could, in principle, serve reads more than the
-// maximum clock offset in the past.
+// AdminTransferLease transfers the LeaderLease to another replica. Only the
+// current holder of the LeaderLease can do a transfer, because it needs to stop
+// serving reads and proposing Raft commands (CPut is a read) while evaluating
+// and proposing the TransferLease request. This synchronization with all other
+// requests on the leaseholder is enforced through latching. The TransferLease
+// request grabs a write latch over all keys in the range.
+//
+// If the leaseholder did not respect latching and did not stop serving reads
+// during the lease transfer, it would potentially serve reads with timestamps
+// greater than the start timestamp of the new (transferred) lease, which is
+// determined during the evaluation of the TransferLease request. More subtly,
+// the replica can't even serve reads or propose commands with timestamps lower
+// than the start of the new lease because it could lead to read your own write
+// violations (see comments on the stasis period on leaseStatus). We could, in
+// principle, serve reads more than the maximum clock offset in the past.
 //
 // The method waits for any in-progress lease extension to be done, and it also
-// blocks until the transfer is done. If a transfer is already in progress,
-// this method joins in waiting for it to complete if it's transferring to the
-// same replica. Otherwise, a NotLeaseHolderError is returned.
+// blocks until the transfer is done. If a transfer is already in progress, this
+// method joins in waiting for it to complete if it's transferring to the same
+// replica. Otherwise, a NotLeaseHolderError is returned.
 func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
@@ -822,7 +813,14 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			return nil, nil, newNotLeaseHolderError(nextLease, r.store.StoreID(), desc,
 				"another transfer to a different store is in progress")
 		}
-		// Stop using the current lease.
+		// Stop using the current lease. All future calls to leaseStatus on this
+		// node with the current lease will now return a PROSCRIBED status.
+		//
+		// TODO(nvanbenschoten): since we aren't pulling the transfer time here
+		// anymore, we could also move this below latching as well, similar to
+		// how a Subsume request sets the FreezeStart time and pauses closed
+		// timestamps during evaluation and communicates this back up using the
+		// LocalResult.
 		r.mu.minLeaseProposedTS = now
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
@@ -911,35 +909,6 @@ func newNotLeaseHolderError(
 	return err
 }
 
-// leaseGoodToGo is a fast-path for lease checks which verifies that an
-// existing lease is valid, owned by the current store, and usable to
-// serve requests at the specified timestamp. This method should not be
-// called directly. Use redirectOnOrAcquireLease instead.
-func (r *Replica) leaseGoodToGo(
-	ctx context.Context, reqTS hlc.Timestamp,
-) (kvserverpb.LeaseStatus, bool) {
-	now := r.store.Clock().NowAsClockTimestamp()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if r.requiresExpiringLeaseRLocked() {
-		// Slow-path for expiration-based leases.
-		return kvserverpb.LeaseStatus{}, false
-	}
-
-	status := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
-	if status.IsValid() && status.Lease.OwnedBy(r.store.StoreID()) {
-		// We own the lease...
-		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
-			if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
-				// ...and there is no transfer pending.
-				return status, true
-			}
-		}
-	}
-	return kvserverpb.LeaseStatus{}, false
-}
-
 // checkRequestTimeRLocked checks that the provided request timestamp is not
 // too far in the future. We define "too far" as a time that would require a
 // lease extension even if we were perfectly proactive about extending our
@@ -950,9 +919,7 @@ func (r *Replica) leaseGoodToGo(
 // This serves as a stricter version of a check that if we were to perform
 // a lease extension at now, the request would be contained within the new
 // lease's expiration (and stasis period).
-func (r *Replica) checkRequestTimeRLocked(
-	now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) *roachpb.Error {
+func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
 	if r.requiresExpiringLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
@@ -968,17 +935,120 @@ func (r *Replica) checkRequestTimeRLocked(
 	}
 	maxReqTS := now.ToTimestamp().Add(leaseRenewalMinusStasis.Nanoseconds(), 0)
 	if maxReqTS.Less(reqTS) {
-		return roachpb.NewErrorf("request timestamp %s too far in future (> %s)", reqTS, maxReqTS)
+		return errors.Errorf("request timestamp %s too far in future (> %s)", reqTS, maxReqTS)
 	}
 	return nil
 }
 
-// redirectOnOrAcquireLease checks whether this replica has the lease at the
-// current timestamp. If it does, returns the lease and its status. If
-// another replica currently holds the lease, redirects by returning
-// NotLeaseHolderError. If the lease is expired, a renewal is synchronously
-// requested. Leases are eagerly renewed when a request with a timestamp
-// within RangeLeaseRenewalDuration of the lease expiration is served.
+// leaseGoodToGoRLocked verifies that the replica has a lease that is
+// valid, owned by the current replica, and usable to serve requests at
+// the specified timestamp. The method will return the lease status,
+// along with an error indicating whether any of these conditions is
+// unsatisfied. The lease status is either empty or fully populated.
+//
+// Latches must be acquired on the range before calling this method.
+// This ensures that callers are properly sequenced with TransferLease
+// requests, which declare a conflict with all other commands.
+//
+// The method can has four possible outcomes:
+//
+// (1) the request timestamp is too far in the future. In this case,
+//     a nonstructured error is returned. This shouldn't happen.
+// (2) the lease is invalid or otherwise unable to serve a request at
+//     the specified timestamp. In this case, an InvalidLeaseError is
+//     returned, which is caught in executeBatchWithConcurrencyRetries
+//     and used to trigger a lease acquisition/extension.
+// (3) the lease is valid but held by a different replica. In this case,
+//     a NotLeaseHolderError is returned, which is propagated back up to
+//     the DistSender and triggers a redirection of the request.
+// (4) the lease is valid, held locally, and capable of serving the
+//     given request. In this case, no error is returned.
+//
+// In addition to the lease status, the method also returns whether the
+// lease should be considered for extension using maybeExtendLeaseAsync
+// after the replica's read lock has been dropped.
+func (r *Replica) leaseGoodToGoRLocked(
+	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
+) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
+		// Case (1): invalid request.
+		return kvserverpb.LeaseStatus{}, false, err
+	}
+
+	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+	if !st.IsValid() {
+		// Case (2): invalid lease.
+		return st, false, &roachpb.InvalidLeaseError{}
+	}
+	if !st.Lease.OwnedBy(r.store.StoreID()) {
+		// Case (3): not leaseholder.
+		_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(st.Lease.Replica.StoreID)
+		if !stillMember {
+			// This would be the situation in which the lease holder gets removed when
+			// holding the lease, or in which a lease request erroneously gets accepted
+			// for a replica that is not in the replica set. Neither of the two can
+			// happen in normal usage since appropriate mechanisms have been added:
+			//
+			// 1. Only the lease holder (at the time) schedules removal of a replica,
+			// but the lease can change hands and so the situation in which a follower
+			// coordinates a replica removal of the (new) lease holder is possible (if
+			// unlikely) in practice. In this situation, the new lease holder would at
+			// some point be asked to propose the replica change's EndTxn to Raft. A
+			// check has been added that prevents proposals that amount to the removal
+			// of the proposer's (and hence lease holder's) Replica, preventing this
+			// scenario.
+			//
+			// 2. A lease is accepted for a Replica that has been removed. Without
+			// precautions, this could happen because lease requests are special in
+			// that they are the only command that is proposed on a follower (other
+			// commands may be proposed from followers, but not successfully so). For
+			// all proposals, processRaftCommand checks that their ProposalLease is
+			// compatible with the active lease for the log position. For commands
+			// proposed on the lease holder, the spanlatch manager then serializes
+			// everything. But lease requests get created on followers based on their
+			// local state and thus without being sequenced through latching. Thus
+			// a recently removed follower (unaware of its own removal) could submit
+			// a proposal for the lease (correctly using as a ProposerLease the last
+			// active lease), and would receive it given the up-to-date ProposerLease.
+			// Hence, an extra check is in order: processRaftCommand makes sure that
+			// lease requests for a replica not in the descriptor are bounced.
+			//
+			// However, this is possible if the `cockroach debug
+			// unsafe-remove-dead-replicas` command has been used, so
+			// this is just a logged error instead of a fatal
+			// assertion.
+			log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
+				st.Lease, st.Lease.Replica)
+		}
+		// Otherwise, if the lease is currently held by another replica, redirect
+		// to the holder.
+		return st, false, newNotLeaseHolderError(
+			st.Lease, r.store.StoreID(), r.descRLocked(), "lease held by different store",
+		)
+	}
+	// Case (4): all good.
+	return st, r.shouldExtendLeaseRLocked(st), nil
+}
+
+// leaseGoodToGo is like leaseGoodToGoRLocked, but will acquire the replica read
+// lock.
+func (r *Replica) leaseGoodToGo(
+	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
+) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
+}
+
+// redirectOnOrAcquireLease checks whether this replica has the lease at
+// the current timestamp. If it does, returns the lease and its status.
+// If another replica currently holds the lease, redirects by returning
+// NotLeaseHolderError and an empty lease status.
+//
+// If the lease is expired, a renewal is synchronously requested.
+// Expiration-based leases are eagerly renewed when a request with a
+// timestamp within RangeLeaseRenewalDuration of the lease expiration is
+// served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
 //  the range lease. If the lease acquisition fails, the write cmd
@@ -998,25 +1068,36 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context, reqTS hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// Try fast-path.
-	if status, ok := r.leaseGoodToGo(ctx, reqTS); ok {
+	now := r.store.Clock().NowAsClockTimestamp()
+	status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
+	if err == nil {
+		if shouldExtend {
+			r.maybeExtendLeaseAsync(ctx, status)
+		}
 		return status, nil
+	} else if !errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)) {
+		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
 	}
 
-	// If fast-path fails, loop until the lease is held or the replica
-	// ascertains the actual lease holder. Returns also on context.Done()
-	// (timeout or cancellation).
-	var status kvserverpb.LeaseStatus
+	// Loop until the lease is held or the replica ascertains the actual lease
+	// holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
-		now := r.store.Clock().NowAsClockTimestamp()
-		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
+		now = r.store.Clock().NowAsClockTimestamp()
+		llHandle, transfer, pErr := func() (*leaseRequestHandle, bool, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			// Check to make sure we aren't trying to perform a request at an
-			// invalid timestamp too far in the future. If so, reject instead
-			// of trying to acquire a lease to satisfy the request.
-			if pErr := r.checkRequestTimeRLocked(now, reqTS); pErr != nil {
-				return nil, pErr
+			// Check that we're not in the process of transferring the lease
+			// away. If we are doing so, we can't serve reads or propose Raft
+			// commands - see comments on AdminTransferLease and TransferLease.
+			// So wait on the lease transfer to complete either successfully or
+			// unsuccessfully before redirecting or retrying.
+			repDesc, err := r.getReplicaDescriptorRLocked()
+			if err != nil {
+				return nil, false, roachpb.NewError(err)
+			}
+			if ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
+				return r.mu.pendingLeaseRequest.JoinRequest(), true /* transfer */, nil
 			}
 
 			status = r.leaseStatusForRequestRLocked(ctx, now, reqTS)
@@ -1024,7 +1105,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
 				log.VEventf(ctx, 2, "lease state couldn't be determined")
-				return nil, roachpb.NewError(
+				return nil, false, roachpb.NewError(
 					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 						"lease state couldn't be determined"))
 
@@ -1032,94 +1113,30 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				if !status.Lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
-						// This would be the situation in which the lease holder gets removed when
-						// holding the lease, or in which a lease request erroneously gets accepted
-						// for a replica that is not in the replica set. Neither of the two can
-						// happen in normal usage since appropriate mechanisms have been added:
-						//
-						// 1. Only the lease holder (at the time) schedules removal of a replica,
-						// but the lease can change hands and so the situation in which a follower
-						// coordinates a replica removal of the (new) lease holder is possible (if
-						// unlikely) in practice. In this situation, the new lease holder would at
-						// some point be asked to propose the replica change's EndTxn to Raft. A
-						// check has been added that prevents proposals that amount to the removal
-						// of the proposer's (and hence lease holder's) Replica, preventing this
-						// scenario.
-						//
-						// 2. A lease is accepted for a Replica that has been removed. Without
-						// precautions, this could happen because lease requests are special in
-						// that they are the only command that is proposed on a follower (other
-						// commands may be proposed from followers, but not successfully so). For
-						// all proposals, processRaftCommand checks that their ProposalLease is
-						// compatible with the active lease for the log position. For commands
-						// proposed on the lease holder, the spanlatch manager then serializes
-						// everything. But lease requests get created on followers based on their
-						// local state and thus without being sequenced through latching. Thus
-						// a recently removed follower (unaware of its own removal) could submit
-						// a proposal for the lease (correctly using as a ProposerLease the last
-						// active lease), and would receive it given the up-to-date ProposerLease.
-						// Hence, an extra check is in order: processRaftCommand makes sure that
-						// lease requests for a replica not in the descriptor are bounced.
-						//
-						// However, this is possible if the `cockroach debug
-						// unsafe-remove-dead-replicas` command has been used, so
-						// this is just a logged error instead of a fatal
-						// assertion.
+						// See corresponding comment in leaseGoodToGoRLocked.
 						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
-					return nil, roachpb.NewError(
+					return nil, false, roachpb.NewError(
 						newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc,
 							"lease held by different store"))
-				}
-				// Check that we're not in the process of transferring the lease away.
-				// If we are transferring the lease away, we can't serve reads or
-				// propose Raft commands - see comments on TransferLease.
-				// TODO(andrei): If the lease is being transferred, consider returning a
-				// new error type so the client backs off until the transfer is
-				// completed.
-				repDesc, err := r.getReplicaDescriptorRLocked()
-				if err != nil {
-					return nil, roachpb.NewError(err)
-				}
-				if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
-					repDesc.ReplicaID); ok {
-					return nil, roachpb.NewError(
-						newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc,
-							"lease transfer in progress"))
 				}
 
 				// If the lease is in stasis, we can't serve requests until we've
 				// renewed the lease, so we return the handle to block on renewal.
-				// Otherwise, we don't need to wait for the extension and simply
-				// ignore the returned handle (whose channel is buffered) and continue.
 				if status.State == kvserverpb.LeaseState_UNUSABLE {
-					return r.requestLeaseLocked(ctx, status), nil
+					return r.requestLeaseLocked(ctx, status), false, nil
 				}
 
-				// Extend the lease if this range uses expiration-based
-				// leases, the lease is in need of renewal, and there's not
-				// already an extension pending.
-				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
-				if !requestPending && r.requiresExpiringLeaseRLocked() {
-					renewal := status.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-					if renewal.LessEq(now.ToTimestamp()) {
-						if log.V(2) {
-							log.Infof(ctx, "extending lease %s at %s", status.Lease, now)
-						}
-						// We had an active lease to begin with, but we want to trigger
-						// a lease extension. We explicitly ignore the returned handle
-						// as we won't block on it.
-						_ = r.requestLeaseLocked(ctx, status)
-					}
-				}
+				// Return a nil handle to signal that we have a valid lease.
+				return nil, false, nil
 
 			case kvserverpb.LeaseState_EXPIRED:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-				return r.requestLeaseLocked(ctx, status), nil
+				return r.requestLeaseLocked(ctx, status), false, nil
 
 			case kvserverpb.LeaseState_PROSCRIBED:
 				// Lease proposed timestamp is earlier than the min proposed
@@ -1127,15 +1144,15 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.Lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-					return r.requestLeaseLocked(ctx, status), nil
+					return r.requestLeaseLocked(ctx, status), false, nil
 				}
 				// If lease is currently held by another, redirect to holder.
-				return nil, roachpb.NewError(
+				return nil, false, roachpb.NewError(
 					newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc, "lease proscribed"))
-			}
 
-			// Return a nil handle to signal that we have a valid lease.
-			return nil, nil
+			default:
+				return nil, false, roachpb.NewErrorf("unknown lease status state %v", status)
+			}
 		}()
 		if pErr != nil {
 			return kvserverpb.LeaseStatus{}, pErr
@@ -1145,7 +1162,15 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			return status, nil
 		}
 
-		// Wait for the range lease to finish, or the context to expire.
+		// Wait for the range lease acquisition/transfer to finish, or the
+		// context to expire.
+		//
+		// Note that even if the operation completes successfully, we can't
+		// assume that we have the lease. This is clearly not the case when
+		// waiting on a lease transfer and also not the case if our request
+		// timestamp is not covered by the new lease (though we try to protect
+		// against this in checkRequestTimeRLocked). So instead of assuming
+		// anything, we iterate and check again.
 		pErr = func() (pErr *roachpb.Error) {
 			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
@@ -1154,6 +1179,12 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			for {
 				select {
 				case pErr = <-llHandle.C():
+					if transfer {
+						// We were waiting on a transfer to finish. Ignore its
+						// result and try again.
+						return nil
+					}
+
 					if pErr != nil {
 						switch tErr := pErr.GetDetail().(type) {
 						case *roachpb.AmbiguousResultError:
@@ -1216,5 +1247,40 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		if pErr != nil {
 			return kvserverpb.LeaseStatus{}, pErr
 		}
+		// Retry...
 	}
+}
+
+// shouldExtendLeaseRLocked determines whether the lease should be
+// extended asynchronously, even if it is currently valid. The method
+// returns true if this range uses expiration-based leases, the lease is
+// in need of renewal, and there's not already an extension pending.
+func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
+	if !r.requiresExpiringLeaseRLocked() {
+		return false
+	}
+	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
+		return false
+	}
+	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+	return renewal.LessEq(st.Now.ToTimestamp())
+}
+
+// maybeExtendLeaseAsync attempts to extend the expiration-based lease
+// asynchronously, if doing so is deemed beneficial by an earlier call
+// to shouldExtendLeaseRLocked.
+func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.LeaseStatus) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Check shouldExtendLeaseRLocked again, because others may have raced to
+	// extend the lease and beaten us here after we made the determination
+	// (under a shared lock) that the extension was needed.
+	if !r.shouldExtendLeaseRLocked(st) {
+		return
+	}
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
+	}
+	// We explicitly ignore the returned handle as we won't block on it.
+	_ = r.requestLeaseLocked(ctx, st)
 }

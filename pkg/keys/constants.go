@@ -22,7 +22,7 @@ import (
 // These constants are single bytes for performance. They allow single-byte
 // comparisons which are considerably faster than bytes.HasPrefix.
 const (
-	localPrefixByte  = '\x01'
+	LocalPrefixByte  = '\x01'
 	localMaxByte     = '\x02'
 	meta1PrefixByte  = localMaxByte
 	meta2PrefixByte  = '\x03'
@@ -42,8 +42,8 @@ var (
 	// MaxKey is the infinity marker which is larger than any other key.
 	MaxKey = roachpb.KeyMax
 
-	// localPrefix is the prefix for all local keys.
-	localPrefix = roachpb.Key{localPrefixByte}
+	// LocalPrefix is the prefix for all local keys.
+	LocalPrefix = roachpb.Key{LocalPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global
 	// key.
 	LocalMax = roachpb.Key{localMaxByte}
@@ -64,7 +64,7 @@ var (
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
 	// case of AbortSpan entry.
-	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
+	LocalRangeIDPrefix = roachpb.RKey(makeKey(LocalPrefix, roachpb.Key("i")))
 	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
 	// keys will be sorted directly before the local unreplicated keys for the
@@ -134,7 +134,7 @@ var (
 	// specific sort of per-range metadata is identified by one of the
 	// suffixes listed below, along with potentially additional encoded
 	// key info, such as the txn ID in the case of a transaction record.
-	LocalRangePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("k")))
+	LocalRangePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
@@ -148,7 +148,7 @@ var (
 	// 4. Store local keys
 	//
 	// LocalStorePrefix is the prefix identifying per-store data.
-	LocalStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
+	LocalStorePrefix = makeKey(LocalPrefix, roachpb.Key("s"))
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")
@@ -200,7 +200,7 @@ var (
 	// double duty as a reference to a provisional MVCC value.
 	// TODO(sumeer): remember to adjust this comment when adding locks of
 	// other strengths, or range locks.
-	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("z")))
+	LocalRangeLockTablePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("z")))
 	LockTableSingleKeyInfix   = []byte("k")
 	// LockTableSingleKeyStart is the inclusive start key of the key range
 	// containing single key locks.

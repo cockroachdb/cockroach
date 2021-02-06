@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -1373,21 +1372,22 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Install a hook to observe when a get or a put request for a special key,
-	// rhsSentinel, acquires latches and begins evaluating.
+	// rhsSentinel, hits a MergeInProgressError and begins waiting on the merge.
 	const reqConcurrency = 10
 	var rhsSentinel roachpb.Key
-	reqAcquiredLatch := make(chan struct{}, reqConcurrency)
-	testingLatchFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
-		for _, r := range ba.Requests {
-			req := r.GetInner()
-			switch req.Method() {
-			case roachpb.Get, roachpb.Put:
-				if req.Header().Key.Equal(rhsSentinel) {
-					reqAcquiredLatch <- struct{}{}
+	reqWaitingOnMerge := make(chan struct{}, reqConcurrency)
+	testingConcurrencyRetryFilter := func(_ context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error) {
+		if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok {
+			for _, r := range ba.Requests {
+				req := r.GetInner()
+				switch req.Method() {
+				case roachpb.Get, roachpb.Put:
+					if req.Header().Key.Equal(rhsSentinel) {
+						reqWaitingOnMerge <- struct{}{}
+					}
 				}
 			}
 		}
-		return nil
 	}
 
 	manualClock := hlc.NewHybridManualClock()
@@ -1401,8 +1401,9 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 						ClockSource: manualClock.UnixNano,
 					},
 					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: testingRequestFilter,
-						TestingLatchFilter:   testingLatchFilter,
+						TestingRequestFilter:                    testingRequestFilter,
+						TestingConcurrencyRetryFilter:           testingConcurrencyRetryFilter,
+						AllowLeaseRequestProposalsWhenNotLeader: true,
 					},
 				},
 			},
@@ -1416,6 +1417,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// during the merge.
 	lhsDesc, rhsDesc, err := tc.Servers[0].ScratchRangeWithExpirationLeaseEx()
 	require.NoError(t, err)
+	rhsSentinel = rhsDesc.StartKey.AsRawKey()
 
 	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
@@ -1438,6 +1440,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// is aware of the merge and is refusing all traffic, so we can't just send a
 	// TransferLease request. Instead, we need to expire the second store's lease,
 	// then acquire the lease on the first store.
+	toAdvance := store.GetStoreConfig().LeaseExpiration()
 
 	// Before doing so, however, ensure that the merge transaction has written
 	// its transaction record so that it doesn't run into trouble with the low
@@ -1445,19 +1448,18 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// the transaction being inadvertently aborted during its first attempt,
 	// which this test is not designed to handle. If the merge transaction did
 	// abort then the get requests could complete on r2 before the merge retried.
-	hb, hbH := heartbeatArgs(mergeTxn, tc.Servers[0].Clock().Now())
+	//
+	// We heartbeat the merge's transaction record with a timestamp forwarded by
+	// the duration we plan to advance the clock by so that the transaction does
+	// not look expired even after the manual clock update.
+	afterAdvance := tc.Servers[0].Clock().Now().Add(toAdvance, 0)
+	hb, hbH := heartbeatArgs(mergeTxn, afterAdvance)
 	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// Turn off liveness heartbeats on the second store, then advance the clock
-	// past the liveness expiration time. This expires all leases on all stores.
-	tc.Servers[1].NodeLiveness().(*liveness.NodeLiveness).PauseHeartbeatLoopForTest()
-	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
-
-	// Manually heartbeat the liveness on the first store to ensure it's
-	// considered live. The automatic heartbeat might not come for a while.
-	require.NoError(t, tc.HeartbeatLiveness(ctx, 0))
+	// Then increment the clock to expire all leases.
+	manualClock.Increment(toAdvance)
 
 	// Send several get and put requests to the RHS. The first of these to
 	// arrive will acquire the lease; the remaining requests will wait for that
@@ -1513,19 +1515,17 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Wait for the get and put requests to acquire latches, which is as far as
-	// they can get while the merge is in progress. Then wait a little bit
-	// longer. This tests that the requests really do get stuck waiting for the
-	// merge to complete without depending too heavily on implementation
-	// details.
+	// Wait for the get and put requests to begin waiting on the merge to
+	// complete. Then wait a little bit longer. This tests that the requests
+	// really do get stuck waiting for the merge to complete without depending
+	// too heavily on implementation details.
 	for i := 0; i < reqConcurrency; i++ {
 		select {
-		case <-reqAcquiredLatch:
-			// Latch acquired.
+		case <-reqWaitingOnMerge:
+			// Waiting on merge.
 		case pErr := <-reqErrs:
-			// Requests may never make it to the latch acquisition if s1 has not
-			// yet learned s2's lease is expired. Instead, we'll see a
-			// NotLeaseholderError.
+			// Requests may never wait on the merge if s1 has not yet learned
+			// s2's lease is expired. Instead, we'll see a NotLeaseholderError.
 			require.IsType(t, &roachpb.NotLeaseHolderError{}, pErr.GetDetail())
 		}
 	}

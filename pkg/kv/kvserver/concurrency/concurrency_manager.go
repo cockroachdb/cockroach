@@ -89,6 +89,7 @@ func NewManager(cfg Config) Manager {
 		lt: lt,
 		ltw: &lockTableWaiterImpl{
 			st:                cfg.Settings,
+			clock:             cfg.Clock,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
 			lt:                lt,
@@ -443,9 +444,10 @@ func (g *Guard) HoldingLatches() bool {
 	return g != nil && g.lg != nil
 }
 
-// AssertLatches asserts that the guard is non-nil and holding latches.
+// AssertLatches asserts that the guard is non-nil and holding latches, if the
+// request is supposed to hold latches while evaluating in the first place.
 func (g *Guard) AssertLatches() {
-	if !g.HoldingLatches() {
+	if shouldAcquireLatches(g.Req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
 }

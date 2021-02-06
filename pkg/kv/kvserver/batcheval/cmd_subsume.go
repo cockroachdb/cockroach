@@ -32,27 +32,10 @@ func declareKeysSubsume(
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
-	// that it conflicts with any other command because every command must declare
-	// at least one addressable key. It does not, in fact, write any keys.
-	//
-	// We use the key bounds from the range descriptor in the request instead
-	// of the current range descriptor. Either would be fine because we verify
-	// that these match during the evaluation of the Subsume request.
-	args := req.(*roachpb.SubsumeRequest)
-	desc := args.RightDesc
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-		Key:    desc.StartKey.AsRawKey(),
-		EndKey: desc.EndKey.AsRawKey(),
-	})
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
-		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey).PrefixEnd(),
-	})
-	rangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-		Key:    rangeIDPrefix,
-		EndKey: rangeIDPrefix.PrefixEnd(),
-	})
+	// that it conflicts with any other command because every command must
+	// declare at least one addressable key. It does not, in fact, write any
+	// keys.
+	declareAllKeys(latchSpans)
 }
 
 // Subsume freezes a range for merging with its left-hand neighbor. When called

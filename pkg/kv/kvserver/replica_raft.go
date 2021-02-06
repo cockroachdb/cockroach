@@ -77,6 +77,7 @@ func (r *Replica) evalAndPropose(
 	// If the request hit a server-side concurrency retry error, immediately
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
+		pErr = maybeAttachLease(pErr, lease)
 		return nil, nil, 0, pErr
 	}
 
