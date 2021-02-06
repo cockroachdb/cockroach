@@ -3390,13 +3390,10 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
+	// SQLLite logic tests can be very disk (with '-disk' configs) intensive,
+	// so we give them larger temp storage limit than other logic tests get.
 	serverArgs := TestServerArgs{
-		// SQLLite logic tests can be very disk (with '-disk' configs)
-		// intensive, so we give them larger temp storage limit than other logic
-		// tests get.
 		tempStorageDiskLimit: 512 << 20, // 512 MiB
-		// SQLLite tests take very long time with small batch sizes.
-		forceProductionBatchSizes: true,
 	}
 	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, true /* runCCLConfigs */, prefixedGlobs...)
 }
