@@ -26,6 +26,13 @@ func GenerateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geom
 	if nPoints < 0 {
 		return geo.Geometry{}, nil
 	}
+	if nPoints > geo.MaxAllowedSplitPoints {
+		return geo.Geometry{}, errors.Newf(
+			"failed to generate random points, too many points to generate: requires %d points, max %d",
+			nPoints,
+			geo.MaxAllowedSplitPoints,
+		)
+	}
 	pointsAsGeometry, err := generateRandomPoints(g, nPoints, rng)
 	if err != nil {
 		return geo.Geometry{}, errors.Wrap(err, "generating random points error")
@@ -113,6 +120,15 @@ func generateRandomPointsFromPolygon(
 		sampleWidth = int(math.Ceil(sampleNPoints / float64(sampleHeight)))
 		sampleCellSize = bboxHeight / float64(sampleHeight)
 	}
+	n := sampleHeight * sampleWidth
+	if n > geo.MaxAllowedSplitPoints {
+		return nil, errors.Newf(
+			"generated area is too large: %d, max %d",
+			n,
+			geo.MaxAllowedSplitPoints,
+		)
+	}
+
 	// Prepare the polygon for fast true/false testing.
 	gPrep, err := geos.PrepareGeometry(g.EWKB())
 	if err != nil {
@@ -120,7 +136,6 @@ func generateRandomPointsFromPolygon(
 	}
 	res, err := func() (*geom.MultiPoint, error) {
 		// Generate a slice of points - for every cell on a grid store coordinates.
-		n := sampleHeight * sampleWidth
 		cells := make([]geom.Coord, n)
 		for i := 0; i < sampleWidth; i++ {
 			for j := 0; j < sampleHeight; j++ {
