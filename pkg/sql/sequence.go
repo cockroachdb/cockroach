@@ -509,11 +509,11 @@ func removeSequenceOwnerIfExists(
 func resolveColumnItemToDescriptors(
 	ctx context.Context, p *planner, columnItem *tree.ColumnItem,
 ) (*tabledesc.Mutable, *descpb.ColumnDescriptor, error) {
-	var tableName tree.TableName
-	if columnItem.TableName != nil {
-		tableName = columnItem.TableName.ToTableName()
+	if columnItem.TableName == nil {
+		err := pgerror.New(pgcode.Syntax, "invalid OWNED BY option")
+		return nil, nil, errors.WithHint(err, "Specify OWNED BY table.column or OWNED BY NONE.")
 	}
-
+	tableName := columnItem.TableName.ToTableName()
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, nil, err

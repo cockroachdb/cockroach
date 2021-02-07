@@ -1391,3 +1391,6 @@ ALTER SEQUENCE db2.seq OWNED BY db1.t.a
 
 statement ok
 CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
+
+statement error invalid OWNED BY option
+ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
