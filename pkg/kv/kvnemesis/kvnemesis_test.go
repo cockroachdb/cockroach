@@ -70,6 +70,9 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		sqlDBs[i] = tc.ServerConn(i)
 	}
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	// Turn net/trace on, which results in real trace spans created throughout.
+	// This gives kvnemesis a chance to hit NPEs related to tracing.
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug.enable = true`)
 
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = numNodes, 3
