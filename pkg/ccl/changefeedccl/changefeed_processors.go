@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -558,6 +559,12 @@ func newKVEventToRowConsumer(
 	}
 }
 
+type tableDescriptorTopic struct {
+	catalog.TableDescriptor
+}
+
+var _ TopicDescriptor = &tableDescriptorTopic{}
+
 // ConsumeEvent implements kvEventConsumer interface
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
 	if event.Type() != kvfeed.KVEvent {
@@ -599,7 +606,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Ev
 		}
 	}
 	if err := c.sink.EmitRow(
-		ctx, r.tableDesc, keyCopy, valueCopy, r.updated,
+		ctx, tableDescriptorTopic{r.tableDesc}, keyCopy, valueCopy, r.updated,
 	); err != nil {
 		return err
 	}
