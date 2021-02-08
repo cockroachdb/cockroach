@@ -141,24 +141,19 @@ func newWindower(
 	}
 	w.outputRow = make(rowenc.EncDatumRow, len(w.outputTypes))
 
-	st := flowCtx.Cfg.Settings
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
-	limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
-	if limit <= 0 {
-		limit = execinfra.SettingWorkMemBytes.Get(&st.SV)
-		if limit < memRequiredByWindower {
+	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	if limit < memRequiredByWindower {
+		if !flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes == 0 {
 			return nil, errors.Errorf(
 				"window functions require %d bytes of RAM but only %d are in the budget. "+
 					"Consider increasing sql.distsql.temp_storage.workmem setting",
 				memRequiredByWindower, limit)
 		}
-	} else {
-		if flowCtx.Cfg.TestingKnobs.ForceDiskSpill || limit < memRequiredByWindower {
-			// The limit is set very low by the tests, but the windower requires
-			// some amount of RAM, so we override the limit.
-			limit = memRequiredByWindower
-		}
+		// The limit is set very low by the tests, but the windower requires
+		// some amount of RAM, so we override the limit.
+		limit = memRequiredByWindower
 	}
 	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
 	limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
