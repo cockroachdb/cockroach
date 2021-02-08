@@ -411,8 +411,12 @@ func TestZipRetries(t *testing.T) {
 		sqlConn := makeSQLConn(sqlURL.String())
 		defer sqlConn.Close()
 
-		if err := dumpTableDataForZip(
-			z, sqlConn, 3*time.Second,
+		zc := debugZipContext{
+			z:       z,
+			timeout: 3 * time.Second,
+		}
+		if err := zc.dumpTableDataForZip(
+			sqlConn,
 			"test", `generate_series(1,15000) as t(x)`,
 			`if(x<11000,x,crdb_internal.force_retry('1h'))`); err != nil {
 			t.Fatal(err)
