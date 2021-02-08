@@ -65,7 +65,8 @@ type Batch interface {
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
-	// or memory blowup issues.
+	// or memory blowup issues. It unsets the selection and sets the length to
+	// 0.
 	ResetInternalBatch()
 	// String returns a pretty representation of this batch.
 	String() string
@@ -302,7 +303,6 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	// Note that we're intentionally not calling m.SetLength() here because
 	// that would update offsets in the bytes vectors which is not necessary
 	// since those will get reset in ResetInternalBatch anyway.
-	m.length = length
 	m.b = m.b[:len(typs)]
 	m.sel = m.sel[:length]
 	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
@@ -311,10 +311,12 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		}
 	}
 	m.ResetInternalBatch()
+	m.SetLength(length)
 }
 
 // ResetInternalBatch implements the Batch interface.
 func (m *MemBatch) ResetInternalBatch() {
+	m.SetLength(0 /* length */)
 	m.SetSelection(false)
 	for _, v := range m.b {
 		if v.CanonicalTypeFamily() != types.UnknownFamily {

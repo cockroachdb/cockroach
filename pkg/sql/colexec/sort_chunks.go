@@ -492,6 +492,5 @@ func (s *chunker) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 }
 
 func (s *chunker) emptyBuffer() {
-	s.bufferedTuples.SetLength(0)
 	s.bufferedTuples.ResetInternalBatch()
 }

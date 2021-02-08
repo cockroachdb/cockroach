@@ -255,10 +255,10 @@ func (s *fixedNumTuplesNoInputOp) Init() {
 }
 
 func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
-	s.batch.ResetInternalBatch()
 	if s.numTuplesLeft == 0 {
 		return coldata.ZeroBatch
 	}
+	s.batch.ResetInternalBatch()
 	length := s.numTuplesLeft
 	if length > coldata.BatchSize() {
 		length = coldata.BatchSize()
