@@ -11,22 +11,21 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
 	val, err := cmd.Flags().GetString(name)
 	if err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %v", err)
+		log.Fatalf("unexpected error: %v", err)
 	}
 	return val
 }
@@ -34,7 +33,7 @@ func mustGetFlagString(cmd *cobra.Command, name string) string {
 func mustGetFlagBool(cmd *cobra.Command, name string) bool {
 	val, err := cmd.Flags().GetBool(name)
 	if err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %v", err)
+		log.Fatalf("unexpected error: %v", err)
 	}
 	return val
 }
@@ -42,37 +41,22 @@ func mustGetFlagBool(cmd *cobra.Command, name string) bool {
 func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	val, err := cmd.Flags().GetDuration(name)
 	if err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %v", err)
+		log.Fatalf("unexpected error: %v", err)
 	}
 	return val
 }
 
 func execute(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
-	log.Infof(ctx, "executing: %s", log.Safe(cmd.String()))
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	cmd.Stderr = cmd.Stdout
-
+	log.Printf("executing: %s", cmd.String())
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		log.Infof(ctx, "-- %s\n", redact.Safe(line))
-	}
-	if err := scanner.Err(); err != nil {
 		return err
 	}
 	if err := cmd.Wait(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -113,5 +97,5 @@ func getPathToBin(target string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("could not find path to binary %q", target)
+	return "", errors.Newf("could not find path to binary %q", target)
 }
