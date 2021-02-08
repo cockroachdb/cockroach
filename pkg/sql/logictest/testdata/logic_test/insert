@@ -486,6 +486,8 @@ CREATE TABLE public.sw (
    dc VARCHAR(3) COLLATE en NULL,
    ec STRING COLLATE en NULL,
    fc STRING(3) COLLATE en NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
 )
 
@@ -597,6 +599,8 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE public.t29494 (
    x INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (x, rowid)
 )
 
@@ -636,6 +640,8 @@ SELECT create_statement FROM [SHOW CREATE t32759]
 CREATE TABLE public.t32759 (
    x INT8 NULL,
    z INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (x, z, rowid)
 )
 

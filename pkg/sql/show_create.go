@@ -82,8 +82,7 @@ func ShowCreateTable(
 	f.WriteString("TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	primaryKeyIsOnVisibleColumn := false
-	for i, col := range desc.VisibleColumns() {
+	for i, col := range desc.PublicColumns() {
 		if i != 0 {
 			f.WriteString(",")
 		}
@@ -93,19 +92,15 @@ func ShowCreateTable(
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().GetColumnID(0) == col.GetID() {
-			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
-			// is on a visible column (not rowid).
-			primaryKeyIsOnVisibleColumn = true
-		}
 	}
-	if primaryKeyIsOnVisibleColumn ||
-		(desc.IsPhysicalTable() && desc.GetPrimaryIndex().IsSharded()) {
+
+	if desc.IsPhysicalTable() {
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().GetName())
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
+
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
 	// exclude check mutations below, for consistency.
 	if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {

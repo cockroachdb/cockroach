@@ -260,6 +260,8 @@ SHOW CREATE TABLE t6
 t6  CREATE TABLE public.t6 (
     id INT8 NULL,
     id2 STRING NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     FAMILY f1 (id, rowid),
     FAMILY f2 (id2)
 )
@@ -294,6 +296,8 @@ SHOW CREATE TABLE t8
 ----
 t8  CREATE TABLE public.t8 (
     x STRING NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     FAMILY "primary" (x, rowid)
 )
 
@@ -408,6 +412,8 @@ show create table t17
 table_name  create_statement
 t17         CREATE TABLE public.t17 (
             x STRING NULL DEFAULT 'HELLO':::STRING,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
             FAMILY "primary" (x, rowid)
 )
 
@@ -479,6 +485,8 @@ show create table t24
 table_name  create_statement
 t24         CREATE TABLE public.t24 (
             x STRING NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
             FAMILY "primary" (x, rowid)
 )
 

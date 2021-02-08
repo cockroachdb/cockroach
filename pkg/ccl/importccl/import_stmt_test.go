@@ -1299,6 +1299,8 @@ const (
 	temp_hi INT8 NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
@@ -5618,6 +5620,8 @@ func TestImportPgDump(t *testing.T) {
 					"seqtable", `CREATE TABLE public.seqtable (
 	a INT8 NULL DEFAULT nextval('public.a_seq':::STRING),
 	b INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})
@@ -5711,6 +5715,14 @@ func TestImportPgDumpGeo(t *testing.T) {
 		// not import (possibly due to the ALTER TABLE statement that makes
 		// gid a primary key), so add that into import to match exec.
 		importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
+		// The rowid column is implicitly created as ALTER PRIMARY KEY only comes into effect later.
+		// As such, insert the line.
+		importCreate[0][0] = strings.Replace(
+			importCreate[0][0],
+			"boroname VARCHAR(32) NULL",
+			"boroname VARCHAR(32) NULL,\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid()",
+			1,
+		)
 		sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
 
 		importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"

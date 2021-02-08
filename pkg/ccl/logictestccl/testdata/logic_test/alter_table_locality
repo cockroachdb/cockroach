@@ -674,9 +674,11 @@ ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE in PRIMAR
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
-regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
-                             i INT8 NULL,
-                             FAMILY "primary" (i, rowid)
+regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
+                                                i INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                FAMILY "primary" (i, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -700,6 +702,8 @@ SHOW CREATE TABLE regional_by_table_no_region
 ----
 regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
                              i INT8 NULL,
+                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                              FAMILY "primary" (i, rowid)
 ) LOCALITY GLOBAL
 
