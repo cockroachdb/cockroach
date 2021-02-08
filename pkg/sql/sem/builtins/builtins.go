@@ -125,6 +125,12 @@ func categorizeType(t *types.T) string {
 	}
 }
 
+const (
+	// GatewayRegionBuiltinName is the builtin name that returns the gateway
+	// region of the current node.
+	GatewayRegionBuiltinName = "gateway_region"
+)
+
 var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
 const regexpFlagInfo = `
@@ -4805,7 +4811,7 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
-	"gateway_region": makeBuiltin(
+	GatewayRegionBuiltinName: makeBuiltin(
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{},

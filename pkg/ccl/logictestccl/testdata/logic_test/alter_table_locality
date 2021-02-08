@@ -37,7 +37,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row  CREATE TABLE public.regional_by_row (
                  pk INT8 NOT NULL,
                  i INT8 NULL,
-                 crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                  FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
@@ -205,7 +205,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row  CREATE TABLE public.regional_by_row (
                  pk INT8 NOT NULL,
                  i INT8 NULL,
-                 crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                  FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
