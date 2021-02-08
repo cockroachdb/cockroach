@@ -135,6 +135,11 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		//
 		// See the comment on createCheckpoints for details on fixtures.
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+		// Turn tracing on globally to give it a fighting chance at exposing
+		// any crash-inducing incompatibilities or horrendous memory leaks.
+		// (It won't catch most memory leaks since this test doesn't run for
+		// too long or does too much work).
+		enableTracingGloballyStep,
 		uploadAndInitSchemaChangeWorkload(),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
