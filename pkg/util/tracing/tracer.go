@@ -289,14 +289,12 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = logtags.FromContext(ctx)
 	}
 
-	// Avoid creating a real span when possible. If tracing is globally
-	// enabled, we always need to create spans. If the incoming
-	// span is recording (which implies that there is a parent) then
-	// we also have to create a real child. Additionally, if the
-	// caller explicitly asked for a real span they need to get one.
-	// In all other cases, a noop span will do.
+	// Avoid creating a real span when possible. If tracing is globally enabled,
+	// we always need to create spans. If the incoming span has a parent, then we
+	// also create a real child. Additionally, if the caller explicitly asked for
+	// a real span they need to get one. In all other cases, a noop span will do.
 	if !t.AlwaysTrace() &&
-		opts.recordingType() == RecordingOff &&
+		opts.parentTraceID() == 0 &&
 		!opts.ForceRealSpan {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
@@ -464,7 +462,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 
 // Inject is part of the opentracing.Tracer interface.
 func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) error {
-	if sc.isNilOrNoop() {
+	if sc == nil {
 		// Fast path when tracing is disabled. Extract will accept an empty map as a
 		// noop context.
 		return nil
@@ -507,7 +505,7 @@ func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) e
 	return nil
 }
 
-var noopSpanContext = &SpanMeta{}
+var noopSpanContext = (*SpanMeta)(nil)
 
 // Extract is part of the opentracing.Tracer interface.
 // It always returns a valid context, even in error cases (this is assumed by the
