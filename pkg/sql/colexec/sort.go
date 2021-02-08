@@ -179,7 +179,6 @@ func (p *allSpooler) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	p.spooled = false
-	p.bufferedTuples.SetLength(0)
 	p.bufferedTuples.ResetInternalBatch()
 }
 

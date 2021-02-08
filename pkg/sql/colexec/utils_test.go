@@ -742,10 +742,10 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
-	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
 		return coldata.ZeroBatch
 	}
+	s.batch.ResetInternalBatch()
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
 		batchSize = len(s.tuples)

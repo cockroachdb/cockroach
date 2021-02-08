@@ -51,10 +51,10 @@ func (c *countOp) Init() {
 }
 
 func (c *countOp) Next(ctx context.Context) coldata.Batch {
-	c.internalBatch.ResetInternalBatch()
 	if c.done {
 		return coldata.ZeroBatch
 	}
+	c.internalBatch.ResetInternalBatch()
 	for {
 		bat := c.input.Next(ctx)
 		length := bat.Length()

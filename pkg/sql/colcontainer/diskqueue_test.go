@@ -189,7 +189,6 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 	require.NoError(t, err)
 
 	b := coldata.NewMemBatch(typs, coldata.StandardColumnFactory)
-	b.SetLength(0)
 
 	err = q.Enqueue(ctx, b)
 	require.Error(t, err, "expected Enqueue to produce an error given a disk limit of one byte")

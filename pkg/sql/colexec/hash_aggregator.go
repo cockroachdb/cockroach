@@ -261,7 +261,6 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 				continue
 			}
 			op.bufferingState.tuples.ResetInternalBatch()
-			op.bufferingState.tuples.SetLength(0)
 			op.state = hashAggregatorBuffering
 
 		case hashAggregatorOutputting:
@@ -483,7 +482,6 @@ func (op *hashAggregator) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	op.bufferingState.tuples.ResetInternalBatch()
-	op.bufferingState.tuples.SetLength(0)
 	op.bufferingState.pendingBatch = nil
 	op.bufferingState.unprocessedIdx = 0
 	op.buckets = op.buckets[:0]
