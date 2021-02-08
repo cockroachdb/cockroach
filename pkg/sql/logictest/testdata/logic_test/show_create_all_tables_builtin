@@ -1,0 +1,133 @@
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+no tables found
+
+statement ok
+CREATE DATABASE d
+
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+no tables found
+
+statement ok
+CREATE TABLE d.parent (
+    x INT,
+    y INT,
+    z INT,
+    UNIQUE (x, y, z),
+    FAMILY f1 (x, y, z),
+    UNIQUE (x)
+);
+
+statement ok
+CREATE TABLE d.full_test (
+    x INT,
+    y INT,
+    z INT,
+    FOREIGN KEY (x, y, z) REFERENCES d.parent (x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
+    FAMILY f1 (x, y, z),
+    UNIQUE (x)
+  );
+
+statement ok
+ALTER TABLE d.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES d.parent (x) ON DELETE CASCADE
+
+statement ok
+CREATE VIEW d.vx AS SELECT 1
+
+statement ok
+CREATE SEQUENCE d.s
+
+# parent should come before full_test due to dependency ordering.
+# if dependency's aren't considered, full_test will appear first due to
+# lexicographical ordering.
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+CREATE TABLE public.parent (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+);
+CREATE TABLE public.full_test (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+);
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE VIEW public.vx ("?column?") AS SELECT 1;
+ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+# testuser does not have CONNECT on database d and cannot see any tables.
+user testuser
+
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+no tables found
+
+user root
+
+statement ok
+GRANT CREATE on DATABASE d TO testuser
+
+# testuser should be able to see the descriptors with
+# CREATE privilege on the database.
+# TODO(richardjcai): Replace this with CONNECT and
+# add CONNECT privilege required on the builtin description once #59676 is in.
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+CREATE TABLE public.parent (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+);
+CREATE TABLE public.full_test (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+);
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE VIEW public.vx ("?column?") AS SELECT 1;
+ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+user root
+
+# Make sure temp tables don't show up in crdb_internal.show_create_all_tables.
+statement ok
+CREATE DATABASE temp_test
+
+statement ok
+USE temp_test
+
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE t()
+
+query T
+SELECT crdb_internal.show_create_all_tables('temp_test')
+----
+no tables found
