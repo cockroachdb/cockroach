@@ -3784,14 +3784,12 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		// TODO(spaskob): we can also validate type descriptors. Add a new function
-		// `forEachTypeDescAllWithTableLookup` and the results to this table.
 		descs, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
 		if err != nil {
 			return err
 		}
 		const allowAdding = true
-		return forEachTableDescWithTableLookupInternalFromDescriptors(
+		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
 				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
 			) error {
@@ -3806,6 +3804,34 @@ CREATE TABLE crdb_internal.invalid_objects (
 				if dbDesc != nil {
 					dbName = dbDesc.GetName()
 				}
+				return addRow(
+					tree.NewDInt(tree.DInt(descriptor.GetID())),
+					tree.NewDString(dbName),
+					tree.NewDString(schema),
+					tree.NewDString(descriptor.GetName()),
+					tree.NewDString(err.Error()),
+				)
+			}); err != nil {
+			return err
+		}
+
+		// Validate type descriptors.
+		return forEachTypeDescWithTableLookupInternalFromDescriptors(
+			ctx, p, dbContext, allowAdding, descs, func(
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TypeDescriptor, fn tableLookupFn,
+			) error {
+				if descriptor == nil {
+					return nil
+				}
+				err = descriptor.Validate(ctx, fn)
+				if err == nil {
+					return nil
+				}
+				var dbName string
+				if dbDesc != nil {
+					dbName = dbDesc.GetName()
+				}
+
 				return addRow(
 					tree.NewDInt(tree.DInt(descriptor.GetID())),
 					tree.NewDString(dbName),
