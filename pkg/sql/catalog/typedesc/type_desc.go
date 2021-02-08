@@ -636,8 +636,13 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	// Validate that all of the referencing descriptors exist.
 	tableExists := func(id descpb.ID) func(got catalog.Descriptor) error {
 		return func(got catalog.Descriptor) error {
-			if _, isTable := got.(catalog.TableDescriptor); !isTable {
+			tableDesc, isTable := got.(catalog.TableDescriptor)
+			if !isTable {
 				return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
+			}
+			if tableDesc.Dropped() {
+				return errors.AssertionFailedf(
+					"referencing descriptor %d was dropped without dependency unlinking", id)
 			}
 			return nil
 		}
