@@ -13,20 +13,25 @@ package sysutil
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 func TestLargeFile(t *testing.T) {
-	f, err := ioutil.TempFile("", "input")
+	d, err := ioutil.TempDir("", t.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fname := f.Name()
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	defer func() {
+		if err := os.RemoveAll(d); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	fname := filepath.Join(d, "ballast")
 	const n int64 = 1013
 	if err := CreateLargeFile(fname, n); err != nil {
 		t.Fatal(err)
@@ -37,5 +42,10 @@ func TestLargeFile(t *testing.T) {
 	}
 	if s.Size() != n {
 		t.Fatal(errors.Errorf("expected size of file %d, got %d", n, s.Size()))
+	}
+
+	// Check that an existing file cannot be overwritten.
+	if err = CreateLargeFile(fname, n); !(oserror.IsExist(err) || strings.Contains(err.Error(), "exists")) {
+		t.Fatalf("expected 'already exists' error, got (%T) %+v", err, err)
 	}
 }
