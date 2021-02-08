@@ -34,6 +34,15 @@ func MakeSelectivity(sel float64) Selectivity {
 	return Selectivity{selectivityInRange(sel)}
 }
 
+// MakeSelectivityFromFraction calculates selectivity as a fraction of a and b
+// if a is less than b and returns OneSelectivity otherwise..
+func MakeSelectivityFromFraction(a, b float64) Selectivity {
+	if a < b {
+		return MakeSelectivity(a / b)
+	}
+	return OneSelectivity
+}
+
 // AsFloat returns the private selectivity field, allowing it to be accessed
 // outside of this package.
 func (s *Selectivity) AsFloat() float64 {

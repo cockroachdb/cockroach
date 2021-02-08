@@ -2726,14 +2726,6 @@ func max(a, b float64) float64 {
 	return b
 }
 
-// fraction returns a/b if a is less than b. Otherwise returns 1.
-func fraction(a, b float64) float64 {
-	if a < b {
-		return a / b
-	}
-	return 1
-}
-
 //////////////////////////////////////////////////
 // Helper functions for selectivity calculation //
 //////////////////////////////////////////////////
@@ -3624,8 +3616,8 @@ func (sb *statisticsBuilder) selectivityFromDistinctCount(
 	}
 
 	// Calculate the selectivity of the predicate.
-	nonNullSelectivity := props.MakeSelectivity(fraction(newDistinct, oldDistinct))
-	nullSelectivity := props.MakeSelectivity(fraction(colStat.NullCount, inputColStat.NullCount))
+	nonNullSelectivity := props.MakeSelectivityFromFraction(newDistinct, oldDistinct)
+	nullSelectivity := props.MakeSelectivityFromFraction(colStat.NullCount, inputColStat.NullCount)
 	return sb.predicateSelectivity(
 		nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputRowCount,
 	)
@@ -3658,8 +3650,8 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		oldCount := oldHist.ValuesCount()
 
 		// Calculate the selectivity of the predicate.
-		nonNullSelectivity := props.MakeSelectivity(fraction(newCount, oldCount))
-		nullSelectivity := props.MakeSelectivity(fraction(colStat.NullCount, inputColStat.NullCount))
+		nonNullSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
+		nullSelectivity := props.MakeSelectivityFromFraction(colStat.NullCount, inputColStat.NullCount)
 		selectivity.Multiply(sb.predicateSelectivity(
 			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
 		))
@@ -3749,7 +3741,7 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 
 	// The selectivity of an equality condition var1=var2 is
 	// 1/max(distinct(var1), distinct(var2)).
-	return props.MakeSelectivity(fraction(1, maxDistinctCount))
+	return props.MakeSelectivityFromFraction(1, maxDistinctCount)
 }
 
 // selectivityFromEquivalenciesSemiJoin determines the selectivity of equality
@@ -3800,7 +3792,7 @@ func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 		maxDistinctCountLeft = s.RowCount
 	}
 
-	return props.MakeSelectivity(fraction(minDistinctCountRight, maxDistinctCountLeft))
+	return props.MakeSelectivityFromFraction(minDistinctCountRight, maxDistinctCountLeft)
 }
 
 func (sb *statisticsBuilder) selectivityFromInvertedJoinCondition(
