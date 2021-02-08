@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+var testSinkFlushFrequency = 50 * time.Millisecond
 
 func waitForSchemaChange(
 	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
@@ -234,6 +237,7 @@ func expectResolvedTimestampAvro(
 
 func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
+		defer TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -276,6 +280,7 @@ func enterpriseTestWithServerArgs(
 	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
 ) func(*testing.T) {
 	return func(t *testing.T) {
+		defer TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
 		ctx := context.Background()
 
 		flushCh := make(chan struct{}, 1)
@@ -315,6 +320,7 @@ func cloudStorageTest(
 	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
 ) func(*testing.T) {
 	return func(t *testing.T) {
+		defer TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
 		ctx := context.Background()
 
 		dir, dirCleanupFn := testutils.TempDir(t)
