@@ -2047,6 +2047,40 @@ func forEachTableDescWithTableLookupInternal(
 		ctx, p, dbContext, virtualOpts, allowAdding, descs, fn)
 }
 
+func forEachTypeDescWithTableLookupInternalFromDescriptors(
+	ctx context.Context,
+	p *planner,
+	dbContext *dbdesc.Immutable,
+	allowAdding bool,
+	descs []catalog.Descriptor,
+	fn func(*dbdesc.Immutable, string, catalog.TypeDescriptor, tableLookupFn) error,
+) error {
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+
+	for _, typID := range lCtx.typIDs {
+		typDesc := lCtx.typDescs[typID]
+		if typDesc.Dropped() || !userCanSeeDescriptor(ctx, p, typDesc, allowAdding) {
+			continue
+		}
+		var scName string
+		dbDesc, parentExists := lCtx.dbDescs[typDesc.GetParentID()]
+		if parentExists {
+			var ok bool
+			scName, ok = lCtx.schemaNames[typDesc.GetParentSchemaID()]
+			if !ok {
+				return errors.AssertionFailedf("schema id %d not found", typDesc.GetParentSchemaID())
+			}
+			if err := fn(dbDesc, scName, typDesc, lCtx); err != nil {
+				return err
+			}
+		} else {
+			return errors.AssertionFailedf("database id %d not found", typDesc.GetParentID())
+		}
+	}
+	return nil
+}
+
 func forEachTableDescWithTableLookupInternalFromDescriptors(
 	ctx context.Context,
 	p *planner,
