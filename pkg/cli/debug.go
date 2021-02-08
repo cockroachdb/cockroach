@@ -279,8 +279,13 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	ballastSize := targetUsage - used
+
+	// Note: CreateLargeFile fails if the target file already
+	// exists. This is a feature; we have seen users mistakenly applying
+	// the `ballast` command directly to block devices, thereby trashing
+	// their filesystem.
 	if err := sysutil.CreateLargeFile(ballastFile, ballastSize); err != nil {
-		return errors.Wrap(err, "failed to fallocate to ballast file")
+		return errors.Wrap(err, "error allocating ballast file")
 	}
 	return nil
 }
