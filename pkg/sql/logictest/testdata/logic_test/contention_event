@@ -1,3 +1,5 @@
+# LogicTest: 5node
+#
 # Verify that ContentionEvents are emitted. This is mostly a sanity check - look
 # for the datadriven tests in `pkg/kv/kvserver/concurrency` for the actual events
 # that do get emitted in various contention scenarios.
@@ -6,7 +8,8 @@ statement ok
 GRANT ADMIN TO testuser
 
 statement ok
-CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR)
+CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
+ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z');
 
 
 query TT
@@ -26,22 +29,30 @@ user root
 statement ok
 SET tracing=on
 
+# Scan all ranges of the table (note that we have intentionally
+# split it into at least six ranges). This is better than a point
+# lookup in that it gives tracing more of a chance to get things
+# wrong due to DistSender parallelism.
 statement ok
 SET TRACING=on;
 BEGIN;
 SET TRANSACTION PRIORITY HIGH;
-INSERT INTO kv VALUES('k', 'my v');
+SELECT * FROM kv;
 COMMIT;
 SET TRACING=off;
 
 # Check for the message emitted by (roachpb.ContentionEvent).String() as proof that a ContentionEvent
 # payload was added to the trace.
 #
+# NB: it looks like there can be multiple (probably when there's an internal restart
+# or something like that). Unfortunately, it is difficult in logic tests to log something
+# that is not part of the scripted output.
+#
 # NB: if the matcher here ever gets updated, make sure to update throughout this file.
-query I
-SELECT count(message) FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
+query B
+SELECT count(message) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
 ----
-1
+true
 
 # Clean up.
 user testuser
