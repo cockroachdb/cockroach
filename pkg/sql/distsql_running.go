@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -653,6 +654,26 @@ func (r *DistSQLReceiver) Push(
 			} else if err := span.ImportRemoteSpans(meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
+			var ev roachpb.ContentionEvent
+			for i := range meta.TraceData {
+				meta.TraceData[i].Structured(func(any *pbtypes.Any) {
+					if !pbtypes.Is(any, &ev) {
+						return
+					}
+					if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+						return
+					}
+					if r.contendedQueryMetric != nil {
+						// Increment the contended query metric at most once
+						// if the query sees at least one contention event.
+						r.contendedQueryMetric.Inc(1)
+						r.contendedQueryMetric = nil
+					}
+					if err := r.contentionRegistry.AddContentionEvent(ev); err != nil {
+						r.resultWriter.SetError(errors.Wrap(err, "unable to add contention event to registry"))
+					}
+				})
+			}
 		}
 		if meta.Metrics != nil {
 			r.stats.bytesRead += meta.Metrics.BytesRead
@@ -662,20 +683,6 @@ func (r *DistSQLReceiver) Push(
 				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
 			}
 			meta.Metrics.Release()
-		}
-		if len(meta.ContentionEvents) > 0 {
-			if r.contendedQueryMetric != nil {
-				// Increment the contended query metric at most once if the query sees at
-				// least one contention event.
-				r.contendedQueryMetric.Inc(1)
-				r.contendedQueryMetric = nil
-			}
-
-			for i := range meta.ContentionEvents {
-				if err := r.contentionRegistry.AddContentionEvent(meta.ContentionEvents[i]); err != nil {
-					r.resultWriter.SetError(errors.Wrap(err, "unable to add contention event to registry"))
-				}
-			}
 		}
 		// Release the meta object. It is unsafe for use after this call.
 		meta.Release()

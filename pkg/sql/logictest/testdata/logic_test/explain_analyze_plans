@@ -293,6 +293,7 @@ vectorized: <hidden>
         └── • lookup join (anti)
             │ actual row count: 0
             │ KV rows read: 1
+            │ KV bytes read: 8 B
             │ table: parent@primary
             │ equality: (column2) = (p)
             │ equality cols are key
@@ -307,6 +308,6 @@ vectorized: <hidden>
 ·
 Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0UtGK2zoQfb9fIeYpAS2xs1woetq0pBA2dUriDZRiFkUevKK2pErj7qYhn9Uf6JcV2-sQszRtKX2cM3Okc2bOAcLnEgQsks18nbJFkq6YetBlzraz5d18w0YxZ6PNfDl_k7JKm5Ebs7fr1TvmpEdD4zFwMDbHRFYYQHyEGDj8DxkH563CEKxv4EM7tMifQEQctHE1NXDGQVmPIA5AmkoEAYm9sm4yBQ45ktRl-yg-oapJW8NIVyhY9P1bAA47SeoBA7M1uZoEi4AD1a48g2LIjhy66vnHQLJAENdHfqYqvqwqlbsS1yhz9JNoqK1bxI3zupJ-Dxw2Tpog2BVwWOpKE2tWcrsdSr_dMmUNoXnpqhntTHiUuejpuz2doFfs9d_aj__E_qwoPBaSrJ_EQ_ez5MN9skrvk7vlcnQTN3H4F8eaDtT-IkJrDM6agAOlP3s5OmYcMC-wi2mwtVf43lvVftOVq5bXAjkG6rrXXbEwXasReE6OL5Knl8nTi-RoSG6ttK7AID1a_4mVktCo_Wn3Pf4oNQ2vkmNAr2Wpv8qXJ-tppzgq1F_wOZJ9s89l3-uy2XcrDEEWg4Ho98OQHf_7EQAA__-Gyooe
 Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkM1KAzEUhfc-xeWsWgg4s81OZISB2kpb3cgsxsylDaRJnNxAocxj-QI-mXTiQheCy_PdnB9yQXp30GjXu2a7p3a935A5WjfQy93qudnRola02DWr5n5PJ-sXcUkP280jxX5kL8slFHwYeN2fOEG_okanEMdgOKUwXtFlftAOZ-hKwfqY5Yo7BRNGhr5ArDiGhgumd2RC9kLVbQWFgaW3bg7mM5ssNngSe2JN1edHgsJbL-bIiUKWmEXT1SU5uh-oRjcpFPXdnKQ_MHQ9qf-v23KKwSf-Neuv5GrqFHg4cPmBFPJo-GkMZq4pcjP7ZjBwknKti2h9OU3ddPMVAAD__4OeiTQ=
-Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9Fq2zAUhu_3FIdzlYAgdtIrXaWMBNx59kjc3oxcqPJJq02RNElmLSGPtRfYkw1bHTQrDUuhdz6_zn_06Ze1x_BDI8eiWi9WDRRVU4O8V7qFm8vyerGGUc5gtF6Ui48N7JQZuTEsV_VncMKTieMxMjS2pUrsKCD_ijluGDpvJYVgfS_th4aifUCeMVTGdbGXNwyl9YR8j1FFTchRWyk0BCkM3HbbLXnIJhkybCkKpYfxdRc5zKfIkB5IdlFZA1HtiEP2-1dAhrciynsKYLvo-t7eHzunn0k5bg4MU_VEEqK4I-T5gf0_7VLpSJ78JD9GTDqHeQ7FGqq6geq6LN-JeHoO8ZVVZkWiJT-ZHjM3j444lItlA5dVU8BVXVTIMF3y3Hm1E_4RGZbWfu8cfLPKgDX9GZE93Un_NWwOCb6n_quEKLQ-PvWnmxe1tCaSeRlQ35ry8CTaNPftWWavZjk7J8v0r5L31oPagrc_A-ST2XGs70F5cQ7lioKzJtAR1muTs8OGIbV3lF5tsJ2X9MVbOWyTynrwDUJLIabVPBWFSUs94HNzftI8PW2enjTPTptnJ80X_5g3hw9_AgAA__8n-Kvh
+Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k0Fu2zwQhff_KQazsgECluwsfmjltLABJapU2Io3hRc0NU7Y0iRLUmgMw8fqBXqyQmJaxA1i1Ciy0zzOG358FA_ovyrMMC-Xs0UNeVlXIB6kamB1XdzNljBIGQyWs2L2voad1AM7hPmi-gCWO9JhOESG2jRU8h15zD5himuG1hlB3hvXSYe-IW8eMUsYSm3b0MlrhsI4wuyAQQZFmKEygivwgmvYtNstOUhGCTJsKHCp-vFVGzKYjpEhPZJogzQagtxRBsmP7x4ZbngQD-TBtMF2vZ0_tFY9k1JcHxnG6onEB35PmKVH9ve0c6kCOXKj9BQx6hlMU8iXUFY1lHdF8UbE40uIb4zUC-INudH4lLneW8qgmM1ruC7rHG6qvESG8ZKn1skdd3tkWBjzpbXw2UgNRndnRPZ0J91XvzlE-I76l-IDV-r01LerF7UwOpB-GVDXGvNwxJs493YFm334Lf0P7_4p4OTVgCeXBBx_YHLOOJBbcOabh3Q0Oc36LSivLqFckLdGezrBem1yclwzpOae4lP2pnWCPjoj-m1iWfW-XmjIh7iaxiLXcakDfG5Oz5rH583js-bJefPkrPnqD_P6-N_PAAAA__8JwrHp
 ·
 WARNING: this statement is experimental!

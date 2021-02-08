@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -84,7 +85,9 @@ type invertedJoiner struct {
 
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
-	fetcher  rowFetcher
+	fetcher rowFetcher
+	// rowsRead is the total number of rows that the fetcher read from disk.
+	rowsRead int64
 	alloc    rowenc.DatumAlloc
 	rowAlloc rowenc.EncDatumRowAlloc
 
@@ -164,6 +167,7 @@ var _ execinfra.Processor = &invertedJoiner{}
 var _ execinfra.RowSource = &invertedJoiner{}
 var _ execinfrapb.MetadataSource = &invertedJoiner{}
 var _ execinfra.OpNode = &invertedJoiner{}
+var _ execinfra.KVReader = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
 
@@ -309,11 +313,7 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	collectingStats := false
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
-		collectingStats = true
-	}
-	if collectingStats {
 		ij.input = newInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.ExecStatsForTrace = ij.execStatsForTrace
@@ -517,6 +517,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// Done with this input batch.
 			break
 		}
+		ij.rowsRead++
 
 		// NB: Inverted columns are custom encoded in a manner that does not
 		// correspond to Datum encoding, and in the code here we only want the
@@ -773,9 +774,10 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
+			BytesRead:      optional.MakeUint(uint64(ij.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(getCumulativeContentionTime(ij.fetcher.GetContentionEvents())),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx)),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
@@ -785,13 +787,25 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
+// GetBytesRead is part of the execinfra.KVReader interface.
+func (ij *invertedJoiner) GetBytesRead() int64 {
+	return ij.fetcher.GetBytesRead()
+}
+
+// GetRowsRead is part of the execinfra.KVReader interface.
+func (ij *invertedJoiner) GetRowsRead() int64 {
+	return ij.rowsRead
+}
+
+// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+func (ij *invertedJoiner) GetCumulativeContentionTime() time.Duration {
+	return execinfra.GetCumulativeContentionTime(ij.Ctx)
+}
+
 func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
-	}
-	if contentionEvents := ij.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
 	}
 	return trailingMeta
 }

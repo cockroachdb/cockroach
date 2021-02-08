@@ -279,11 +279,6 @@ func newJoinReader(
 		return nil, err
 	}
 
-	collectingStats := false
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
-		collectingStats = true
-	}
-
 	rightCols := jr.neededRightCols()
 	if isSecondary {
 		set, err := getIndexColSet(jr.index, jr.colIdxMap)
@@ -305,7 +300,7 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	if collectingStats {
+	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -699,6 +694,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
+			BytesRead:      optional.MakeUint(uint64(jr.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(jr.GetCumulativeContentionTime()),
@@ -719,7 +715,7 @@ func (jr *joinReader) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the execinfra.KVReader interface.
 func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
-	return getCumulativeContentionTime(jr.fetcher.GetContentionEvents())
+	return execinfra.GetCumulativeContentionTime(jr.Ctx)
 }
 
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
@@ -729,13 +725,7 @@ func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMe
 	meta.Metrics.RowsRead = jr.GetRowsRead()
 	meta.Metrics.BytesRead = jr.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
-		trailingMeta = append(trailingMeta,
-			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},
-		)
-	}
-
-	if contentionEvents := jr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }
