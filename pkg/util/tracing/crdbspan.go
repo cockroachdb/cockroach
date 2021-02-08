@@ -206,7 +206,7 @@ func (s *crdbSpan) record(msg string) {
 	}
 }
 
-func (s *crdbSpan) logStructured(item Structured) {
+func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.structured = append(s.mu.structured, item)

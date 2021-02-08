@@ -27,15 +27,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var gRPCComponentTag = opentracing.Tag{Key: string(ext.Component), Value: "gRPC"}
-
-// metadataReaderWriter satisfies both the opentracing.TextMapReader and
-// opentracing.TextMapWriter interfaces.
-type metadataReaderWriter struct {
+// metadataCarrier is an implementation of the Carrier interface for gRPC
+// metadata.
+type metadataCarrier struct {
 	metadata.MD
 }
 
-func (w metadataReaderWriter) Set(key, val string) {
+// Set implements the Carrier interface.
+func (w metadataCarrier) Set(key, val string) {
 	// The GRPC HPACK implementation rejects any uppercase keys here.
 	//
 	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
@@ -45,10 +44,11 @@ func (w metadataReaderWriter) Set(key, val string) {
 	w.MD[key] = append(w.MD[key], val)
 }
 
-func (w metadataReaderWriter) ForeachKey(handler func(key, val string) error) error {
+// ForEach implements the Carrier interface.
+func (w metadataCarrier) ForEach(fn func(key, val string) error) error {
 	for k, vals := range w.MD {
 		for _, v := range vals {
-			if err := handler(k, v); err != nil {
+			if err := fn(k, v); err != nil {
 				return err
 			}
 		}
@@ -62,7 +62,7 @@ func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
 	if !ok {
 		md = metadata.New(nil)
 	}
-	return tracer.Extract(opentracing.HTTPHeaders, metadataReaderWriter{md})
+	return tracer.ExtractMetaFrom(metadataCarrier{md})
 }
 
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
@@ -76,9 +76,9 @@ func spanInclusionFuncForServer(t *Tracer, spanMeta *SpanMeta) bool {
 	return !spanMeta.isNilOrNoop() || t.AlwaysTrace()
 }
 
-// SetSpanTags sets one or more tags on the given span according to the
+// setSpanTags sets one or more tags on the given span according to the
 // error.
-func SetSpanTags(sp *Span, err error, client bool) {
+func setSpanTags(sp *Span, err error, client bool) {
 	c := otgrpc.ErrorClass(err)
 	code := codes.Unknown
 	if s, ok := status.FromError(err); ok {
@@ -93,6 +93,8 @@ func SetSpanTags(sp *Span, err error, client bool) {
 		sp.SetTag(string(ext.Error), true)
 	}
 }
+
+var gRPCComponentTag = opentracing.Tag{Key: string(ext.Component), Value: "gRPC"}
 
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
 // for use in a grpc.NewServer call.
@@ -134,7 +136,7 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 
 		resp, err = handler(ctx, req)
 		if err != nil {
-			SetSpanTags(serverSpan, err, false)
+			setSpanTags(serverSpan, err, false)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
@@ -180,7 +182,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		}
 		err = handler(srv, ss)
 		if err != nil {
-			SetSpanTags(serverSpan, err, false)
+			setSpanTags(serverSpan, err, false)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -209,17 +211,16 @@ func spanInclusionFuncForClient(parent *Span) bool {
 	return parent != nil && !parent.isNoop()
 }
 
-func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
+func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
 	md, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
 		md = metadata.New(nil)
 	} else {
 		md = md.Copy()
 	}
-	mdWriter := metadataReaderWriter{md}
-	err := tracer.Inject(clientSpan.Meta(), opentracing.HTTPHeaders, mdWriter)
-	// We have no better place to record an error than the Span itself :-/
-	if err != nil {
+
+	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
+		// We have no better place to record an error than the Span itself.
 		clientSpan.Recordf("error: %s", err)
 	}
 	return metadata.NewOutgoingContext(ctx, md)
@@ -262,10 +263,10 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		)
 		init(clientSpan)
 		defer clientSpan.Finish()
-		ctx = injectSpanContext(ctx, tracer, clientSpan)
+		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
-			SetSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err, true)
 			clientSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -310,11 +311,11 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
 		init(clientSpan)
-		ctx = injectSpanContext(ctx, tracer, clientSpan)
+		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			SetSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err, true)
 			clientSpan.Finish()
 			return cs, err
 		}
@@ -341,7 +342,7 @@ func newTracingClientStream(
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			SetSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err, true)
 		}
 	}
 	go func() {

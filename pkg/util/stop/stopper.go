@@ -341,7 +341,7 @@ func (s *Stopper) RunAsyncTask(
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkCtxSpan(ctx, taskName)
+	ctx, span := tracing.ForkSpan(ctx, taskName)
 
 	// Call f.
 	go func() {
@@ -400,7 +400,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkCtxSpan(ctx, taskName)
+	ctx, span := tracing.ForkSpan(ctx, taskName)
 
 	go func() {
 		defer s.Recover(ctx)

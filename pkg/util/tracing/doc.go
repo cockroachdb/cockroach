@@ -90,13 +90,13 @@
 // [2]: https://opentracing.io/specification/
 // [3]: `Recording.String`
 // [4]: `ChildSpan`
-// [5]: `ForkCtxSpan`. "forking" a Span is the same as creating a new one
+// [5]: `ForkSpan`. "forking" a Span is the same as creating a new one
 //      with a "follows from" relation.
 // [6]: `crdbSpan`
 // [7]: `Span.SetVerbose`. To understand the specifics of what exactly is
 //      captured in Span recording, when Spans have children that may be either
 //      local or remote, look towards `WithParentAnd{Auto,Manual}Collection`
-// [8]: `Tracer.{Inject,Extract}`
+// [8]: `Tracer.{InjectMetaInto,ExtractMetaFrom}`
 // [9]: `SpanMeta`
 // [10]: `{Client,Server}Interceptor`
 // [11]: `SpanFromContext`

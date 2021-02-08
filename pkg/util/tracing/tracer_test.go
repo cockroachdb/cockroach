@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestStartSpanAlwaysTrace(t *testing.T) {
@@ -211,22 +211,22 @@ func TestTracerInjectExtract(t *testing.T) {
 	if !noop1.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
-	carrier := make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(noop1.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
+	carrier := metadataCarrier{metadata.MD{}}
+	if err := tr.InjectMetaInto(noop1.Meta(), carrier); err != nil {
 		t.Fatal(err)
 	}
-	if len(carrier) != 0 {
+	if len(carrier.MD) != 0 {
 		t.Errorf("noop Span has carrier: %+v", carrier)
 	}
 
-	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
+	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wireContext.isNilOrNoop() {
-		t.Errorf("expected noop context: %v", wireContext)
+	if !wireSpanMeta.isNilOrNoop() {
+		t.Errorf("expected noop context: %v", wireSpanMeta)
 	}
-	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireContext))
+	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
 	if !noop2.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
@@ -239,16 +239,16 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1 := tr.StartSpan("a", WithForceRealSpan())
 	s1.SetVerbose(true)
 
-	carrier = make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(s1.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
+	carrier = metadataCarrier{metadata.MD{}}
+	if err := tr.InjectMetaInto(s1.Meta(), carrier); err != nil {
 		t.Fatal(err)
 	}
 
-	wireContext, err = tr2.Extract(opentracing.HTTPHeaders, carrier)
+	wireSpanMeta, err = tr2.ExtractMetaFrom(carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireContext))
+	s2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
 
 	// Compare TraceIDs
 	trace1 := s1.Meta().traceID
@@ -311,18 +311,18 @@ func TestLightstepContext(t *testing.T) {
 	const testBaggageVal = "test-val"
 	s.SetBaggageItem(testBaggageKey, testBaggageVal)
 
-	carrier := make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(s.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
+	carrier := metadataCarrier{metadata.MD{}}
+	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
 		t.Fatal(err)
 	}
 
-	// Extract also extracts the embedded lightstep context.
-	wireContext, err := tr.Extract(opentracing.HTTPHeaders, carrier)
+	// ExtractMetaFrom also extracts the embedded lightstep context.
+	wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireContext))
+	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
 	s2Ctx := s2.ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
