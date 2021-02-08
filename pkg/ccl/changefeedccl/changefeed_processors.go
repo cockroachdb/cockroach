@@ -119,6 +119,11 @@ func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp
 var _ execinfra.Processor = &changeAggregator{}
 var _ execinfra.RowSource = &changeAggregator{}
 
+// Default frequence to flush sink.  See comment in newChangeAggregatorProcessor
+// for explanation on the value.
+// Can be changed in tests.
+var defaultFlushFrequency = 5 * time.Second
+
 func newChangeAggregatorProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -180,7 +185,7 @@ func newChangeAggregatorProcessor(
 			return nil, err
 		}
 	} else {
-		ca.flushFrequency = time.Second * 5
+		ca.flushFrequency = defaultFlushFrequency
 	}
 	return ca, nil
 }

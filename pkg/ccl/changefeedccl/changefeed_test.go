@@ -3080,3 +3080,7 @@ func TestChangefeedPrimaryKeyChange(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 }
+
+func init() {
+	defaultFlushFrequency = 50 * time.Millisecond
+}
