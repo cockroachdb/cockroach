@@ -59,6 +59,13 @@ func TestSelectivity(t *testing.T) {
 	}
 	inf := math.MaxFloat64
 
+	// MakeSelectivityFromFraction variations.
+	test(MakeSelectivityFromFraction(1, 2), s(0.5))
+	test(MakeSelectivityFromFraction(1, 1), OneSelectivity)
+	test(MakeSelectivityFromFraction(1.5, 1), OneSelectivity)
+	test(MakeSelectivityFromFraction(1, 0), OneSelectivity)
+	test(MakeSelectivityFromFraction(0, 0), OneSelectivity)
+
 	// MinSelectivity variations.
 	test(MinSelectivity(s(0.4), s(0.5)), s(0.4))
 	test(MinSelectivity(s(0.5), s(0.4)), s(0.4))
