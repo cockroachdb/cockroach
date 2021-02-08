@@ -24,13 +24,13 @@ import (
 // given size. On other platforms, it naively writes the specified number of
 // bytes, which can take a long time.
 func CreateLargeFile(path string, bytes int64) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create file %s", path)
+		return err
 	}
 	defer f.Close()
 	if err := unix.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
-		return err
+		return errors.Wrap(err, "fallocate")
 	}
-	return f.Sync()
+	return errors.Wrap(f.Sync(), "fsync")
 }

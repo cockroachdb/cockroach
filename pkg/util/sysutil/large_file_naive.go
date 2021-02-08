@@ -23,9 +23,9 @@ import (
 // platforms, it naively writes the specified number of bytes, which can take a
 // long time when the number of bytes is large.
 func CreateLargeFile(path string, bytes int64) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create file %s", path)
+		return err
 	}
 	defer f.Close()
 	sixtyFourMB := make([]byte, 64<<20)
@@ -35,9 +35,9 @@ func CreateLargeFile(path string, bytes int64) error {
 			z = sixtyFourMB[:bytes]
 		}
 		if _, err := f.Write(z); err != nil {
-			return err
+			return errors.Wrap(err, "write")
 		}
 		bytes -= int64(len(z))
 	}
-	return f.Sync()
+	return errors.Wrap(f.Sync(), "fsync")
 }
