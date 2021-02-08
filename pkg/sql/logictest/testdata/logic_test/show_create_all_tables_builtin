@@ -1,0 +1,53 @@
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+No tables found
+
+statement ok
+CREATE DATABASE d
+
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+No tables found
+
+statement ok
+CREATE TABLE d.parent (x INT, y INT,  z INT, UNIQUE (x, y, z));
+
+statement ok
+CREATE TABLE d.full_test (
+    x INT,
+    y INT,
+    z INT,
+    FOREIGN KEY (x, y, z) REFERENCES d.parent (x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE
+  );
+
+statement ok
+CREATE VIEW d.vx AS SELECT 1
+
+statement ok
+CREATE SEQUENCE d.s
+
+query T
+SELECT crdb_internal.show_create_all_tables('d')
+----
+CREATE TABLE public.full_test (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  FAMILY fam_0_y_x_rowid (y, x, rowid),
+  FAMILY fam_1_z (z)
+);
+CREATE TABLE public.parent (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  FAMILY fam_0_x_z_rowid (x, z, rowid),
+  FAMILY fam_1_y (y)
+);
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE VIEW public.vx ("?column?") AS SELECT 1;
+ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
+

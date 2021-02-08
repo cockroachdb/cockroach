@@ -4825,6 +4825,20 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Volatility: tree.VolatilityStable,
 		},
 	),
+
+	"crdb_internal.show_create_all_tables": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"dbName", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn:         showCreateAllTablesBuiltin,
+			Info: `Returns a flat log of CREATE table statements followed by
+ALTER statements to add the tables constraints for a given database.'`,
+			Volatility: tree.VolatilityStable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
