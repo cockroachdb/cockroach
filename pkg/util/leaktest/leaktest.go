@@ -94,6 +94,8 @@ var PrintLeakedStoppers = func(t testing.TB) {}
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	// Try a best effort GC to help the race tests move along.
+	runtime.GC()
 	orig := interestingGoroutines()
 	return func() {
 		t.Helper()

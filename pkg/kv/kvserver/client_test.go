@@ -1649,3 +1649,29 @@ func waitForTombstone(
 	})
 	return tombstone
 }
+
+// This test is here to please the unused code linter, and will be removed in
+// the next commit.
+func TestDummyMultiTestContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	key := []byte("a")
+	mtc.getRaftLeader(1)
+
+	incArgs := incrementArgs(key, 5)
+	if _, err := kv.SendWrapped(ctx, mtc.Store(0).TestSender(), incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.waitForValues(key, []int64{5, 0, 0})
+	mtc.stopStore(1)
+	mtc.restartStore(1)
+}

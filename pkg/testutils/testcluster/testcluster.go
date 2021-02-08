@@ -1141,10 +1141,10 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	}
 }
 
-// readIntFromStores reads the current integer value at the given key
+// ReadIntFromStores reads the current integer value at the given key
 // from all configured engines, filling in zeros when the value is not
 // found.
-func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
+func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
 		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
@@ -1175,7 +1175,7 @@ func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
 func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
-		actual := tc.readIntFromStores(key)
+		actual := tc.ReadIntFromStores(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
