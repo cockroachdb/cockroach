@@ -73,7 +73,7 @@ func spanInclusionFuncForServer(t *Tracer, spanMeta *SpanMeta) bool {
 	// configured to always trace, return true. The second part is particularly
 	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
 	// where client is never tracing.
-	return !spanMeta.isNilOrNoop() || t.AlwaysTrace()
+	return spanMeta != nil || t.AlwaysTrace()
 }
 
 // setSpanTags sets one or more tags on the given span according to the

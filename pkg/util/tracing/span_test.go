@@ -205,7 +205,6 @@ Span child:
 
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
-	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 

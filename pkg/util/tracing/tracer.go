@@ -293,14 +293,12 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = logtags.FromContext(ctx)
 	}
 
-	// Avoid creating a real span when possible. If tracing is globally
-	// enabled, we always need to create spans. If the incoming
-	// span is recording (which implies that there is a parent) then
-	// we also have to create a real child. Additionally, if the
-	// caller explicitly asked for a real span they need to get one.
-	// In all other cases, a noop span will do.
+	// Avoid creating a real span when possible. If tracing is globally enabled,
+	// we always need to create spans. If the incoming span has a parent, then we
+	// also create a real child. Additionally, if the caller explicitly asked for
+	// a real span they need to get one. In all other cases, a noop span will do.
 	if !t.AlwaysTrace() &&
-		opts.recordingType() == RecordingOff &&
+		opts.parentTraceID() == 0 &&
 		!opts.ForceRealSpan {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
@@ -532,7 +530,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 // Carrier. This, alongside ExtractMetaFrom, can be used to carry span metadata
 // across process boundaries. See serializationFormat for more details.
 func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
-	if sm.isNilOrNoop() {
+	if sm == nil {
 		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
 		// empty map as a noop context.
 		return nil
@@ -575,7 +573,7 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 	return nil
 }
 
-var noopSpanMeta = &SpanMeta{}
+var noopSpanMeta = (*SpanMeta)(nil)
 
 // ExtractMetaFrom is used to deserialize a span metadata (if any) from the
 // given Carrier. This, alongside InjectMetaFrom, can be used to carry span
