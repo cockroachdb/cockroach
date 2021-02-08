@@ -808,6 +808,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				n.tableDesc,
 				*n.tableDesc.GetPrimaryIndex().IndexDesc(),
 				t.PartitionBy,
+				nil,
 			)
 			if err != nil {
 				return err

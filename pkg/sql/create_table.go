@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -1261,6 +1262,7 @@ func CreatePartitioning(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, error) {
 	if partBy == nil {
 		if indexDesc.Partitioning.NumImplicitColumns > 0 {
@@ -1275,7 +1277,7 @@ func CreatePartitioning(
 		return indexDesc, nil
 	}
 	return CreatePartitioningCCL(
-		ctx, st, evalCtx, tableDesc, indexDesc, partBy,
+		ctx, st, evalCtx, tableDesc, indexDesc, partBy, allowedNewColumnNames,
 	)
 }
 
@@ -1288,6 +1290,7 @@ var CreatePartitioningCCL = func(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, error) {
 	return descpb.IndexDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
 		"creating or manipulating partitions requires a CCL binary"))
@@ -1563,20 +1566,7 @@ func NewTableDesc(
 				)
 			}
 			oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
-			// TODO(#59630): set the column visibility to be hidden.
-			c := &tree.ColumnTableDef{
-				Name: tree.RegionalByRowRegionDefaultColName,
-				Type: &tree.OIDTypeReference{OID: oid},
-			}
-			c.Nullable.Nullability = tree.NotNull
-			c.DefaultExpr.Expr = &tree.CastExpr{
-				Expr: &tree.FuncExpr{
-					Func: tree.WrapFunction("gateway_region"),
-				},
-				Type:       &tree.OIDTypeReference{OID: oid},
-				SyntaxMode: tree.CastShort,
-			}
-			n.Defs = append(n.Defs, c)
+			n.Defs = append(n.Defs, regionalByRowDefaultColDef(oid))
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		} else if !regionalByRowColExists {
 			return nil, pgerror.Newf(
@@ -1840,6 +1830,7 @@ func NewTableDesc(
 						&desc,
 						idx,
 						partitionBy,
+						nil, /* allowedNewColumnNames */
 					)
 					if err != nil {
 						return nil, err
@@ -1914,6 +1905,7 @@ func NewTableDesc(
 						&desc,
 						idx,
 						partitionBy,
+						nil, /* allowedNewColumnNames */
 					)
 					if err != nil {
 						return nil, err
@@ -2034,6 +2026,7 @@ func NewTableDesc(
 				&desc,
 				*desc.GetPrimaryIndex().IndexDesc(),
 				partitionBy,
+				nil, /* allowedNewColumnNames */
 			)
 			if err != nil {
 				return nil, err
@@ -2627,4 +2620,21 @@ func CreateInheritedPrivilegesFromDBDesc(
 	privs.SetOwner(user)
 
 	return privs
+}
+
+func regionalByRowDefaultColDef(oid oid.Oid) *tree.ColumnTableDef {
+	// TODO(#59630): set the column visibility to be hidden.
+	c := &tree.ColumnTableDef{
+		Name: tree.RegionalByRowRegionDefaultColName,
+		Type: &tree.OIDTypeReference{OID: oid},
+	}
+	c.Nullable.Nullability = tree.NotNull
+	c.DefaultExpr.Expr = &tree.CastExpr{
+		Expr: &tree.FuncExpr{
+			Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
+		},
+		Type:       &tree.OIDTypeReference{OID: oid},
+		SyntaxMode: tree.CastShort,
+	}
+	return c
 }

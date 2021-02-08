@@ -114,6 +114,12 @@ const (
 	categorySystemRepair        = "System repair"
 )
 
+const (
+	// GatewayRegionBuiltinName is the builtin name that returns the gateway
+	// region of the current node.
+	GatewayRegionBuiltinName = "gateway_region"
+)
+
 func categorizeType(t *types.T) string {
 	switch t.Family() {
 	case types.DateFamily, types.IntervalFamily, types.TimestampFamily, types.TimestampTZFamily:
@@ -4805,7 +4811,7 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
-	"gateway_region": makeBuiltin(
+	GatewayRegionBuiltinName: makeBuiltin(
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
