@@ -238,6 +238,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
 ----
 CREATE TABLE public.regional_primary_region_table (
                                                 a INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                                                 FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
@@ -262,6 +264,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region
 ----
 CREATE TABLE public.regional_implicit_primary_region_table (
                                                 a INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                                                 FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
@@ -285,8 +289,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE "regional_us-east-1_table"]
 ----
 CREATE TABLE public."regional_us-east-1_table" (
-                                            a INT8 NULL,
-                                            FAMILY "primary" (a, rowid)
+                                             a INT8 NULL,
+                                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                             FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
@@ -313,6 +319,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE global_table]
 ----
 CREATE TABLE public.global_table (
                    a INT8 NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                    FAMILY "primary" (a, rowid)
 ) LOCALITY GLOBAL
 
@@ -816,5 +824,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE no_initial_region.t]
 ----
 CREATE TABLE public.t (
                                                 k INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                                                 FAMILY "primary" (k, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION

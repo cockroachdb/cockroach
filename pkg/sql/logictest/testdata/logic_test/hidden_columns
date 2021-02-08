@@ -26,7 +26,11 @@ INSERT INTO kv VALUES (111, 222)
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (FAMILY "primary" (x, rowid)
+t  CREATE TABLE public.t (
+   x INT8 NOT VISIBLE NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (x, rowid)
 )
 
 # Check that stars expand to no columns.
