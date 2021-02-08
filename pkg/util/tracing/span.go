@@ -174,13 +174,6 @@ func (s *Span) IsBlackHole() bool {
 	return s.crdb.recordingType() == RecordingOff && s.netTr == nil && s.ot == (otSpan{})
 }
 
-// isNilOrNoop returns true if the Span context is either nil
-// or corresponds to a "no-op" Span. If this is true, any Span
-// derived from this context will be a "black hole Span".
-func (sm *SpanMeta) isNilOrNoop() bool {
-	return sm == nil || (sm.recordingType == RecordingOff && sm.shadowTracerType == "")
-}
-
 // SpanStats are stats that can be added to a Span.
 type SpanStats interface {
 	protoutil.Message
