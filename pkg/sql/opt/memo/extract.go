@@ -252,8 +252,14 @@ func ExtractJoinEquality(
 // ExtractRemainingJoinFilters calculates the remaining ON condition after
 // removing equalities that are handled separately. The given function
 // determines if an equality is redundant. The result is empty if there are no
-// remaining conditions.
+// remaining conditions. Panics if leftEq and rightEq are not the same length.
 func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) FiltersExpr {
+	if len(leftEq) != len(rightEq) {
+		panic(errors.AssertionFailedf("leftEq and rightEq have different lengths"))
+	}
+	if len(leftEq) == 0 {
+		return on
+	}
 	var newFilters FiltersExpr
 	for i := range on {
 		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
