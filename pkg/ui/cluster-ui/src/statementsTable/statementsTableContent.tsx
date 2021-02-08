@@ -26,6 +26,7 @@ import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Download } from "@cockroachlabs/icons";
+import { getBasePath } from "../api";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
@@ -345,7 +346,9 @@ export const StatementTableCell = {
                 name: (
                   <a
                     className={cx("download-diagnostics-link")}
-                    href={`/_admin/v1/stmtbundle/${dr.statement_diagnostics_id}`}
+                    href={`${getBasePath()}/_admin/v1/stmtbundle/${
+                      dr.statement_diagnostics_id
+                    }`}
                   >
                     {`${TimestampToMoment(dr.requested_at).format(
                       "ll [at] LT [diagnostic]",
