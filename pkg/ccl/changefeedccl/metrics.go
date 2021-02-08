@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -35,10 +34,10 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 }
 
 func (s *metricsSink) EmitRow(
-	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitRow(ctx, table, key, value, updated)
+	err := s.wrapped.EmitRow(ctx, topic, key, value, updated)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
