@@ -68,6 +68,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
 CREATE TABLE public.geom_table_negative_values (
    a GEOMETRY(GEOMETRY) NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
 
@@ -81,6 +83,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 ----
 CREATE TABLE public.geog_table_negative_values (
    a GEOGRAPHY(GEOMETRY) NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
 

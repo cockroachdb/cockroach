@@ -21,6 +21,8 @@ bits        CREATE TABLE public.bits (
             b BIT(4) NULL,
             c VARBIT NULL,
             d VARBIT(4) NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
             FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -267,6 +269,8 @@ SELECT create_statement FROM [SHOW CREATE obitsa]
 ----
 CREATE TABLE public.obitsa (
    x VARBIT(20)[] NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (x, rowid)
 )
 

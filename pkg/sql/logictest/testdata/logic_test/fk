@@ -503,6 +503,8 @@ delivery  CREATE TABLE public.delivery (
           "order" INT8 NULL,
           shipment INT8 NULL,
           item STRING NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
           CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES public.products(upc),
           INDEX delivery_item_idx (item ASC),
@@ -816,6 +818,8 @@ refpairs  CREATE TABLE public.refpairs (
           a INT8 NULL,
           b STRING NULL,
           c INT8 NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
           CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
           INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
           FAMILY "primary" (a, b, c, rowid)
@@ -1023,6 +1027,8 @@ SHOW CREATE TABLE refers
 refers  CREATE TABLE public.refers (
         a INT8 NULL,
         b INT8 NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
         CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES public.referee(id),
         INDEX another_idx (b ASC),
         INDEX foo (a ASC),
