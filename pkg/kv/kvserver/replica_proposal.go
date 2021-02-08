@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
 )
 
@@ -842,7 +841,7 @@ func (r *Replica) requestToProposal(
 }
 
 // getTraceData extracts the SpanMeta of the current span.
-func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
+func (r *Replica) getTraceData(ctx context.Context) map[string]string {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return nil
@@ -850,12 +849,13 @@ func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	if sp.IsBlackHole() {
 		return nil
 	}
-	traceData := opentracing.TextMapCarrier{}
-	if err := r.AmbientContext.Tracer.Inject(
-		sp.Meta(), opentracing.TextMap, traceData,
-	); err != nil {
+
+	traceCarrier := tracing.MapCarrier{
+		Map: make(map[string]string),
+	}
+	if err := r.AmbientContext.Tracer.InjectMetaInto(sp.Meta(), traceCarrier); err != nil {
 		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Meta(), err)
 		return nil
 	}
-	return traceData
+	return traceCarrier.Map
 }

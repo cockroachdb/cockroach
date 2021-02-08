@@ -245,7 +245,7 @@ func (fr *FlowRegistry) RegisterFlow(
 			fr.Unlock()
 			if len(timedOutReceivers) != 0 {
 				// The span in the context might be finished by the time this runs. In
-				// principle, we could ForkCtxSpan() beforehand, but we don't want to
+				// principle, we could ForkSpan() beforehand, but we don't want to
 				// create the extra span every time.
 				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
 				log.Errorf(

@@ -315,7 +315,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID d
 // by fetching the new stats from the database.
 func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID descpb.ID) {
 	log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
-	ctx, span := tracing.ForkCtxSpan(ctx, "refresh-table-stats")
+	ctx, span := tracing.ForkSpan(ctx, "refresh-table-stats")
 	// Perform an asynchronous refresh of the cache.
 	go func() {
 		defer span.Finish()

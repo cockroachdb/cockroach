@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestRecordingString(t *testing.T) {
@@ -36,18 +36,19 @@ func TestRecordingString(t *testing.T) {
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
 
-	carrier := make(opentracing.HTTPHeadersCarrier)
-	err := tr.Inject(root.Meta(), opentracing.HTTPHeaders, carrier)
+	carrier := metadataCarrier{MD: metadata.MD{}}
+	require.NoError(t, tr.InjectMetaInto(root.Meta(), carrier))
+
+	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
-	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
-	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireContext))
+
+	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireSpanMeta))
 	root.Record("root 2")
 	remoteChild.Record("remote child 1")
-	require.NoError(t, err)
 	remoteChild.Finish()
+
 	remoteRec := remoteChild.GetRecording()
-	err = root.ImportRemoteSpans(remoteRec)
-	require.NoError(t, err)
+	require.NoError(t, root.ImportRemoteSpans(remoteRec))
 	root.Finish()
 
 	root.Record("root 3")
@@ -182,13 +183,13 @@ Span grandchild:
 	require.Equal(t, exp, recToStrippedString(childRec))
 }
 
-func TestSpan_LogStructured(t *testing.T) {
+func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
 	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
-	sp.LogStructured(&types.Int32Value{Value: 4})
+	sp.RecordStructured(&types.Int32Value{Value: 4})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].InternalStructured, 1)
@@ -207,7 +208,7 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer ch.Finish()
 	require.Len(t, sp.crdb.mu.recording.children, 1)
 	require.Equal(t, ch.crdb, sp.crdb.mu.recording.children[0])
-	ch.LogStructured(&types.Int32Value{Value: 5})
+	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)

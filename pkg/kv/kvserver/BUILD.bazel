@@ -183,7 +183,6 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_google_btree//:btree",
         "@com_github_kr_pretty//:pretty",
-        "@com_github_opentracing_opentracing_go//:opentracing-go",
         "@io_etcd_go_etcd_raft_v3//:raft",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",

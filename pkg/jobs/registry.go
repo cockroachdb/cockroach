@@ -517,9 +517,9 @@ func (r *Registry) CreateStartableJobWithTxn(
 	// Construct a context which contains a tracing span that follows from the
 	// span in the parent context. We don't directly use the parent span because
 	// we want independent lifetimes and cancellation. For the same reason, we
-	// don't use the Context returned by ForkCtxSpan.
+	// don't use the Context returned by ForkSpan.
 	resumerCtx, cancel := r.makeCtx()
-	_, span := tracing.ForkCtxSpan(ctx, "job")
+	_, span := tracing.ForkSpan(ctx, "job")
 	if span != nil {
 		resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
 	}
