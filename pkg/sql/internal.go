@@ -240,9 +240,14 @@ type rowsIterator struct {
 	// before an error is returned by Next() or Close().
 	errCallback func(err error) error
 
-	// stmtBuf will be closed on Close(). This is necessary in order to tell
-	// the connExecutor's goroutine to exit when the iterator's user wants to
-	// short-circuit the iteration (i.e. before Next() returns false).
+	// cancelCtx will be called on Close() and cancels the context of the
+	// connExecutor goroutine. This is necessary (in combination with closing
+	// the stmtBuf) in order to tell the connExecutor goroutine to exit when the
+	// iterator's user wants to short-circuit the iteration (i.e. before Next()
+	// returns false).
+	cancelCtx context.CancelFunc
+
+	// stmtBuf will be closed on Close().
 	stmtBuf *StmtBuf
 
 	// wg can be used to wait for the connExecutor's goroutine to exit.
@@ -325,8 +330,9 @@ func (r *rowsIterator) Cur() tree.Datums {
 }
 
 func (r *rowsIterator) Close() error {
-	// Closing the stmtBuf will tell the connExecutor to stop executing commands
-	// (if it hasn't exited yet).
+	// Canceling the context and closing the stmtBuf will tell the connExecutor
+	// to stop executing commands (if it hasn't exited yet).
+	r.cancelCtx()
 	r.stmtBuf.Close()
 	// We need to finish the span but only after the connExecutor goroutine is
 	// done.
@@ -340,10 +346,6 @@ func (r *rowsIterator) Close() error {
 
 	// We also need to exhaust the channel since the connExecutor goroutine
 	// might be blocked on sending the row in AddRow().
-	// TODO(yuzefovich): at the moment, the connExecutor goroutine will not stop
-	// execution of the current command right away when the stmtBuf is closed
-	// (e.g. if it is currently executing ExecStmt command, all rows will still
-	// be pushed into the channel). Improve this.
 	for {
 		select {
 		case res, ok := <-r.ch:
@@ -612,6 +614,13 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	var cancelCtx context.CancelFunc
+	ctx, cancelCtx = context.WithCancel(ctx)
+	defer func() {
+		if cancelCtx != nil {
+			cancelCtx()
+		}
+	}()
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -769,12 +778,16 @@ func (ie *InternalExecutor) execInternal(
 	if parsed.AST.StatementType() != tree.Rows {
 		resultColumns = rowsAffectedResultColumns
 	}
-	return &rowsIterator{
+	it := &rowsIterator{
 		ch:         ch,
 		resultCols: resultColumns,
+		cancelCtx:  cancelCtx,
 		stmtBuf:    stmtBuf,
 		wg:         wg,
-	}, nil
+	}
+	// The context will be cancelled by the iterator.
+	cancelCtx = nil
+	return it, nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the
