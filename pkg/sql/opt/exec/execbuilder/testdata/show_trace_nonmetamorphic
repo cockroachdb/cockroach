@@ -139,8 +139,8 @@ WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-materializer  Scan /Table/55/{1-2}
-materializer  fetched: /kv2/primary/-9222809086901354496/k/v -> /1/2
+colbatchscan  Scan /Table/55/{1-2}
+colbatchscan  fetched: /kv2/primary/-9222809086901354496/k/v -> /1/2
 flow          Put /Table/55/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
 flow          fast path completed
 exec stmt     rows affected: 1
@@ -181,8 +181,8 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-materializer                          Scan /Table/54/{1-2}
-materializer                          fetched: /kv/primary/1/v -> /2
+colbatchscan                          Scan /Table/54/{1-2}
+colbatchscan                          fetched: /kv/primary/1/v -> /2
 flow                                  Del /Table/54/2/2/0
 flow                                  Del /Table/54/1/1/0
 kv.DistSender: sending partial batch  r35: sending batch 1 Del to (n1,s1):1

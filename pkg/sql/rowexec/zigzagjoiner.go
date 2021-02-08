@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
 
@@ -262,6 +264,7 @@ var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
 var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 var _ execinfra.OpNode = &zigzagJoiner{}
+var _ execinfra.KVReader = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -322,6 +325,12 @@ func newZigzagJoiner(
 		z.infos[i] = &zigzagJoinerInfo{}
 	}
 
+	collectingStats := false
+	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+		collectingStats = true
+		z.ExecStatsForTrace = z.execStatsForTrace
+	}
+
 	colOffset := 0
 	for i := 0; i < z.numTables; i++ {
 		if fixedValues != nil && i < len(fixedValues) {
@@ -335,7 +344,7 @@ func newZigzagJoiner(
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables); err != nil {
+		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables, collectingStats); err != nil {
 			return nil, err
 		}
 		colOffset += len(z.infos[i].table.PublicColumns())
@@ -372,7 +381,9 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher    row.Fetcher
+	fetcher rowFetcher
+	// rowsRead is the total number of rows that this fetcher read from disk.
+	rowsRead   int64
 	alloc      *rowenc.DatumAlloc
 	table      catalog.TableDescriptor
 	index      *descpb.IndexDescriptor
@@ -412,6 +423,7 @@ func (z *zigzagJoiner) setupInfo(
 	side int,
 	colOffset int,
 	tables []catalog.TableDescriptor,
+	collectingStats bool,
 ) error {
 	z.side = side
 	info := z.infos[side]
@@ -461,9 +473,10 @@ func (z *zigzagJoiner) setupInfo(
 	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
+	var fetcher row.Fetcher
 	_, _, err := initRowFetcher(
 		flowCtx,
-		&info.fetcher,
+		&fetcher,
 		info.table,
 		int(indexOrdinal),
 		catalog.ColumnIDToOrdinalMap(info.table.PublicColumns()),
@@ -482,6 +495,12 @@ func (z *zigzagJoiner) setupInfo(
 	)
 	if err != nil {
 		return err
+	}
+
+	if collectingStats {
+		info.fetcher = newRowFetcherStatCollector(&fetcher)
+	} else {
+		info.fetcher = &fetcher
 	}
 
 	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.ID)
@@ -537,6 +556,7 @@ func (z *zigzagJoiner) fetchRowFromSide(
 		if fetchedRow == nil || err != nil {
 			return fetchedRow, err
 		}
+		z.infos[side].rowsRead++
 		if !hasNull(fetchedRow) {
 			break
 		}
@@ -970,6 +990,49 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
 	z.close()
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
+	kvStats := execinfrapb.KVStats{
+		BytesRead:      optional.MakeUint(uint64(z.GetBytesRead())),
+		ContentionTime: optional.MakeTimeValue(z.GetCumulativeContentionTime()),
+	}
+	for i := range z.infos {
+		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
+		if !ok {
+			return nil
+		}
+		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
+		kvStats.KVTime.MaybeAdd(fis.WaitTime)
+	}
+	return &execinfrapb.ComponentStats{
+		KV:     kvStats,
+		Output: z.Out.Stats(),
+	}
+}
+
+// GetBytesRead is part of the execinfra.KVReader interface.
+func (z *zigzagJoiner) GetBytesRead() int64 {
+	var bytesRead int64
+	for i := range z.infos {
+		bytesRead += z.infos[i].fetcher.GetBytesRead()
+	}
+	return bytesRead
+}
+
+// GetRowsRead is part of the execinfra.KVReader interface.
+func (z *zigzagJoiner) GetRowsRead() int64 {
+	var rowsRead int64
+	for i := range z.infos {
+		rowsRead += z.infos[i].rowsRead
+	}
+	return rowsRead
+}
+
+// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+func (z *zigzagJoiner) GetCumulativeContentionTime() time.Duration {
+	return execinfra.GetCumulativeContentionTime(z.Ctx)
 }
 
 func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {

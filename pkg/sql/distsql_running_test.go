@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -265,7 +265,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 }
 
 // TestDistSQLReceiverReportsContention verifies that the distsql receiver
-// reports contentions event via an observable metric if they occur. This test
+// reports contention events via an observable metric if they occur. This test
 // additionally verifies that the metric stays at zero if there is no
 // contention.
 func TestDistSQLReceiverReportsContention(t *testing.T) {
@@ -274,41 +274,57 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 
 	ctx := context.Background()
 	testutils.RunTrueAndFalse(t, "contention", func(t *testing.T, contention bool) {
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				DistSQL: &execinfra.TestingKnobs{
-					GenerateMockContentionEvents: contention,
-				},
-			},
-		})
+		// TODO(yuzefovich): add an onContentionEventCb() to
+		// DistSQLRunTestingKnobs and use it here to accumulate contention
+		// events.
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
-
 		sqlutils.CreateTable(
-			t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
+			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 		)
 
-		metrics := s.DistSQLServer().(*distsql.ServerImpl).Metrics
-		for _, query := range []string{
-			"SELECT * FROM test.test",
-			// TODO(asubiotto): Uncomment once contention metadata is propagated back
-			//  from planNodes (#56916).
-			// "INSERT INTO test.test VALUES (11)",
-		} {
-			metrics.ContendedQueriesCount.Clear()
-			_, err := db.ExecContext(ctx, query)
+		if contention {
+			// Begin a contending transaction.
+			conn, err := db.Conn(ctx)
 			require.NoError(t, err)
-
-			if contention {
-				// Soft check to protect against flakiness where an internal query
-				// causes the contention metric to increment.
-				require.GreaterOrEqual(t, metrics.ContendedQueriesCount.Count(), int64(1))
-			} else {
-				require.Zero(
-					t,
-					metrics.ContendedQueriesCount.Count(),
-					"contention metric unexpectedly non-zero when no contention events are produced",
-				)
-			}
+			defer func() {
+				require.NoError(t, conn.Close())
+			}()
+			_, err = conn.ExecContext(ctx, "BEGIN; UPDATE test.test SET x = 10 WHERE x = 1;")
+			require.NoError(t, err)
 		}
+
+		metrics := s.DistSQLServer().(*distsql.ServerImpl).Metrics
+		metrics.ContendedQueriesCount.Clear()
+		contentionRegistry := s.ExecutorConfig().(ExecutorConfig).ContentionRegistry
+		otherConn, err := db.Conn(ctx)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, otherConn.Close())
+		}()
+		// TODO(yuzefovich): turning the tracing ON won't be necessary once
+		// always-on tracing is enabled.
+		_, err = otherConn.ExecContext(ctx, `
+SET TRACING=on;
+BEGIN;
+SET TRANSACTION PRIORITY HIGH;
+UPDATE test.test SET x = 100 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+		require.NoError(t, err)
+		const contentionEventSubstring = "tableID=53 indexID=1"
+		if contention {
+			// Soft check to protect against flakiness where an internal query
+			// causes the contention metric to increment.
+			require.GreaterOrEqual(t, metrics.ContendedQueriesCount.Count(), int64(1))
+		} else {
+			require.Zero(
+				t,
+				metrics.ContendedQueriesCount.Count(),
+				"contention metric unexpectedly non-zero when no contention events are produced",
+			)
+		}
+		require.Equal(t, contention, strings.Contains(contentionRegistry.String(), contentionEventSubstring))
 	})
 }

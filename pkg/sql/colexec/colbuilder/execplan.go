@@ -737,6 +737,7 @@ func NewColOperator(
 			// cancellation check on their own while performing long operations.
 			result.Op = colexec.NewCancelChecker(result.Op)
 			result.ColumnTypes = scanOp.ResultTypes
+			result.ToClose = append(result.ToClose, scanOp)
 
 		case core.Filterer != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
