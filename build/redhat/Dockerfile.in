@@ -1,0 +1,3 @@
+FROM cockroachdb/cockroach:@build_name@
+ENV COCKROACH_CHANNEL=official-openshift
+

@@ -13,7 +13,7 @@ export BUILDER_HIDE_GOPATH_SRC=1
 # `+` in the tag name.
 # https://github.com/cockroachdb/cockroach/blob/4c6864b44b9044874488cfedee3a31e6b23a6790/pkg/util/version/version.go#L75
 build_name="$(echo "${NAME}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$')"
-#                                         ^major           ^minor           ^patch         ^preRelease
+#                                             ^major           ^minor           ^patch         ^preRelease
 
 if [[ -z "$build_name" ]] ; then
     echo "Invalid NAME \"${NAME}\". Must be of the format \"vMAJOR.MINOR.PATCH(-PRERELEASE)?\"."
@@ -21,6 +21,8 @@ if [[ -z "$build_name" ]] ; then
 fi
 
 release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
+version=$(echo ${build_name} | sed -e 's/^v//' | cut -d- -f 1)
+release=$(echo ${build_name} | sed -e 's/^v//' | cut -d- -f 2)
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET:-binaries.cockroachdb.com}"
@@ -88,10 +90,46 @@ docker_login
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 
-docker build --no-cache --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} --tag=${gcr_repository}:${build_name} build/deploy
+# TODO(rail): do we need to copy the licenses?
+docker build --no-cache \
+  --label version=$version \
+  --label release=$release \
+  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
+  --tag=${gcr_repository}:${build_name} \
+  build/deploy
+
+# verify the image
+# version and release labels
+# TODO(rail): make sure jq is available on the build agents
+ver="$(docker image inspect ${dockerhub_repository}:{$build_name} | jq -r '.[0].Config.Labels.version')"
+rel="$(docker image inspect ${dockerhub_repository}:{$build_name} | jq -r '.[0].Config.Labels.release')"
+if [ "$ver" != "$version" -o "$rel" != "$release" ]; then
+    echo "Expected labels version:$version release:$release, got version:$ver release:$rel"
+    exit 1
+fi
+
+# Make sure we have less than 40 layers (per RedHat requirements)
+layers="$(docker history -q ${dockerhub_repository}:{$build_name} | wc -l | sed -e 's/ //g')"
+if [ $layers -gt 40 ]; then
+    echo "Expected less than 40 layers, got $layers"
+    exit 1
+fi
 
 docker push "${dockerhub_repository}:${build_name}"
 docker push "${gcr_repository}:${build_name}"
+
+if [[ -z "${DRY_RUN}" ]] ; then
+  # TODO(rail): create a dry-run env for rhel
+  # as an alternative these steps can be extracted into a separate process, so we
+  # don't fail the whole thing in case of vendor specific failures
+  # make sure that using our FROM: is acceptable by rhel
+  sed -e "s/@build_name@/${build_name}/g" build/redhat/Dockerfile.in > build/redhat/Dockerfile
+  docker build --no-cache \
+    --tag=scan.connect.redhat.com/p194808216984433e18e6e90dd859cb1ea7c738ec50/cockroach:${build_name} \
+    build/redhat
+  # TODO(rail): docker push
+fi
+
 tc_end_block "Make and push docker images"
 
 
