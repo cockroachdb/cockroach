@@ -255,7 +255,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}
-		if len(desc.VisibleColumns()) == 0 {
+		if len(desc.PublicColumns()) == 0 {
 			f.WriteString("FAMILY ")
 		} else {
 			f.WriteString(",\n\tFAMILY ")

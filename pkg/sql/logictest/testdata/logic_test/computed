@@ -13,6 +13,8 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                      a INT8 NULL,
                      b INT8 NULL,
                      c INT8 NULL AS (3:::INT8) STORED,
+                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                      FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -31,6 +33,8 @@ extra_parens  CREATE TABLE public.extra_parens (
               a INT8 NULL,
               b INT8 NULL,
               c INT8 NULL AS (3:::INT8) STORED,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
               FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -85,6 +89,8 @@ x  CREATE TABLE public.x (
    b INT8 NULL DEFAULT 7:::INT8,
    c INT8 NULL AS (a) STORED,
    d INT8 NULL AS (a + b) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -634,6 +640,8 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, rowid)
 )
 
@@ -657,6 +665,8 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    c INT8 NULL,
    b INT8 NULL AS (c) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (c, b, rowid)
 )
 
@@ -696,7 +706,9 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a * 2:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    c INT8 NOT NULL AS (a + 4:::INT8) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, rowid, c)
 )
 
@@ -820,6 +832,8 @@ SHOW CREATE t42418
 ----
 t42418  CREATE TABLE public.t42418 (
         x INT8 NULL AS (1:::INT8) STORED,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         y INT8 NULL AS (1:::INT8) STORED,
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
         FAMILY "primary" (x, rowid, y)
 )
