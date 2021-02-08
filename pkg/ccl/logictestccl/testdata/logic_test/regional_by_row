@@ -81,8 +81,6 @@ CREATE TABLE regional_by_row_table (
   FAMILY (pk, pk2, a, b)
 ) LOCALITY REGIONAL BY ROW
 
-# TODO(#59630): determine how we should display the presence of a crdb_region column
-# to the user.
 # TODO(#59362): ensure this CREATE TABLE statement round trips.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
@@ -92,7 +90,7 @@ CREATE TABLE public.regional_by_row_table (
   pk2 INT8 NOT NULL,
   a INT8 NOT NULL,
   b INT8 NOT NULL,
-  crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
@@ -200,6 +198,17 @@ ca-central-1    7   7   8   9
 ca-central-1    10  10  11  12
 us-east-1       20  20  21  22
 ap-southeast-2  23  23  24  25
+
+query IIII colnames
+SELECT * FROM regional_by_row_table ORDER BY pk
+----
+pk  pk2  a   b
+1   1    2   3
+4   4    5   6
+7   7    8   9
+10  10   11  12
+20  20   21  22
+23  23   24  25
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
@@ -392,7 +401,7 @@ CREATE TABLE public.regional_by_row_table (
   pk2 INT8 NOT NULL,
   a INT8 NOT NULL,
   b INT8 NOT NULL,
-  crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
@@ -507,7 +516,7 @@ CREATE TABLE public.regional_by_row_table (
                             pk2 INT8 NOT NULL,
                             a INT8 NOT NULL,
                             b INT8 NOT NULL,
-                            crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
                             CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
                             UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
                             INDEX regional_by_row_table_a_idx (a ASC),
@@ -628,6 +637,14 @@ RETURNING crdb_region_col, pk
 us-east-1       1
 us-east-1       10
 ap-southeast-2  20
+
+query IIIT colnames
+SELECT * FROM regional_by_row_table_as ORDER BY pk
+----
+pk  a     b     crdb_region_col
+1   NULL  NULL  us-east-1
+10  NULL  NULL  us-east-1
+20  NULL  NULL  ap-southeast-2
 
 # Tests for altering the survivability of a REGIONAL BY ROW table.
 statement ok
