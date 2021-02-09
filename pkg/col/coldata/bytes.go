@@ -376,7 +376,12 @@ func (b *Bytes) Size() uintptr {
 // ProportionalSize returns the size of the receiver in bytes that is
 // attributed to only first n out of Len() elements.
 func (b *Bytes) ProportionalSize(n int64) uintptr {
-	return FlatBytesOverhead + uintptr(len(b.data[:b.offsets[n]])) + uintptr(n)*sizeOfInt32
+	if n == 0 {
+		return 0
+	}
+	// It is possible that we have a "window" into the vector that doesn't start
+	// from the offset of 0, so we have to look at the first actual offset.
+	return FlatBytesOverhead + uintptr(len(b.data[b.offsets[0]:b.offsets[n]])) + uintptr(n)*sizeOfInt32
 }
 
 var zeroInt32Slice = make([]int32, BytesInitialAllocationFactor*BatchSize())
