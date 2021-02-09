@@ -86,6 +86,9 @@ func GetBatchMemSize(b coldata.Batch) int64 {
 // proportional to given 'length'. This method returns the estimated memory
 // footprint *only* of the first 'length' tuples in 'b'.
 func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
+	if length == 0 {
+		return 0
+	}
 	usesSel := b.Selection() != nil
 	b.SetSelection(true)
 	selCapacity := cap(b.Selection())

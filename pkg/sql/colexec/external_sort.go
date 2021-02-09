@@ -514,7 +514,7 @@ func (o *inputPartitioningOperator) reset(ctx context.Context) {
 		}
 	}
 	o.interceptReset = false
-	o.standaloneMemAccount.Shrink(ctx, o.standaloneMemAccount.Used())
+	o.standaloneMemAccount.Clear(ctx)
 }
 
 func (o *inputPartitioningOperator) Close(ctx context.Context) error {
