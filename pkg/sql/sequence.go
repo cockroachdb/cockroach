@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
@@ -94,6 +95,13 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
 	if err != nil {
 		return 0, err
+	}
+	if !descriptor.IsSequence() {
+		seqName, err := p.getQualifiedTableName(ctx, descriptor)
+		if err != nil {
+			return 0, err
+		}
+		return 0, sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
 	return incrementSequenceHelper(ctx, p, descriptor)
 }
@@ -178,6 +186,9 @@ func (p *planner) GetLatestValueInSessionForSequenceByID(
 	if err != nil {
 		return 0, err
 	}
+	if !descriptor.IsSequence() {
+		return 0, sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
+	}
 	return getLatestValueInSessionForSequenceHelper(p, descriptor, seqName)
 }
 
@@ -229,6 +240,9 @@ func (p *planner) SetSequenceValueByID(
 	seqName, err := p.getQualifiedTableName(ctx, descriptor)
 	if err != nil {
 		return err
+	}
+	if !descriptor.IsSequence() {
+		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
 	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
 }
