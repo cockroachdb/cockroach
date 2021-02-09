@@ -893,3 +893,77 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 		JoinPrivate:           memo.JoinPrivate{},
 	}
 }
+
+// HasVolatileProjection returns true if any of the projection items of the
+// ProjectionsExpr contains a volatile expression.
+func (c *CustomFuncs) HasVolatileProjection(projections memo.ProjectionsExpr) bool {
+	for i := range projections {
+		if projections[i].ScalarProps().VolatilitySet.HasVolatile() {
+			return true
+		}
+	}
+	return false
+}
+
+// FindLeftJoinCanaryColumn tries to find a "canary" column from the right input
+// of a left join. This is a column that is NULL in the join output iff the row
+// is an "outer left" row that had no match in the join.
+//
+// Returns 0 if we couldn't find such a column.
+func (c *CustomFuncs) FindLeftJoinCanaryColumn(
+	right memo.RelExpr, on memo.FiltersExpr,
+) opt.ColumnID {
+	canaryCol, ok := right.Relational().NotNullCols.Next(0)
+	if ok {
+		// The right expression has a non-null column; we can use it as a canary
+		// column.
+		return canaryCol
+	}
+
+	// Find any column from the right which is null-rejected by the ON condition.
+	// right rows where such a column is NULL will never contribute to the join
+	// result.
+	nullRejectedCols := memo.NullColsRejectedByFilter(c.e.evalCtx, on)
+	nullRejectedCols.IntersectionWith(right.Relational().OutputCols)
+
+	canaryCol, ok = nullRejectedCols.Next(0)
+	if ok {
+		return canaryCol
+	}
+
+	return 0
+}
+
+// FoundCanaryColumn returns true if the given column returned by
+// FindLeftJoinCanaryColum indicates that we found a canary column.
+func (c *CustomFuncs) FoundCanaryColumn(canaryCol opt.ColumnID) bool {
+	return canaryCol != 0
+}
+
+// MakeProjectionsForOuterJoin takes a set of projections and wraps them in a
+// conditional which overrides them to NULL whenever the canary column is NULL.
+// TODO(radu): detect projections that evaluate to NULL on NULL inputs anyway,
+// and leave those alone.
+func (c *CustomFuncs) MakeProjectionsForOuterJoin(
+	canaryCol opt.ColumnID, proj memo.ProjectionsExpr,
+) memo.ProjectionsExpr {
+	result := make(memo.ProjectionsExpr, len(proj))
+
+	for i := range proj {
+		// Construct "IF(canaryCol IS NULL, NULL, <projection>)".
+		ifExpr := c.e.f.ConstructCase(
+			c.e.f.ConstructIs(
+				c.e.f.ConstructVariable(
+					canaryCol,
+				),
+				memo.NullSingleton,
+			),
+			memo.ScalarListExpr{
+				c.e.f.ConstructWhen(memo.TrueSingleton, c.e.f.ConstructNull(proj[i].Typ)),
+			},
+			proj[i].Element,
+		)
+		result[i] = c.e.f.ConstructProjectionsItem(ifExpr, proj[i].Col)
+	}
+	return result
+}

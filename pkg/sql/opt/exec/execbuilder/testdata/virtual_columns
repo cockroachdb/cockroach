@@ -780,7 +780,6 @@ vectorized: true
                   row 1, expr 0: 6
                   row 1, expr 1: 60
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
 ----
@@ -809,33 +808,22 @@ vectorized: true
         │ render b: b
         │ render v: v
         │
-        └── • merge join (right outer)
-            │ columns: (v, a, b, column8, column1, column2)
+        └── • render
+            │ columns: (v, column1, column2, column8, a, b)
             │ estimated row count: 3 (missing stats)
-            │ equality: (a) = (column1)
-            │ left cols are key
-            │ merge ordering: +"(a=column1)"
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column8: column8
+            │ render a: a
+            │ render b: b
             │
-            ├── • render
-            │   │ columns: (v, a, b)
-            │   │ ordering: +a
-            │   │ estimated row count: 1,000 (missing stats)
-            │   │ render v: a + b
-            │   │ render a: a
-            │   │ render b: b
-            │   │
-            │   └── • scan
-            │         columns: (a, b)
-            │         ordering: +a
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t@primary
-            │         spans: FULL SCAN
-            │
-            └── • sort
-                │ columns: (column8, column1, column2)
-                │ ordering: +column1
-                │ estimated row count: 3
-                │ order: +column1
+            └── • lookup join (left outer)
+                │ columns: (column8, column1, column2, a, b)
+                │ estimated row count: 3 (missing stats)
+                │ table: t@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (column8, column1, column2)
@@ -854,7 +842,6 @@ vectorized: true
                           row 2, expr 0: 7
                           row 2, expr 1: 100
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
 ----
@@ -883,33 +870,22 @@ vectorized: true
         │ render b: b
         │ render v: v
         │
-        └── • merge join (right outer)
-            │ columns: (v, a, b, column8, column1, column2)
+        └── • render
+            │ columns: (v, column1, column2, column8, a, b)
             │ estimated row count: 3 (missing stats)
-            │ equality: (a) = (column1)
-            │ left cols are key
-            │ merge ordering: +"(a=column1)"
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column8: column8
+            │ render a: a
+            │ render b: b
             │
-            ├── • render
-            │   │ columns: (v, a, b)
-            │   │ ordering: +a
-            │   │ estimated row count: 1,000 (missing stats)
-            │   │ render v: a + b
-            │   │ render a: a
-            │   │ render b: b
-            │   │
-            │   └── • scan
-            │         columns: (a, b)
-            │         ordering: +a
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t@primary
-            │         spans: FULL SCAN
-            │
-            └── • sort
-                │ columns: (column8, column1, column2)
-                │ ordering: +column1
-                │ estimated row count: 3
-                │ order: +column1
+            └── • lookup join (left outer)
+                │ columns: (column8, column1, column2, a, b)
+                │ estimated row count: 3 (missing stats)
+                │ table: t@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (column8, column1, column2)
@@ -928,7 +904,6 @@ vectorized: true
                           row 2, expr 0: 8
                           row 2, expr 1: 100
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
 ----
@@ -945,35 +920,27 @@ vectorized: true
 └── • project
     │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column2, column3, column11, column12, a)
     │
-    └── • merge join (right outer)
-        │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+    └── • render
+        │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
         │ estimated row count: 4 (missing stats)
-        │ equality: (a) = (column1)
-        │ left cols are key
-        │ merge ordering: +"(a=column1)"
+        │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+        │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column11: column11
+        │ render column12: column12
+        │ render a: a
+        │ render b: b
+        │ render c: c
         │
-        ├── • render
-        │   │ columns: (v, w, a, b, c)
-        │   │ ordering: +a
-        │   │ estimated row count: 1,000 (missing stats)
-        │   │ render v: a + b
-        │   │ render w: c + 1
-        │   │ render a: a
-        │   │ render b: b
-        │   │ render c: c
-        │   │
-        │   └── • scan
-        │         columns: (a, b, c)
-        │         ordering: +a
-        │         estimated row count: 1,000 (missing stats)
-        │         table: t_idx@primary
-        │         spans: FULL SCAN
-        │
-        └── • sort
-            │ columns: (column11, column12, column1, column2, column3)
-            │ ordering: +column1
-            │ estimated row count: 4
-            │ order: +column1
+        └── • lookup join (left outer)
+            │ columns: (column11, column12, column1, column2, column3, a, b, c)
+            │ estimated row count: 4 (missing stats)
+            │ table: t_idx@primary
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │ locking strength: for update
             │
             └── • render
                 │ columns: (column11, column12, column1, column2, column3)
@@ -1000,7 +967,6 @@ vectorized: true
                       row 3, expr 1: 40
                       row 3, expr 2: 400
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
 ----
@@ -1032,35 +998,26 @@ vectorized: true
         │ render v: v
         │ render w: w
         │
-        └── • merge join (right outer)
-            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+        └── • render
+            │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
             │ estimated row count: 2 (missing stats)
-            │ equality: (a) = (column1)
-            │ left cols are key
-            │ merge ordering: +"(a=column1)"
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render column11: column11
+            │ render column12: column12
+            │ render a: a
+            │ render b: b
+            │ render c: c
             │
-            ├── • render
-            │   │ columns: (v, w, a, b, c)
-            │   │ ordering: +a
-            │   │ estimated row count: 1,000 (missing stats)
-            │   │ render v: a + b
-            │   │ render w: c + 1
-            │   │ render a: a
-            │   │ render b: b
-            │   │ render c: c
-            │   │
-            │   └── • scan
-            │         columns: (a, b, c)
-            │         ordering: +a
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t_idx@primary
-            │         spans: FULL SCAN
-            │
-            └── • sort
-                │ columns: (column11, column12, column1, column2, column3)
-                │ ordering: +column1
-                │ estimated row count: 2
-                │ order: +column1
+            └── • lookup join (left outer)
+                │ columns: (column11, column12, column1, column2, column3, a, b, c)
+                │ estimated row count: 2 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)
@@ -1149,7 +1106,6 @@ vectorized: true
                           row 2, expr 1: 70
                           row 2, expr 2: 100
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
 ----
@@ -1180,33 +1136,24 @@ vectorized: true
         │ render c: c
         │ render w: w
         │
-        └── • merge join (right outer)
-            │ columns: (w, a, c, column11, column12, column1, column2, column3)
+        └── • render
+            │ columns: (w, column1, column2, column3, column11, column12, a, c)
             │ estimated row count: 3 (missing stats)
-            │ equality: (a) = (column1)
-            │ left cols are key
-            │ merge ordering: +"(a=column1)"
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render column11: column11
+            │ render column12: column12
+            │ render a: a
+            │ render c: c
             │
-            ├── • render
-            │   │ columns: (w, a, c)
-            │   │ ordering: +a
-            │   │ estimated row count: 1,000 (missing stats)
-            │   │ render w: c + 1
-            │   │ render a: a
-            │   │ render c: c
-            │   │
-            │   └── • scan
-            │         columns: (a, c)
-            │         ordering: +a
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t_idx@primary
-            │         spans: FULL SCAN
-            │
-            └── • sort
-                │ columns: (column11, column12, column1, column2, column3)
-                │ ordering: +column1
-                │ estimated row count: 3
-                │ order: +column1
+            └── • lookup join (left outer)
+                │ columns: (column11, column12, column1, column2, column3, a, c)
+                │ estimated row count: 3 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)
@@ -1230,7 +1177,6 @@ vectorized: true
                           row 2, expr 1: 70
                           row 2, expr 2: 700
 
-# TODO(radu): this should use a lookup join instead of a merge join.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
 ----
@@ -1266,35 +1212,26 @@ vectorized: true
         │ render v: v
         │ render w: w
         │
-        └── • merge join (right outer)
-            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+        └── • render
+            │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
             │ estimated row count: 3 (missing stats)
-            │ equality: (a) = (column1)
-            │ left cols are key
-            │ merge ordering: +"(a=column1)"
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render column11: column11
+            │ render column12: column12
+            │ render a: a
+            │ render b: b
+            │ render c: c
             │
-            ├── • render
-            │   │ columns: (v, w, a, b, c)
-            │   │ ordering: +a
-            │   │ estimated row count: 1,000 (missing stats)
-            │   │ render v: a + b
-            │   │ render w: c + 1
-            │   │ render a: a
-            │   │ render b: b
-            │   │ render c: c
-            │   │
-            │   └── • scan
-            │         columns: (a, b, c)
-            │         ordering: +a
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t_idx@primary
-            │         spans: FULL SCAN
-            │
-            └── • sort
-                │ columns: (column11, column12, column1, column2, column3)
-                │ ordering: +column1
-                │ estimated row count: 3
-                │ order: +column1
+            └── • lookup join (left outer)
+                │ columns: (column11, column12, column1, column2, column3, a, b, c)
+                │ estimated row count: 3 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)

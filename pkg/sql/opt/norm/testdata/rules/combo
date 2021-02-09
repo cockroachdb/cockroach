@@ -3028,7 +3028,7 @@ GenerateMergeJoins
     └── projections
          └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
 --------------------------------------------------------------------------------
-CommuteLeftJoin (higher cost)
+HoistProjectFromLeftJoin (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:10
@@ -3038,21 +3038,29 @@ CommuteLeftJoin (higher cost)
     │    ├── key: (1)
     │    ├── fd: (1)-->(12)
   - │    ├── left-join (merge)
-  + │    ├── right-join (hash)
-    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    ├── columns: x:1!null k:4 notnull:11
   - │    │    ├── left ordering: +1
   - │    │    ├── right ordering: +4
+  + │    ├── project
+  + │    │    ├── columns: notnull:11 x:1!null k:4
     │    │    ├── key: (1)
     │    │    ├── fd: (4)-->(11), (1)-->(4,11)
   - │    │    ├── scan xy
   - │    │    │    ├── columns: x:1!null
-  - │    │    │    ├── key: (1)
+  + │    │    ├── left-join (hash)
+  + │    │    │    ├── columns: x:1!null k:4 i:5
+  + │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    ├── key: (1)
   - │    │    │    └── ordering: +1
-    │    │    ├── project
-    │    │    │    ├── columns: notnull:11!null k:4!null
-    │    │    │    ├── key: (4)
-    │    │    │    ├── fd: (4)-->(11)
+  - │    │    ├── project
+  - │    │    │    ├── columns: notnull:11!null k:4!null
+  - │    │    │    ├── key: (4)
+  - │    │    │    ├── fd: (4)-->(11)
   - │    │    │    ├── ordering: +4
+  + │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    └── key: (1)
     │    │    │    ├── select
     │    │    │    │    ├── columns: k:4!null i:5
     │    │    │    │    ├── key: (4)
@@ -3066,9 +3074,413 @@ CommuteLeftJoin (higher cost)
   + │    │    │    │    │    └── fd: (4)-->(5)
     │    │    │    │    └── filters
     │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
-    │    │    │    └── projections
-    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    └── projections
+  - │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
   - │    │    └── filters (true)
+  + │    │    │    └── filters
+  + │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    └── projections
+  + │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+ReorderJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── left-join (hash)
+  + │    │    ├── right-join (hash)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    └── key: (1)
+    │    │    │    └── filters
+    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── right-join (hash)
+  + │    │    ├── left-join (merge)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  + │    │    │    ├── left ordering: +1
+  + │    │    │    ├── right ordering: +4
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    ├── key: (1)
+  + │    │    │    │    └── ordering: +1
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    └── ordering: +4
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    └── filters
+  - │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateLookupJoinsWithFilter (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── left-join (merge)
+  + │    │    ├── left-join (lookup a)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── left ordering: +1
+  - │    │    │    ├── right ordering: +4
+  + │    │    │    ├── key columns: [1] = [4]
+  + │    │    │    ├── lookup columns are key
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    ├── key: (1)
+  - │    │    │    │    └── ordering: +1
+  - │    │    │    ├── select
+  - │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    ├── key: (4)
+  - │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    ├── ordering: +4
+  - │    │    │    │    ├── scan a
+  - │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    └── ordering: +4
+  - │    │    │    │    └── filters
+  - │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    └── filters (true)
+  + │    │    │    │    └── key: (1)
+  + │    │    │    └── filters
+  + │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── left-join (lookup a)
+  + │    │    ├── right-join (hash)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── key columns: [1] = [4]
+  - │    │    │    ├── lookup columns are key
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    │    ├── select
+  + │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    ├── key: (4)
+  + │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    └── filters
+  + │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: x:1!null
+    │    │    │    │    └── key: (1)
+    │    │    │    └── filters
+  - │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── right-join (hash)
+  + │    │    ├── left-join (merge)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  + │    │    │    ├── left ordering: +1
+  + │    │    │    ├── right ordering: +4
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    ├── key: (1)
+  + │    │    │    │    └── ordering: +1
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    └── ordering: +4
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    └── filters
+  - │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateLookupJoinsWithFilter (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── left-join (merge)
+  + │    │    ├── left-join (lookup a)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── left ordering: +1
+  - │    │    │    ├── right ordering: +4
+  + │    │    │    ├── key columns: [1] = [4]
+  + │    │    │    ├── lookup columns are key
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    ├── key: (1)
+  - │    │    │    │    └── ordering: +1
+  - │    │    │    ├── select
+  - │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    ├── key: (4)
+  - │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    ├── ordering: +4
+  - │    │    │    │    ├── scan a
+  - │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    └── ordering: +4
+  - │    │    │    │    └── filters
+  - │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    └── filters (true)
+  + │    │    │    │    └── key: (1)
+  + │    │    │    └── filters
+  + │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── project
+    │    │    ├── columns: notnull:11 x:1!null k:4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── left-join (lookup a)
+  + │    │    ├── right-join (merge)
+    │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── key columns: [1] = [4]
+  - │    │    │    ├── lookup columns are key
+  + │    │    │    ├── left ordering: +4
+  + │    │    │    ├── right ordering: +1
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    │    ├── select
+  + │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    ├── key: (4)
+  + │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── ordering: +4
+  + │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    └── ordering: +4
+  + │    │    │    │    └── filters
+  + │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    └── filters
+  - │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    ├── key: (1)
+  + │    │    │    │    └── ordering: +1
+  + │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+  - │    ├── project
+  - │    │    ├── columns: notnull:11 x:1!null k:4
+  + │    ├── right-join (hash)
+  + │    │    ├── columns: x:1!null k:4 notnull:11
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── right-join (merge)
+  - │    │    │    ├── columns: x:1!null k:4 i:5
+  - │    │    │    ├── left ordering: +4
+  - │    │    │    ├── right ordering: +1
+  - │    │    │    ├── key: (1)
+  - │    │    │    ├── fd: (4)-->(5), (1)-->(4,5)
+  + │    │    ├── project
+  + │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    ├── key: (4)
+  + │    │    │    ├── fd: (4)-->(11)
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    └── ordering: +4
+  + │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    ├── key: (1)
+  - │    │    │    │    └── ordering: +1
+  - │    │    │    └── filters (true)
+  - │    │    └── projections
+  - │    │         └── CASE k:4 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:5 IS NOT NULL END [as=notnull:11, outer=(4,5)]
+  + │    │    │    └── projections
+  + │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
   + │    │    ├── scan xy
   + │    │    │    ├── columns: x:1!null
   + │    │    │    └── key: (1)
@@ -3081,6 +3493,9 @@ CommuteLeftJoin (higher cost)
          └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+HoistProjectFromLeftJoin (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)

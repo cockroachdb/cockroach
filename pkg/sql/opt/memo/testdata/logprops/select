@@ -6,6 +6,10 @@ exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
 
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
 build
 SELECT * FROM xy WHERE x=1
 ----
@@ -466,3 +470,18 @@ select
                 └── le [type=bool]
                      ├── variable: y:2 [type=int]
                      └── const: 10 [type=int]
+
+# Verify that a and b are determined to be not null.
+norm
+SELECT * FROM ab WHERE a=b
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan ab
+ │    ├── columns: a:1(int) b:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           ├── variable: a:1 [type=int]
+           └── variable: b:2 [type=int]

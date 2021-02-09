@@ -57,6 +57,10 @@
 # ((Distinct(RHS*) InnerJoin LHS) will have at most 1 matching row for each row
 # in the LHS if the On conditions are simple equalities.
 #
+# Note that if the join was a result of a join reordering, the new join will not
+# be reordered again (because it inherits the the SkipReorderJoins flag in the
+# private).
+#
 # Citations: [7] (see section 2.1.1)
 [CommuteSemiJoin, Explore]
 (SemiJoin
@@ -232,4 +236,84 @@
         $indexPrivate
         (OutputCols2 $left $right)
     )
+)
+
+# HoistProjectFromInnerJoin lifts a Project from under an InnerJoin; the join
+# can then be subject to other rules, most importantly allowing it to become a
+# lookup join.
+#
+# As long as the projections are non-volatile, it is equivalent to calculate
+# them on every output row.
+#
+# Note that if the join was a result of a join reordering, the new join will not
+# be reordered again (because it inherits the the SkipReorderJoins flag in the
+# private).
+#
+# TODO(radu): we could make the rule work even when the ON condition depends on
+# a projection (by inlining the projection).
+[HoistProjectFromInnerJoin, Explore]
+(InnerJoin
+    $left:*
+    $proj:(Project
+        $right:*
+        $projections:* & ^(HasVolatileProjection $projections)
+        $passthrough:*
+    )
+    $on:* &
+        ^(ColsIntersect
+            (ProjectionCols $projections)
+            (FilterOuterCols $on)
+        )
+    $private:*
+)
+=>
+(Project
+    (InnerJoin $left $right $on $private)
+    $projections
+    (UnionCols $passthrough (OutputCols $left))
+)
+
+# HoistProjectFromLeftJoin pulls a project from under an LeftJoin; the join can
+# then be subject to other rules, most importantly allowing it to become a
+# lookup join.
+#
+# This rule is similar to HoistProjectFromInnerJoin, except that we have to
+# handle "outer" rows correctly and make sure we project NULLs, regardless of
+# the expressions. First we find a canary column from the right input which is
+# null iff the output row is a null-extended left row. Then, we wrap each
+# projection in a CASE statement which is null if the canary column is null and
+# equivalent to the original projection if the canary column is not null".
+#
+# Note that if the join was a result of a join reordering, the new join will not
+# be reordered again (because it inherits the the SkipReorderJoins flag in the
+# private).
+#
+# TODO(radu): we could make the rule work even when the ON condition depends on
+# a projection (by inlining the projection).
+#
+# TODO(radu): we could make the rule augment an input Scan with a non-null
+# column from the table.
+[HoistProjectFromLeftJoin, Explore]
+(LeftJoin
+    $left:*
+    (Project
+        $right:*
+        $projections:* & ^(HasVolatileProjection $projections)
+        $passthrough:*
+    )
+    $on:* &
+        ^(ColsIntersect
+            (ProjectionCols $projections)
+            (FilterOuterCols $on)
+        ) &
+        (FoundCanaryColumn
+            $canaryCol:(FindLeftJoinCanaryColumn $right $on)
+        )
+    $private:*
+)
+=>
+(Project
+    (LeftJoin $left $right $on $private)
+    (MakeProjectionsForOuterJoin $canaryCol $projections)
+    (UnionCols $passthrough (OutputCols $left))
 )
