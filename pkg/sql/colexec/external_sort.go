@@ -267,6 +267,13 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			if s.partitioner == nil {
 				s.partitioner = s.partitionerCreator()
+				if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil {
+					toAcquire := s.maxNumberPartitions
+					if err := s.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
+						colexecerror.InternalError(err)
+					}
+					s.fdState.acquiredFDs = toAcquire
+				}
 			}
 			// Note that b will never have a selection vector set because the
 			// allSpooler performs a deselection when buffering up the tuples,
@@ -279,6 +286,9 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 		case externalSorterSpillPartition:
 			curPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			b := s.input.Next(ctx)
+			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
+				colexecerror.InternalError(err)
+			}
 			if b.Length() == 0 {
 				// The partition has been fully spilled, so we reset the
 				// in-memory sorter (which will do the "shallow" reset of
@@ -303,16 +313,6 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterNewPartition
 				continue
 			}
-			if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs == 0 {
-				toAcquire := s.maxNumberPartitions
-				if err := s.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
-					colexecerror.InternalError(err)
-				}
-				s.fdState.acquiredFDs = toAcquire
-			}
-			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
-				colexecerror.InternalError(err)
-			}
 
 		case externalSorterRepeatedMerging:
 			// We will merge all partitions in range [s.firstPartitionIdx,
@@ -330,9 +330,12 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			merger.Init()
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
-			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
+			for b := merger.Next(ctx); ; b = merger.Next(ctx) {
 				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 					colexecerror.InternalError(err)
+				}
+				if b.Length() == 0 {
+					break
 				}
 			}
 			after := s.unlimitedAllocator.Used()
