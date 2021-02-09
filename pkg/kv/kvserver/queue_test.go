@@ -388,6 +388,7 @@ func TestBaseQueueAdd(t *testing.T) {
 // are counted as successes, while no-ops are not.
 func TestBaseQueueNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
