@@ -80,3 +80,50 @@ query I
 SELECT pg_column_size(NULL::int)
 ----
 NULL
+
+statement ok
+CREATE TABLE is_visible(a int primary key);
+CREATE SCHEMA other;
+CREATE TABLE other.not_visible(a int primary key);
+CREATE DATABASE db2;
+SET DATABASE = db2;
+CREATE TABLE table_in_db2(a int primary key);
+
+let $table_in_db2_id
+SELECT c.oid FROM pg_class c WHERE c.relname = 'table_in_db2';
+
+statement ok
+SET DATABASE = test;
+
+query B
+SELECT pg_table_is_visible(c.oid)
+FROM pg_class c
+WHERE c.relname = 'is_visible'
+----
+true
+
+query B
+SELECT pg_table_is_visible(c.oid)
+FROM pg_class c
+WHERE c.relname = 'pg_type'
+----
+true
+
+query B
+SELECT pg_table_is_visible(c.oid)
+FROM pg_class c
+WHERE c.relname = 'not_visible'
+----
+false
+
+# Looking up a table in a different database should return NULL.
+query B
+SELECT pg_table_is_visible($table_in_db2_id)
+----
+NULL
+
+# Looking up a non-existent OID should return NULL.
+query B
+SELECT pg_table_is_visible(1010101010)
+----
+NULL

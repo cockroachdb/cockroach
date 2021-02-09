@@ -26,6 +26,7 @@ go_test(
         "drop_bench_test.go",
         "grant_revoke_bench_test.go",
         "grant_revoke_role_bench_test.go",
+        "orm_queries_bench_test.go",
         "system_bench_test.go",
         "truncate_bench_test.go",
         "validate_benchmark_data_test.go",

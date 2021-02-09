@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -203,6 +204,48 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 		Required:    required,
 		AvoidCached: p.avoidCachedDescriptors,
 	}
+}
+
+// IsTableVisible is part of the tree.EvalDatabase interface.
+func (p *planner) IsTableVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+) (isVisible, exists bool, err error) {
+	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableID))
+	if err != nil {
+		// If an error happened here, it means the table doesn't exist, so we
+		// return "not exists" rather than the error.
+		return false, false, nil //nolint:returnerrcheck
+	}
+	schemaID := tableDesc.GetParentSchemaID()
+	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaID,
+		tree.SchemaLookupFlags{
+			Required:    true,
+			AvoidCached: p.avoidCachedDescriptors})
+	if err != nil {
+		return false, false, err
+	}
+	if schemaDesc.Kind != catalog.SchemaVirtual {
+		dbID := tableDesc.GetParentID()
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidCached: p.avoidCachedDescriptors})
+		if err != nil {
+			return false, false, err
+		}
+		if dbDesc.Name != curDB {
+			// If the table is in a different database, then it's considered to be
+			// "not existing" instead of just "not visible"; this matches PostgreSQL.
+			return false, false, nil
+		}
+	}
+	iter := searchPath.Iter()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		if schemaDesc.Name == scName {
+			return true, true, nil
+		}
+	}
+	return false, true, nil
 }
 
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.

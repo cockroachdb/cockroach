@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
