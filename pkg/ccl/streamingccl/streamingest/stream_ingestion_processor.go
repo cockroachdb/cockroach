@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -72,7 +73,6 @@ type streamIngestionProcessor struct {
 // partitionEvent augments a normal event with the partition it came from.
 type partitionEvent struct {
 	streamingccl.Event
-
 	partition streamingccl.PartitionAddress
 }
 
@@ -91,6 +91,20 @@ func newStreamIngestionDataProcessor(
 	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if there are any interceptor methods that need to be registered with
+	// the stream client.
+	// These methods are invoked on every emitted Event.
+	if knobs, ok := flowCtx.Cfg.TestingKnobs.StreamIngestionTestingKnobs.(*sql.
+		StreamIngestionTestingKnobs); ok {
+		if knobs.Interceptors != nil {
+			if interceptable, ok := streamClient.(streamclient.InterceptableStreamClient); ok {
+				for _, interceptor := range knobs.Interceptors {
+					interceptable.RegisterInterception(interceptor)
+				}
+			}
+		}
 	}
 
 	sip := &streamIngestionProcessor{
