@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -135,4 +136,67 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "goroutine")
 	})
 
+}
+
+func TestIdleExit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	warmupDuration := 500 * time.Millisecond
+	countdownDuration := 4000 * time.Millisecond
+	tenant, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+		TenantID:      roachpb.MakeTenantID(10),
+		IdleExitAfter: warmupDuration,
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				IdleExitCountdownDuration: countdownDuration,
+			},
+		},
+		Stopper: tc.Stopper(),
+	})
+
+	require.NoError(t, err)
+
+	time.Sleep(warmupDuration / 2)
+	log.Infof(context.Background(), "Opening first con")
+	db := serverutils.OpenDBConn(
+		t, tenant.SQLAddr(), "", false, tc.Stopper(),
+	)
+	r := sqlutils.MakeSQLRunner(db)
+	r.QueryStr(t, `SELECT 1`)
+	require.NoError(t, db.Close())
+
+	time.Sleep(warmupDuration/2 + countdownDuration/2)
+
+	// Opening a connection in the middle of the countdown should stop the
+	// countdown timer. Closing the connection will restart the countdown.
+	log.Infof(context.Background(), "Opening second con")
+	db = serverutils.OpenDBConn(
+		t, tenant.SQLAddr(), "", false, tc.Stopper(),
+	)
+	r = sqlutils.MakeSQLRunner(db)
+	r.QueryStr(t, `SELECT 1`)
+	require.NoError(t, db.Close())
+
+	time.Sleep(countdownDuration / 2)
+
+	// If the tenant is stopped, that most likely means that the second connection
+	// didn't stop the countdown
+	select {
+	case <-tc.Stopper().IsStopped():
+		t.Error("stop on idle triggered too early")
+	default:
+	}
+
+	time.Sleep(countdownDuration * 3 / 2)
+
+	select {
+	case <-tc.Stopper().IsStopped():
+	default:
+		t.Error("stop on idle didn't trigger")
+	}
 }
