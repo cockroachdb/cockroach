@@ -99,6 +99,9 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
+	// Detached option
+	detached = "detached"
+
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
 	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
@@ -133,6 +136,8 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	avroRecordsSeparatedBy: sql.KVStringOptRequireValue,
 	avroBinRecords:         sql.KVStringOptRequireNoValue,
 	avroJSONRecords:        sql.KVStringOptRequireNoValue,
+
+	detached: sql.KVStringOptRequireNoValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -296,6 +301,14 @@ func importPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	opts, optsErr := optsFn()
+
+	var isDetached bool
+	if _, ok := opts[detached]; ok {
+		delete(opts, detached)
+		isDetached = true
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
@@ -303,13 +316,12 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if !p.ExtendedEvalContext().TxnImplicit {
-			return errors.Errorf("IMPORT cannot be used inside a transaction")
+		if !(p.ExtendedEvalContext().TxnImplicit || isDetached) {
+			return errors.Errorf("IMPORT cannot be used inside a transaction without DETACHED option")
 		}
 
-		opts, err := optsFn()
-		if err != nil {
-			return err
+		if optsErr != nil {
+			return optsErr
 		}
 
 		filenamePatterns, err := filesFn()
@@ -882,6 +894,25 @@ func importPlanHook(
 			Progress:    jobspb.ImportProgress{},
 		}
 
+		if isDetached {
+			// When running inside an explicit transaction, we simply create the job
+			// record. We do not wait for the job to finish.
+			aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, p.ExtendedEvalContext().Txn)
+			if err != nil {
+				return err
+			}
+
+			if err = protectTimestampForImport(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spansToProtect,
+				walltime, importDetails); err != nil {
+				return err
+			}
+
+			addToFileFormatTelemetry(format.Format.String(), "started")
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
+			return nil
+		}
+
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
@@ -889,15 +920,7 @@ func importPlanHook(
 				return err
 			}
 
-			if len(spansToProtect) > 0 {
-				// NB: We protect the timestamp preceding the import statement timestamp
-				// because that's the timestamp to which we want to revert.
-				tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
-				rec := jobsprotectedts.MakeRecord(*importDetails.ProtectedTimestampRecord,
-					*sj.ID(), tsToProtect, spansToProtect)
-				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
-			}
-			return nil
+			return protectTimestampForImport(ctx, p, txn, *sj.ID(), spansToProtect, walltime, importDetails)
 		}); err != nil {
 			if sj != nil {
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
@@ -915,6 +938,10 @@ func importPlanHook(
 			return err
 		}
 		return sj.ReportExecutionResults(ctx, resultsCh)
+	}
+
+	if isDetached {
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
@@ -1002,6 +1029,29 @@ func parseAvroOptions(
 				return errors.Errorf("%s out of range: %d", override, sz)
 			}
 			format.Avro.MaxRecordSize = int32(sz)
+		}
+	}
+	return nil
+}
+
+func protectTimestampForImport(
+	ctx context.Context,
+	p sql.PlanHookState,
+	txn *kv.Txn,
+	jobID int64,
+	spansToProtect []roachpb.Span,
+	walltime int64,
+	importDetails jobspb.ImportDetails,
+) error {
+	if len(spansToProtect) > 0 {
+		// NB: We protect the timestamp preceding the import statement timestamp
+		// because that's the timestamp to which we want to revert.
+		tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
+		rec := jobsprotectedts.MakeRecord(*importDetails.ProtectedTimestampRecord,
+			jobID, tsToProtect, spansToProtect)
+		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
