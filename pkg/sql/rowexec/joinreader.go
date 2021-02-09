@@ -89,9 +89,23 @@ type joinReader struct {
 	readerType         joinReaderType
 
 	input execinfra.RowSource
-	// Column indexes in the input stream specifying the columns which match with
-	// the index columns. These are the equality columns of the join.
+
+	// lookupCols and lookupExpr represent the part of the join condition used
+	// to perform the lookup into the index. Exactly one of lookupCols or
+	// lookupExpr must be non-empty.
+	//
+	// lookupCols is used when the lookup condition is just a simple equality
+	// between input columns and index columns. In this case, lookupCols contains
+	// the column indexes in the input stream specifying the columns which match
+	// with the index columns. These are the equality columns of the join.
+	//
+	// lookupExpr is used when the lookup condition is more complicated than a
+	// simple equality between input columns and index columns. In this case,
+	// lookupExpr specifies the expression that will be used to construct the
+	// spans for each lookup. See comments in the spec for details about the
+	// supported expressions.
 	lookupCols []uint32
+	lookupExpr execinfrapb.ExprHelper
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSizeBytes    int64
@@ -167,6 +181,9 @@ func newJoinReader(
 	case indexJoinReaderType:
 		if spec.Type != descpb.InnerJoin {
 			return nil, errors.AssertionFailedf("only inner index joins are supported, %s requested", spec.Type)
+		}
+		if !spec.LookupExpr.Empty() {
+			return nil, errors.AssertionFailedf("non-empty lookup expressions are not supported for index joins")
 		}
 		if !spec.OnExpr.Empty() {
 			return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
@@ -303,7 +320,20 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType)
+	if !spec.LookupExpr.Empty() {
+		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(columnTypes))
+		lookupExprTypes = append(lookupExprTypes, leftTypes...)
+		lookupExprTypes = append(lookupExprTypes, columnTypes...)
+
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
+		return nil, err
+	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -316,38 +346,65 @@ func (jr *joinReader) initJoinReaderStrategy(
 	numKeyCols int,
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
-) {
+) error {
 	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
+	var generator joinReaderSpanGenerator
 	var keyToInputRowIndices map[string][]int
 	if readerType != indexJoinReaderType {
 		keyToInputRowIndices = make(map[string][]int)
 	}
 	// Else: see the comment in defaultSpanGenerator on why we don't need
 	// this map for index joins.
-	spanGenerator := defaultSpanGenerator{
-		spanBuilder:          spanBuilder,
-		keyToInputRowIndices: keyToInputRowIndices,
-		numKeyCols:           numKeyCols,
-		lookupCols:           jr.lookupCols,
+
+	if jr.lookupExpr.Expr == nil {
+		generator = &defaultSpanGenerator{
+			spanBuilder:          spanBuilder,
+			keyToInputRowIndices: keyToInputRowIndices,
+			numKeyCols:           numKeyCols,
+			lookupCols:           jr.lookupCols,
+		}
+	} else {
+		// Since jr.lookupExpr is set, we need to use multiSpanGenerator, which
+		// supports looking up multiple spans per input row.
+		tableOrdToIndexOrd := util.FastIntMap{}
+		columnIDs, _ := jr.index.FullColumnIDs()
+		for i, colID := range columnIDs {
+			tabOrd := jr.colIdxMap.GetDefault(colID)
+			tableOrdToIndexOrd.Set(tabOrd, i)
+		}
+
+		multiSpanGen := &multiSpanGenerator{}
+		if err := multiSpanGen.init(
+			spanBuilder,
+			numKeyCols,
+			len(jr.input.OutputTypes()),
+			keyToInputRowIndices,
+			&jr.lookupExpr,
+			tableOrdToIndexOrd,
+		); err != nil {
+			return err
+		}
+		generator = multiSpanGen
 	}
+
 	if readerType == indexJoinReaderType {
 		jr.strategy = &joinReaderIndexJoinStrategy{
-			joinerBase:           &jr.joinerBase,
-			defaultSpanGenerator: spanGenerator,
+			joinerBase:              &jr.joinerBase,
+			joinReaderSpanGenerator: generator,
 		}
-		return
+		return nil
 	}
 
 	if !jr.maintainOrdering {
 		jr.strategy = &joinReaderNoOrderingStrategy{
-			joinerBase:           &jr.joinerBase,
-			defaultSpanGenerator: spanGenerator,
-			isPartialJoin:        jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
-			groupingState:        jr.groupingState,
+			joinerBase:              &jr.joinerBase,
+			joinReaderSpanGenerator: generator,
+			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
+			groupingState:           jr.groupingState,
 		}
-		return
+		return nil
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -375,12 +432,13 @@ func (jr *joinReader) initJoinReaderStrategy(
 	}
 	jr.strategy = &joinReaderOrderingStrategy{
 		joinerBase:                        &jr.joinerBase,
-		defaultSpanGenerator:              spanGenerator,
+		joinReaderSpanGenerator:           generator,
 		isPartialJoin:                     jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 		lookedUpRows:                      drc,
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
 	}
+	return nil
 }
 
 // getIndexColSet returns a set of all column indices for the given index.
@@ -587,8 +645,6 @@ func (jr *joinReader) readInput() (
 
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
-	nCols := len(jr.lookupCols)
-
 	for {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
@@ -598,7 +654,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		// it, since it is not cheap for long keys.
 		if jr.readerType != indexJoinReaderType {
 			var err error
-			key, err = jr.fetcher.PartialKey(nCols)
+			key, err = jr.fetcher.PartialKey(jr.strategy.getMaxLookupKeyCols())
 			if err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()

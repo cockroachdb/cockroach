@@ -574,6 +574,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	index cat.Index,
 	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
+	lookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isSecondJoinInPairedJoiner bool,
@@ -611,6 +612,9 @@ func (ef *execFactory) ConstructLookupJoin(
 		n.eqCols[i] = int(c)
 	}
 	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
+	if lookupExpr != nil {
+		n.lookupExpr = pred.iVarHelper.Rebind(lookupExpr)
+	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = pred.iVarHelper.Rebind(onCond)
 	}
