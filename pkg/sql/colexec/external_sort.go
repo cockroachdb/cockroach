@@ -116,10 +116,12 @@ type externalSorter struct {
 	closerHelper
 
 	unlimitedAllocator *colmem.Allocator
-	totalMemoryLimit   int64
-	state              externalSorterState
-	inputTypes         []*types.T
-	ordering           execinfrapb.Ordering
+	// memoryLimit is the amount of RAM available to the external sorter (the
+	// buffer sizes of disk queues' caches have already been subtracted).
+	memoryLimit int64
+	state       externalSorterState
+	inputTypes  []*types.T
+	ordering    execinfrapb.Ordering
 	// columnOrdering is the same as ordering used when creating mergers.
 	columnOrdering     colinfo.ColumnOrdering
 	inMemSorter        ResettableOperator
@@ -128,9 +130,18 @@ type externalSorter struct {
 	partitionerCreator func() colcontainer.PartitionedQueue
 	// numPartitions is the current number of partitions.
 	numPartitions int
+	// avgBatchSizeInPartition tracks the average size of batches in a single
+	// partition (when partitionIdx is in
+	// [firstPartitionIdx, firstPartitionIdx+numPartitions) range).
+	avgBatchSizeInPartition []int64
 	// firstPartitionIdx is the index of the first partition to merge next.
 	firstPartitionIdx   int
 	maxNumberPartitions int
+
+	currentPartitionState struct {
+		numBatches   int64
+		totalMemSize int64
+	}
 
 	// fdState is used to acquire file descriptors up front.
 	fdState struct {
@@ -195,18 +206,18 @@ func NewExternalSorter(
 	if maxNumberPartitions < ExternalSorterMinPartitions {
 		maxNumberPartitions = ExternalSorterMinPartitions
 	}
-	estimatedOutputBatchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
-	// memoryLimit of the partitions to sort in memory by those cache sizes. To
-	// be safe, we also estimate the size of the output batch and subtract that
-	// as well.
-	singlePartitionSize := memoryLimit - int64(maxNumberPartitions*diskQueueCfg.BufferSizeBytes+estimatedOutputBatchMemSize)
-	if singlePartitionSize < 1 {
+	// memoryLimit of the partitions to sort in memory by those cache sizes.
+	memoryLimit -= int64(maxNumberPartitions * diskQueueCfg.BufferSizeBytes)
+	if memoryLimit < 1 {
 		// If the memory limit is 0, the input partitioning operator will return
 		// a zero-length batch, so make it at least 1.
-		singlePartitionSize = 1
+		memoryLimit = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, singlePartitionSize)
+	// In externalSorterSpillPartition phase (when the memory limit of the input
+	// partitioning operator matters) we only use RAM for sorting a single
+	// partition, so we use the whole memoryLimit here.
+	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, memoryLimit)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
@@ -225,15 +236,16 @@ func NewExternalSorter(
 	es := &externalSorter{
 		OneInputNode:       NewOneInputNode(inMemSorter),
 		unlimitedAllocator: unlimitedAllocator,
-		totalMemoryLimit:   memoryLimit,
+		memoryLimit:        memoryLimit,
 		inMemSorter:        inMemSorter,
 		inMemSorterInput:   inputPartitioner.(*inputPartitioningOperator),
 		partitionerCreator: func() colcontainer.PartitionedQueue {
 			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
-		inputTypes:     inputTypes,
-		ordering:       ordering,
-		columnOrdering: execinfrapb.ConvertToColumnOrdering(ordering),
+		inputTypes:              inputTypes,
+		ordering:                ordering,
+		columnOrdering:          execinfrapb.ConvertToColumnOrdering(ordering),
+		avgBatchSizeInPartition: make([]int64, maxNumberPartitions),
 		// TODO(yuzefovich): maxNumberPartitions should also be semi-dynamically
 		// limited based on the sizes of batches. Consider a scenario when each
 		// input batch is 1 GB in size - if we don't put any limiting in place,
@@ -268,6 +280,8 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			if s.partitioner == nil {
 				s.partitioner = s.partitionerCreator()
 			}
+			s.currentPartitionState.numBatches = 1
+			s.currentPartitionState.totalMemSize = colmem.GetBatchMemSize(b)
 			// Note that b will never have a selection vector set because the
 			// allSpooler performs a deselection when buffering up the tuples,
 			// and the in-memory sorter has allSpooler as its input.
@@ -285,6 +299,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				// inputPartitioningOperator).
 				s.inMemSorterInput.interceptReset = true
 				s.inMemSorter.reset(ctx)
+				s.avgBatchSizeInPartition[s.numPartitions] = s.currentPartitionState.totalMemSize / s.currentPartitionState.numBatches
 				s.numPartitions++
 				if s.numPartitions == s.maxNumberPartitions-1 {
 					// We have reached the maximum number of active partitions
@@ -305,6 +320,8 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				}
 				s.fdState.acquiredFDs = toAcquire
 			}
+			s.currentPartitionState.numBatches++
+			s.currentPartitionState.totalMemSize += colmem.GetBatchMemSize(b)
 			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -431,11 +448,23 @@ func (s *externalSorter) createMergerForPartitions(
 		)
 	}
 
-	// TODO(yuzefovich): we should calculate a more precise memory limit taking
-	// into account how many partitions are currently being merged and the
-	// average batch size in each one of them.
+	// The ordered synchronizer will read one batch at a time from each input,
+	// so we estimate how much memory all those batches will need and give the
+	// remainder of the memory limit for the output batch.
+	estimatedInputBatchesSize := int64(0)
+	for i := 0; i < numPartitions; i++ {
+		estimatedInputBatchesSize += s.avgBatchSizeInPartition[i]
+	}
+	outputMaxBatchSize := s.memoryLimit - estimatedInputBatchesSize
+	// It is possible that we have very wide rows in which case each batch on
+	// its own might exceed the memory limit. In such cases, we still want to
+	// have reasonably large limit for the output batch.
+	const minOutputMaxBatchSize = 1 << 20 /* 1 MiB */
+	if outputMaxBatchSize < minOutputMaxBatchSize {
+		outputMaxBatchSize = minOutputMaxBatchSize
+	}
 	return NewOrderedSynchronizer(
-		s.unlimitedAllocator, s.totalMemoryLimit, syncInputs, s.inputTypes, s.columnOrdering,
+		s.unlimitedAllocator, outputMaxBatchSize, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }
 

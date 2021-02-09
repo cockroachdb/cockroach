@@ -430,6 +430,9 @@ func (p *sortOp) ExportBuffered(context.Context, colexecbase.Operator) coldata.B
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
+	// TODO(yuzefovich): limit the number of tuples exported in a single batch
+	// in some way using the memory footprint of the batch. Consider adding
+	// an argument to ExportBuffered() signature for a limit.
 	newExported := p.exported + coldata.BatchSize()
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()

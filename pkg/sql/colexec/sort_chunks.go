@@ -115,6 +115,10 @@ func (c *sortChunksOp) ExportBuffered(context.Context, colexecbase.Operator) col
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
 		if c.exportedFromBuffer < c.input.bufferedTuples.Length() {
+			// TODO(yuzefovich): limit the number of tuples exported in a single
+			// batch in some way using the memory footprint of the batch.
+			// Consider adding an argument to ExportBuffered() signature for a
+			// limit.
 			newExportedFromBuffer := c.exportedFromBuffer + coldata.BatchSize()
 			if newExportedFromBuffer > c.input.bufferedTuples.Length() {
 				newExportedFromBuffer = c.input.bufferedTuples.Length()

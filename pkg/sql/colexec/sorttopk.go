@@ -272,6 +272,9 @@ func (t *topKSorter) ExportBuffered(context.Context, colexecbase.Operator) colda
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {
+		// TODO(yuzefovich): limit the number of tuples exported in a single batch
+		// in some way using the memory footprint of the batch. Consider adding
+		// an argument to ExportBuffered() signature for a limit.
 		newExportedFromTopK := t.exportedFromTopK + coldata.BatchSize()
 		if newExportedFromTopK > topKLen {
 			newExportedFromTopK = topKLen
