@@ -1341,6 +1341,141 @@ SELECT * FROM prune@idx WHERE c > 0
 ----
 1  2  3  7
 
+# Tests for partial indexes with predicates that reference virtual computed
+# columns.
+subtest virtual
+
+statement ok
+SET experimental_enable_virtual_columns = true
+
+statement ok
+CREATE TABLE virt (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT AS (b + 10) VIRTUAL,
+    INDEX idx (a) WHERE c = 10
+)
+
+statement ok
+INSERT INTO virt (a, b) VALUES
+    (1, 0),
+    (2, 2),
+    (3, 0)
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+1  0  10
+3  0  10
+
+statement ok
+DELETE FROM virt WHERE a = 1
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+3  0  10
+
+statement ok
+UPDATE virt SET b = 0 WHERE a = 2
+
+statement ok
+UPDATE virt SET b = 3 WHERE a = 3
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+2  0  10
+
+statement ok
+UPDATE virt SET a = 4 WHERE a = 2
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+
+statement ok
+UPSERT INTO virt (a, b) VALUES (5, 5), (6, 6);
+UPSERT INTO virt (a, b) VALUES (5, 0);
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+5  0  10
+
+statement ok
+INSERT INTO virt (a, b) VALUES (7, 7), (8, 0) ON CONFLICT (a) DO NOTHING;
+INSERT INTO virt (a, b) VALUES (7, 0) ON CONFLICT (a) DO NOTHING;
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+5  0  10
+8  0  10
+
+statement ok
+INSERT INTO virt (a, b) VALUES (7, 0), (9, 9), (10, 0) ON CONFLICT (a) DO UPDATE SET b = 0
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4   0  10
+5   0  10
+7   0  10
+8   0  10
+10  0  10
+
+# Tests for unique partial indexes with predicates that reference virtual
+# computed columns.
+statement ok
+DELETE FROM virt;
+DROP INDEX virt@idx;
+CREATE UNIQUE INDEX idx ON virt (b) WHERE c > 10;
+
+statement ok
+INSERT INTO virt (a, b) VALUES (1, 1), (2, 2), (3, 1) ON CONFLICT DO NOTHING
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  2  12
+
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO virt (a, b) VALUES (4, 1), (5, 5) ON CONFLICT (b) DO NOTHING
+
+statement ok
+INSERT INTO virt (a, b) VALUES (4, 1), (5, 5) ON CONFLICT (b) WHERE c > 10 DO NOTHING
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  2  12
+5  5  15
+
+# Conflict with b=2 and the update to b=5 creates another conflict.
+statement error duplicate key value violates unique constraint "idx"\nDETAIL: Key \(b\)=\(5\) already exists\.
+INSERT INTO virt (a, b) VALUES (1, 2), (6, 6) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 5
+
+# Conflict with PK a=1 and no conflict with b.
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO virt (a, b) VALUES (1, 3), (7, 7) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 8
+
+statement ok
+INSERT INTO virt (a, b) VALUES (1, 2), (8, 8) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 9
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  9  19
+5  5  15
+8  8  18
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 subtest regression_52318
