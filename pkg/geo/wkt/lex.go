@@ -114,6 +114,14 @@ func getKeywordToken(tokStr string) int {
 		return MULTIPOINTZ
 	case "MULTIPOINTZM":
 		return MULTIPOINTZM
+	case "MULTILINESTRING":
+		return MULTILINESTRING
+	case "MULTILINESTRINGM":
+		return MULTILINESTRINGM
+	case "MULTILINESTRINGZ":
+		return MULTILINESTRINGZ
+	case "MULTILINESTRINGZM":
+		return MULTILINESTRINGZM
 	default:
 		return eof
 	}

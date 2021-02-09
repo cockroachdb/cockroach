@@ -41,6 +41,10 @@ type geomPair struct {
 	ends       []int
 }
 
+func makeGeomPair(flatCoords []float64) geomPair {
+	return geomPair{flatCoords: flatCoords, ends: []int{len(flatCoords)}}
+}
+
 func appendGeomPairs(p1 geomPair, p2 geomPair) geomPair {
 	if len(p1.ends) > 0 {
 		p1LastEnd := p1.ends[len(p1.ends)-1]
@@ -48,7 +52,7 @@ func appendGeomPairs(p1 geomPair, p2 geomPair) geomPair {
 			p2.ends[i] += p1LastEnd
 		}
 	}
-	return geomPair{append(p1.flatCoords, p2.flatCoords...), append(p1.ends, p2.ends...)}
+	return geomPair{flatCoords: append(p1.flatCoords, p2.flatCoords...), ends: append(p1.ends, p2.ends...)}
 }
 
 %}
@@ -65,25 +69,35 @@ func appendGeomPairs(p1 geomPair, p2 geomPair) geomPair {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
+%token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> EMPTY
-//%token <str> MULTILINESTRING MULTIPOLYGON GEOMETRYCOLLECTION
+//%token <str> MULTIPOLYGON GEOMETRYCOLLECTION
 %token <coord> NUM
 
 %type <geom> geometry
-%type <geom> point linestring polygon multipoint
+%type <geom> point linestring polygon multipoint multilinestring
+
+// TODO(ayang) reorganize the list of %type statements
 %type <coordList> two_coords three_coords four_coords
 %type <coordList> two_coords_point_with_parens three_coords_point_with_parens four_coords_point_with_parens
 %type <coordList> two_coords_list three_coords_list four_coords_list
+%type <coordList> two_coords_list_with_parens three_coords_list_with_parens four_coords_list_with_parens
 %type <coordList> two_coords_line three_coords_line four_coords_line
 %type <pair> two_coords_ring three_coords_ring four_coords_ring
 %type <pair> two_coords_ring_list three_coords_ring_list four_coords_ring_list
 %type <coordList> two_coords_point three_coords_point four_coords_point
 %type <coordList> three_coords_point_list four_coords_point_list
-%type <pair> empty_point
+%type <pair> empty_point empty_line_pair
 %type <pair> two_coords_point_allowing_empty three_coords_point_allowing_empty four_coords_point_allowing_empty
 %type <pair> two_coords_point_list_allowing_empty_points
 %type <pair> three_coords_point_list_allowing_empty_points
 %type <pair> four_coords_point_list_allowing_empty_points
+%type <pair> two_coords_line_pair three_coords_line_pair four_coords_line_pair
+%type <pair> two_coords_line_allowing_empty three_coords_line_allowing_empty four_coords_line_allowing_empty
+%type <pair> three_coords_line_list four_coords_line_list
+%type <pair> two_coords_line_list_allowing_empty_lines
+%type <pair> three_coords_line_list_allowing_empty_lines
+%type <pair> four_coords_line_list_allowing_empty_lines
 
 %%
 
@@ -98,6 +112,7 @@ geometry:
 |	linestring
 |	polygon
 |	multipoint
+|	multilinestring
 
 point:
 	POINT two_coords_point_with_parens
@@ -144,44 +159,26 @@ point:
 linestring:
 	LINESTRING two_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 2) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XY, $2)
 	}
 |	LINESTRING three_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 3) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XYZ, $2)
 	}
 |	LINESTRING four_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 4) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XYZM, $2)
 	}
 |	LINESTRINGM three_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 3) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XYM, $2)
 	}
 |	LINESTRINGZ three_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 3) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XYZ, $2)
 	}
 |	LINESTRINGZM four_coords_line
 	{
-		if !isValidLineString(wktlex, $2, 4) {
-			return 1
-		}
 		$$ = geom.NewLineStringFlat(geom.XYZM, $2)
 	}
 |	LINESTRING EMPTY
@@ -285,6 +282,48 @@ multipoint:
 		$$ = geom.NewMultiPoint(geom.XYZM)
 	}
 
+multilinestring:
+	MULTILINESTRING '(' two_coords_line_list_allowing_empty_lines ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XY, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRING '(' three_coords_line_list ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XYZ, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRING '(' four_coords_line_list ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XYZM, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRINGM '(' three_coords_line_list_allowing_empty_lines ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XYM, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRINGZ '(' three_coords_line_list_allowing_empty_lines ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XYZ, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRINGZM '(' four_coords_line_list_allowing_empty_lines ')'
+	{
+		$$ = geom.NewMultiLineStringFlat(geom.XYZM, $3.flatCoords, $3.ends)
+	}
+|	MULTILINESTRING EMPTY
+	{
+		$$ = geom.NewMultiLineString(geom.XY)
+	}
+|	MULTILINESTRINGM EMPTY
+	{
+		$$ = geom.NewMultiLineString(geom.XYM)
+	}
+|	MULTILINESTRINGZ EMPTY
+	{
+		$$ = geom.NewMultiLineString(geom.XYZ)
+	}
+|	MULTILINESTRINGZM EMPTY
+	{
+		$$ = geom.NewMultiLineString(geom.XYZM)
+	}
+
 two_coords_ring_list:
 	two_coords_ring_list ',' two_coords_ring
 	{
@@ -307,48 +346,145 @@ four_coords_ring_list:
 |	four_coords_ring
 
 two_coords_ring:
-	two_coords_line
+	two_coords_list_with_parens
 	{
 		if !isValidPolygonRing(wktlex, $1, 2) {
 			return 1
 		}
-		$$ = geomPair{$1, []int{len($1)}}
+		$$ = makeGeomPair($1)
 	}
 
 three_coords_ring:
-	three_coords_line
+	three_coords_list_with_parens
 	{
 		if !isValidPolygonRing(wktlex, $1, 3) {
 			return 1
 		}
-		$$ = geomPair{$1, []int{len($1)}}
+		$$ = makeGeomPair($1)
 	}
 
 four_coords_ring:
-	four_coords_line
+	four_coords_list_with_parens
 	{
 		if !isValidPolygonRing(wktlex, $1, 4) {
 			return 1
 		}
-		$$ = geomPair{$1, []int{len($1)}}
+		$$ = makeGeomPair($1)
+	}
+
+// NB: A two_coords_line_list is not required since a 2D list inside a MULTILINESTRING is always allowed to have EMPTYs.
+
+three_coords_line_list:
+	three_coords_line_list ',' three_coords_line_pair
+	{
+		$$ = appendGeomPairs($1, $3)
+	}
+|	three_coords_line_pair
+
+four_coords_line_list:
+	four_coords_line_list ',' four_coords_line_pair
+	{
+		$$ = appendGeomPairs($1, $3)
+	}
+|	four_coords_line_pair
+
+two_coords_line_list_allowing_empty_lines:
+	two_coords_line_list_allowing_empty_lines ',' two_coords_line_allowing_empty
+	{
+		$$ = appendGeomPairs($1, $3)
+	}
+|	two_coords_line_allowing_empty
+
+three_coords_line_list_allowing_empty_lines:
+	three_coords_line_list_allowing_empty_lines ',' three_coords_line_allowing_empty
+	{
+		$$ = appendGeomPairs($1, $3)
+	}
+|	three_coords_line_allowing_empty
+
+four_coords_line_list_allowing_empty_lines:
+	four_coords_line_list_allowing_empty_lines ',' four_coords_line_allowing_empty
+	{
+		$$ = appendGeomPairs($1, $3)
+	}
+|	four_coords_line_allowing_empty
+
+two_coords_line_allowing_empty:
+	two_coords_line_pair
+|	empty_line_pair
+
+three_coords_line_allowing_empty:
+	three_coords_line_pair
+|	empty_line_pair
+
+four_coords_line_allowing_empty:
+	four_coords_line_pair
+|	empty_line_pair
+
+two_coords_line_pair:
+	two_coords_line
+	{
+		$$ = makeGeomPair($1)
+	}
+
+three_coords_line_pair:
+	three_coords_line
+	{
+		$$ = makeGeomPair($1)
+	}
+
+four_coords_line_pair:
+	four_coords_line
+	{
+		$$ = makeGeomPair($1)
 	}
 
 two_coords_line:
+	two_coords_list_with_parens
+	{
+		if !isValidLineString(wktlex, $1, 2) {
+			return 1
+		}
+	}
+
+three_coords_line:
+	three_coords_list_with_parens
+	{
+		if !isValidLineString(wktlex, $1, 3) {
+			return 1
+		}
+	}
+
+four_coords_line:
+	four_coords_list_with_parens
+	{
+		if !isValidLineString(wktlex, $1, 4) {
+			return 1
+		}
+	}
+
+two_coords_list_with_parens:
 	'(' two_coords_list ')'
 	{
 		$$ = $2
 	}
 
-three_coords_line:
+three_coords_list_with_parens:
 	'(' three_coords_list ')'
 	{
 		$$ = $2
 	}
 
-four_coords_line:
+four_coords_list_with_parens:
 	'(' four_coords_list ')'
 	{
 		$$ = $2
+	}
+
+empty_line_pair:
+	EMPTY
+	{
+		$$ = makeGeomPair(nil)
 	}
 
 two_coords_list:
@@ -412,21 +548,21 @@ four_coords_point_list_allowing_empty_points:
 two_coords_point_allowing_empty:
 	two_coords_point
 	{
-		$$ = geomPair{$1, []int{2}}
+		$$ = makeGeomPair($1)
 	}
 |	empty_point
 
 three_coords_point_allowing_empty:
 	three_coords_point
 	{
-		$$ = geomPair{$1, []int{3}}
+		$$ = makeGeomPair($1)
 	}
 |	empty_point
 
 four_coords_point_allowing_empty:
 	four_coords_point
 	{
-		$$ = geomPair{$1, []int{4}}
+		$$ = makeGeomPair($1)
 	}
 |	empty_point
 
@@ -445,7 +581,7 @@ four_coords_point:
 empty_point:
 	EMPTY
 	{
-		$$ = geomPair{nil, []int{0}}
+		$$ = makeGeomPair(nil)
 	}
 
 two_coords_point_with_parens:
