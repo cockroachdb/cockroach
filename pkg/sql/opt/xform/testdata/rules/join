@@ -6780,7 +6780,7 @@ inner-join (lookup abc@ab)
  └── filters (true)
 
 # No-op case because the right side of the InnerJoin has outer columns.
-opt expect-not=PushJoinIntoIndexJoin disable=(TryDecorrelateProject)
+opt expect-not=PushJoinIntoIndexJoin disable=(TryDecorrelateProject,HoistProjectFromInnerJoin)
 SELECT * 
 FROM stu
 INNER JOIN LATERAL (
@@ -7109,3 +7109,215 @@ union-all
       │    └── filters (true)
       └── projections
            └── 1 [as="?column?":6]
+
+# --------------------------------------------------
+# HoistProjectFromInnerJoin
+# --------------------------------------------------
+
+opt expect=HoistProjectFromInnerJoin
+SELECT * FROM small JOIN (SELECT a, a+b FROM abcd) ON a=m
+----
+project
+ ├── columns: m:1!null n:2 a:5!null "?column?":10
+ ├── immutable
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6
+ │    ├── key columns: [1] = [5]
+ │    ├── fd: (1)==(5), (5)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
+ └── projections
+      └── a:5 + b:6 [as="?column?":10, outer=(5,6), immutable]
+
+# The rule works the other way too, thanks to join commuting.
+opt expect=HoistProjectFromInnerJoin
+SELECT * FROM (SELECT a, a+b FROM abcd) JOIN small ON a=m
+----
+project
+ ├── columns: a:1!null "?column?":6 m:7!null n:8
+ ├── immutable
+ ├── fd: (1)==(7), (7)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: a:1!null b:2 m:7!null n:8
+ │    ├── key columns: [7] = [1]
+ │    ├── fd: (1)==(7), (7)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:7 n:8
+ │    └── filters (true)
+ └── projections
+      └── a:1 + b:2 [as="?column?":6, outer=(1,2), immutable]
+
+# The rule should not fire when the ON condition uses a projection.
+# TODO(radu): we could inline the projection.
+opt expect-not=HoistProjectFromInnerJoin
+SELECT * FROM small JOIN (SELECT a, a+b FROM abcd) AS rhs(a,x) ON a=m AND x=n
+----
+inner-join (hash)
+ ├── columns: m:1!null n:2!null a:5!null x:10!null
+ ├── immutable
+ ├── fd: (1)==(5), (5)==(1), (2)==(10), (10)==(2)
+ ├── project
+ │    ├── columns: "?column?":10 a:5
+ │    ├── immutable
+ │    ├── scan abcd@secondary
+ │    │    └── columns: a:5 b:6
+ │    └── projections
+ │         └── a:5 + b:6 [as="?column?":10, outer=(5,6), immutable]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      ├── a:5 = m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── "?column?":10 = n:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+
+# The rule should not fire when a projection is volatile.
+opt expect-not=HoistProjectFromInnerJoin
+SELECT * FROM small JOIN (SELECT a, a+b, random() FROM abcd) ON a=m
+----
+inner-join (merge)
+ ├── columns: m:1!null n:2 a:5!null "?column?":10 random:11
+ ├── left ordering: +5
+ ├── right ordering: +1
+ ├── volatile
+ ├── fd: (1)==(5), (5)==(1)
+ ├── project
+ │    ├── columns: "?column?":10 random:11 a:5
+ │    ├── volatile
+ │    ├── ordering: +5
+ │    ├── scan abcd@secondary
+ │    │    ├── columns: a:5 b:6
+ │    │    └── ordering: +5
+ │    └── projections
+ │         ├── a:5 + b:6 [as="?column?":10, outer=(5,6), immutable]
+ │         └── random() [as=random:11, volatile]
+ ├── sort
+ │    ├── columns: m:1 n:2
+ │    ├── ordering: +1
+ │    └── scan small
+ │         └── columns: m:1 n:2
+ └── filters (true)
+
+# --------------------------------------------------
+# HoistProjectFromLeftJoin
+# --------------------------------------------------
+
+# The rule should use p as the canary column.
+opt expect=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT p, p+q FROM pqr) ON p=m
+----
+project
+ ├── columns: m:1 n:2 p:5 "?column?":11
+ ├── immutable
+ ├── fd: (5)-->(11)
+ ├── left-join (lookup pqr)
+ │    ├── columns: m:1 n:2 p:5 q:6
+ │    ├── key columns: [1] = [5]
+ │    ├── lookup columns are key
+ │    ├── fd: (5)-->(6)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
+ └── projections
+      └── CASE p:5 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE p:5 + q:6 END [as="?column?":11, outer=(5,6), immutable]
+
+# The rule should use a as the canary column, because it is null-rejected by
+# the ON condition.
+opt expect=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT a, a+b FROM abcd) ON a=m
+----
+project
+ ├── columns: m:1 n:2 a:5 "?column?":10
+ ├── immutable
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1 n:2 a:5 b:6
+ │    ├── key columns: [1] = [5]
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
+ └── projections
+      └── CASE a:5 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a:5 + b:6 END [as="?column?":10, outer=(5,6), immutable]
+
+# The rule can use p as the canary column, because it is not-null in the right
+# input.
+opt expect=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT q, p+q FROM pqr) ON q=m
+----
+project
+ ├── columns: m:1 n:2 q:6 "?column?":11
+ ├── immutable
+ ├── left-join (lookup pqr@q)
+ │    ├── columns: m:1 n:2 p:5 q:6
+ │    ├── key columns: [1] = [6]
+ │    ├── fd: (5)-->(6)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
+ └── projections
+      └── CASE p:5 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE p:5 + q:6 END [as="?column?":11, outer=(5,6), immutable]
+
+# We cannot find a canary column, so the rule should not fire.
+# TODO(radu): we could try adding a column to the input scan, similar to EnsureKey.
+opt expect-not=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT a, a+b FROM abcd) ON a=m OR m=1
+----
+right-join (cross)
+ ├── columns: m:1 n:2 a:5 "?column?":10
+ ├── immutable
+ ├── project
+ │    ├── columns: "?column?":10 a:5
+ │    ├── immutable
+ │    ├── scan abcd@secondary
+ │    │    └── columns: a:5 b:6
+ │    └── projections
+ │         └── a:5 + b:6 [as="?column?":10, outer=(5,6), immutable]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── (a:5 = m:1) OR (m:1 = 1) [outer=(1,5), constraints=(/1: (/NULL - ])]
+
+# The rule should not fire when the ON condition uses a projection.
+# TODO(radu): we could inline the projection.
+opt expect-not=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT a, a+b FROM abcd) AS rhs(a,x) ON a=m AND x=n
+----
+right-join (hash)
+ ├── columns: m:1 n:2 a:5 x:10
+ ├── immutable
+ ├── project
+ │    ├── columns: "?column?":10 a:5
+ │    ├── immutable
+ │    ├── scan abcd@secondary
+ │    │    └── columns: a:5 b:6
+ │    └── projections
+ │         └── a:5 + b:6 [as="?column?":10, outer=(5,6), immutable]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      ├── a:5 = m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── "?column?":10 = n:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+
+# The rule should not fire when a projection is volatile.
+opt expect-not=HoistProjectFromLeftJoin
+SELECT * FROM small LEFT JOIN (SELECT p, p+q, random() FROM pqr) ON p=m
+----
+right-join (hash)
+ ├── columns: m:1 n:2 p:5 "?column?":11 random:12
+ ├── volatile
+ ├── fd: (5)-->(11,12)
+ ├── project
+ │    ├── columns: "?column?":11 random:12 p:5!null
+ │    ├── volatile
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(11,12)
+ │    ├── scan pqr@q
+ │    │    ├── columns: p:5!null q:6
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    └── projections
+ │         ├── p:5 + q:6 [as="?column?":11, outer=(5,6), immutable]
+ │         └── random() [as=random:12, volatile]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── p:5 = m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
