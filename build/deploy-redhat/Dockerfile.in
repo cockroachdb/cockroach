@@ -1,0 +1,8 @@
+FROM cockroachdb/cockroach:@build_name@
+
+LABEL name="Cockroach DB"
+LABEL vendor="Cockroach Labs"
+LABEL summary="CockroachDB is a Distributed SQL database."
+LABEL description="CockroachDB is a PostgreSQL wire-compatable Distributed SQL database."
+
+ENV COCKROACH_CHANNEL=official-openshift
