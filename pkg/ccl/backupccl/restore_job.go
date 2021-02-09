@@ -424,6 +424,13 @@ func WriteDescriptors(
 					"validate table %d", errors.Safe(table.GetID()))
 			}
 		}
+
+		for _, db := range databases {
+			if err := db.Validate(); err != nil {
+				return errors.Wrapf(err,
+					"validate database %d", errors.Safe(db.GetID()))
+			}
+		}
 		return nil
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")
@@ -1021,6 +1028,54 @@ func createImportingDescriptors(
 			p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
 				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 			) error {
+				// A couple of pieces of cleanup are required for multi-region databases.
+				// First, we need to find all of the MULTIREGION_ENUMs types and remap the
+				// IDs stored in the corresponding database descriptors to match the type's
+				// new ID. Secondly, we need to rebuild the zone configuration for each
+				// multi-region database. We don't perform the zone configuration rebuild on
+				// cluster restores, as they will have the zone configurations restored as
+				// as the system tables are restored.
+				mrEnumsFound := make(map[descpb.ID]descpb.ID)
+				for _, t := range typesByID {
+					typeDesc := t.TypeDesc()
+					if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+						// Check to see if we've found more than one multi-region enum on any
+						// given database.
+						if id, ok := mrEnumsFound[typeDesc.ParentID]; ok {
+							return errors.AssertionFailedf(
+								"unexpectedly found more than one MULTIREGION_ENUM (IDs = %d, %d) "+
+									"on database %d during restore", id, typeDesc.ID, typeDesc.ParentID)
+						}
+						mrEnumsFound[typeDesc.ParentID] = typeDesc.ID
+
+						if db, ok := dbsByID[typeDesc.GetParentID()]; ok {
+							desc := db.DatabaseDesc()
+							if desc.RegionConfig == nil {
+								return errors.AssertionFailedf(
+									"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)
+							}
+
+							// Update the RegionEnumID to record the new multi-region enum ID.
+							desc.RegionConfig.RegionEnumID = t.GetID()
+
+							// If we're not in a cluster restore, rebuild the database-level zone
+							// configuration.
+							if details.DescriptorCoverage != tree.AllDescriptors {
+								log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
+								if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
+									ctx,
+									desc.GetID(),
+									*desc.RegionConfig,
+									txn,
+									p.ExecCfg(),
+								); err != nil {
+									return err
+								}
+							}
+						}
+					}
+				}
+
 				// Write the new descriptors which are set in the OFFLINE state.
 				if err := WriteDescriptors(
 					ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
