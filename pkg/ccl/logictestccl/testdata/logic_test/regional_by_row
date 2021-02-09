@@ -403,9 +403,100 @@ vectorized: true
                 └── • values
                       size: 1 column, 3 rows
 
+query T
+EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: regional_by_row_table@primary
+│               │ lookup condition: (column2 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 5 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@primary
+│           │ equality: (lookup_join_const_col_@35, upsert_pk) = (crdb_region,pk)
+│           │ equality cols are key
+│           │ pred: column1 != crdb_region
+│           │
+│           └── • cross join
+│               │
+│               ├── • scan buffer
+│               │     label: buffer 1
+│               │
+│               └── • values
+│                     size: 1 column, 3 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_b_key
+│           │ equality: (lookup_join_const_col_@47, column5) = (crdb_region,b)
+│           │ equality cols are key
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • cross join
+│               │
+│               ├── • scan buffer
+│               │     label: buffer 1
+│               │
+│               └── • values
+│                     size: 1 column, 3 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@new_idx
+            │ equality: (lookup_join_const_col_@60, column4, column5) = (crdb_region,a,b)
+            │ equality cols are key
+            │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+            │
+            └── • cross join
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • values
+                      size: 1 column, 3 rows
+
+query TIIIIIIIIT colnames
+SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
+LEFT JOIN regional_by_row_table t ON v.pk = t.pk;
+----
+crdb_region   pk  pk2  a   b   pk    pk2   a     b     j
+us-east-1     23  24   25  26  23    23    24    25    NULL
+ca-central-1  30  30   31  32  NULL  NULL  NULL  NULL  NULL
+
 # One row already exists, one row is new.
 statement ok
-UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
+UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
 
 query TIIII colnames
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
