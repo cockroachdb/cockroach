@@ -32,12 +32,13 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.ReplicaTypeNonVoter()},
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100 /* storeID */, desc, liveness.IsLiveMap{
+		ctr, down, under, over := calcRangeCounter(1100, desc, liveness.IsLiveMap{
 			1000: liveness.IsLiveMapEntry{IsLive: true}, // by NodeID
-		}, 3, 3)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4)
 
 		require.True(t, ctr)
 		require.True(t, down)
@@ -48,11 +49,25 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	{
 		ctr, down, under, over := calcRangeCounter(1000, desc, liveness.IsLiveMap{
 			1000: liveness.IsLiveMapEntry{IsLive: false},
-		}, 3, 3)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4)
 
 		// Does not confuse a non-live entry for a live one. In other words,
 		// does not think that the liveness map has only entries for live nodes.
 		require.False(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.False(t, over)
+	}
+
+	{
+		ctr, down, under, over := calcRangeCounter(11, desc, liveness.IsLiveMap{
+			10:   liveness.IsLiveMapEntry{IsLive: true},
+			100:  liveness.IsLiveMapEntry{IsLive: true},
+			1000: liveness.IsLiveMapEntry{IsLive: true},
+			2000: liveness.IsLiveMapEntry{IsLive: true},
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4)
+
+		require.True(t, ctr)
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
