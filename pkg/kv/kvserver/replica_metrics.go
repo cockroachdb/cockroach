@@ -121,7 +121,7 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated =
-		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, clusterNodes)
+		calcRangeCounter(storeID, desc, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -139,10 +139,11 @@ func calcReplicaMetrics(
 	return m
 }
 
-// calcRangeCounter returns whether this replica is designated as the
-// replica in the range responsible for range-level metrics, whether
-// the range doesn't have a quorum of live replicas, and whether the
-// range is currently under-replicated.
+// calcRangeCounter returns whether this replica is designated as the replica in
+// the range responsible for range-level metrics, whether the range doesn't have
+// a quorum of live voting replicas, and whether the range is currently
+// under-replicated (with regards to either the number of voting replicas or the
+// number of non-voting replicas).
 //
 // Note: we compute an estimated range count across the cluster by counting the
 // first live replica in each descriptor. Note that the first live replica is
@@ -158,12 +159,11 @@ func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	livenessMap liveness.IsLiveMap,
-	numReplicas int32,
+	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
 	// It seems unlikely that a learner replica would be the first live one, but
-	// there's no particular reason to exclude them. Note that `All` returns the
-	// voters first.
+	// there's no particular reason to exclude them.
 	for _, rd := range desc.Replicas().Descriptors() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
@@ -176,11 +176,13 @@ func calcRangeCounter(
 		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		})
-		needed := GetNeededVoters(numReplicas, clusterNodes)
-		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)
-		if needed > liveVoterReplicas {
+		neededVoters := GetNeededVoters(numVoters, clusterNodes)
+		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
+		neededNonVoters := GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
+		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
+		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
 			underreplicated = true
-		} else if needed < liveVoterReplicas {
+		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
 			overreplicated = true
 		}
 	}
@@ -192,8 +194,18 @@ func calcRangeCounter(
 // method is used when indicating under-replication so only voter replicas are
 // considered.
 func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), livenessMap)
+}
+
+// calcLiveNonVoterReplicas returns a count of the live non-voter replicas; a live
+// replica is determined by checking its node in the provided liveness map.
+func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), livenessMap)
+}
+
+func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap liveness.IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas().VoterDescriptors() {
+	for _, rd := range repls {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}

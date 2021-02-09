@@ -367,6 +367,9 @@ func GetNeededNonVoters(numVoters, zoneConfigNonVoterCount, clusterNodes int) in
 		// replica.
 		need = clusterNodes - numVoters
 	}
+	if need < 0 {
+		need = 0 // Must be non-negative.
+	}
 	return need
 }
 
