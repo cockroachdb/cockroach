@@ -12,6 +12,8 @@ import {
 } from "./appStats";
 import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
+import { random } from "d3";
+import { exec } from "child_process";
 
 // record is implemented here so we can write the below test as a direct
 // analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
@@ -157,11 +159,14 @@ function randomStat(scale = 1): NumericStat {
   };
 }
 
-function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
+function randomStats(
+  sensitiveInfo?: ISensitiveInfo,
+): Required<StatementStatistics> {
   const count = randomInt(1000);
   // tslint:disable:variable-name
   const first_attempt_count = randomInt(count);
   const max_retries = randomInt(count - first_attempt_count);
+  const exec_stat_collection_count = randomInt(count);
   // tslint:enable:variable-name
 
   return {
@@ -174,7 +179,15 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
     run_lat: randomStat(),
     service_lat: randomStat(),
     overhead_lat: randomStat(),
+    bytes_read: randomStat(),
+    rows_read: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
+    legacy_last_err: "",
+    legacy_last_err_redacted: "",
+    bytes_sent_over_network: randomStat(),
+    max_mem_usage: randomStat(),
+    exec_stat_collection_count: Long.fromNumber(exec_stat_collection_count),
+    contention_time: randomStat(),
   };
 }
 
