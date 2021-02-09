@@ -54,10 +54,10 @@ const retryBars = [
 ];
 
 const rowsReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
-  stdDevLong(d.stats.rows_read, d.stats.exec_stat_collection_count),
+  stdDevLong(d.stats.rows_read, d.stats.count),
 );
 const bytesReadStdDev = bar(cx("rows-read-dev"), (d: StatementStatistics) =>
-  stdDevLong(d.stats.bytes_read, d.stats.exec_stat_collection_count),
+  stdDevLong(d.stats.bytes_read, d.stats.count),
 );
 const latencyStdDev = bar(
   cx("bar-chart__overall-dev"),
