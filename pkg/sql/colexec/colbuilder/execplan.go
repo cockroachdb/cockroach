@@ -13,7 +13,6 @@ package colbuilder
 import (
 	"context"
 	"fmt"
-	"math"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -363,12 +362,20 @@ func (r opResult) createDiskBackedSort(
 		sorterMemMonitorName,
 		func(input colexecbase.Operator) colexecbase.Operator {
 			monitorNamePrefix := fmt.Sprintf("%sexternal-sorter", memMonitorNamePrefix)
-			// We are using an unlimited memory monitor here because external
+			// We are using unlimited memory monitors here because external
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
-			unlimitedAllocator := colmem.NewAllocator(
+			sortUnlimitedAllocator := colmem.NewAllocator(
 				ctx, r.createBufferingUnlimitedMemAccount(
-					ctx, flowCtx, monitorNamePrefix,
+					ctx, flowCtx, monitorNamePrefix+"-sort",
+				), factory)
+			mergeUnlimitedAllocator := colmem.NewAllocator(
+				ctx, r.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, monitorNamePrefix+"-merge",
+				), factory)
+			outputUnlimitedAllocator := colmem.NewAllocator(
+				ctx, r.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, monitorNamePrefix+"-output",
 				), factory)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
 			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
@@ -381,8 +388,9 @@ func (r opResult) createDiskBackedSort(
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
 			es := colexec.NewExternalSorter(
-				ctx,
-				unlimitedAllocator,
+				sortUnlimitedAllocator,
+				mergeUnlimitedAllocator,
+				outputUnlimitedAllocator,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
