@@ -116,25 +116,6 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
-	// A Scan is required as tableScope.expr in order to correctly normalize the
-	// partial index predicate. We normalize the predicate by constructing a
-	// Select with tableScope.expr as the input and the predicate as filters.
-	// This allows normalization rules that only apply to Selects to fire,
-	// mimicking query filter normalization. If the input to the Select is not a
-	// Scan, additional normalization rules may fire that break assumptions
-	// below. For example, if tableScope.expr is a Project expression, the
-	// result of constructing and normalizing the Select expression may be a
-	// Project expression, making it difficult to access the normalized
-	// predicate filters.
-	// TODO(mgartner): Consider building a FakeRel specifically for this
-	// normalization instead of using tableScope.expr.
-	if _, ok := tableScope.expr.(*memo.ScanExpr); !ok {
-		panic(errors.AssertionFailedf(
-			"can only build partial index predicates with Scan scope expressions, not %T",
-			tableScope.expr,
-		))
-	}
-
 	texpr := resolvePartialIndexPredicate(tableScope, expr)
 
 	var scalar opt.ScalarExpr
@@ -179,29 +160,39 @@ func (b *Builder) buildPartialIndexPredicate(
 	}
 
 	// Wrap the expression in a FiltersExpr and normalize it by constructing a
-	// Select expression.
+	// Select expression with a FakeRel as input. The FakeRel has the same
+	// logical properties as the tableScope's expression to aid in
+	// normalization.
 	filters := memo.FiltersExpr{filter}
-	selExpr := b.factory.ConstructSelect(tableScope.expr, filters)
+	selExpr := b.factory.ConstructSelect(
+		b.factory.ConstructFakeRel(
+			&memo.FakeRelPrivate{Props: tableScope.expr.Relational()},
+		),
+		filters,
+	)
 
-	// If the normalized relational expression is a Select, return the filters.
-	if sel, ok := selExpr.(*memo.SelectExpr); ok {
-		return sel.Filters, nil
-	}
-
-	// Otherwise, the filters may be either true or false. Check the cardinality
-	// to determine which one.
-	if selExpr.Relational().Cardinality.IsZero() {
+	switch t := selExpr.(type) {
+	case *memo.SelectExpr:
+		// If the expression remains a Select, return the normalized filters.
+		return t.Filters, nil
+	case *memo.FakeRelExpr:
+		// If the expression has been normalized to a FakeRelExpr, then the
+		// filters were normalized to true and the Select was eliminated.
+		// So, return a true filter.
+		return memo.TrueFilter, nil
+	case *memo.ValuesExpr:
+		// If the expression has been normalized to a Values expression, then
+		// the filters were normalized to false and the Select and FakeRel were
+		// eliminated. So, return a false filter.
+		if !t.Relational().Cardinality.IsZero() {
+			panic(errors.AssertionFailedf("values expression should have a cardinality of zero"))
+		}
 		return memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}, nil
+	default:
+		// Otherwise, normalization resulted in an unexpected expression type.
+		// Panic rather than return an incorrect predicate.
+		panic(errors.AssertionFailedf("unexpected expression during partial index normalization: %T", t))
 	}
-
-	// TODO(mgartner): It is a bit dangerous to assume that if the normalized
-	// expression is not a Select and the cardinality is not zero, then the
-	// filter is equivalent to True. There should only be 3 types of relation
-	// normalized relational expressions: Scan, Values, and Select. Scan
-	// indicates the filters are always true and Values indicates the filters
-	// are always false. If the expression is a Select, use its filters. If the
-	// expression is none of the three, we should probably panic.
-	return memo.TrueFilter, nil
 }
 
 // resolvePartialIndexPredicate attempts to resolve the type of expr as a
