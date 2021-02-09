@@ -25,6 +25,8 @@ type lookupJoinNode struct {
 	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
 	joinType descpb.JoinType
 
+	// eqCols represents the part of the join condition used to perform
+	// the lookup into the index. It should only be set when lookupExpr is empty.
 	// eqCols identifies the columns from the input which are used for the
 	// lookup. These correspond to a prefix of the index columns (of the index we
 	// are looking up into).
@@ -33,12 +35,20 @@ type lookupJoinNode struct {
 	// eqColsAreKey is true when each lookup can return at most one row.
 	eqColsAreKey bool
 
+	// lookupExpr represents the part of the join condition used to perform
+	// the lookup into the index. It should only be set when eqCols is empty.
+	// lookupExpr is used instead of eqCols when the lookup condition is
+	// more complicated than a simple equality between input columns and index
+	// columns. In this case, lookupExpr specifies the expression that will be
+	// used to construct the spans for each lookup.
+	lookupExpr tree.TypedExpr
+
 	// columns are the produced columns, namely the input columns and (unless the
 	// join type is semi or anti join) the columns in the table scanNode.
 	columns colinfo.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
-	// equality condition on eqCols.
+	// equality condition on eqCols or the conditions in lookupExpr.
 	onCond tree.TypedExpr
 
 	isSecondJoinInPairedJoiner bool

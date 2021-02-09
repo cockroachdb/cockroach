@@ -176,8 +176,11 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
 	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
-	if jr.LookupColumns != nil {
+	if len(jr.LookupColumns) > 0 {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
+	}
+	if !jr.LookupExpr.Empty() {
+		details = append(details, fmt.Sprintf("Lookup join on: %s", jr.LookupExpr))
 	}
 	if !jr.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))

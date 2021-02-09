@@ -273,8 +273,42 @@ message JoinReaderSpec {
   // for each primary key. The index must provide all lookup columns.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  // Column indexes in the input stream specifying the columns which match with
-  // the index columns. These are the equality columns of the join.
+  // LookupExpr represents the part of the join condition used to perform the
+  // lookup into the index. It should only be set when LookupColumns is empty.
+  // LookupExpr is used instead of LookupColumns when the lookup condition is
+  // more complicated than a simple equality between input columns and index
+  // columns. In this case, LookupExpr specifies the expression that will be
+  // used to construct the spans for each lookup. Currently, the only
+  // expressions supported are conjunctions (AND expressions) of equality and
+  // IN expressions, specifically:
+  //  1. equalities between two variables (one from the input and one from the
+  //     index) representing the equi-join condition(s),
+  //  2. equalities between an index column and a constant, and
+  //  3. IN expressions between an index column and a tuple of constants.
+  //
+  // Variables in this expression are assigned in the same way as the ON
+  // condition below. Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression variables @1 to @N refer to
+  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
+  // in the right stream.
+  //
+  // For example, a valid LookupExpr for N=2 and M=2 might be:
+  //   @3 IN (10, 20) AND @2 = @4.
+  optional Expression lookup_expr = 16 [(gogoproto.nullable) = false];
+
+  // LookupColumns, like LookupExpr, represents the part of the join condition
+  // used to perform the lookup into the index. It is used as an optimization
+  // for the common case where the join conditions are all simple equalities
+  // between input and index columns (i.e., only the first of the supported
+  // expression types listed above for LookupExpr). LookupColumns should only
+  // be set when LookupExpr is empty.
+  //
+  // LookupColumns contains the column indexes in the input stream that match
+  // with the index columns. These are the equality columns of the join. For
+  // example, if there are 3 input columns and 2 index columns, LookupColumns
+  // {0, 2} is equivalent to the LookupExpr @1 = @4 AND @3 = @5.
+  //
+  // If LookupExpr is empty, LookupColumns can be interpreted as follows:
   //
   // If empty (index join), the start of the input stream schema is assumed to
   // match the index columns. The joinReader will perform an index join and the
@@ -284,17 +318,19 @@ message JoinReaderSpec {
   // and the "internal columns" will be the concatenation of the input stream
   // columns followed by the table columns (except for semi/anti join, which
   // don't output any table columns).
+  // TODO(rytaft): remove this field and use LookupExpr for all cases. This
+  // requires ensuring that cases currently using LookupColumns do not regress.
   repeated uint32 lookup_columns = 3 [packed = true];
 
   // If set, the lookup columns form a key in the target table and thus each
   // lookup has at most one result.
   optional bool lookup_columns_are_key = 8 [(gogoproto.nullable) = false];
 
-  // "ON" expression (in addition to the equality constraints captured by the
-  // orderings). Assuming that the left stream has N columns and the right
-  // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
-  // in the right stream.
+  // "ON" expression (in addition to the conditions in LookupExpr and/or
+  // equality constraints captured by the LookupColumns). Assuming that the left
+  // stream has N columns and the right stream has M columns, in this expression
+  // variables @1 to @N refer to columns of the left stream and variables @(N+1)
+  // to @(N+M) refer to columns in the right stream.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   // This used to be used for an extra index filter expression. It was removed
