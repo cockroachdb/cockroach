@@ -17,17 +17,6 @@ export const tableClasses = {
       },
     },
   },
-  RowsAffectedClasses: {
-    column: statementsTableCx("statements-table__col-rows"),
-    barChart: {
-      classes: {
-        root: statementsTableCx("statements-table__col-rows--bar-chart"),
-        label: statementsTableCx(
-          "statements-table__col-rows--bar-chart__label",
-        ),
-      },
-    },
-  },
 };
 
 export const statisticsClasses = {
