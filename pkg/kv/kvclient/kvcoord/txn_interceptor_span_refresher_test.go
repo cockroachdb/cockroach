@@ -120,7 +120,6 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	txn := makeTxnProto()
-	txn.UpdateObservedTimestamp(1, txn.WriteTimestamp.Add(20, 0).UnsafeToClockTimestamp())
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	cases := []struct {
@@ -159,24 +158,24 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 		},
 		{
 			pErr: func() *roachpb.Error {
-				pErr := roachpb.NewError(&roachpb.ReadWithinUncertaintyIntervalError{})
-				pErr.OriginNode = 1
-				return pErr
-			},
-			expRefresh:   true,
-			expRefreshTS: txn.WriteTimestamp.Add(20, 0).WithSynthetic(false), // see UpdateObservedTimestamp
-		},
-		{
-			pErr: func() *roachpb.Error {
-				pErr := roachpb.NewError(
+				return roachpb.NewError(
 					&roachpb.ReadWithinUncertaintyIntervalError{
 						ExistingTimestamp: txn.WriteTimestamp.Add(25, 0),
 					})
-				pErr.OriginNode = 1
-				return pErr
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(25, 1), // see ExistingTimestamp
+		},
+		{
+			pErr: func() *roachpb.Error {
+				return roachpb.NewError(
+					&roachpb.ReadWithinUncertaintyIntervalError{
+						ExistingTimestamp:     txn.WriteTimestamp.Add(25, 0),
+						LocalUncertaintyLimit: txn.WriteTimestamp.Add(30, 0),
+					})
+			},
+			expRefresh:   true,
+			expRefreshTS: txn.WriteTimestamp.Add(30, 0), // see LocalUncertaintyLimit
 		},
 		{
 			pErr: func() *roachpb.Error {
