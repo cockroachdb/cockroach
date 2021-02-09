@@ -34,8 +34,9 @@ import (
 const getServerVersion = `SELECT current_setting('server_version');`
 
 var (
-	postgresAddr = flag.String("addr", "localhost:5432", "Postgres server address")
-	postgresUser = flag.String("user", "postgres", "Postgres user")
+	postgresAddr    = flag.String("addr", "localhost:5432", "Postgres server address")
+	postgresUser    = flag.String("user", "postgres", "Postgres user")
+	postgresCatalog = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
 )
 
 func main() {
@@ -62,7 +63,7 @@ func main() {
 }
 
 func describePgCatalog(conn *pgx.Conn) *pgx.Rows {
-	rows, err := conn.Query(sql.GetPGCatalogSQL)
+	rows, err := conn.Query(sql.GetPGCatalogSQL, *postgresCatalog)
 	if err != nil {
 		panic(err)
 	}
