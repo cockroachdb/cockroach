@@ -303,14 +303,6 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.True(t, spilled)
 	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
 
-	// Currently, because of a bug in Bytes.ProportionalSize, the behavior is as
-	// follows:
-	// - all batches buffered in the in-memory sorter constitute the first
-	//   partition (often, not always)
-	// - each batch read from the input creates a new partition
-	// - two partitions are merged right away into a larger one (because of the
-	//   limit in the semaphore).
-	// TODO(yuzefovich): tighten the bounds here.
 	// In the ideal world, given the limit in the semaphore, we expect that each
 	// newly created partition contains about numInMemoryBufferedBatches number
 	// of batches with only the partition that is the result of the repeated
@@ -320,7 +312,11 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	externalSorter := sorter.(*diskSpillerBase).diskBackedOp.(*externalSorter)
 	numPartitionsCreated := externalSorter.firstPartitionIdx + externalSorter.numPartitions
 	expMinTotalPartitionsCreated := 2*numNewPartitions - 1
-	expMaxTotalPartitionsCreated := 23
+	// Because of some issues we might create more partitions than we would
+	// expect (depending on the batch size if numNewPartitions is 4, then we
+	// will create from 7 (large batch size) to 15 (batch size of 4)).
+	// The formula below might not apply if we change numNewPartitions.
+	expMaxTotalPartitionsCreated := 4*numNewPartitions - 1
 	require.GreaterOrEqualf(t, numPartitionsCreated, expMinTotalPartitionsCreated,
 		"didn't create enough partitions: actual %d, min expected %d",
 		numPartitionsCreated, expMinTotalPartitionsCreated,
@@ -352,8 +348,8 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	//   external sorter reports slightly above memoryLimit usage).
 	// TODO(yuzefovich): fix known deficiencies of the memory accounting and
 	// tighten the bounds.
-	expMin := memoryLimit * 2
-	expMax := memoryLimit * 5
+	expMin := memoryLimit * 3 / 2
+	expMax := memoryLimit * 4
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
