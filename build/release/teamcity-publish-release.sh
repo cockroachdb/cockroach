@@ -3,58 +3,11 @@
 set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
-
+source "$(dirname "${0}")/../shlib.sh"
 
 tc_start_block "Variable Setup"
 export BUILDER_HIDE_GOPATH_SRC=1
-
-# Matching the version name regex from within the cockroach code except
-# for the `metadata` part at the end because Docker tags don't support
-# `+` in the tag name.
-# https://github.com/cockroachdb/cockroach/blob/4c6864b44b9044874488cfedee3a31e6b23a6790/pkg/util/version/version.go#L75
-build_name="$(echo "${NAME}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$')"
-#                                         ^major           ^minor           ^patch         ^preRelease
-
-if [[ -z "$build_name" ]] ; then
-    echo "Invalid NAME \"${NAME}\". Must be of the format \"vMAJOR.MINOR.PATCH(-PRERELEASE)?\"."
-    exit 1
-fi
-
-release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
-
-if [[ -z "${DRY_RUN}" ]] ; then
-  bucket="${BUCKET:-binaries.cockroachdb.com}"
-  google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS"
-  if [[ -z "${PRE_RELEASE}" ]] ; then
-    dockerhub_repository="docker.io/cockroachdb/cockroach"
-  else
-    dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
-  fi
-  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
-  s3_download_hostname="${bucket}"
-  git_repo_for_tag="cockroachdb/cockroach"
-else
-  bucket="${BUCKET:-cockroach-builds-test}"
-  google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
-  dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
-  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
-  s3_download_hostname="${bucket}.s3.amazonaws.com"
-  git_repo_for_tag="cockroachlabs/release-staging"
-  if [[ -z "$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+\.[0-9]+$')" ]] ; then
-    # Using `.` to match how we usually format the pre-release portion of the
-    # version string using '.' separators.
-    # ex: v20.2.0-rc.2.dryrun
-    build_name="${build_name}.dryrun"
-  else
-    # Using `-` to put dryrun in the pre-release portion of the version string.
-    # ex: v20.2.0-dryrun
-    build_name="${build_name}-dryrun"
-  fi
-fi
-
-# Used for docker login for gcloud
-gcr_hostname="us.gcr.io"
-
+source "$(dirname "${0}")/release-support.sh"
 tc_end_block "Variable Setup"
 
 
@@ -87,11 +40,14 @@ docker_login
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
+cp -r licenses build/deploy/
 
-docker build --no-cache --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} --tag=${gcr_repository}:${build_name} build/deploy
+docker build --no-cache \
+  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
+  build/deploy
 
-docker push "${dockerhub_repository}:${build_name}"
-docker push "${gcr_repository}:${build_name}"
+retry docker push "${dockerhub_repository}:${build_name}"
+
 tc_end_block "Make and push docker images"
 
 
@@ -130,7 +86,7 @@ tc_end_block "Publish S3 binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ -z "$PRE_RELEASE" ]]; then
-  docker push "${dockerhub_repository}:latest-${release_branch}"
+  retry docker push "${dockerhub_repository}:latest-${release_branch}"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tag was _not_ pushed."
 fi
@@ -143,7 +99,7 @@ tc_start_block "Tag docker image as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" ]]; then
-  docker push "${dockerhub_repository}:latest"
+  retry docker push "${dockerhub_repository}:latest"
 else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
 fi

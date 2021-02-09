@@ -1,0 +1,11 @@
+FROM cockroachdb/cockroach:@build_name@
+
+LABEL name="Cockroach DB"
+LABEL vendor="Cockroach Labs"
+LABEL summary="CockroachDB is a Distributed SQL database."
+LABEL description="CockroachDB is a PostgreSQL wire-compatable Distributed SQL database."
+# TODO(rail): add k8s/redshift specific labels too
+# io.k8s.display-name, io.k8s.description and io.openshift.tags
+# Action-oriented labels, such as run or stop.
+
+ENV COCKROACH_CHANNEL=official-openshift
