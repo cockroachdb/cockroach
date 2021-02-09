@@ -1403,8 +1403,7 @@ func PrepareTransactionForRetry(
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:
-		txn.WriteTimestamp.Forward(
-			readWithinUncertaintyIntervalRetryTimestamp(ctx, &txn, tErr, pErr.OriginNode))
+		txn.WriteTimestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(tErr))
 	case *TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're just ahead of
 		// the pushee.
@@ -1465,34 +1464,45 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 		// to the key that generated the error.
 		timestamp.Forward(writeTooOldRetryTimestamp(err))
 	case *ReadWithinUncertaintyIntervalError:
-		timestamp.Forward(
-			readWithinUncertaintyIntervalRetryTimestamp(ctx, txn, err, pErr.OriginNode))
+		timestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(err))
 	default:
 		return false, nil
 	}
 	return PrepareTransactionForRefresh(txn, timestamp)
 }
 
-func readWithinUncertaintyIntervalRetryTimestamp(
-	ctx context.Context, txn *Transaction, err *ReadWithinUncertaintyIntervalError, origin NodeID,
-) hlc.Timestamp {
-	// If the reader encountered a newer write within the uncertainty
-	// interval, we advance the txn's timestamp just past the last observed
-	// timestamp from the node.
+func readWithinUncertaintyIntervalRetryTimestamp(err *ReadWithinUncertaintyIntervalError) hlc.Timestamp {
+	// If the reader encountered a newer write within the uncertainty interval,
+	// we advance the txn's timestamp just past the uncertain value's timestamp.
+	// This ensures that we read above the uncertain value on a retry.
+	ts := err.ExistingTimestamp.Next()
+	// In addition to advancing past the uncertainty value's timestamp, we also
+	// advance the txn's timestamp up to the local uncertainty limit on the node
+	// which hit the error. This ensures that no future read after the retry on
+	// this node (ignoring lease complications in ComputeLocalUncertaintyLimit)
+	// will throw an uncertainty error.
 	//
-	// TODO(nvanbenschoten): how is this supposed to work for follower reads?
-	// This is tracked in #57685. We can now use the LocalUncertaintyLimit in
-	// place of clockTS, which handles follower reads correctly.
-	clockTS, ok := txn.GetObservedTimestamp(origin)
-	if !ok {
-		log.Fatalf(ctx,
-			"missing observed timestamp for node %d found on uncertainty restart. "+
-				"err: %s. txn: %s. Observed timestamps: %v",
-			origin, err, txn, txn.ObservedTimestamps)
+	// However, we only do so if observed timestamps were able to reduce the
+	// local uncertainty limit below the global uncertainty limit, otherwise we
+	// could risk retrying with a timestamp above present time. Ideally, we
+	// would be able to detect this by checking whether local uncertainty limit
+	// had its Synthetic bit set, but since MakeTransaction doesn't yet mark the
+	// global uncertainty limit as synthetic (see TODO), we can't rely on this.
+	//
+	// TODO DURING REVIEW: this is a little subtle and indicates that maybe
+	// we're defining the local uncertainty limit incorrectly. Right now,
+	// ComputeLocalUncertaintyLimit will return a timestamp regardless of
+	// whether an observed timestamp exists for the leaseholder's node. This
+	// means that in such cases, the local uncertainty limit is equal to the
+	// global uncertainty limit. This, in turn, means that we can't rely on the
+	// local uncertainty limit being a "clock timestamp". An alternative would
+	// be to say that the local uncertainty limit is optional and only exists if
+	// a corresponding observed timestamp exists. We could then say that not all
+	// operations operate with a local uncertainty limit, but that local
+	// uncertainty limits, when available, are always clock timestamps.
+	if err.LocalUncertaintyLimit.Less(err.GlobalUncertaintyLimit) {
+		ts.Forward(err.LocalUncertaintyLimit)
 	}
-	// Also forward by the existing timestamp.
-	ts := clockTS.ToTimestamp()
-	ts.Forward(err.ExistingTimestamp.Next())
 	return ts
 }
 
