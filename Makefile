@@ -246,10 +246,6 @@ endif
 
 $(info GOPATH set to $(GOPATH))
 
-# We install our vendored tools to a directory within this repository to avoid
-# overwriting any user-installed binaries of the same name in the default GOBIN.
-GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install
-
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
 export PATH := $(abspath bin):$(PATH)
@@ -348,31 +344,6 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	rm -rf pkg/ui/node_modules/@types/node
 	touch $@
 
-# Update the git hooks and install commands from dependencies whenever they
-# change.
-bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
-	@$(GO_INSTALL) -v \
-		./vendor/github.com/client9/misspell/cmd/misspell \
-		./vendor/github.com/cockroachdb/crlfmt \
-		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
-		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
-		./vendor/github.com/cockroachdb/stress \
-		./vendor/github.com/golang/dep/cmd/dep \
-		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		./vendor/github.com/kevinburke/go-bindata/go-bindata \
-		./vendor/github.com/kisielk/errcheck \
-		./vendor/github.com/mattn/goveralls \
-		./vendor/github.com/mibk/dupl \
-		./vendor/github.com/mmatczuk/go_generics/cmd/go_generics \
-		./vendor/github.com/wadey/gocovmerge \
-		./vendor/golang.org/x/lint/golint \
-		./vendor/golang.org/x/perf/cmd/benchstat \
-		./vendor/golang.org/x/tools/cmd/goyacc \
-		./vendor/golang.org/x/tools/cmd/stringer \
-		./vendor/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
-		./vendor/honnef.co/go/tools/cmd/staticcheck
-	touch $@
-
 IGNORE_GOVERS :=
 
 # The following section handles building our C/C++ dependencies. These are
@@ -429,6 +400,10 @@ xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
 override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
 endif
+
+# We install our vendored tools to a directory within this repository to avoid
+# overwriting any user-installed binaries of the same name in the default GOBIN.
+GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(xgo) install
 
 C_DEPS_DIR := $(abspath c-deps)
 CRYPTOPP_SRC_DIR := $(C_DEPS_DIR)/cryptopp
@@ -1667,11 +1642,36 @@ bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER
 bin/workload bin/roachtest $(logictest-bins): $(EXECGEN_TARGETS)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 
+# Update the git hooks and install commands from dependencies whenever they
+# change.
+bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
+	@$(GO_INSTALL) -v \
+		./vendor/github.com/client9/misspell/cmd/misspell \
+		./vendor/github.com/cockroachdb/crlfmt \
+		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
+		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		./vendor/github.com/cockroachdb/stress \
+		./vendor/github.com/golang/dep/cmd/dep \
+		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		./vendor/github.com/kevinburke/go-bindata/go-bindata \
+		./vendor/github.com/kisielk/errcheck \
+		./vendor/github.com/mattn/goveralls \
+		./vendor/github.com/mibk/dupl \
+		./vendor/github.com/mmatczuk/go_generics/cmd/go_generics \
+		./vendor/github.com/wadey/gocovmerge \
+		./vendor/golang.org/x/lint/golint \
+		./vendor/golang.org/x/perf/cmd/benchstat \
+		./vendor/golang.org/x/tools/cmd/goyacc \
+		./vendor/golang.org/x/tools/cmd/stringer \
+		./vendor/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
+		./vendor/honnef.co/go/tools/cmd/staticcheck
+	touch $@
+
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
 	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
-	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
+	$(GO_INSTALL) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
