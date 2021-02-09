@@ -31,7 +31,7 @@ const GetPGCatalogSQL = `
 	JOIN pg_attribute a ON a.attrelid = c.oid
 	JOIN pg_type t ON t.oid = a.atttypid
 	JOIN pg_namespace n ON n.oid = c.relnamespace
-	WHERE n.nspname = 'pg_catalog'
+	WHERE n.nspname = $1
 	AND a.attnum > 0
 	ORDER BY 1, 2;
 `
