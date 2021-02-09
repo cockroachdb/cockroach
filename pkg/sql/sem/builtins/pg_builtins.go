@@ -1077,25 +1077,26 @@ SELECT description
 		},
 	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
-	// that is part of the databases on the search path.
+	// that is part of the schemas on the search path.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oid := args[0]
-				t, err := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "pg_table_is_visible",
-					ctx.Txn,
-					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
-						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true))", oid)
+				oid := tree.MustBeDOid(args[0])
+				isVisible, exists, err := ctx.Planner.IsTableVisible(
+					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, int64(oid.DInt),
+				)
 				if err != nil {
 					return nil, err
 				}
-				return tree.MakeDBool(tree.DBool(t != nil)), nil
+				if !exists {
+					return tree.DNull, nil
+				}
+				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
 			Volatility: tree.VolatilityStable,
 		},
 	),
