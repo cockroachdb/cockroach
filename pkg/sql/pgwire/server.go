@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -755,23 +756,21 @@ func parseClientProvidedSessionParameters(
 			}
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
 
-		default:
-			exists, configurable := sql.IsSessionVariableConfigurable(key)
-
-			switch {
-			case exists && configurable:
-				args.SessionDefaults[key] = value
-
-			case !exists:
-				if _, ok := sql.UnsupportedVars[key]; ok {
-					counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
-					telemetry.Inc(counter)
+		case "options":
+			opts, err := parseOptions(value)
+			if err != nil {
+				return sql.SessionArgs{}, err
+			}
+			for _, opt := range opts {
+				err = loadParameter(ctx, opt.key, opt.value, &args)
+				if err != nil {
+					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
-				log.Warningf(ctx, "unknown configuration parameter: %q", key)
-
-			case !configurable:
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.CantChangeRuntimeParam,
-					"parameter %q cannot be changed", key)
+			}
+		default:
+			err = loadParameter(ctx, key, value, &args)
+			if err != nil {
+				return sql.SessionArgs{}, err
 			}
 		}
 	}
@@ -788,6 +787,133 @@ func parseClientProvidedSessionParameters(
 	}
 
 	return args, nil
+}
+
+func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
+	exists, configurable := sql.IsSessionVariableConfigurable(key)
+
+	switch {
+	case exists && configurable:
+		args.SessionDefaults[key] = value
+
+	case !exists:
+		if _, ok := sql.UnsupportedVars[key]; ok {
+			counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
+			telemetry.Inc(counter)
+		}
+		log.Warningf(ctx, "unknown configuration parameter: %q", key)
+
+	case !configurable:
+		return pgerror.Newf(pgcode.CantChangeRuntimeParam,
+			"parameter %q cannot be changed", key)
+	}
+	return nil
+}
+
+// option represents an option argument passed in the connection URL.
+type option struct {
+	key   string
+	value string
+}
+
+// parseOptions parses the given string into the options. The options must be
+// separated by space and have one of the following patterns:
+// '-c key=value', '-ckey=value', '--key=value'
+func parseOptions(optionsString string) ([]option, error) {
+	var res []option
+	optionsRaw, err := url.QueryUnescape(optionsString)
+	if err != nil {
+		return nil, pgerror.Newf(pgcode.ProtocolViolation, "failed to unescape options %q", optionsString)
+	}
+
+	lastWasDashC := false
+	opts := splitOptions(optionsRaw)
+
+	for i := 0; i < len(opts); i++ {
+		prefix := ""
+		if len(opts[i]) > 1 {
+			prefix = opts[i][:2]
+		}
+
+		switch {
+		case opts[i] == "-c":
+			lastWasDashC = true
+			continue
+		case lastWasDashC:
+			lastWasDashC = false
+			// if the last option was '-c' parse current option with no regard to
+			// the prefix
+			prefix = ""
+		case prefix == "--" || prefix == "-c":
+			lastWasDashC = false
+		default:
+			return nil, pgerror.Newf(pgcode.ProtocolViolation,
+				"option %q is invalid, must have prefix '-c' or '--'", opts[i])
+		}
+
+		opt, err := splitOption(opts[i], prefix)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, opt)
+	}
+	return res, nil
+}
+
+// splitOptions slices the given string into substrings separated by space
+// unless the space is escaped using backslashes '\\'. It also skips multiple
+// subsequent spaces.
+func splitOptions(options string) []string {
+	var res []string
+	var sb strings.Builder
+	i := 0
+	for i < len(options) {
+		sb.Reset()
+		// skip leading space
+		for i < len(options) && options[i] == ' ' {
+			i++
+		}
+		if i == len(options) {
+			break
+		}
+
+		lastWasEscape := false
+
+		for i < len(options) {
+			if options[i] == ' ' && !lastWasEscape {
+				break
+			}
+			if !lastWasEscape && options[i] == '\\' {
+				lastWasEscape = true
+			} else {
+				lastWasEscape = false
+				sb.WriteByte(options[i])
+			}
+			i++
+		}
+
+		res = append(res, sb.String())
+	}
+
+	return res
+}
+
+// splitOption splits the given opt argument into substrings separated by '='.
+// It returns an error if the given option does not comply with the pattern
+// "key=value" and the number of elements in the result is not two.
+// splitOption removes the prefix from the key and replaces '-' with '_' so
+// "--option-name=value" becomes [option_name, value].
+func splitOption(opt, prefix string) (option, error) {
+	kv := strings.Split(opt, "=")
+
+	if len(kv) != 2 {
+		return option{}, pgerror.Newf(pgcode.ProtocolViolation,
+			"option %q is invalid, check '='", opt)
+	}
+
+	kv[0] = strings.TrimPrefix(kv[0], prefix)
+
+	return option{key: strings.ReplaceAll(kv[0], "-", "_"), value: kv[1]}, nil
 }
 
 // Note: Usage of an env var here makes it possible to unconditionally
