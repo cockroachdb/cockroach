@@ -106,6 +106,14 @@ func getKeywordToken(tokStr string) int {
 		return POLYGONZ
 	case "POLYGONZM":
 		return POLYGONZM
+	case "MULTIPOINT":
+		return MULTIPOINT
+	case "MULTIPOINTM":
+		return MULTIPOINTM
+	case "MULTIPOINTZ":
+		return MULTIPOINTZ
+	case "MULTIPOINTZM":
+		return MULTIPOINTZM
 	default:
 		return eof
 	}

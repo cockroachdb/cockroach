@@ -158,6 +158,66 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"POLYGON ZM EMPTY", "POLYGONZM EMPTY"},
 			expected:    geom.NewPolygon(geom.XYZM),
 		},
+		{
+			desc:        "parse 2D multipoint",
+			equivInputs: []string{"MULTIPOINT(0 0, 1 1, 2 2)", "MULTIPOINT((0 0), 1 1, (2 2))", "MULTIPOINT (0 0, 1 1, 2 2)"},
+			expected:    geom.NewMultiPointFlat(geom.XY, []float64{0, 0, 1, 1, 2, 2}),
+		},
+		{
+			desc:        "parse 2D+M multipoint",
+			equivInputs: []string{"MULTIPOINTM((-1 5 -16), .23 7 0)", "MULTIPOINT M (-1 5 -16, 0.23 7.0 0)"},
+			expected:    geom.NewMultiPointFlat(geom.XYM, []float64{-1, 5, -16, 0.23, 7, 0}),
+		},
+		{
+			desc:        "parse 3D multipoint",
+			equivInputs: []string{"MULTIPOINT(2 1 3)", "MULTIPOINTZ(2 1 3)", "MULTIPOINT Z ((2 1 3))"},
+			expected:    geom.NewMultiPointFlat(geom.XYZ, []float64{2, 1, 3}),
+		},
+		{
+			desc:        "parse 4D multipoint",
+			equivInputs: []string{"MULTIPOINT(2 -8 17 45, (0 0 0 0))", "MULTIPOINTZM((2 -8 17 45), (0 0 0 0))", "MULTIPOINT ZM (2 -8 17 45, 0 0 0 0)"},
+			expected:    geom.NewMultiPointFlat(geom.XYZM, []float64{2, -8, 17, 45, 0, 0, 0, 0}),
+		},
+		{
+			desc:        "parse 2D multipoint with EMPTY points",
+			equivInputs: []string{"MULTIPOINT(EMPTY, 2 3, EMPTY)", "MULTIPOINT (EMPTY, (2 3), EMPTY)"},
+			expected:    geom.NewMultiPointFlat(geom.XY, []float64{2, 3}, geom.NewMultiPointFlatOptionWithEnds([]int{0, 2, 2})),
+		},
+		{
+			desc:        "parse 2D+M multipoint with EMPTY points",
+			equivInputs: []string{"MULTIPOINTM(2 3 1, EMPTY)", "MULTIPOINT M ((2 3 1), EMPTY)"},
+			expected:    geom.NewMultiPointFlat(geom.XYM, []float64{2, 3, 1}, geom.NewMultiPointFlatOptionWithEnds([]int{3, 3})),
+		},
+		{
+			desc:        "parse 3D multipoint with EMPTY points",
+			equivInputs: []string{"MULTIPOINTZ (EMPTY, EMPTY)", "MULTIPOINT Z (EMPTY, EMPTY)"},
+			expected:    geom.NewMultiPointFlat(geom.XYZ, []float64(nil), geom.NewMultiPointFlatOptionWithEnds([]int{0, 0})),
+		},
+		{
+			desc:        "parse 4D multipoint with EMPTY points",
+			equivInputs: []string{"MULTIPOINTZM(EMPTY, 1 -1 1 -1)", "MULTIPOINT ZM (EMPTY, (1 -1 1 -1))"},
+			expected:    geom.NewMultiPointFlat(geom.XYZM, []float64{1, -1, 1, -1}, geom.NewMultiPointFlatOptionWithEnds([]int{0, 4})),
+		},
+		{
+			desc:        "parse empty 2D multipoint",
+			equivInputs: []string{"MULTIPOINT EMPTY"},
+			expected:    geom.NewMultiPoint(geom.XY),
+		},
+		{
+			desc:        "parse empty 2D+M multipoint",
+			equivInputs: []string{"MULTIPOINT M EMPTY", "MULTIPOINTM EMPTY"},
+			expected:    geom.NewMultiPoint(geom.XYM),
+		},
+		{
+			desc:        "parse empty 3D multipoint",
+			equivInputs: []string{"MULTIPOINT Z EMPTY", "MULTIPOINTZ EMPTY"},
+			expected:    geom.NewMultiPoint(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 4D multipoint",
+			equivInputs: []string{"MULTIPOINT ZM EMPTY", "MULTIPOINTZM EMPTY"},
+			expected:    geom.NewMultiPoint(geom.XYZM),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -232,7 +292,7 @@ LINESTRING(0 0)
 		{
 			desc:  "linestring with mixed dimensionality",
 			input: "LINESTRING(0 0, 1 1 1)",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' at pos 20
+			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 20
 LINESTRING(0 0, 1 1 1)
                     ^`,
 		},
@@ -270,6 +330,34 @@ POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)
 			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 40
 POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))
                                         ^`,
+		},
+		{
+			desc:  "2D multipoint without any points",
+			input: "MULTIPOINT()",
+			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or NUM or '(' at pos 11
+MULTIPOINT()
+           ^`,
+		},
+		{
+			desc:  "3D multipoint without comma separating points",
+			input: "MULTIPOINT Z (0 0 0 0 0 0)",
+			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 20
+MULTIPOINT Z (0 0 0 0 0 0)
+                    ^`,
+		},
+		{
+			desc:  "2D multipoint with EMPTY inside extraneous parentheses",
+			input: "MULTIPOINT((EMPTY))",
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM at pos 12
+MULTIPOINT((EMPTY))
+            ^`,
+		},
+		{
+			desc:  "3D multipoint using EMPTY as a point without using Z in type",
+			input: "MULTIPOINT(0 0 0, EMPTY)",
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM or '(' at pos 18
+MULTIPOINT(0 0 0, EMPTY)
+                  ^`,
 		},
 	}
 
