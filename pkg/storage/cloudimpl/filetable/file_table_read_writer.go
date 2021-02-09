@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -174,24 +176,34 @@ byte_offset INT,
 payload BYTES, 
 PRIMARY KEY(file_id, byte_offset))`
 
+// MaybeExpandQuotedTableName checks if the existing table prefix is quoted,
+// if it is it extends the quotes to include the tableSuffix. Otherwise, it just
+// returns a concatenation of the two strings.
+func MaybeExpandQuotedTableName(tablePrefix, tableSuffix string) string {
+	if strings.HasSuffix(tablePrefix, "\"") {
+		return fmt.Sprintf("%s%s\"", strings.TrimSuffix(tablePrefix, "\""), tableSuffix)
+	}
+	return tablePrefix + tableSuffix
+}
+
 // GetFQFileTableName returns the qualified File table name.
 func (f *FileToTableSystem) GetFQFileTableName() string {
-	return f.qualifiedTableName + fileTableNameSuffix
+	return MaybeExpandQuotedTableName(f.qualifiedTableName, fileTableNameSuffix)
 }
 
 // GetFQPayloadTableName returns the qualified Payload table name.
 func (f *FileToTableSystem) GetFQPayloadTableName() string {
-	return f.qualifiedTableName + payloadTableNameSuffix
+	return MaybeExpandQuotedTableName(f.qualifiedTableName, payloadTableNameSuffix)
 }
 
 // GetSimpleFileTableName returns the non-qualified File table name.
 func (f *FileToTableSystem) GetSimpleFileTableName(prefix string) (string, error) {
-	return prefix + fileTableNameSuffix, nil
+	return MaybeExpandQuotedTableName(prefix, fileTableNameSuffix), nil
 }
 
 // GetSimplePayloadTableName returns the non-qualified Payload table name.
 func (f *FileToTableSystem) GetSimplePayloadTableName(prefix string) (string, error) {
-	return prefix + payloadTableNameSuffix, nil
+	return MaybeExpandQuotedTableName(prefix, payloadTableNameSuffix), nil
 }
 
 // GetDatabaseAndSchema returns the database.schema of the current
@@ -726,7 +738,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	}
 
 	tableExistenceQuery := fmt.Sprintf(
-		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
+		`SELECT quote_ident(table_name) FROM [SHOW TABLES FROM %s] WHERE quote_ident(table_name)=$1 OR quote_ident(table_name)=$2`,
 		databaseSchema)
 	rows, err := ie.QueryEx(ctx, "tables-exist", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUser},
@@ -779,11 +791,12 @@ file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableNa
 func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
 ) error {
+	var quotedUsername bytes.Buffer
+	lex.EncodeRestrictedSQLIdent(&quotedUsername, f.username, lex.EncNoFlags)
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
-		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username)
+		f.GetFQFileTableName(), f.GetFQPayloadTableName(), quotedUsername.String())
 	_, err := ie.QueryEx(ctx, "grant-user-file-payload-table-access", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
-		grantQuery)
+		sessiondata.InternalExecutorOverride{User: security.RootUser}, grantQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to grant access privileges to file and payload tables")
 	}
@@ -813,11 +826,12 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 	}
 
 	for _, user := range users {
+		var quotedUsername bytes.Buffer
+		lex.EncodeRestrictedSQLIdent(&quotedUsername, user, lex.EncNoFlags)
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
-			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user)
+			f.GetFQFileTableName(), f.GetFQPayloadTableName(), quotedUsername.String())
 		_, err = ie.QueryEx(ctx, "revoke-user-privileges", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
-			revokeQuery)
+			sessiondata.InternalExecutorOverride{User: security.RootUser}, revokeQuery)
 		if err != nil {
 			return errors.Wrap(err, "failed to revoke privileges")
 		}

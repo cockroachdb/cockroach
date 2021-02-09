@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
@@ -31,10 +33,8 @@ import (
 
 const (
 	// DefaultUserfileScheme is the default scheme used in a userfile URI.
-	DefaultUserfileScheme = "userfile"
-	// DefaultQualifiedNamePrefix is the default FQN prefix used when referencing
-	// tables in userfile.
-	DefaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
+	DefaultUserfileScheme      = "userfile"
+	defaultUserfileTablePrefix = "userfiles_"
 )
 
 type fileTableStorage struct {
@@ -48,6 +48,14 @@ type fileTableStorage struct {
 }
 
 var _ cloud.ExternalStorage = &fileTableStorage{}
+
+// GetDefaultQualifiedTableName returns the default table name for userfile
+// tables, when the user has not specified a custom table prefix.
+func GetDefaultQualifiedTableName(user string) string {
+	fqn := tree.MakeTableNameWithSchema(catalogkeys.DefaultDatabaseName, tree.Name(tree.PublicSchema),
+		tree.Name(defaultUserfileTablePrefix+user))
+	return fqn.FQString()
+}
 
 func makeFileTableStorage(
 	ctx context.Context,
