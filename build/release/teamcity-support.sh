@@ -49,6 +49,10 @@ configure_docker_creds() {
 EOF
 }
 
+docker_login_with_redhat() {
+  echo "${REDHAT_REGISTRY_KEY}" | docker login --username unused --password-stdin $rhel_registry
+}
+
 configure_git_ssh_key() {
   # Write a private key file and populate known_hosts
   touch .cockroach-teamcity-key

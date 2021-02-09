@@ -10,8 +10,9 @@ RUN apt-get update && \
 	apt-get install -y libc6 ca-certificates tzdata && \
 	rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /cockroach
+RUN mkdir -p /cockroach /licenses
 COPY cockroach.sh cockroach /cockroach/
+COPY licenses/* /licenses/
 # Set working directory so that relative paths
 # are resolved appropriately when passed as args.
 WORKDIR /cockroach/
