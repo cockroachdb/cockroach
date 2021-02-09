@@ -3458,11 +3458,13 @@ SettingsResponse is the response to SettingsRequest.
 
 ## Health
 
-`GET /health`
+`GET /_admin/v1/health`
 
-Health returns liveness for the node target of the request.
+Health returns UI-level liveness for the node target of the request.
+This is the service endpoint specific to the web UI. For a general
+endpoint suitable for monitoring, etc., use /health.
 
-Support status: [public](#support-status)
+Support status: [reserved](#support-status)
 
 #### Request Parameters
 
@@ -3506,6 +3508,104 @@ HealthResponse is the response to HealthRequest. It currently does not
 contain any information.
 
 
+
+
+
+
+
+
+## PublicHealth
+
+`GET /health`
+
+PublicHealth returns UI-level liveness for the node target of the request.
+This endpoint does not require authentication.
+
+Support status: [public](#support-status)
+
+#### Request Parameters
+
+
+
+
+HealthRequest requests a liveness or readiness check.
+
+A liveness check is triggered via ready set to false. In this mode,
+an empty response is returned immediately, that is, the caller merely
+learns that the process is running.
+
+A readiness check (ready == true) is suitable for determining whether
+user traffic should be directed at a given node, for example by a load
+balancer. In this mode, a successful response is returned only if the
+node:
+
+- is not in the process of shutting down or booting up (including
+  waiting for cluster bootstrap);
+- is regarded as healthy by the cluster via the recent broadcast of
+  a liveness beacon. Absent either of these conditions, an error
+  code will result.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ready | [bool](#cockroach.server.serverpb.HealthRequest-bool) |  | ready specifies whether the client wants to know whether the target node is ready to receive traffic. If a node is unready, an error will be returned. | [public](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+HealthCheckResult holds a number of HealthAlerts.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| alerts | [HealthAlert](#cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthAlert) | repeated | The health alerts computed for this health report. | [public](#support-status) |
+| lines | [HealthLine](#cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthLine) | repeated | The current health-related metrics and indicators for this node. | [public](#support-status) |
+| collection_time | [int64](#cockroach.server.status.statuspb.HealthCheckResult-int64) |  | The time at which this health report was computed. A time too far in the past may indicate node malfunction, where the health checker itself is non-functional. | [public](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthAlert"></a>
+#### HealthAlert
+
+A HealthAlert is an undesired condition detected by a server which should be
+exposed to the operators.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| store_id | [int32](#cockroach.server.status.statuspb.HealthCheckResult-int32) |  | store_id is zero for alerts not specific to a store (i.e. apply at the node level). | [reserved](#support-status) |
+| category | [HealthCategory](#cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthCategory) |  |  | [reserved](#support-status) |
+| description | [string](#cockroach.server.status.statuspb.HealthCheckResult-string) |  |  | [reserved](#support-status) |
+| value | [double](#cockroach.server.status.statuspb.HealthCheckResult-double) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthLine"></a>
+#### HealthLine
+
+A HealthLine is an indicator about the health of one subsystem.
+Lines report what has been checked unconditionally.
+Lines that correspond to unwanted/undesired conditions are also
+translated into HealthAlerts.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| store_id | [int32](#cockroach.server.status.statuspb.HealthCheckResult-int32) |  | store_id is zero for alerts not specific to a store (i.e. apply at the node level). | [reserved](#support-status) |
+| category | [HealthCategory](#cockroach.server.status.statuspb.HealthCheckResult-cockroach.server.status.statuspb.HealthCategory) |  |  | [reserved](#support-status) |
+| description | [string](#cockroach.server.status.statuspb.HealthCheckResult-string) |  |  | [reserved](#support-status) |
+| value | [double](#cockroach.server.status.statuspb.HealthCheckResult-double) |  | value can be set to the values 0.0/1.0 to report boolean conditions. | [reserved](#support-status) |
 
 
 

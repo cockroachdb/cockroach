@@ -97,7 +97,7 @@ var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.ena
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
-	*HealthChecker
+	*MetricsHealthChecker
 	gossip       *gossip.Gossip
 	nodeLiveness *liveness.NodeLiveness
 	rpcContext   *rpc.Context
@@ -154,11 +154,11 @@ func NewMetricsRecorder(
 	settings *cluster.Settings,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
-		HealthChecker: NewHealthChecker(trackedMetrics),
-		nodeLiveness:  nodeLiveness,
-		rpcContext:    rpcContext,
-		gossip:        gossip,
-		settings:      settings,
+		MetricsHealthChecker: NewMetricsHealthChecker(trackedMetrics),
+		nodeLiveness:         nodeLiveness,
+		rpcContext:           rpcContext,
+		gossip:               gossip,
+		settings:             settings,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)

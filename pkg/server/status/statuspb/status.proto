@@ -95,6 +95,15 @@ message NodeStatus {
   int32 num_cpus = 12;
 }
 
+enum HealthCategory {
+  // METRICS pertains to the time series and metric counters.
+  METRICS = 0;
+  // NETWORK pertains to the external network connections.
+  NETWORK = 1;
+  // SERVICE pertains to the component / subsystems.
+  SERVICE = 2;
+}
+
 // A HealthAlert is an undesired condition detected by a server which should be
 // exposed to the operators.
 message HealthAlert {
@@ -106,16 +115,42 @@ message HealthAlert {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
     (gogoproto.customname) = "StoreID"
   ];
-  enum Category {
-    METRICS = 0;
-    NETWORK = 1;
-  }
-  Category category = 2;
+  HealthCategory category = 2;
   string description = 3;
   double value = 4;
 }
 
+// A HealthLine is an indicator about the health of one subsystem.
+// Lines report what has been checked unconditionally.
+// Lines that correspond to unwanted/undesired conditions are also
+// translated into HealthAlerts.
+message HealthLine {
+  // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
+  int32 store_id = 1 [
+    // NB: trying to make this nullable does not work with the custom type. You need a
+    // pointer type as the custom type, but that breaks protoc-gen-gogoroach.
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.customname) = "StoreID"
+  ];
+  HealthCategory category = 2;
+  string description = 3;
+  // value can be set to the values 0.0/1.0 to report boolean conditions.
+  double value = 4;
+}
+
 // HealthCheckResult holds a number of HealthAlerts.
-message HealthCheckResult{
+// API: PUBLIC
+message HealthCheckResult {
+  // The health alerts computed for this health report.
+  // API: PUBLIC
   repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
+  // The current health-related metrics and indicators for this node.
+  // API: PUBLIC
+  repeated HealthLine lines = 2 [(gogoproto.nullable) = false];
+  // The time at which this health report was computed. A time
+  // too far in the past may indicate node malfunction, where
+  // the health checker itself is non-functional.
+  // API: PUBLIC
+  int64 collection_time = 3;
 }

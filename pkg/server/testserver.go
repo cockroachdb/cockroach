@@ -772,7 +772,8 @@ func StartTenant(
 
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
+		// TODO(knz): Connect the health checker for SQL-only pods.
+		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), nil)
 		mux.Handle("/", debugServer)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 			// Return Bad Request if called with arguments.
@@ -932,7 +933,7 @@ func (ts *TestServer) DrainClients(ctx context.Context) error {
 
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
-	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
+	return ts.node.writeNodeStatus(context.TODO(), true /* forceNow */, false /* mustExist */)
 }
 
 // AdminURL implements TestServerInterface.

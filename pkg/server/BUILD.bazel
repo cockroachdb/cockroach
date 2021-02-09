@@ -15,6 +15,7 @@ go_library(
         "doc.go",
         "drain.go",
         "grpc_server.go",
+        "health_check.go",
         "init.go",
         "loopback.go",
         "migration.go",

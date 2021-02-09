@@ -5,7 +5,7 @@ go_library(
     srcs = [
         "disk_counters.go",
         "disk_counters_darwin.go",
-        "health_check.go",
+        "metrics_health_check.go",
         "recorder.go",
         "runtime.go",
         "runtime_jemalloc.go",
@@ -117,9 +117,9 @@ go_library(
 go_test(
     name = "status_test",
     srcs = [
-        "health_check_test.go",
         "jemalloc_test.go",
         "main_test.go",
+        "metrics_health_check_test.go",
         "recorder_test.go",
         "runtime_test.go",
     ],
