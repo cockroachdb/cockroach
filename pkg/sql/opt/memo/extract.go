@@ -211,6 +211,27 @@ func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) 
 	return on
 }
 
+// ExtractJoinEqualityFilter returns the filter containing the given pair of
+// columns (one from the left side, one from the right side) which are
+// constrained to be equal in a join (and have equivalent types).
+func ExtractJoinEqualityFilter(
+	leftCol, rightCol opt.ColumnID, leftCols, rightCols opt.ColSet, on FiltersExpr,
+) FiltersItem {
+	for i := range on {
+		condition := on[i].Condition
+		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
+		if !ok {
+			continue
+		}
+		if left == leftCol && right == rightCol {
+			return on[i]
+		}
+	}
+	panic(errors.AssertionFailedf("could not find equality between columns %d and %d in filters %s",
+		leftCol, rightCol, on.String(),
+	))
+}
+
 func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
 	if eq, ok := condition.(*EqExpr); ok {
 		if leftVar, ok := eq.Left.(*VariableExpr); ok {

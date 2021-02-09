@@ -805,8 +805,6 @@ vectorized: true
                               label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
-# TODO(rytaft): This plan is suboptimal because it's not safe to construct
-# a left lookup join in this case (see #59649).
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT DO NOTHING
@@ -837,41 +835,31 @@ vectorized: true
 │           │ render column3: column3
 │           │ render column4: column4
 │           │
-│           └── • hash join (right anti)
+│           └── • lookup join (anti)
 │               │ columns: (column1, column2, column3, column4)
 │               │ estimated row count: 0 (missing stats)
-│               │ equality: (i) = (column3)
-│               │
-│               ├── • scan
-│               │     columns: (i)
-│               │     estimated row count: 1,000 (missing stats)
-│               │     table: uniq_enum@primary
-│               │     spans: FULL SCAN
+│               │ table: uniq_enum@uniq_enum_r_s_j_key
+│               │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (column1, column2, column3, column4)
 │                   │ estimated row count: 0 (missing stats)
 │                   │ table: uniq_enum@primary
-│                   │ equality: (column1, column3) = (r,i)
-│                   │ equality cols are key
+│                   │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │                   │
 │                   └── • lookup join (anti)
 │                       │ columns: (column1, column2, column3, column4)
 │                       │ estimated row count: 0 (missing stats)
-│                       │ table: uniq_enum@uniq_enum_r_s_j_key
-│                       │ equality: (column1, column2, column4) = (r,s,j)
+│                       │ table: uniq_enum@primary
+│                       │ equality: (column1, column3) = (r,i)
 │                       │ equality cols are key
 │                       │
-│                       └── • hash join (right anti)
+│                       └── • lookup join (anti)
 │                           │ columns: (column1, column2, column3, column4)
 │                           │ estimated row count: 0 (missing stats)
-│                           │ equality: (s, j) = (column2, column4)
-│                           │
-│                           ├── • scan
-│                           │     columns: (s, j)
-│                           │     estimated row count: 1,000 (missing stats)
-│                           │     table: uniq_enum@primary
-│                           │     spans: FULL SCAN
+│                           │ table: uniq_enum@uniq_enum_r_s_j_key
+│                           │ equality: (column1, column2, column4) = (r,s,j)
+│                           │ equality cols are key
 │                           │
 │                           └── • values
 │                                 columns: (column1, column2, column3, column4)
@@ -2295,8 +2283,6 @@ vectorized: true
                               label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
-# TODO(rytaft): This plan is suboptimal because it's not safe to construct
-# a left lookup join in this case (see #59649).
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT (s, j) DO UPDATE SET i = 3
@@ -2353,16 +2339,11 @@ vectorized: true
 │                   │ render i: i
 │                   │ render j: j
 │                   │
-│                   └── • hash join (right outer)
-│                       │ columns: (r, s, i, j, column1, column2, column3, column4)
+│                   └── • lookup join (left outer)
+│                       │ columns: (column1, column2, column3, column4, r, s, i, j)
 │                       │ estimated row count: 2 (missing stats)
-│                       │ equality: (s, j) = (column2, column4)
-│                       │
-│                       ├── • scan
-│                       │     columns: (r, s, i, j)
-│                       │     estimated row count: 1,000 (missing stats)
-│                       │     table: uniq_enum@primary
-│                       │     spans: FULL SCAN
+│                       │ table: uniq_enum@uniq_enum_r_s_j_key
+│                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)

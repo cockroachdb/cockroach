@@ -434,6 +434,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
+		if err := checkExpr(n.lookupExpr); err != nil {
+			return cannotDistribute, err
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -2048,9 +2051,24 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	numInputNodeCols, planToStreamColMap, post, types :=
 		mappingHelperForLookupJoins(plan, n.input, n.table, false /* addContinuationCol */)
 
+	// Set the lookup condition.
+	var indexVarMap []int
+	if n.lookupExpr != nil {
+		indexVarMap = makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
+		var err error
+		joinReaderSpec.LookupExpr, err = physicalplan.MakeExpression(
+			n.lookupExpr, planCtx, indexVarMap,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Set the ON condition.
 	if n.onCond != nil {
-		indexVarMap := makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
+		if indexVarMap == nil {
+			indexVarMap = makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
+		}
 		var err error
 		joinReaderSpec.OnExpr, err = physicalplan.MakeExpression(
 			n.onCond, planCtx, indexVarMap,

@@ -1798,3 +1798,95 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: tab4@tab4_col3_col4_key
                       spans: /NULL-
+
+###########################################################
+#  LOOKUP JOINS WITH LOOKUP EXPRESSIONS                   #
+#  https://github.com/cockroachdb/cockroach/issues/59615  #
+###########################################################
+
+# Regression test for #59615. Ensure that invalid lookup joins are not created
+# for left and anti joins.
+statement ok
+CREATE TABLE t59615 (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y INT NOT NULL,
+  z INT,
+  PRIMARY KEY (x, y)
+)
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
+----
+distribution: full
+vectorized: true
+·
+• lookup join (left outer)
+│ table: t59615@primary
+│ lookup condition: (column1 = y) AND (x IN (1, 3))
+│
+└── • values
+      size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9r3DAQxe_9FMOcpCKSlTcprSCgbeOAg2unaycUig_GHlI3G8nVH-iy7HcvtgttCinNTTNPb55-owP67ztUmH6-yTdZAewyq-rqU86hSvP0Qw2v4WpbfgR2t8lv0wqY5AJYwjlsKojA9hzy9KqG6zIrIJy_eyPPJyVAWUA82cMFhJM9CjS2p6J9JI_qC0psBI7OduS9dVPrMF_I-h-oVgIHM8YwtRuBnXWE6oBhCDtChXftLpI_XaHAnkI77OaJZ_AeWALd12gePMfmKNDG8HuKD-09oVodxf8nXdvBbKntyZ3Kp2n1fiS1cJe3dbqd6VHgwq9HNzy2bqLOrX2II3yzgwFrFDAt4QL0msOmuASmE5hWLpVSWVG_FbD-deIcBZYxKNBS6ETotdBnz1LJl1BtyY_WeHpC9Py-GoHU39PyR95G19GNs90cs5Tl7JsbPfmwqHIpMrNI0wP_NMt_mpO_zM3x1c8AAAD__1P0zvM=
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615 t WHERE u.y = t.y
+)
+----
+distribution: full
+vectorized: true
+·
+• lookup join (anti)
+│ table: t59615@primary
+│ lookup condition: (column1 = y) AND (x IN (1, 3))
+│
+└── • values
+      size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd9r1EAQx9_9K4Z52pWlvb1a0YVCok0xJSb1EmtB8hCSocZed-P-AMNx_7skKegJJ_Zt58dnZr_f2aH7sUWFyd1NFqc5sMu0rMpPGYcyyZL3FbyEq03xEdhtnH1OSmCSC2BrziEuIQAbOXz5kGwSyIsKkrsJBnaI-vO3r-X51O-fesPJCBfgT0aOArXpKG8eyaH6ihJrgYM1LTln7JTazQ1p9xPVSmCvh-CndC2wNZZQ7dD3fkuo8LbZBnKnKxTYkW_67TzxFbwDtob2W9APjmO9F2iC_z3F-eaeUK324v83XZteb6jpyJ7Kw23VOJCCLLmqIM6rFK6LNEeBiwXRYPvHxo4oMDPmIQzw3fQajFbAIgkXEJ1xiPNLYNEapltIpVSaV28EnD29-ORYEbyCSB7VIp-jZUNuMNrRgY7jLtUCqbun5TLOBNvSjTXtvGYJi5mbEx05v1TlEqR6KU0f_BOW_4TXf8H1_sWvAAAA__87BtNx
+
+statement ok
+CREATE TABLE lookup_expr (
+  r STRING NOT NULL CHECK (r IN ('east', 'west')),
+  v INT NOT NULL,
+  w INT,
+  x INT,
+  y INT NOT NULL CHECK (y IN (10, 20)),
+  z INT NOT NULL CHECK (z = 5),
+  PRIMARY KEY (r, v),
+  INDEX (r, x, y, z, w)
+)
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
+ON u.w = t.w AND u.x = t.x
+----
+distribution: full
+vectorized: true
+·
+• lookup join (left outer)
+│ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
+│ lookup condition: ((((column2 = x) AND (column1 = w)) AND (r IN ('east', 'west'))) AND (y IN (10, 20))) AND (z = 5)
+│
+└── • values
+      size: 2 columns, 3 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFr2zAQ_b5fcdyXyONoo2RpgyCgbHWHi2d3sVMGIxgTi85rZnmWjN2F_Pdhu13TQcf67d679-7EO-3R_NyhQPfLtb_0AmAXXhRHn30HItd3P8TwFi5X4SdgN0t_7UbAOAEfOwRsQjDpiylBsPZ9x4FlBDWwhqB1wHcvY7gKvQB2Wt_VZaLasuoUFsIAWH3SwALsSePAMrjocNvj1kHCQmcqSH8og-IrctwQlpXeKmN01VH7XuBlLYoxYV6Ute3oDeFWVwrFHm1udwoF3qS7WpnTMRJmyqb5bpjI4T2wKWy_1cWdcXBzINS1fRpjbHqrUIwP9P-rrnRerFSaqeqUP18X35dKDHmE69hd9akg4VEu8qhOqqRN7pNfSZPkWYuEft-D7zovQBcCGGNMTmAB8uwhPMk7NHMe4RS6S45UauxICBHFKy_4SDBq1DHh_NGf93o-FkJ4QTzvDvtQPmnmsIDZI4uEYW0FSE5yQnJK8h3JGckzkuck5y8myl-T6EqZUhdGPUvz5VttCFV2q4YPYnRdbdV1pbf9mgGGva8nMmXs0OUD8Iqh1T3w2Mz_aZ78Zd4c3vwOAAD___N7_WA=
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
+  SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
+)
+----
+distribution: full
+vectorized: true
+·
+• lookup join (anti)
+│ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
+│ lookup condition: ((((column2 = x) AND (column1 = w)) AND (r IN ('east', 'west'))) AND (y IN (10, 20))) AND (z = 5)
+│
+└── • values
+      size: 2 columns, 3 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlFr20wQfP9-xbIvvvs4Ep9N2nBgkNsorYIqp5aSBooRQlpSNapO1Z2QUuP_XiQ5jV1Iad92Zndmj9nbovleoEL37tpfegGwCy-Mwo8-h9D13bcR_A-X69UHYLdL_8YNgUkBcsoFsJmA2VDMBQQ3vs85LENogLUCOg6f3rtrF4JVBO5dbwns2LDQ-qGpYuqqutfZvYA1Jy0swJ60HJbBRY-7AXeco8BSZxQk38ig-owSNwKrWqdkjK57ajsMeFmHaiowL6vG9vRGYKprQrVFm9uCUOFtUjRkTqcoMCOb5MXoKOENsDmkX5rywXDc7ATqxj7bGJvcE6rpTvz9qiudl2tKMqpP5fG66LEiBb57GcEyiDy4WnkBCjyIxjmo4zru4sf4R9zGedahQH_owVedl6BLBYwx5sxgAc6rfXiO7NEZf4Jz6E88ocTYiVIqjNZe8E7ApKVDgv-afz3My6lSygui8_7i-_J55hwWcPbEosBVYxU4UjizF-OT_xLfmkylS0NH0b18mI1Ayu5p_A1GN3VK17VOhzUjXA26gcjI2LErR-CVY6t_4KFY_lE8-0282f33MwAA__9ovQAB

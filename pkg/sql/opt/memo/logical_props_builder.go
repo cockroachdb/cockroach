@@ -1838,6 +1838,15 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 			relational.OutputCols.Add(indexColID)
 		}
 
+		// Include columns from the join condition in the output columns.
+		lookupExprCols := join.LookupExpr.OuterCols()
+		for i, n := 0, index.KeyColumnCount(); i < n; i++ {
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
+			if lookupExprCols.Contains(indexColID) {
+				relational.OutputCols.Add(indexColID)
+			}
+		}
+
 		relational.NotNullCols = tableNotNullCols(md, join.Table)
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
@@ -1969,7 +1978,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		ensureLookupJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
-		h.filters = join.On
+		h.filters = append(join.On, join.LookupExpr...)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
