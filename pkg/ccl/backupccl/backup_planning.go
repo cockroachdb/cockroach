@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -807,7 +808,7 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+		targetDescs, completeDBs, err := backupbase.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 		}

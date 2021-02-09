@@ -21,7 +21,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/backupccl",
+        "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/utilccl",

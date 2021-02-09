@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -488,7 +489,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 	}
 
 	expectedSystemTables := make([]string, 0)
-	for systemTableName := range getSystemTablesToIncludeInClusterBackup() {
+	for systemTableName := range backupbase.GetSystemTablesToIncludeInClusterBackup() {
 		expectedSystemTables = append(expectedSystemTables, systemTableName)
 	}
 
