@@ -239,7 +239,7 @@ func newHashBasedPartitioner(
 			inputTypes[i], diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
 		)
 		partitionedInputs[i] = newPartitionerToOperator(
-			unlimitedAllocator, inputTypes[i], partitioners[i], 0, /* partitionIdx */
+			unlimitedAllocator, inputTypes[i], partitioners[i],
 		)
 	}
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
@@ -454,9 +454,11 @@ StateChanged:
 					batch := op.recursiveScratch.batches[i]
 					partitioner := op.partitioners[i]
 					for {
-						if err := partitioner.Dequeue(ctx, parentPartitionIdx, batch); err != nil {
-							colexecerror.InternalError(err)
-						}
+						op.unlimitedAllocator.PerformOperation(batch.ColVecs(), func() {
+							if err := partitioner.Dequeue(ctx, parentPartitionIdx, batch); err != nil {
+								colexecerror.InternalError(err)
+							}
+						})
 						if batch.Length() == 0 {
 							break
 						}
