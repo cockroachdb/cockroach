@@ -1394,3 +1394,38 @@ CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
 
 statement error invalid OWNED BY option
 ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
+
+
+# Test that passing a descriptor other than a sequence
+# returns an appropriate error.
+subtest invalid_ids
+
+statement ok
+CREATE TABLE t (i SERIAL PRIMARY KEY)
+
+let $t_id
+SELECT 't'::regclass::int
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT nextval($t_id::regclass)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT setval($t_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT currval($t_id::regclass)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+let $v_id
+SELECT 'v'::regclass::int
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT nextval($v_id::regclass)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT setval($v_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT currval($v_id::regclass)
