@@ -20,6 +20,7 @@ export BUILDER_HIDE_GOPATH_SRC=1
 # https://github.com/cockroachdb/cockroach/blob/4c6864b44b9044874488cfedee3a31e6b23a6790/pkg/util/version/version.go#L75
 build_name="$(echo "${NAME}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$')"
 #                                         ^major           ^minor           ^patch         ^preRelease
+version=$(echo ${build_name} | sed -e 's/^v//' | cut -d- -f 1)
 
 if [[ -z "$build_name" ]] ; then
     echo "Invalid NAME \"${NAME}\". Must be of the format \"vMAJOR.MINOR.PATCH(-PRERELEASE)?\"."
@@ -93,8 +94,14 @@ docker_login
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
+cp -r licenses build/deploy/
 
-docker build --no-cache --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} --tag=${gcr_repository}:${build_name} build/deploy
+docker build \
+  --label version=$version \
+  --no-cache \
+  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
+  --tag=${gcr_repository}:${build_name} \
+  build/deploy
 
 docker push "${dockerhub_repository}:${build_name}"
 docker push "${gcr_repository}:${build_name}"
