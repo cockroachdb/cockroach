@@ -216,6 +216,7 @@ define LookupJoin {
     Index cat.Index
     EqCols []exec.NodeColumnOrdinal
     EqColsAreKey bool
+    LookupExpr tree.TypedExpr
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
     IsSecondJoinInPairedJoiner bool

@@ -309,10 +309,20 @@ define LookupJoinPrivate {
     # cat.Index metadata.
     Index IndexOrdinal
 
+    # KeyCols represents the part of the join condition used to perform the
+    # lookup into the index. It should only be set when LookupExpr is empty.
     # KeyCols are the columns (produced by the input) used to create lookup keys.
-    # The key columns must be non-empty, and are listed in the same order as the
-    # index columns (or a prefix of them).
+    # The key columns are listed in the same order as the index columns (or a
+    # prefix of them).
     KeyCols ColList
+
+    # LookupExpr represents the part of the join condition used to perform
+    # the lookup into the index. It should only be set when KeyCols is empty.
+    # LookupExpr is used instead of KeyCols when the lookup condition is
+    # more complicated than a simple equality between input columns and index
+    # columns. In this case, LookupExpr specifies the filter conditions that
+    # will be used to construct the spans for each lookup.
+    LookupExpr FiltersExpr
 
     # Cols is the union between the set of input columns that are returned by
     # the lookup join and the set of lookup columns retrieved through lookup.

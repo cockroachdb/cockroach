@@ -71,6 +71,7 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 	return false
 }
 
+// generateSpans is part of the joinReaderSpanGenerator interface.
 func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb.Spans, error) {
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
@@ -103,10 +104,23 @@ func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb
 	return g.scratchSpans, nil
 }
 
+// getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
+func (g *defaultSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
+	return g.keyToInputRowIndices[string(key)]
+}
+
+// lookupColsCount is part of the joinReaderSpanGenerator interface.
+func (g *defaultSpanGenerator) lookupColsCount() int {
+	return len(g.lookupCols)
+}
+
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
 	getLookupRowsBatchSizeHint() int64
+	// getLookupKeyColsCount returns the number of key columns used to lookup into
+	// the index.
+	getLookupKeyColsCount() int
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
 	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
@@ -135,7 +149,7 @@ type joinReaderStrategy interface {
 // the input ordering. This is more performant than joinReaderOrderingStrategy.
 type joinReaderNoOrderingStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	isPartialJoin bool
 	inputRows     []rowenc.EncDatumRow
 
@@ -176,6 +190,10 @@ func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 2 << 20 /* 2 MiB */
 }
 
+func (s *joinReaderNoOrderingStrategy) getLookupKeyColsCount() int {
+	return s.lookupColsCount()
+}
+
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -187,7 +205,7 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	_ context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
+	matchingInputRowIndices := s.getMatchingRowIndices(key)
 	if s.isPartialJoin {
 		// In the case of partial joins, only process input rows that have not been
 		// matched yet. Make a copy of the matching input row indices to avoid
@@ -294,7 +312,7 @@ func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
 // join. It does not maintain the ordering.
 type joinReaderIndexJoinStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	inputRows []rowenc.EncDatumRow
 
 	emitState struct {
@@ -316,6 +334,10 @@ type joinReaderIndexJoinStrategy struct {
 // small to no marginal improvements.
 func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 4 << 20 /* 4 MB */
+}
+
+func (s *joinReaderIndexJoinStrategy) getLookupKeyColsCount() int {
+	return s.lookupColsCount()
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
@@ -360,7 +382,7 @@ var partialJoinSentinel = []int{-1}
 // ordering. This is more expensive than joinReaderNoOrderingStrategy.
 type joinReaderOrderingStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	isPartialJoin bool
 
 	inputRows []rowenc.EncDatumRow
@@ -404,6 +426,10 @@ func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 10 << 10 /* 10 KiB */
 }
 
+func (s *joinReaderOrderingStrategy) getLookupKeyColsCount() int {
+	return s.lookupColsCount()
+}
+
 func (s *joinReaderOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -427,7 +453,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
+	matchingInputRowIndices := s.getMatchingRowIndices(key)
 	if !s.isPartialJoin {
 		// Replace missing values with nulls to appease the row container.
 		for i := range row {
