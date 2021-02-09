@@ -9,6 +9,7 @@ import { aggregateNumericStats, FixLong } from "../util";
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type ExecStats = protos.cockroach.sql.IExecStats;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -124,12 +125,52 @@ const withFingerprint = function(
   };
 };
 
+function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
+  let execStatCountA = FixLong(a.count).toInt();
+  const execStatCountB = FixLong(b.count).toInt();
+  if (execStatCountA === 0 && execStatCountB === 0) {
+    // If both counts are zero, artificially set the one count to one to avoid
+    // division by zero when calculating the mean in addNumericStats.
+    execStatCountA = 1;
+  }
+  return {
+    count: a.count.add(b.count),
+    network_bytes:
+      a.network_bytes && b.network_bytes
+        ? aggregateNumericStats(
+            a.network_bytes,
+            b.network_bytes,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
+    max_mem_usage:
+      a.max_mem_usage && b.max_mem_usage
+        ? aggregateNumericStats(
+            a.max_mem_usage,
+            b.max_mem_usage,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
+    contention_time:
+      a.contention_time && b.contention_time
+        ? aggregateNumericStats(
+            a.contention_time,
+            b.contention_time,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
+  };
+}
+
 // addTransactionStats adds together two stat objects into one using their counts to compute a new
 // average for the numeric statistics. It's modeled after the similar `addStatementStats` function
 function addTransactionStats(
   a: TransactionStats,
   b: TransactionStats,
-): TransactionStats {
+): Required<TransactionStats> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
   return {
@@ -151,6 +192,14 @@ function addTransactionStats(
       countA,
       countB,
     ),
+    rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
+    bytes_read: aggregateNumericStats(
+      a.bytes_read,
+      b.bytes_read,
+      countA,
+      countB,
+    ),
+    exec_stats: addExecStats(a.exec_stats, b.exec_stats),
   };
 }
 
