@@ -57,9 +57,16 @@ export function coalesceSensitiveInfo(
 export function addStatementStats(
   a: StatementStatistics,
   b: StatementStatistics,
-) {
+): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
+  let execStatCountA = FixLong(a.exec_stat_collection_count).toInt();
+  const execStatCountB = FixLong(b.exec_stat_collection_count).toInt();
+  if (execStatCountA === 0 && execStatCountB === 0) {
+    // If both counts are zero, artificially set the one count to one to avoid
+    // division by zero when calculating the mean in addNumericStats.
+    execStatCountA = 1;
+  }
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -82,7 +89,46 @@ export function addStatementStats(
       countA,
       countB,
     ),
+    bytes_read: aggregateNumericStats(
+      a.bytes_read,
+      b.bytes_read,
+      countA,
+      countB,
+    ),
+    rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
+    legacy_last_err: "",
+    legacy_last_err_redacted: "",
+    bytes_sent_over_network:
+      a.bytes_sent_over_network && b.bytes_sent_over_network
+        ? aggregateNumericStats(
+            a.bytes_sent_over_network,
+            b.bytes_sent_over_network,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
+    max_mem_usage:
+      a.max_mem_usage && b.max_mem_usage
+        ? aggregateNumericStats(
+            a.max_mem_usage,
+            b.max_mem_usage,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
+    exec_stat_collection_count: a.exec_stat_collection_count.add(
+      b.exec_stat_collection_count,
+    ),
+    contention_time:
+      a.contention_time && b.contention_time
+        ? aggregateNumericStats(
+            a.contention_time,
+            b.contention_time,
+            execStatCountA,
+            execStatCountB,
+          )
+        : null,
   };
 }
 
