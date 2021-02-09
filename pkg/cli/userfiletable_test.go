@@ -23,7 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -170,8 +172,8 @@ func TestUserFileUpload(t *testing.T) {
 	}
 }
 
-func checkListedFiles(t *testing.T, c cliTest, uri string, expectedFiles []string) {
-	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "list", uri})
+func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expectedFiles []string) {
+	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "list", uri, args})
 	require.NoError(t, err)
 	cliOutput = strings.TrimSpace(cliOutput)
 
@@ -184,8 +186,8 @@ func checkListedFiles(t *testing.T, c cliTest, uri string, expectedFiles []strin
 	require.Equal(t, expectedFiles, listedFiles)
 }
 
-func checkDeletedFiles(t *testing.T, c cliTest, uri string, expectedFiles []string) {
-	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "delete", uri})
+func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles []string) {
+	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "delete", uri, args})
 	require.NoError(t, err)
 	cliOutput = strings.TrimSpace(cliOutput)
 
@@ -224,7 +226,7 @@ func TestUserFileList(t *testing.T) {
 
 	defaultUserfileURLSchemeAndHost := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + security.RootUser,
+		Host:   cloudimpl.GetDefaultQualifiedTableName(security.RootUser),
 	}
 
 	abs := func(in []string) []string {
@@ -311,7 +313,7 @@ func TestUserFileList(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				checkListedFiles(t, c, tc.URI, tc.resultList)
+				checkListedFiles(t, c, tc.URI, "", tc.resultList)
 			})
 		}
 	})
@@ -341,7 +343,7 @@ func TestUserFileDelete(t *testing.T) {
 
 	defaultUserfileURLSchemeAndHost := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + security.RootUser,
+		Host:   cloudimpl.GetDefaultQualifiedTableName(security.RootUser),
 	}
 
 	abs := func(in []string) []string {
@@ -452,13 +454,13 @@ func TestUserFileDelete(t *testing.T) {
 				}
 
 				// List files prior to deletion.
-				checkListedFiles(t, c, "", abs(tc.writeList))
+				checkListedFiles(t, c, "", "", abs(tc.writeList))
 
 				// Delete files.
-				checkDeletedFiles(t, c, tc.URI, tc.expectedDeleteList)
+				checkDeletedFiles(t, c, tc.URI, "", tc.expectedDeleteList)
 
 				// List files after deletion.
-				checkListedFiles(t, c, "", abs(tc.postDeleteList))
+				checkListedFiles(t, c, "", "", abs(tc.postDeleteList))
 
 				// Cleanup all files for next test run.
 				_, err = c.RunWithCaptureArgs([]string{"userfile", "delete", "*"})
@@ -467,4 +469,139 @@ func TestUserFileDelete(t *testing.T) {
 		}
 	})
 	require.NoError(t, os.RemoveAll(dir))
+}
+
+func TestUsernameUserfileInteraction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	c.omitArgs = true
+	defer c.cleanup()
+
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+
+	localFilePath := filepath.Join(dir, "test.csv")
+	fileContent := []byte("a")
+	err := ioutil.WriteFile(localFilePath, []byte("a"), 0666)
+	require.NoError(t, err)
+
+	rootURL, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(),
+		url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(rootURL.String())
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	createUser := func(username string) {
+		createUserQuery := fmt.Sprintf(`CREATE USER "%s" WITH PASSWORD 'a'`, username)
+		err = conn.Exec(createUserQuery, nil)
+		require.NoError(t, err)
+
+		privsUserQuery := fmt.Sprintf(`GRANT CREATE ON DATABASE defaultdb TO "%s"`, username)
+		err = conn.Exec(privsUserQuery, nil)
+		require.NoError(t, err)
+	}
+
+	defaultUser := "bar"
+	createUser(defaultUser)
+	t.Run("usernames", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			username string
+			// Set to true if the username is currently not supported by CRDB. In such
+			// cases we are only interested in ensuring that the table prefixes
+			// derived from the username are correctly quoted.
+			invalidUsername bool
+		}{
+			{
+				name:     "simple-username",
+				username: "foo",
+			},
+			{
+				name:     "digit-username",
+				username: "123foo",
+			},
+			{
+				name:     "special-char-username",
+				username: "foo-foo",
+			},
+			{
+				name:     "dot-in-username",
+				username: "this.username",
+			},
+			{
+				name:     "underscore-in-username",
+				username: "this_username",
+			},
+			{
+				name:     "reserved-keyword-username",
+				username: "index",
+			},
+			{
+				name:            "special-char-user-1",
+				username:        `this"username`,
+				invalidUsername: true,
+			},
+			{
+				name:            "special-char-user-2",
+				username:        "this\x54username",
+				invalidUsername: true,
+			},
+			{
+				name:            "special-char-user-3",
+				username:        "this\044username",
+				invalidUsername: true,
+			},
+			{
+				name:            "special-char-user-4",
+				username:        `this""username`,
+				invalidUsername: true,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				uri := constructUserfileDestinationURI("", tc.name, tc.username)
+				// In tests where the username is not supported by CRDB we use a valid
+				// username to actually run the userfile commands.
+				// Using the "invalid" username when deriving the userfile destination
+				// URI above verifies the correctness of the table names derived for
+				// identifiers that contain arbitrary characters.
+				if tc.invalidUsername {
+					userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),
+						url.UserPassword(defaultUser, "a"), false)
+					defer cleanup2()
+
+					_, err := c.RunWithCapture(fmt.Sprintf("userfile upload %s %s --url=%s",
+						localFilePath, uri, userURL.String()))
+					require.NoError(t, err)
+
+					checkUserFileContent(ctx, t, c.ExecutorConfig(), defaultUser, uri, fileContent)
+
+					checkListedFiles(t, c, uri, fmt.Sprintf("--url=%s", userURL.String()), []string{uri})
+
+					checkDeletedFiles(t, c, uri, fmt.Sprintf("--url=%s", userURL.String()),
+						[]string{uri})
+					return
+				}
+
+				createUser(tc.username)
+				userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),
+					url.UserPassword(tc.username, "a"), false)
+				defer cleanup2()
+
+				_, err := c.RunWithCapture(fmt.Sprintf("userfile upload %s %s --url=%s",
+					localFilePath, tc.name, userURL.String()))
+				require.NoError(t, err)
+
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), tc.username, uri, fileContent)
+
+				checkListedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()), []string{uri})
+
+				checkDeletedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()),
+					[]string{uri})
+			})
+		}
+	})
 }

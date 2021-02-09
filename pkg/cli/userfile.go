@@ -24,15 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 const (
-	defaultUserfileScheme      = "userfile"
-	defaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
-	tmpSuffix                  = ".tmp"
-	fileTableNameSuffix        = "_upload_files"
+	defaultUserfileScheme = "userfile"
+	tmpSuffix             = ".tmp"
+	fileTableNameSuffix   = "_upload_files"
 )
 
 var userFileUploadCmd = &cobra.Command{
@@ -160,7 +160,7 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 		sourceFilename := path.Base(source)
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
-			Host:   defaultQualifiedNamePrefix + user,
+			Host:   cloudimpl.GetDefaultQualifiedTableName(user),
 			Path:   sourceFilename,
 		}
 		return userFileURL.String()
@@ -177,7 +177,7 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	if userfileURI, err = url.ParseRequestURI(destination); err == nil {
 		if userfileURI.Scheme == defaultUserfileScheme {
 			if userfileURI.Host == "" {
-				userfileURI.Host = defaultQualifiedNamePrefix + user
+				userfileURI.Host = cloudimpl.GetDefaultQualifiedTableName(user)
 			}
 			return userfileURI.String()
 		}
@@ -187,7 +187,7 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	// userfile URI schema and host, and the destination as the path.
 	userFileURL := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + user,
+		Host:   cloudimpl.GetDefaultQualifiedTableName(user),
 		Path:   destination,
 	}
 	return userFileURL.String()
@@ -199,7 +199,7 @@ func constructUserfileListURI(glob, user string) string {
 	if glob == "" || glob == "*" {
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
-			Host:   defaultQualifiedNamePrefix + user,
+			Host:   cloudimpl.GetDefaultQualifiedTableName(user),
 			Path:   "",
 		}
 		return userFileURL.String()
@@ -218,7 +218,7 @@ func constructUserfileListURI(glob, user string) string {
 	// userfile URI schema and host, and the glob as the path.
 	userfileURL := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + user,
+		Host:   cloudimpl.GetDefaultQualifiedTableName(user),
 		Path:   glob,
 	}
 
@@ -326,7 +326,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 			return errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
 		}
 
-		resolvedHost := defaultQualifiedNamePrefix + connURL.User.Username()
+		resolvedHost := cloudimpl.GetDefaultQualifiedTableName(connURL.User.Username())
 		if userfileParsedURL.Host != "" {
 			resolvedHost = userfileParsedURL.Host
 		}
@@ -348,8 +348,12 @@ func renameUserFile(
 		return err
 	}
 
+	targetTable, err := filetable.MaybeExpandQuotedTableName(qualifiedTableName, fileTableNameSuffix)
+	if err != nil {
+		return err
+	}
 	stmt, err := conn.conn.Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
-		qualifiedTableName+fileTableNameSuffix))
+		targetTable))
 	if err != nil {
 		return err
 	}

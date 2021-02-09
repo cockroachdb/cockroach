@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -159,6 +160,8 @@ type FileToTableSystem struct {
 	qualifiedTableName string
 	executor           FileToTableSystemExecutor
 	username           string
+	fileTableName      string
+	payloadTableName   string
 }
 
 // FileTable which contains records for every uploaded file.
@@ -174,24 +177,38 @@ byte_offset INT,
 payload BYTES, 
 PRIMARY KEY(file_id, byte_offset))`
 
+// MaybeExpandQuotedTableName checks if the existing table prefix is quoted,
+// if it is it extends the quotes to include the tableSuffix. Otherwise, it just
+// returns a concatenation of the two strings.
+func MaybeExpandQuotedTableName(tablePrefix, tableSuffix string) (string, error) {
+	tableName, err := parser.ParseQualifiedTableName(tablePrefix)
+	if err != nil {
+		return "", err
+	}
+	strippedObjectName := strings.TrimPrefix(strings.TrimSuffix(tableName.ObjectName.String(),
+		"\""), "\"")
+	tableName.ObjectName = tree.Name(strippedObjectName + tableSuffix)
+	return tableName.String(), nil
+}
+
 // GetFQFileTableName returns the qualified File table name.
 func (f *FileToTableSystem) GetFQFileTableName() string {
-	return f.qualifiedTableName + fileTableNameSuffix
+	return f.fileTableName
 }
 
 // GetFQPayloadTableName returns the qualified Payload table name.
 func (f *FileToTableSystem) GetFQPayloadTableName() string {
-	return f.qualifiedTableName + payloadTableNameSuffix
+	return f.payloadTableName
 }
 
 // GetSimpleFileTableName returns the non-qualified File table name.
 func (f *FileToTableSystem) GetSimpleFileTableName(prefix string) (string, error) {
-	return prefix + fileTableNameSuffix, nil
+	return MaybeExpandQuotedTableName(prefix, fileTableNameSuffix)
 }
 
 // GetSimplePayloadTableName returns the non-qualified Payload table name.
 func (f *FileToTableSystem) GetSimplePayloadTableName(prefix string) (string, error) {
-	return prefix + payloadTableNameSuffix, nil
+	return MaybeExpandQuotedTableName(prefix, payloadTableNameSuffix)
 }
 
 // GetDatabaseAndSchema returns the database.schema of the current
@@ -247,6 +264,15 @@ func NewFileToTableSystem(
 
 	f := FileToTableSystem{
 		qualifiedTableName: qualifiedTableName, executor: executor, username: username,
+	}
+	f.fileTableName, err = MaybeExpandQuotedTableName(f.qualifiedTableName, fileTableNameSuffix)
+	if err != nil {
+		return nil, err
+	}
+
+	f.payloadTableName, err = MaybeExpandQuotedTableName(f.qualifiedTableName, payloadTableNameSuffix)
+	if err != nil {
+		return nil, err
 	}
 
 	// A SQLConnFileToTableExecutor should not perform any of the init steps as it
@@ -366,17 +392,15 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 	if err := e.db.Txn(ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := e.ie.QueryEx(ctx, "drop-payload-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropPayloadTableQuery)
+			_, err = e.ie.QueryEx(ctx, "drop-payload-table", txn,
+				sessiondata.InternalExecutorOverride{User: f.username}, dropPayloadTableQuery)
 			if err != nil {
 				return errors.Wrap(err, "failed to drop payload table")
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
 			_, err = e.ie.QueryEx(ctx, "drop-file-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropFileTableQuery)
+				sessiondata.InternalExecutorOverride{User: f.username}, dropFileTableQuery)
 			if err != nil {
 				return errors.Wrap(err, "failed to drop file table")
 			}
@@ -397,8 +421,7 @@ func (f *FileToTableSystem) getDeleteQuery() string {
 func (f *FileToTableSystem) getDeletePayloadQuery() string {
 	deletePayloadQueryPlaceholder := `DELETE FROM %s WHERE file_id IN (
 SELECT file_id FROM %s WHERE filename=$1)`
-	return fmt.Sprintf(deletePayloadQueryPlaceholder, f.GetFQPayloadTableName(),
-		f.GetFQFileTableName())
+	return fmt.Sprintf(deletePayloadQueryPlaceholder, f.GetFQPayloadTableName(), f.GetFQFileTableName())
 }
 
 // deleteFileWithoutTxn differs from DeleteFile in that it performs its delete
@@ -726,7 +749,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	}
 
 	tableExistenceQuery := fmt.Sprintf(
-		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
+		`SELECT quote_ident(table_name) FROM [SHOW TABLES FROM %s] WHERE quote_ident(table_name)=$1 OR quote_ident(table_name)=$2`,
 		databaseSchema)
 	rows, err := ie.QueryEx(ctx, "tables-exist", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUser},
@@ -780,10 +803,9 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
-		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username)
+		f.GetFQFileTableName(), f.GetFQPayloadTableName(), tree.NameString(f.username))
 	_, err := ie.QueryEx(ctx, "grant-user-file-payload-table-access", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
-		grantQuery)
+		sessiondata.InternalExecutorOverride{User: security.RootUser}, grantQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to grant access privileges to file and payload tables")
 	}
@@ -814,10 +836,9 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 
 	for _, user := range users {
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
-			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user)
+			f.GetFQFileTableName(), f.GetFQPayloadTableName(), tree.NameString(user))
 		_, err = ie.QueryEx(ctx, "revoke-user-privileges", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
-			revokeQuery)
+			sessiondata.InternalExecutorOverride{User: security.RootUser}, revokeQuery)
 		if err != nil {
 			return errors.Wrap(err, "failed to revoke privileges")
 		}
