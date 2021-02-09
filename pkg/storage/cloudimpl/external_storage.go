@@ -377,7 +377,7 @@ func AccessIsWithExplicitAuth(path string) (bool, string, error) {
 	switch uri.Scheme {
 	case "s3":
 		auth := uri.Query().Get(AuthParam)
-		hasExplicitAuth = auth == AuthParamSpecified
+		hasExplicitAuth = auth == AuthParamSpecified || auth == ""
 
 		// If a custom endpoint has been specified in the S3 URI then this is no
 		// longer an explicit AUTH.
