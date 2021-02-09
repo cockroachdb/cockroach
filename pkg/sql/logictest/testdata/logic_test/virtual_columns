@@ -425,7 +425,49 @@ a   b   c    v   w
 8   80  800  88  801
 10  70  110  80  111
 
-# Test schema changes with virtual columns.
+# Verify that FK relations on virtual columns are disallowed.
+statement ok
+CREATE TABLE fk (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  u INT UNIQUE AS (b+c) VIRTUAL
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  c INT REFERENCES fk(u)
+)
+
+statement error virtual column "c" cannot reference a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  c INT AS (p+1) VIRTUAL REFERENCES fk(a)
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+CREATE TABLE fk2 (
+  p INT PRIMARY KEY,
+  q INT,
+  r INT,
+  CONSTRAINT fk FOREIGN KEY (q,r) REFERENCES fk(a,u)
+)
+
+statement ok
+CREATE TABLE fk2 (
+  x INT PRIMARY KEY,
+  y INT,
+  v INT AS (x+y) VIRTUAL
+)
+
+statement error virtual column "u" cannot be referenced by a foreign key
+ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (x) REFERENCES fk(u)
+
+statement error virtual column "v" cannot reference a foreign key
+ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (v) REFERENCES fk(a)
+
+subtest schema_changes
 
 statement ok
 CREATE TABLE sc (a INT PRIMARY KEY, b INT)
@@ -501,44 +543,95 @@ a  b   v   w1  w2
 2  20  22  40  40
 3  30  33  90  60
 
-# Verify that FK relations on virtual columns are disallowed.
 statement ok
-CREATE TABLE fk (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  u INT UNIQUE AS (b+c) VIRTUAL
-)
+ALTER TABLE sc DROP COLUMN w1, DROP COLUMN w2
 
-statement error virtual column "u" cannot be referenced by a foreign key
-CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  c INT REFERENCES fk(u)
-)
+query III rowsort,colnames
+SELECT * FROM sc
+----
+a  b   v
+1  10  11
+2  20  22
+3  30  33
 
-statement error virtual column "c" cannot reference a foreign key
-CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  c INT AS (p+1) VIRTUAL REFERENCES fk(a)
-)
+# Create an index on the virtual column and check that it works.
+statement ok
+CREATE INDEX v_idx ON sc(v)
 
-statement error virtual column "u" cannot be referenced by a foreign key
-CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  q INT,
-  r INT,
-  CONSTRAINT fk FOREIGN KEY (q,r) REFERENCES fk(a,u)
-)
+query I rowsort
+SELECT a FROM sc@v_idx
+----
+1
+2
+3
+
+query I rowsort
+SELECT a FROM sc WHERE v>20 AND v<40
+----
+2
+3
 
 statement ok
-CREATE TABLE fk2 (
-  x INT PRIMARY KEY,
-  y INT,
-  v INT AS (x+y) VIRTUAL
-)
+DROP INDEX v_idx
 
-statement error virtual column "u" cannot be referenced by a foreign key
-ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (x) REFERENCES fk(u)
+statement ok
+ALTER TABLE sc DROP COLUMN v
 
-statement error virtual column "v" cannot reference a foreign key
-ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (v) REFERENCES fk(a)
+# Add a column and an index on that column in the same transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
+
+statement ok
+CREATE INDEX v_idx ON sc(v)
+
+statement ok
+END
+
+query I rowsort
+SELECT a FROM sc@v_idx
+----
+1
+2
+3
+
+statement ok
+DROP INDEX v_idx
+
+statement ok
+ALTER TABLE sc DROP COLUMN v
+
+# Add a column and a partial index using that column in the predicate in the
+# same transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
+
+statement ok
+CREATE INDEX partial_idx ON sc(b) WHERE v > 20
+
+statement ok
+END
+
+query I rowsort
+SELECT a FROM sc@partial_idx WHERE v > 20
+----
+2
+3
+
+statement ok
+DROP INDEX partial_idx
+
+# Create a partial index on the virtual column and which uses the virtual column in the predicate.
+statement ok
+CREATE INDEX v_partial_idx ON sc(v) WHERE v > 20
+
+query I rowsort
+SELECT a FROM sc@v_partial_idx WHERE v > 20
+----
+2
+3
