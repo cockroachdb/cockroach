@@ -106,7 +106,7 @@ require (
 	github.com/lib/pq v1.8.0
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/lightstep/lightstep-tracer-go v0.15.6
-	github.com/linkedin/goavro/v2 v2.8.1
+	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/lufia/iostat v1.0.0
 	github.com/lusis/go-slackbot v0.0.0-20180109053408-401027ccfef5 // indirect
 	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
