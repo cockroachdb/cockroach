@@ -925,7 +925,6 @@ ssl.keystore.location=%s
 ssl.keystore.password=%s
 
 listeners=PLAINTEXT://:9092,SSL://:9093,SASL_SSL://:9094
-advertised.listeners=PLAINTEXT://%s:9092,SSL://%s:9093,SASL_SSL://:9094
 
 sasl.enabled.mechanisms=SCRAM-SHA-256,SCRAM-SHA-512,PLAIN
 sasl.mechanism.inter.broker.protocol=PLAIN
@@ -995,7 +994,7 @@ func (k kafkaManager) install(ctx context.Context) {
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.c.status("generating TLS certificates")
-	kafkaIP := k.c.ExternalIP(ctx, k.nodes)[0]
+	kafkaIP := k.c.InternalIP(ctx, k.nodes)[0]
 
 	testCerts, err := makeTestCerts(kafkaIP)
 	if err != nil {
@@ -1028,8 +1027,6 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 		keystorePassword,
 		keystorePath,
 		keystorePassword,
-		kafkaIP,
-		kafkaIP,
 	)
 
 	k.PutConfigContent(ctx, testCerts.KafkaKey, kafkaKeyPath)
