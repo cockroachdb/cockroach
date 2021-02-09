@@ -1,6 +1,6 @@
 {
   "pgVersion": "13.0",
-  "pgCatalog": {
+  "pgMetadata": {
     "pg_aggregate": {
       "aggcombinefn": {
         "oid": 24,

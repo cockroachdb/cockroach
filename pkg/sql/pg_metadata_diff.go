@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 // This file contains constants and types used by pg_catalog diff tool
-// that are also re-used in /pkg/cmd/generate-pg-catalog
+// that are also re-used in /pkg/cmd/generate-postgres-metadata-tables
 
 package sql
 
@@ -19,9 +19,9 @@ import (
 	"os"
 )
 
-// GetPGCatalogSQL is a query uses udt_name::regtype instead of data_type column because
+// GetPGMetadataSQL is a query uses udt_name::regtype instead of data_type column because
 // data_type only says "ARRAY" but does not say which kind of array it is.
-const GetPGCatalogSQL = `
+const GetPGMetadataSQL = `
 	SELECT
 		c.relname AS table_name,
 		a.attname AS column_name,
@@ -31,47 +31,47 @@ const GetPGCatalogSQL = `
 	JOIN pg_attribute a ON a.attrelid = c.oid
 	JOIN pg_type t ON t.oid = a.atttypid
 	JOIN pg_namespace n ON n.oid = c.relnamespace
-	WHERE n.nspname = 'pg_catalog'
+	WHERE n.nspname = $1
 	AND a.attnum > 0
 	ORDER BY 1, 2;
 `
 
-// PGCatalogColumn is a structure which contains a small description about the datatype of a column, but this can also be
+// PGMetadataColumnType is a structure which contains a small description about the datatype of a column, but this can also be
 // used as a diff information if populating ExpectedOid. Fields are exported for Marshaling purposes.
-type PGCatalogColumn struct {
+type PGMetadataColumnType struct {
 	Oid              uint32  `json:"oid"`
 	DataType         string  `json:"dataType"`
 	ExpectedOid      *uint32 `json:"expectedOid"`
 	ExpectedDataType *string `json:"expectedDataType"`
 }
 
-// PGCatalogColumns maps column names to datatype description
-type PGCatalogColumns map[string]*PGCatalogColumn
+// PGMetadataColumns maps column names to datatype description
+type PGMetadataColumns map[string]*PGMetadataColumnType
 
-// PGCatalogTables have 2 use cases:
+// PGMetadataTables have 2 use cases:
 // First: This is used to model pg_schema for postgres and cockroach db for comparison purposes by mapping tableNames
 // to columns.
 // Second: This is used to store and load expected diffs:
-// - Using it this way, a table name pointing to a zero length PGCatalogColumns means that we expect this table to be missing
+// - Using it this way, a table name pointing to a zero length PGMetadataColumns means that we expect this table to be missing
 //   in cockroach db
-// - If PGCatalogColumns is not empty but columnName points to null, we expect that column to be missing in that table in
+// - If PGMetadataColumns is not empty but columnName points to null, we expect that column to be missing in that table in
 //   cockroach db
-// - If column Name points to a not null PGCatalogColumn, the test column describes how we expect that data type to be
+// - If column Name points to a not null PGMetadataColumnType, the test column describes how we expect that data type to be
 //   different between cockroach db and postgres
-type PGCatalogTables map[string]PGCatalogColumns
+type PGMetadataTables map[string]PGMetadataColumns
 
-// PGCatalogFile is used to export pg_catalog from postgres and store the representation of this structure as a
+// PGMetadataFile is used to export pg_catalog from postgres and store the representation of this structure as a
 // json file
-type PGCatalogFile struct {
-	PgVersion string          `json:"pgVersion"`
-	PgCatalog PGCatalogTables `json:"pgCatalog"`
+type PGMetadataFile struct {
+	PGVersion  string           `json:"pgVersion"`
+	PGMetadata PGMetadataTables `json:"pgMetadata"`
 }
 
-func (p PGCatalogTables) addColumn(tableName, columnName string, column *PGCatalogColumn) {
+func (p PGMetadataTables) addColumn(tableName, columnName string, column *PGMetadataColumnType) {
 	columns, ok := p[tableName]
 
 	if !ok {
-		columns = make(PGCatalogColumns)
+		columns = make(PGMetadataColumns)
 		p[tableName] = columns
 	}
 
@@ -79,10 +79,10 @@ func (p PGCatalogTables) addColumn(tableName, columnName string, column *PGCatal
 }
 
 // AddColumnMetadata is used to load data from postgres or cockroach pg_catalog schema
-func (p PGCatalogTables) AddColumnMetadata(
+func (p PGMetadataTables) AddColumnMetadata(
 	tableName string, columnName string, dataType string, dataTypeOid uint32,
 ) {
-	p.addColumn(tableName, columnName, &PGCatalogColumn{
+	p.addColumn(tableName, columnName, &PGMetadataColumnType{
 		dataTypeOid,
 		dataType,
 		nil,
@@ -91,10 +91,10 @@ func (p PGCatalogTables) AddColumnMetadata(
 }
 
 // addDiff is for the second use case for pgTables which objective is create a datatype diff
-func (p PGCatalogTables) addDiff(
-	tableName string, columnName string, expected *PGCatalogColumn, actual *PGCatalogColumn,
+func (p PGMetadataTables) addDiff(
+	tableName string, columnName string, expected *PGMetadataColumnType, actual *PGMetadataColumnType,
 ) {
-	p.addColumn(tableName, columnName, &PGCatalogColumn{
+	p.addColumn(tableName, columnName, &PGMetadataColumnType{
 		actual.Oid,
 		actual.DataType,
 		&expected.Oid,
@@ -103,8 +103,8 @@ func (p PGCatalogTables) addDiff(
 }
 
 // isDiffOid verifies if there is a datatype mismatch or if the diff is an expected diff
-func (p PGCatalogTables) isDiffOid(
-	tableName string, columnName string, expected *PGCatalogColumn, actual *PGCatalogColumn,
+func (p PGMetadataTables) isDiffOid(
+	tableName string, columnName string, expected *PGMetadataColumnType, actual *PGMetadataColumnType,
 ) bool {
 	if expected.Oid == actual.Oid {
 		return false
@@ -125,9 +125,9 @@ func (p PGCatalogTables) isDiffOid(
 	return !(diff.Oid == actual.Oid && *diff.ExpectedOid == expected.Oid)
 }
 
-// isExpectedMissingTable is used by the diff PGCatalogTables to verify whether missing a table in cockroach is expected
+// isExpectedMissingTable is used by the diff PGMetadataTables to verify whether missing a table in cockroach is expected
 // or not
-func (p PGCatalogTables) isExpectedMissingTable(tableName string) bool {
+func (p PGMetadataTables) isExpectedMissingTable(tableName string) bool {
 	if columns, ok := p[tableName]; !ok || len(columns) > 0 {
 		return false
 	}
@@ -136,7 +136,7 @@ func (p PGCatalogTables) isExpectedMissingTable(tableName string) bool {
 }
 
 // isExpectedMissingColumn is similar to isExpectedMissingTable to verify column expected misses
-func (p PGCatalogTables) isExpectedMissingColumn(tableName string, columnName string) bool {
+func (p PGMetadataTables) isExpectedMissingColumn(tableName string, columnName string) bool {
 	columns, ok := p[tableName]
 	if !ok {
 		return false
@@ -151,16 +151,16 @@ func (p PGCatalogTables) isExpectedMissingColumn(tableName string, columnName st
 }
 
 // addMissingTable adds a tablename when it is not found in cockroach db
-func (p PGCatalogTables) addMissingTable(tableName string) {
-	p[tableName] = make(PGCatalogColumns)
+func (p PGMetadataTables) addMissingTable(tableName string) {
+	p[tableName] = make(PGMetadataColumns)
 }
 
 // addMissingColumn adds a column when it is not found in cockroach db
-func (p PGCatalogTables) addMissingColumn(tableName string, columnName string) {
+func (p PGMetadataTables) addMissingColumn(tableName string, columnName string) {
 	columns, ok := p[tableName]
 
 	if !ok {
-		columns = make(PGCatalogColumns)
+		columns = make(PGMetadataColumns)
 		p[tableName] = columns
 	}
 
@@ -168,7 +168,7 @@ func (p PGCatalogTables) addMissingColumn(tableName string, columnName string) {
 }
 
 // rewriteDiffs creates pg_catalog_test-diffs.json
-func (p PGCatalogTables) rewriteDiffs(diffFile string) error {
+func (p PGMetadataTables) rewriteDiffs(diffFile string) error {
 	f, err := os.OpenFile(diffFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (p PGCatalogTables) rewriteDiffs(diffFile string) error {
 }
 
 // Save have the purpose of storing all the data retrieved from postgres and useful information as postgres version
-func (f *PGCatalogFile) Save(writer io.Writer) {
+func (f *PGMetadataFile) Save(writer io.Writer) {
 	byteArray, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		panic(err)
