@@ -158,6 +158,7 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"POLYGON ZM EMPTY", "POLYGONZM EMPTY"},
 			expected:    geom.NewPolygon(geom.XYZM),
 		},
+		// MULTIPOINT tests
 		{
 			desc:        "parse 2D multipoint",
 			equivInputs: []string{"MULTIPOINT(0 0, 1 1, 2 2)", "MULTIPOINT((0 0), 1 1, (2 2))", "MULTIPOINT (0 0, 1 1, 2 2)"},
@@ -217,6 +218,65 @@ func TestUnmarshal(t *testing.T) {
 			desc:        "parse empty 4D multipoint",
 			equivInputs: []string{"MULTIPOINT ZM EMPTY", "MULTIPOINTZM EMPTY"},
 			expected:    geom.NewMultiPoint(geom.XYZM),
+		},
+		// MULTILINESTRING tests
+		{
+			desc:        "parse 2D multilinestring",
+			equivInputs: []string{"MULTILINESTRING((0 0, 1 1), EMPTY)", "MULTILINESTRING (( 0 0, 1 1 ), EMPTY )"},
+			expected:    geom.NewMultiLineStringFlat(geom.XY, []float64{0, 0, 1, 1}, []int{4, 4}),
+		},
+		{
+			desc:        "parse 2D+M multilinestring",
+			equivInputs: []string{"MULTILINESTRINGM((0 -1 -2, 2 5 7))", "multilinestring m ((0 -1 -2, 2 5 7))"},
+			expected:    geom.NewMultiLineStringFlat(geom.XYM, []float64{0, -1, -2, 2, 5, 7}, []int{6}),
+		},
+		{
+			desc:        "parse 3D multilinestring",
+			equivInputs: []string{"MULTILINESTRING((0 -1 -2, 2 5 7))", "MULTILINESTRINGZ((0 -1 -2, 2 5 7))", "MULTILINESTRING Z ((0 -1 -2, 2 5 7))"},
+			expected:    geom.NewMultiLineStringFlat(geom.XYZ, []float64{0, -1, -2, 2, 5, 7}, []int{6}),
+		},
+		{
+			desc: "parse 4D multilinestring",
+			equivInputs: []string{"MULTILINESTRING((0 0 0 0, 1 1 1 1), (-2 -3 -4 -5, 0.5 -0.75 1 -1.25, 0 1 5 7))",
+				"MULTILINESTRING ZM ((0 0 0 0, 1 1 1 1), (-2 -3 -4 -5, 0.5 -0.75 1 -1.25, 0 1 5 7))",
+				"multilinestringzm((0 0 0 0, 1 1 1 1), (-2 -3 -4 -5, 0.5 -0.75 1 -1.25, 0 1 5 7))"},
+			expected: geom.NewMultiLineStringFlat(geom.XYZM,
+				[]float64{0, 0, 0, 0, 1, 1, 1, 1, -2, -3, -4, -5, 0.5, -0.75, 1, -1.25, 0, 1, 5, 7}, []int{8, 20}),
+		},
+		{
+			desc:        "parse 2D+M multilinestring with EMPTY linestrings",
+			equivInputs: []string{"MultiLineString M ((1 -1 2, 3 -0.4 7), EMPTY, (0 0 0, -2 -4 -89))", "MULTILINESTRINGM ((1 -1 2, 3 -0.4 7), EMPTY, (0 0 0, -2 -4 -89))"},
+			expected:    geom.NewMultiLineStringFlat(geom.XYM, []float64{1, -1, 2, 3, -0.4, 7, 0, 0, 0, -2, -4, -89}, []int{6, 6, 12}),
+		},
+		{
+			desc:        "parse 3D multilinestring with EMPTY linestrings",
+			equivInputs: []string{"MULTILINESTRINGZ(EMPTY, EMPTY, (1 1 1, 2 2 2, 3 3 3))", "multilinestring z (EMPTY, empty, (1 1 1, 2 2 2, 3 3 3))"},
+			expected:    geom.NewMultiLineStringFlat(geom.XYZ, []float64{1, 1, 1, 2, 2, 2, 3, 3, 3}, []int{0, 0, 9}),
+		},
+		{
+			desc:        "parse 4D multilinestring with EMPTY linestrings",
+			equivInputs: []string{"MULTILINESTRINGZM(EMPTY)", "MuLTIliNeStRiNg zM (EMPTY)"},
+			expected:    geom.NewMultiLineStringFlat(geom.XYZM, []float64(nil), []int{0}),
+		},
+		{
+			desc:        "parse empty 2D multilinestring",
+			equivInputs: []string{"MULTILINESTRING EMPTY"},
+			expected:    geom.NewMultiLineString(geom.XY),
+		},
+		{
+			desc:        "parse empty 2D+M multilinestring",
+			equivInputs: []string{"MULTILINESTRING M EMPTY", "MULTILINESTRINGM EMPTY"},
+			expected:    geom.NewMultiLineString(geom.XYM),
+		},
+		{
+			desc:        "parse empty 3D multilinestring",
+			equivInputs: []string{"MULTILINESTRING Z EMPTY", "MULTILINESTRINGZ EMPTY"},
+			expected:    geom.NewMultiLineString(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 4D multilinestring",
+			equivInputs: []string{"MULTILINESTRING ZM EMPTY", "MULTILINESTRINGZM EMPTY"},
+			expected:    geom.NewMultiLineString(geom.XYZM),
 		},
 	}
 
@@ -281,6 +341,13 @@ POINT POINT
 			expectedErrStr: `syntax error: unexpected ',', expecting NUM at pos 7
 POINT(0, 0)
        ^`,
+		},
+		{
+			desc:  "2D linestring with no points",
+			input: "LINESTRING()",
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 11
+LINESTRING()
+           ^`,
 		},
 		{
 			desc:  "2D linestring with not enough points",
@@ -358,6 +425,34 @@ MULTIPOINT((EMPTY))
 			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM or '(' at pos 18
 MULTIPOINT(0 0 0, EMPTY)
                   ^`,
+		},
+		{
+			desc:  "multipoint with mixed dimensionality",
+			input: "MULTIPOINT(0 0 0, 1 1)",
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 21
+MULTIPOINT(0 0 0, 1 1)
+                     ^`,
+		},
+		{
+			desc:  "2D multilinestring containing linestring with no points",
+			input: "MULTILINESTRING(())",
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 17
+MULTILINESTRING(())
+                 ^`,
+		},
+		{
+			desc:  "2D multilinestring containing linestring with only one point",
+			input: "MULTILINESTRING((0 0))",
+			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 20
+MULTILINESTRING((0 0))
+                    ^`,
+		},
+		{
+			desc:  "4D multilinestring using EMPTY without using ZM in type",
+			input: "MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))",
+			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 28
+MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))
+                            ^`,
 		},
 	}
 
