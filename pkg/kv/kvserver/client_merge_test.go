@@ -1554,6 +1554,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 // in detail. This test is meant as a sanity check for this assertion.
 func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
