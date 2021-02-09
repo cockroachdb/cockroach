@@ -166,7 +166,7 @@ func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
 }
 
-// ConsultsTimestampCache returns whether the command must consult
+// ConsultsTimestampCache returns whether the request must consult
 // the timestamp cache to determine whether a mutation is safe at
 // a proposed timestamp or needs to move to a higher timestamp to
 // avoid re-writing history.
