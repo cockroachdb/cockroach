@@ -1014,6 +1014,50 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
+	// A couple of pieces of cleanup are required for multi-region databases.
+	// First, we need to find all of the MULTIREGION_ENUMs types and remap the
+	// IDs stored in the corresponding database descriptors to match the type's
+	// new ID.  Secondly, we need to rebuild the zone configuration for each
+	// multi-region database.  We don't perform the zone configuration rebuild on
+	// cluster restores, as they will have the zone configurations restored as
+	// as the system tables are restored.
+	foundMREnum := false
+	for _, t := range typesByID {
+		typeDesc := t.TypeDesc()
+		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			if foundMREnum && details.DescriptorCoverage != tree.AllDescriptors {
+				return nil, nil, nil, errors.AssertionFailedf(
+					"unexpectedly found more than one MULTIREGION_ENUM (ID = %d) during restore", typeDesc.ID)
+			}
+			foundMREnum = true
+			if db, ok := dbsByID[typeDesc.GetParentID()]; ok {
+				desc := db.DatabaseDesc()
+				if desc.RegionConfig == nil {
+					return nil, nil, nil, errors.AssertionFailedf(
+						"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)
+				}
+
+				// Update the RegionEnumID to record the new multi-region enum ID.
+				desc.RegionConfig.RegionEnumID = t.GetID()
+
+				// If we're not in a cluster restore, rebuild the database-level zone
+				// configuration.
+				if details.DescriptorCoverage != tree.AllDescriptors {
+					log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
+					if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
+						ctx,
+						desc.GetID(),
+						*desc.RegionConfig,
+						p.ExtendedEvalContext().Txn,
+						p.ExecCfg(),
+					); err != nil {
+						return nil, nil, nil, err
+					}
+				}
+			}
+		}
+	}
+
 	if !details.PrepareCompleted {
 		err := descs.Txn(
 			ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
