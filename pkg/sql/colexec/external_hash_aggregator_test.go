@@ -91,7 +91,7 @@ func TestExternalHashAggregator(t *testing.T) {
 					tc.expected,
 					unorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+						sem := colexecbase.NewTestingSemaphore(ehaNumRequiredFDs)
 						semsToCheck = append(semsToCheck, sem)
 						op, accs, mons, closers, err := createExternalHashAggregator(
 							ctx, flowCtx, &colexecagg.NewAggregatorArgs{
