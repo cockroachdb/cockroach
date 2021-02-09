@@ -685,6 +685,37 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
 	return nil, -1
 }
 
+// GetNumVoters returns the number of voting replicas for the given zone config.
+//
+// This method will panic if called on a ZoneConfig with an uninitialized
+// NumReplicas attribute.
+func (z *ZoneConfig) GetNumVoters() int32 {
+	if z.NumReplicas == nil {
+		panic("NumReplicas must not be nil")
+	}
+	if z.NumVoters != nil && *z.NumVoters != 0 {
+		return *z.NumVoters
+	}
+	return *z.NumReplicas
+}
+
+// GetNumNonVoters returns the number of non-voting replicas as defined in the
+// zone config.
+//
+// This method will panic if called on a ZoneConfig with an uninitialized
+// NumReplicas attribute.
+func (z *ZoneConfig) GetNumNonVoters() int32 {
+	if z.NumReplicas == nil {
+		panic("NumReplicas must not be nil")
+	}
+	if z.NumVoters != nil && *z.NumVoters != 0 {
+		return *z.NumReplicas - *z.NumVoters
+	}
+	// `num_voters` hasn't been explicitly configured. Every replica should be a
+	// voting replica.
+	return 0
+}
+
 // SetSubzone installs subzone into the ZoneConfig, overwriting any existing
 // subzone with the same IndexID and PartitionName.
 func (z *ZoneConfig) SetSubzone(subzone Subzone) {
