@@ -46,13 +46,16 @@ import (
 
 // Test data files
 const (
-	pgCatalogDump = "pg_catalog_tables.json"              // PostgreSQL pg_catalog schema
-	expectedDiffs = "pg_catalog_test_expected_diffs.json" // Contains expected difference between postgres and cockroach
-	testdata      = "testdata"                            // testdata directory
+	catalogDump   = "%s_tables.json"              // PostgreSQL pg_catalog schema
+	expectedDiffs = "%s_test_expected_diffs.json" // Contains expected difference between postgres and cockroach
+	testdata      = "testdata"                    // testdata directory
 )
 
 // When running test with -rewrite-diffs test will pass and re-create pg_catalog_test-diffs.json
-var rewriteFlag = flag.Bool("rewrite-diffs", false, "This will re-create the expected diffs file")
+var (
+	rewriteFlag = flag.Bool("rewrite-diffs", false, "This will re-create the expected diffs file")
+	catalogName = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
+)
 
 // summary will keep accountability for any unexpected difference and report it in the log
 type summary struct {
@@ -77,9 +80,9 @@ func (sum *summary) report(t *testing.T) {
 }
 
 // loadTestData retrieves the pg_catalog from the dumpfile generated from Postgres
-func loadTestData(t testing.TB) PGCatalogTables {
-	var pgCatalogFile PGCatalogFile
-	testdataFile := filepath.Join(testdata, pgCatalogDump)
+func loadTestData(t testing.TB) PGMetadataTables {
+	var pgCatalogFile PGMetadataFile
+	testdataFile := filepath.Join(testdata, fmt.Sprintf(catalogDump, *catalogName))
 	f, err := os.Open(testdataFile)
 	if err != nil {
 		t.Fatal(err)
@@ -95,17 +98,17 @@ func loadTestData(t testing.TB) PGCatalogTables {
 		t.Fatal(err)
 	}
 
-	return pgCatalogFile.PgCatalog
+	return pgCatalogFile.PGMetadata
 }
 
 // loadCockroachPgCatalog retrieves pg_catalog schema from cockroach db
-func loadCockroachPgCatalog(t testing.TB) PGCatalogTables {
-	crdbTables := make(PGCatalogTables)
+func loadCockroachPgCatalog(t testing.TB) PGMetadataTables {
+	crdbTables := make(PGMetadataTables)
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(db)
-	rows := sqlRunner.Query(t, GetPGCatalogSQL)
+	rows := sqlRunner.Query(t, GetPGMetadataSQL, *catalogName)
 	defer rows.Close()
 
 	for rows.Next() {
@@ -120,15 +123,15 @@ func loadCockroachPgCatalog(t testing.TB) PGCatalogTables {
 }
 
 // loadExpectedDiffs get all differences that will be skipped by the this test
-func loadExpectedDiffs(t *testing.T) (diffs PGCatalogTables) {
-	diffs = PGCatalogTables{}
+func loadExpectedDiffs(t *testing.T) (diffs PGMetadataTables) {
+	diffs = PGMetadataTables{}
 
 	if *rewriteFlag {
 		// For rewrite we want this to be empty and get populated
 		return
 	}
 
-	diffFile := filepath.Join(testdata, expectedDiffs)
+	diffFile := filepath.Join(testdata, fmt.Sprintf(expectedDiffs, *catalogName))
 	if _, err := os.Stat(diffFile); err != nil {
 		if oserror.IsNotExist(err) {
 			// File does not exists it means diffs are not expected
@@ -160,7 +163,7 @@ func errorf(t *testing.T, format string, args ...interface{}) {
 	}
 }
 
-func rewriteDiffs(t *testing.T, diffs PGCatalogTables, diffsFile string) {
+func rewriteDiffs(t *testing.T, diffs PGMetadataTables, diffsFile string) {
 	if !*rewriteFlag {
 		return
 	}
@@ -217,5 +220,5 @@ func TestPGCatalog(t *testing.T) {
 	}
 
 	sum.report(t)
-	rewriteDiffs(t, diffs, filepath.Join(testdata, expectedDiffs))
+	rewriteDiffs(t, diffs, filepath.Join(testdata, fmt.Sprintf(expectedDiffs, *catalogName)))
 }
