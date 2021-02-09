@@ -589,6 +589,11 @@ query I
 SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
 ----
 
+###########################################################
+#  LOOKUP JOINS WITH LOOKUP EXPRESSIONS                   #
+#  https://github.com/cockroachdb/cockroach/issues/59615  #
+###########################################################
+
 # Regression test for #59615. Ensure that invalid lookup joins are not created
 # for left and anti joins.
 statement ok
@@ -599,7 +604,6 @@ CREATE TABLE t59615 (
   PRIMARY KEY (x, y)
 )
 
-# We cannot create a lookup join in this case.
 query IIII rowsort
 SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
@@ -613,3 +617,44 @@ SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
 ----
 1
 2
+
+statement ok
+CREATE TABLE lookup_expr (
+  r STRING NOT NULL CHECK (r IN ('east', 'west')),
+  v INT NOT NULL,
+  w INT,
+  x INT,
+  y INT NOT NULL CHECK (y IN (10, 20)),
+  z INT NOT NULL CHECK (z = 5),
+  PRIMARY KEY (r, v),
+  INDEX (r, x, y, z, w)
+)
+
+statement ok
+INSERT INTO lookup_expr VALUES
+  ('east', 1, 1, 10, 10, 5),
+  ('east', 2, NULL, 20, 10, 5),
+  ('east', 3, 3, NULL, 10, 5),
+  ('east', 4, 4, 40, 20, 5),
+  ('east', 5, NULL, 50, 20, 5),
+  ('west', 6, 1, 10, 20, 5),
+  ('west', 7, NULL, NULL, 20, 5),
+  ('west', 8, 2, 20, 20, 5),
+  ('west', 9, 3, 30, 10, 5),
+  ('west', 10, 4, 40, 10, 5)
+
+query IITIIIII rowsort
+SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
+ON u.w = t.w AND u.x = t.x
+----
+1  10    east  1     1     10    10    5
+1  10    west  6     1     10    20    5
+2  20    west  8     2     20    20    5
+3  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+
+query II rowsort
+SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
+  SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
+)
+----
+3  NULL
