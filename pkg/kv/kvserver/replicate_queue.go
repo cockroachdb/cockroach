@@ -344,11 +344,11 @@ func (rq *replicateQueue) processOneChange(
 		// lost quorum. Either way, it's not a good idea to make changes right now.
 		// Let the scanner requeue it again later.
 		return false, nil
-	case AllocatorAdd:
+	case AllocatorAddVoter:
 		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, -1 /* removeIdx */, dryRun)
-	case AllocatorRemove:
+	case AllocatorRemoveVoter:
 		return rq.remove(ctx, repl, voterReplicas, dryRun)
-	case AllocatorReplaceDead:
+	case AllocatorReplaceDeadVoter:
 		if len(deadVoterReplicas) == 0 {
 			// Nothing to do.
 			return false, nil
@@ -366,7 +366,7 @@ func (rq *replicateQueue) processOneChange(
 				deadVoterReplicas[0], voterReplicas)
 		}
 		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
-	case AllocatorReplaceDecommissioning:
+	case AllocatorReplaceDecommissioningVoter:
 		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(voterReplicas)
 		if len(decommissioningReplicas) == 0 {
 			// Nothing to do.
@@ -385,14 +385,14 @@ func (rq *replicateQueue) processOneChange(
 				decommissioningReplicas[0], voterReplicas)
 		}
 		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
-	case AllocatorRemoveDecommissioning:
+	case AllocatorRemoveDecommissioningVoter:
 		// NB: this path will only be hit when the range is over-replicated and
 		// has decommissioning replicas; in the common case we'll hit
-		// AllocatorReplaceDecommissioning above.
+		// AllocatorReplaceDecommissioningVoter above.
 		return rq.removeDecommissioning(ctx, repl, dryRun)
-	case AllocatorRemoveDead:
+	case AllocatorRemoveDeadVoter:
 		// NB: this path will only be hit when the range is over-replicated and
-		// has dead replicas; in the common case we'll hit AllocatorReplaceDead
+		// has dead replicas; in the common case we'll hit AllocatorReplaceDeadVoter
 		// above.
 		return rq.removeDead(ctx, repl, deadVoterReplicas, dryRun)
 	case AllocatorRemoveLearner:
@@ -404,6 +404,9 @@ func (rq *replicateQueue) processOneChange(
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
+	case AllocatorAddNonVoter, AllocatorRemoveNonVoter:
+		return false, errors.Errorf("allocator actions pertaining to non-voters are"+
+			" currently not supported: %v", action)
 	default:
 		return false, errors.Errorf("unknown allocator action %v", action)
 	}
@@ -478,7 +481,7 @@ func (rq *replicateQueue) addOrReplace(
 	}
 
 	clusterNodes := rq.allocator.storePool.ClusterNodeCount()
-	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+	need := GetNeededVoters(*zone.NumReplicas, clusterNodes)
 
 	// Only up-replicate if there are suitable allocation targets such that,
 	// either the replication goal is met, or it is possible to get to the next
@@ -647,9 +650,9 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 	// is the leaseholder, so transfer the lease instead. We don't check that
 	// the current store has too many leases in this case under the
 	// assumption that replica balance is a greater concern. Also note that
-	// AllocatorRemove action takes preference over AllocatorConsiderRebalance
+	// AllocatorRemoveVoter action takes preference over AllocatorConsiderRebalance
 	// (rebalancing) which is where lease transfer would otherwise occur. We
-	// need to be able to transfer leases in AllocatorRemove in order to get
+	// need to be able to transfer leases in AllocatorRemoveVoter in order to get
 	// out of situations where this store is overfull and yet holds all the
 	// leases. The fullness checks need to be ignored for cases where
 	// a replica needs to be removed for constraint violations.

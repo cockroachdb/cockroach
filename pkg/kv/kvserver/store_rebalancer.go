@@ -504,7 +504,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			desc.RangeID, replWithStats.qps)
 
 		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
-		desiredReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+		desiredReplicas := GetNeededVoters(*zone.NumReplicas, clusterNodes)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 		currentReplicas := desc.Replicas().Descriptors()
