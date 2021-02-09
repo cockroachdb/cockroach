@@ -302,7 +302,7 @@ func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor
 		for i := range in {
 			u := *uri
 			if u.Scheme == "userfile" && u.Host == "" {
-				u.Host = cloudimpl.DefaultQualifiedNamePrefix + user
+				u.Host = cloudimpl.GetDefaultQualifiedTableName(user)
 			}
 			u.Path = u.Path + "/" + in[i]
 			out[i] = u.String()
