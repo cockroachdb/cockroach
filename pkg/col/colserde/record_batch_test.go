@@ -25,9 +25,11 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -291,6 +293,41 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var err error
+	rng, _ := randutil.NewPseudoRand()
+
+	typs := []*types.T{types.Bytes}
+	b := testAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
+	bytesVec := b.ColVec(0).Bytes()
+	maxValueLen := coldata.BytesInitialAllocationFactor * 8
+	value := make([]byte, maxValueLen)
+	for i := 0; i < coldata.BatchSize(); i++ {
+		value = value[:rng.Intn(maxValueLen)]
+		_, err = rng.Read(value)
+		require.NoError(t, err)
+		bytesVec.Set(i, value)
+	}
+	b.SetLength(coldata.BatchSize())
+
+	originalMemoryEstimate := colmem.GetBatchMemSize(b)
+
+	c, err := colserde.NewArrowBatchConverter(typs)
+	require.NoError(t, err)
+	r, err := colserde.NewRecordBatchSerializer(typs)
+	require.NoError(t, err)
+	b, err = roundTripBatch(b, c, r, typs)
+	require.NoError(t, err)
+
+	// We expect that the original memory estimate to be no smaller than the
+	// current estimate because in the original case the underlying flat []byte
+	// slice could have extra capacity which will not be present after
+	// round-tripping.
+	require.GreaterOrEqual(t, originalMemoryEstimate, colmem.GetBatchMemSize(b))
 }
 
 func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
