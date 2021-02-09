@@ -116,13 +116,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		nil /* interceptors */, mockClient)
 	require.NoError(t, err)
 
-	// Compare the set of results since the ordering is not guaranteed.
-	expectedRows := map[string]struct{}{
-		"partition1{-\\x00} 0.000000001,0": {},
-		"partition1{-\\x00} 0.000000004,0": {},
-		"partition2{-\\x00} 0.000000001,0": {},
-		"partition2{-\\x00} 0.000000004,0": {},
-	}
 	actualRows := make(map[string]struct{})
 	for {
 		row := out.NextNoMeta(t)
@@ -139,7 +132,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		actualRows[fmt.Sprintf("%s %s", resolvedSpan.Span, resolvedSpan.Timestamp)] = struct{}{}
 	}
 
-	require.Equal(t, expectedRows, actualRows)
+	// Only compare the latest advancement, since not all resolved timestamps
+	// might be flushed (due to the minimum flush interval steting in the
+	// ingestion processor).
+	require.Contains(t, actualRows, "partition1{-\\x00} 0.000000004,0",
+		"partition 1 should advance to timestamp 4")
+	require.Contains(t, actualRows, "partition2{-\\x00} 0.000000004,0",
+		"partition 2 should advance to timestamp 4")
 }
 
 // TestRandomClientGeneration tests the ingestion processor against a random
@@ -153,10 +152,10 @@ func TestRandomClientGeneration(t *testing.T) {
 	makeTestStreamURI := func(
 		tableID string,
 		valueRange, kvsPerResolved int,
-		kvFrequency time.Duration,
+		eventFrequency time.Duration,
 	) string {
 		return "test://" + tableID + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
-			"&KV_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
+			"&EVENT_FREQUENCY=" + strconv.Itoa(int(eventFrequency)) +
 			"&KVS_PER_RESOLVED=" + strconv.Itoa(kvsPerResolved)
 	}
 
@@ -172,15 +171,15 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	// TODO: Consider testing variations on these parameters.
 	valueRange := 100
-	kvsPerResolved := 1_000
-	kvFrequency := 50 * time.Nanosecond
-	streamAddr := makeTestStreamURI(tableID, valueRange, kvsPerResolved, kvFrequency)
+	kvsPerResolved := 100
+	eventFrequency := 50 * time.Nanosecond
+	streamAddr := makeTestStreamURI(tableID, valueRange, kvsPerResolved, eventFrequency)
 
 	startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
 	ctx, cancel := context.WithCancel(ctx)
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
-	cancelAfterCheckpoints := makeCheckpointEventCounter(1_000, cancel)
+	cancelAfterCheckpoints := makeCheckpointEventCounter(10, cancel)
 	out, err := runStreamIngestionProcessor(ctx, t, kvDB, streamAddr, startTime,
 		cancelAfterCheckpoints, nil /* mockClient */)
 	require.NoError(t, err)

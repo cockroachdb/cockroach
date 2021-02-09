@@ -39,9 +39,9 @@ const (
 	// ValueRangeKey controls the range of the randomly generated values produced
 	// by this workload. The workload will generate between 0 and this value.
 	ValueRangeKey = "VALUE_RANGE"
-	// KVFrequency is the frequency in nanoseconds that the stream will emit
+	// EventFrequency is the frequency in nanoseconds that the stream will emit
 	// randomly generated KV events.
-	KVFrequency = "KV_FREQUENCY"
+	EventFrequency = "EVENT_FREQUENCY"
 	// KVsPerCheckpoint controls approximately how many KV events should be emitted
 	// between checkpoint events.
 	KVsPerCheckpoint = "KVS_PER_CHECKPOINT"
@@ -70,7 +70,7 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		}
 	}
 
-	if kvFreqStr := streamURL.Query().Get(KVFrequency); kvFreqStr != "" {
+	if kvFreqStr := streamURL.Query().Get(EventFrequency); kvFreqStr != "" {
 		kvFreq, err := strconv.Atoi(kvFreqStr)
 		c.kvFrequency = time.Duration(kvFreq)
 		if err != nil {
@@ -166,34 +166,25 @@ func (m *randomStreamClient) ConsumePartition(
 		// rand is not thread safe, so create a random source for each partition.
 		r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		kvInterval := m.config.kvFrequency
-		resolvedInterval := kvInterval * time.Duration(m.config.kvsPerCheckpoint)
 
-		kvTimer := timeutil.NewTimer()
-		kvTimer.Reset(0)
-		defer kvTimer.Stop()
-
-		resolvedTimer := timeutil.NewTimer()
-		resolvedTimer.Reset(0)
-		defer resolvedTimer.Stop()
+		numKVEventsSinceLastResolved := 0
 
 		for {
 			var event streamingccl.Event
-			select {
-			case <-kvTimer.C:
-				kvTimer.Read = true
-				event = streamingccl.MakeKVEvent(m.makeRandomKey(r, lastResolvedTime))
-				kvTimer.Reset(kvInterval)
-			case <-resolvedTimer.C:
-				resolvedTimer.Read = true
+
+			if numKVEventsSinceLastResolved == m.config.kvsPerCheckpoint {
+				// Emit a CheckpointEvent
 				resolvedTime := timeutil.Now()
 				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 				event = streamingccl.MakeCheckpointEvent(hlcResolvedTime)
 				lastResolvedTime = resolvedTime
-				resolvedTimer.Reset(resolvedInterval)
+
+				numKVEventsSinceLastResolved = 0
+			} else {
+				numKVEventsSinceLastResolved++
+				event = streamingccl.MakeKVEvent(m.makeRandomKey(r, lastResolvedTime))
 			}
 
-			// TODO: Consider keeping an in-memory copy so that tests can verify
-			// that the data we've ingested is correct.
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
@@ -209,6 +200,8 @@ func (m *randomStreamClient) ConsumePartition(
 				}
 				m.mu.Unlock()
 			}
+
+			time.Sleep(kvInterval)
 		}
 	}()
 

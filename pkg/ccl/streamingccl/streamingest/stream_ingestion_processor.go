@@ -12,6 +12,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -26,10 +28,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+var minimumFlushInterval = settings.RegisterDurationSetting(
+	"bulkio.stream_ingestion.minimum_flush_interval",
+	"the minimum timestamp between flushes; unless the internal memory buffer is full",
+	10*time.Second,
+).WithPublic()
 
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpan
@@ -65,8 +75,9 @@ type streamIngestionProcessor struct {
 	// that it can be forwarded through the DistSQL flow.
 	ingestionErr error
 
-	// eventCh is the merged event channel of all of the partition event streams.
-	eventCh chan partitionEvent
+	flushedCheckpoints  chan *jobspb.ResolvedSpan
+	lastFlushTime       time.Time
+	bufferedCheckpoints map[streamingccl.PartitionAddress]hlc.Timestamp
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -94,11 +105,13 @@ func newStreamIngestionDataProcessor(
 	}
 
 	sip := &streamIngestionProcessor{
-		flowCtx:  flowCtx,
-		spec:     spec,
-		output:   output,
-		curBatch: make([]storage.MVCCKeyValue, 0),
-		client:   streamClient,
+		flowCtx:             flowCtx,
+		spec:                spec,
+		output:              output,
+		curBatch:            make([]storage.MVCCKeyValue, 0),
+		client:              streamClient,
+		flushedCheckpoints:  make(chan *jobspb.ResolvedSpan, len(spec.PartitionAddresses)),
+		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
 	}
 
 	evalCtx := flowCtx.EvalCtx
@@ -128,16 +141,23 @@ func newStreamIngestionDataProcessor(
 func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
-	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
-	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
-	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
-		if err != nil {
-			sip.ingestionErr = errors.Wrapf(err, "consuming partition %v", partitionAddress)
+	go func() {
+		defer close(sip.flushedCheckpoints)
+
+		startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
+		eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
+		for _, partitionAddress := range sip.spec.PartitionAddresses {
+			eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
+			if err != nil {
+				sip.ingestionErr = errors.Wrapf(err, "consuming partition %v", partitionAddress)
+				return
+			}
+			eventChs[partitionAddress] = eventCh
 		}
-		eventChs[partitionAddress] = eventCh
-	}
-	sip.eventCh = merge(ctx, eventChs)
+		mergedEvents := merge(ctx, eventChs)
+
+		sip.ingestionErr = sip.consumeEvents(mergedEvents)
+	}()
 
 	return ctx
 }
@@ -148,13 +168,9 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	progressUpdate, err := sip.consumeEvents()
-	if err != nil {
-		sip.MoveToDraining(err)
-		return nil, sip.DrainHelper()
-	}
-
-	if progressUpdate != nil {
+	// read from buffered resolved events.
+	progressUpdate, ok := <-sip.flushedCheckpoints
+	if ok && progressUpdate != nil {
 		progressBytes, err := protoutil.Marshal(progressUpdate)
 		if err != nil {
 			sip.MoveToDraining(err)
@@ -183,7 +199,8 @@ func (sip *streamIngestionProcessor) ConsumerClosed() {
 func (sip *streamIngestionProcessor) close() {
 	if sip.InternalClose() {
 		if sip.batcher != nil {
-			sip.batcher.Close()
+			// FIXME: We should close this, but there might be a race here?
+			// sip.batcher.Close()
 		}
 	}
 }
@@ -202,8 +219,25 @@ func (sip *streamIngestionProcessor) flush() error {
 		return errors.Wrap(err, "flushing")
 	}
 
+	log.Infof(sip.Ctx, "testing: flushing %d keys!", len(sip.curBatch))
+
+	// Go through buffered checkpoint events, and put them on the channel to be
+	// emitted to the downstream frontier processor.
+	for partition, timestamp := range sip.bufferedCheckpoints {
+		// Each partition is represented by a span defined by the
+		// partition address.
+		spanStartKey := roachpb.Key(partition)
+		sip.flushedCheckpoints <- &jobspb.ResolvedSpan{
+			Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
+			Timestamp: timestamp,
+		}
+	}
+
 	// Reset the current batch.
 	sip.curBatch = nil
+	sip.lastFlushTime = timeutil.Now()
+	sip.bufferedCheckpoints = make(map[streamingccl.PartitionAddress]hlc.Timestamp)
+
 	return sip.batcher.Reset(sip.Ctx)
 }
 
@@ -244,56 +278,87 @@ func merge(
 	return merged
 }
 
-// consumeEvents handles processing events on the merged event queue and returns
-// once a checkpoint event has been emitted so that it can inform the downstream
-// frontier processor to consider updating the frontier.
+// consumeEvents continues to consume events until it flushes a checkpoint
+// event. It may not flush every checkpoint event due to the minimum flush
+// interval.
 //
-// It should only make a claim that about the resolved timestamp of a partition
-// increasing after it has flushed all KV events previously received by that
-// partition.
-func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpan, error) {
-	for event := range sip.eventCh {
-		switch event.Type() {
-		case streamingccl.KVEvent:
-			kv := event.GetKV()
-			if kv == nil {
-				return nil, errors.New("kv event expected to have kv")
-			}
-			mvccKey := storage.MVCCKey{
-				Key:       kv.Key,
-				Timestamp: kv.Value.Timestamp,
-			}
-			sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
-		case streamingccl.CheckpointEvent:
-			// TODO: In addition to flushing when receiving a checkpoint event, we
-			// should also flush when we've buffered sufficient KVs. A buffering adder
-			// would save us here.
-			//
-			// TODO: Add a setting to control the max flush-rate. This would be a time
-			// interval to allow us to limit the number of flushes we do on
-			// checkpoints.
-			resolvedTimePtr := event.GetResolved()
-			if resolvedTimePtr == nil {
-				return nil, errors.New("checkpoint event expected to have a resolved timestamp")
-			}
-			resolvedTime := *resolvedTimePtr
-			if err := sip.flush(); err != nil {
-				return nil, errors.Wrap(err, "flushing")
+// It returns all partitions that are flushed.
+func (sip *streamIngestionProcessor) consumeEvents(events chan partitionEvent) error {
+	var timer timeutil.Timer
+	defer timer.Stop()
+
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				// Done consuming events
+				return sip.flush()
 			}
 
-			// Each partition is represented by a span defined by the
-			// partition address.
-			spanStartKey := roachpb.Key(event.partition)
-			return &jobspb.ResolvedSpan{
-				Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
-				Timestamp: resolvedTime,
-			}, nil
-		default:
-			return nil, errors.Newf("unknown streaming event type %v", event.Type())
+			switch event.Type() {
+			case streamingccl.KVEvent:
+				if err := sip.bufferKV(event); err != nil {
+					return err
+				}
+			case streamingccl.CheckpointEvent:
+				if err := sip.bufferCheckpoint(event); err != nil {
+					return err
+				}
+
+				minFlushInterval := 5 * time.Millisecond
+				if timeutil.Since(sip.lastFlushTime) < minFlushInterval {
+					// Not enough time has passed since the last flush. Let's set a timer
+					// that will trigger a flush eventually.
+					// TODO: This resets the timer every checkpoint event, but we only
+					// need to reset it once.
+					timer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
+					continue
+				}
+
+				if err := sip.flush(); err != nil {
+					return err
+				}
+			default:
+				return errors.Newf("unknown streaming event type %v", event.Type())
+			}
+		case <-timer.C:
+			timer.Read = true
+			if err := sip.flush(); err != nil {
+				return err
+			}
 		}
 	}
+}
 
-	return nil, nil
+func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
+	// TODO: In addition to flushing when receiving a checkpoint event, we
+	// should also flush when we've buffered sufficient KVs. A buffering adder
+	// would save us here.
+
+	kv := event.GetKV()
+	if kv == nil {
+		return errors.New("kv event expected to have kv")
+	}
+	mvccKey := storage.MVCCKey{
+		Key:       kv.Key,
+		Timestamp: kv.Value.Timestamp,
+	}
+	sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+	return nil
+}
+
+func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+	resolvedTimePtr := event.GetResolved()
+	if resolvedTimePtr == nil {
+		return errors.New("checkpoint event expected to have a resolved timestamp")
+	}
+	resolvedTime := *resolvedTimePtr
+
+	// Buffer the checkpoint.
+	if lastTimestamp, ok := sip.bufferedCheckpoints[event.partition]; !ok || lastTimestamp.Less(resolvedTime) {
+		sip.bufferedCheckpoints[event.partition] = resolvedTime
+	}
+	return nil
 }
 
 func init() {
