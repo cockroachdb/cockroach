@@ -1141,6 +1141,9 @@ func replsForRange(
 				return err
 			}
 			if repl != nil {
+				if !repl.IsInitialized() {
+					return errors.Errorf("%s not initialized", repl)
+				}
 				repls = append(repls, repl)
 			}
 		}
