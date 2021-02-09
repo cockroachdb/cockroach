@@ -108,11 +108,11 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(cli), cli)
 
 	go func() {
-		err := be.Send(&pgproto3.BackendKeyData{})
+		err := be.Send(&pgproto3.BindComplete{})
 		require.NoError(t, err)
 		beMsg, err := fe.Receive()
 		require.NoError(t, err)
-		require.Equal(t, beMsg, &pgproto3.BackendKeyData{})
+		require.Equal(t, beMsg, &pgproto3.BindComplete{})
 	}()
 
 	err := authenticate(srv, cli)
