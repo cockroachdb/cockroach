@@ -2713,7 +2713,13 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 	case *tree.CommitTransaction:
 		sc.TxnCommitCount.Inc()
 	case *tree.RollbackTransaction:
-		sc.TxnRollbackCount.Inc()
+		// The CommitWait state means that the transaction has already committed
+		// after a specially handled `RELEASE SAVEPOINT cockroach_restart` command.
+		if ex.getTransactionState() == CommitWaitStateStr {
+			sc.TxnCommitCount.Inc()
+		} else {
+			sc.TxnRollbackCount.Inc()
+		}
 	case *tree.Savepoint:
 		if ex.isCommitOnReleaseSavepoint(t.Name) {
 			sc.RestartSavepointCount.Inc()
