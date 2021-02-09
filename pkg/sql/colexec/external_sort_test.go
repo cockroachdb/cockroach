@@ -342,14 +342,14 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// In an ideal world:
 	// - all of the memory would be accounted for (this is not done at the
 	//   moment)
-	// - no memory is double-counted (this is not done at the moment)
+	// - no memory is double-counted
 	// - the reported usage is very close to 2 x memoryLimit (the monitor for
 	//   the in-memory sorter reports slightly below and the monitor for the
 	//   external sorter reports slightly above memoryLimit usage).
 	// TODO(yuzefovich): fix known deficiencies of the memory accounting and
 	// tighten the bounds.
 	expMin := memoryLimit * 3 / 2
-	expMax := memoryLimit * 4
+	expMax := memoryLimit * 3
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
