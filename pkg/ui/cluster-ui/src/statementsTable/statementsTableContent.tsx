@@ -111,30 +111,6 @@ export const StatementTableTitle = {
       Execution Count
     </Tooltip>
   ),
-  rowsAffected: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
-          <p>
-            {
-              "Average number of rows returned while executing statements with this fingerprint within the last hour or specified "
-            }
-            <Anchor href={statementsTimeInterval} target="_blank">
-              time interval
-            </Anchor>
-            .
-          </p>
-          <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
-          </p>
-        </div>
-      }
-    >
-      Rows Affected
-    </Tooltip>
-  ),
   rowsRead: (
     <Tooltip
       placement="bottom"
