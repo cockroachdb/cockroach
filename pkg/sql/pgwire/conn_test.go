@@ -1521,3 +1521,47 @@ func TestSetSessionArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestCancelQuery uses the pgwire-level query cancellation protocol provided
+// by lib/pq to make sure that canceling a query has no effect, and makes sure
+// the dummy BackendKeyData does not cause problems.
+func TestCancelQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeExecute: func(ctx context.Context, stmt string) {
+					if strings.Contains(stmt, "pg_sleep") {
+						cancel()
+					}
+				},
+			},
+		},
+	}
+	s, _, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(cancelCtx)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "TestCancelQuery" /* prefix */, url.User(security.RootUser),
+	)
+	defer cleanupFunc()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Cancellation has no effect on ongoing query.
+	if _, err := db.QueryContext(cancelCtx, "select pg_sleep(0)"); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Context is already canceled, so error should come before execution.
+	if _, err := db.QueryContext(cancelCtx, "select 1"); err == nil {
+		t.Fatal("expected error")
+	} else if err.Error() != "context canceled" {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
