@@ -389,6 +389,8 @@ vectorized: true
               table: t_idx@t_idx_v_idx
               spans: /1-/2
 
+subtest Update
+
 query T
 EXPLAIN (VERBOSE) UPDATE t SET a=a+1
 ----
@@ -706,6 +708,8 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+
+subtest Upsert
 
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
@@ -1334,3 +1338,30 @@ vectorized: true
                           row 1, expr 0: 10
                           row 1, expr 1: 100
                           row 1, expr 2: 700
+
+subtest Checks
+
+statement ok
+CREATE TABLE checks (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  v INT NOT NULL AS (b % 4) VIRTUAL CHECK (v IN (0,1,2,3)),
+  INDEX (v, b)
+)
+
+# Verify that we use the (v,b) index.
+query T
+EXPLAIN (VERBOSE) SELECT a FROM checks WHERE b BETWEEN 10 and 15
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a)
+│ estimated row count: 60 (missing stats)
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 60 (missing stats)
+      table: checks@checks_v_b_idx
+      spans: /0/10-/0/16 /1/10-/1/16 /2/10-/2/16 /3/10-/3/16
