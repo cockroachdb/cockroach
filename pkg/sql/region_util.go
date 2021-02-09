@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -385,33 +384,30 @@ func zoneConfigForMultiRegionTable(
 	return ret, nil
 }
 
-// TODO(#59631): everything using this should instead use getZoneConfigRaw
-// and writeZoneConfig instead of calling SQL for each query.
 // This removes the requirement to only call this function after writeSchemaChange
 // is called on creation of tables, and potentially removes the need for ReadingOwnWrites
 // for some subcommands.
 // Requires some logic to "inherit" from parents.
-func (p *planner) applyZoneConfigForMultiRegion(
-	ctx context.Context, zs tree.ZoneSpecifier, zc *zonepb.ZoneConfig, desc string,
+func applyZoneConfigForMultiRegion(
+	ctx context.Context,
+	zc *zonepb.ZoneConfig,
+	targetID descpb.ID,
+	table catalog.TableDescriptor,
+	txn *kv.Txn,
+	execConfig *ExecutorConfig,
 ) error {
-	// Convert the partially filled zone config to re-run as a SQL command.
-	// This avoid us having to modularize planNode logic from set_zone_config
-	// and the optimizer.
-	sql, err := zoneConfigToSQL(&zs, zc)
-	if err != nil {
-		return err
-	}
-	if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	if _, err := writeZoneConfig(
 		ctx,
-		desc,
-		p.Txn(),
-		sessiondata.InternalExecutorOverride{
-			User: p.SessionData().User(),
-		},
-		sql,
+		txn,
+		targetID,
+		table,
+		zc,
+		execConfig,
+		true, /* hasNewSubzones */
 	); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -608,8 +604,12 @@ func applyZoneConfigForMultiRegionTable(
 	return nil
 }
 
-func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
-	ctx context.Context, dbName tree.Name, regionConfig descpb.DatabaseDescriptor_RegionConfig,
+func ApplyZoneConfigFromDatabaseRegionConfig(
+	ctx context.Context,
+	dbID descpb.ID,
+	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	txn *kv.Txn,
+	execConfig *ExecutorConfig,
 ) error {
 	// Convert the partially filled zone config to re-run as a SQL command.
 	// This avoid us having to modularize planNode logic from set_zone_config
@@ -618,11 +618,25 @@ func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
 	if err != nil {
 		return err
 	}
-	return p.applyZoneConfigForMultiRegion(
+	return applyZoneConfigForMultiRegion(
 		ctx,
-		tree.ZoneSpecifier{Database: dbName},
 		dbZoneConfig,
-		"database-multiregion-set-zone-config",
+		dbID,
+		nil,
+		txn,
+		execConfig,
+	)
+}
+
+func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
+	ctx context.Context, dbID descpb.ID, regionConfig descpb.DatabaseDescriptor_RegionConfig,
+) error {
+	return ApplyZoneConfigFromDatabaseRegionConfig(
+		ctx,
+		dbID,
+		regionConfig,
+		p.Txn(),
+		p.ExecCfg(),
 	)
 }
 
@@ -734,7 +748,7 @@ func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdes
 	// Create the database-level zone configuration.
 	if err := p.applyZoneConfigFromDatabaseRegionConfig(
 		ctx,
-		tree.Name(desc.Name),
+		desc.ID,
 		*desc.RegionConfig); err != nil {
 		return err
 	}
