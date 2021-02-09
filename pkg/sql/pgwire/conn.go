@@ -302,6 +302,20 @@ func (c *conn) serveImpl(
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
+
+		// Send the client a dummy BackendKeyData message. This is necessary for
+		// compatibility with tools that require this message. This information is
+		// normally used by clients to send a CancelRequest message:
+		// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
+		// CockroachDB currently ignores all CancelRequests.
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
+		c.msgBuilder.putInt32(0)
+		c.msgBuilder.putInt32(0)
+		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+			reserved.Close(ctx)
+			return
+		}
+
 		// An initial readyForQuery message is part of the handshake.
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 		c.msgBuilder.writeByte(byte(sql.IdleTxnBlock))
@@ -686,6 +700,18 @@ func (c *conn) sendInitialConnData(
 		superUserVal = "on"
 	}
 	if err := c.sendParamStatus("is_superuser", superUserVal); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+
+	// Send the client a dummy BackendKeyData message. This is necessary for
+	// compatibility with tools that require this message. This information is
+	// normally used by clients to send a CancelRequest message:
+	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
+	// CockroachDB currently ignores all CancelRequests.
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
+	c.msgBuilder.putInt32(0)
+	c.msgBuilder.putInt32(0)
+	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 

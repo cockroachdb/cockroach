@@ -1521,3 +1521,42 @@ func TestSetSessionArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestReadTimeoutConn asserts that a readTimeoutConn performs reads normally
+// and exits with an appropriate error when exit conditions are satisfied.
+func TestCancelQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "TestCancelQuery" /* prefix */, url.User(security.RootUser),
+	)
+	defer cleanupFunc()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer db.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Delay execution for just a bit until db.QueryContext has begun.
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		cancel()
+	}()
+
+	// Cancellation has no effect on ongoing query.
+	if _, err := db.QueryContext(ctx, "select pg_sleep(1)"); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Context is already canceled, so error should come before execution.
+	if _, err := db.QueryContext(ctx, "select 1"); err == nil {
+		t.Fatal("expected error")
+	} else if err.Error() != "context canceled" {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
