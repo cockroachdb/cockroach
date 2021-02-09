@@ -1284,7 +1284,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		}
 
 		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
-			return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
+			return errors.NewAssertionErrorWithWrappedErrf(err, "invalid locality config")
 		}
 	}
 
