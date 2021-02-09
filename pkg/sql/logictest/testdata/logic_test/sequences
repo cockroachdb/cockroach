@@ -1394,3 +1394,92 @@ CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
 
 statement error invalid OWNED BY option
 ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
+
+
+# Test that passing a descriptor other than a sequence
+# returns an appropriate error.
+subtest invalid_ids
+
+statement ok
+CREATE TABLE t (i SERIAL PRIMARY KEY)
+
+let $t_id
+SELECT 't'::regclass::int
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT nextval($t_id::regclass)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT setval($t_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT currval($t_id::regclass)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+let $v_id
+SELECT 'v'::regclass::int
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT nextval($v_id::regclass)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT setval($v_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT currval($v_id::regclass)
+
+statement ok
+CREATE SCHEMA sc
+
+let $sc_id
+SELECT id FROM system.namespace WHERE name='sc'
+
+statement error does not exist
+SELECT nextval($sc_id::regclass)
+
+statement error does not exist
+SELECT setval($sc_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($sc_id::regclass)
+
+statement ok
+CREATE DATABASE db
+
+let $db_id
+SELECT id FROM system.namespace WHERE name='db'
+
+statement error does not exist
+SELECT nextval($db_id::regclass)
+
+statement error does not exist
+SELECT setval($db_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($db_id::regclass)
+
+statement ok
+CREATE TYPE e AS ENUM ('foo', 'bar')
+
+let $e_id
+SELECT id FROM system.namespace WHERE name='e'
+
+statement error does not exist
+SELECT nextval($e_id::regclass)
+
+statement error does not exist
+SELECT setval($e_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($e_id::regclass)
+
+statement error does not exist
+SELECT nextval(12345::regclass) # Bogus ID
+
+statement error does not exist
+SELECT setval(12345::regclass, 30, false) # Bogus ID
+
+statement error does not exist
+SELECT currval(12345::regclass) # Bogus ID
