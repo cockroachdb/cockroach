@@ -17,7 +17,9 @@ const presets = [
 const plugins = [
   "@babel/proposal-class-properties",
   "@babel/proposal-object-rest-spread",
-  ["import", { "libraryName": "antd", "style": "css" }]
+  // @babel/plugin-transform-runtime is required to support dynamic loading of cluster-ui package
+  "@babel/plugin-transform-runtime",
+  ["import", { "libraryName": "antd", "style": "css" }],
 ];
 
 const env = {
