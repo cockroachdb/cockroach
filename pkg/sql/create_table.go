@@ -1262,6 +1262,7 @@ func CreatePartitioning(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, error) {
 	if partBy == nil {
 		if indexDesc.Partitioning.NumImplicitColumns > 0 {
@@ -1276,7 +1277,7 @@ func CreatePartitioning(
 		return indexDesc, nil
 	}
 	return CreatePartitioningCCL(
-		ctx, st, evalCtx, tableDesc, indexDesc, partBy,
+		ctx, st, evalCtx, tableDesc, indexDesc, partBy, allowedNewColumnNames,
 	)
 }
 
@@ -1289,6 +1290,7 @@ var CreatePartitioningCCL = func(
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, error) {
 	return descpb.IndexDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
 		"creating or manipulating partitions requires a CCL binary"))
@@ -1828,6 +1830,7 @@ func NewTableDesc(
 						&desc,
 						idx,
 						partitionBy,
+						nil, /* allowedNewColumnNames */
 					)
 					if err != nil {
 						return nil, err
@@ -1902,6 +1905,7 @@ func NewTableDesc(
 						&desc,
 						idx,
 						partitionBy,
+						nil, /* allowedNewColumnNames */
 					)
 					if err != nil {
 						return nil, err
@@ -2022,6 +2026,7 @@ func NewTableDesc(
 				&desc,
 				*desc.GetPrimaryIndex().IndexDesc(),
 				partitionBy,
+				nil, /* allowedNewColumnNames */
 			)
 			if err != nil {
 				return nil, err

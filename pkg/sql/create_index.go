@@ -548,6 +548,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 				tableDesc,
 				indexDesc,
 				partitionBy,
+				nil, /* allowedNewColumnNames */
 			); err != nil {
 				return indexDesc, err
 			}
