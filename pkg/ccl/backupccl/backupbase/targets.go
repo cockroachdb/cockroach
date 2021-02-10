@@ -392,7 +392,9 @@ func DescriptorsMatchingTargets(
 				return ret, err
 			}
 			// Get all the types used by this table.
-			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(getTypeByID)
+			desc := resolver.DescByID[tableDesc.GetParentID()]
+			dbDesc := desc.(catalog.DatabaseDescriptor)
+			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 			if err != nil {
 				return ret, err
 			}
@@ -465,7 +467,9 @@ func DescriptorsMatchingTargets(
 						}
 					}
 					// Get all the types used by this table.
-					typeIDs, err := desc.GetAllReferencedTypeIDs(getTypeByID)
+					dbRaw := resolver.DescByID[desc.GetParentID()]
+					dbDesc := dbRaw.(catalog.DatabaseDescriptor)
+					typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 					if err != nil {
 						return ret, err
 					}
