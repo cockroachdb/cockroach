@@ -161,7 +161,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// Add the region to the database descriptor. This function validates that the region
 	// we're adding is an active member of the cluster and isn't already present in the
 	// RegionConfig.
-	if err := params.p.addRegionToRegionConfig(n.desc, n.n); err != nil {
+	if err := params.p.addRegionToRegionConfig(params.ctx, n.desc, n.n); err != nil {
 		return err
 	}
 

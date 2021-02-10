@@ -261,9 +261,9 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 // addRegionToRegionConfig adds the supplied region to the RegionConfig in the
 // supplied database descriptor.
 func (p *planner) addRegionToRegionConfig(
-	desc *dbdesc.Mutable, regionToAdd *tree.AlterDatabaseAddRegion,
+	ctx context.Context, desc *dbdesc.Mutable, regionToAdd *tree.AlterDatabaseAddRegion,
 ) error {
-	liveRegions, err := p.getLiveClusterRegions()
+	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func (p *planner) createRegionConfig(
 	if err != nil {
 		return nil, err
 	}
-	liveRegions, err := p.getLiveClusterRegions()
+	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return nil, err
 	}
