@@ -455,7 +455,7 @@ func (s *initServer) attemptJoinTo(
 	}
 
 	defer func() {
-		_ = conn.Close()
+		_ = conn.Close() // nolint:grpcconnclose
 	}()
 
 	binaryVersion := s.config.binaryVersion
