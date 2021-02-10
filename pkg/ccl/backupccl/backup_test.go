@@ -17,7 +17,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -329,8 +328,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fileType := http.DetectContentType(backupManifestBytes)
-		require.Equal(t, ZipType, fileType)
+		require.True(t, isGZipped(backupManifestBytes))
 	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
@@ -462,8 +460,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					fileType := http.DetectContentType(backupPartitionBytes)
-					require.Equal(t, ZipType, fileType)
+					require.True(t, isGZipped(backupPartitionBytes))
 				}
 			}
 		}
@@ -1577,8 +1574,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == ZipType {
+		if isGZipped(backupManifestBytes) {
 			backupManifestBytes, err = decompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
@@ -3935,8 +3931,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == ZipType {
+		if isGZipped(backupManifestBytes) {
 			backupManifestBytes, err = decompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
