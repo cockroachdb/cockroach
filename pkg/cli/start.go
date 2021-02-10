@@ -1085,7 +1085,7 @@ func getClientGRPCConn(
 		return nil, nil, nil, err
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
-		_ = conn.Close()
+		_ = conn.Close() // nolint:grpcconnclose
 	}))
 
 	// Tie the lifetime of the stopper to that of the context.

@@ -1321,7 +1321,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 			// running in a worker and usually sits on accept() which unblocks
 			// only when the listener closes. In other words, the listener needs
 			// to close when quiescing starts to allow that worker to shut down.
-			if err := conn.Close(); err != nil {
+			err := conn.Close() // nolint:grpcconnclose
+			if err != nil {
 				log.Ops.Fatalf(workersCtx, "%v", err)
 			}
 		}
