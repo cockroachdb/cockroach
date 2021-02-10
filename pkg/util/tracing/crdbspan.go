@@ -136,16 +136,9 @@ func (s *crdbSpan) disableRecording() {
 
 func (s *crdbSpan) getRecording(m mode) Recording {
 	if s == nil {
-		return nil
+		return nil // noop span
 	}
-	if m == modeLegacy && s.recordingType() == RecordingOff {
-		// In legacy tracing (pre always-on), we avoid allocations when the
-		// Span is not actively recording.
-		//
-		// TODO(tbg): we could consider doing the same when background tracing
-		// is on but the current span contains "nothing of interest".
-		return nil
-	}
+
 	s.mu.Lock()
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
