@@ -59,8 +59,7 @@ TABLE kv
  ├── INDEX idx
  │    ├── v int
  │    ├── k int not null
- │    └── WHERE
- │         └── v > 1
+ │    └── WHERE v > 1
  └── UNIQUE (k)
 
 exec-ddl
@@ -143,6 +142,5 @@ TABLE xyz
  │    ├── y int
  │    ├── x int not null
  │    ├── z string (storing)
- │    └── WHERE
- │         └── v > 1
+ │    └── WHERE v > 1
  └── UNIQUE (x)

@@ -234,7 +234,8 @@ CREATE TABLE constraint_db.t4 (
     a INT UNIQUE WITHOUT INDEX,
     b FLOAT,
     c STRING,
-    CONSTRAINT uwi_b_c UNIQUE WITHOUT INDEX (b, c)
+    CONSTRAINT uwi_b_c UNIQUE WITHOUT INDEX (b, c),
+    CONSTRAINT uwi_b_partial UNIQUE WITHOUT INDEX (b) WHERE c = 'foo'
 )
 
 statement ok
@@ -925,18 +926,19 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-oid         conname      connamespace  contype  condef
-370295511   check_c      2332901747    c        CHECK ((c != ''::STRING))
-644272476   unique_a     2332901747    u        UNIQUE WITHOUT INDEX (a)
-2112301379  uwi_b_c      2332901747    u        UNIQUE WITHOUT INDEX (b, c)
-2143281868  fk           2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
-2355671820  fk_b_c       2332901747    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
-2792001267  check_b      2332901747    c        CHECK ((b > 11))
-3572320190  primary      2332901747    p        PRIMARY KEY (p ASC)
-3911002394  fk_a_ref_t4  2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
-4089604113  fk           2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
-4243354484  t1_a_key     2332901747    u        UNIQUE (a ASC)
-4243354485  index_key    2332901747    u        UNIQUE (b ASC, c ASC)
+oid         conname        connamespace  contype  condef
+202621891   uwi_b_partial  2332901747    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
+370295511   check_c        2332901747    c        CHECK ((c != ''::STRING))
+644272476   unique_a       2332901747    u        UNIQUE WITHOUT INDEX (a)
+2112301379  uwi_b_c        2332901747    u        UNIQUE WITHOUT INDEX (b, c)
+2143281868  fk             2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
+2355671820  fk_b_c         2332901747    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
+2792001267  check_b        2332901747    c        CHECK ((b > 11))
+3572320190  primary        2332901747    p        PRIMARY KEY (p ASC)
+3911002394  fk_a_ref_t4    2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
+4089604113  fk             2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
+4243354484  t1_a_key       2332901747    u        UNIQUE (a ASC)
+4243354485  index_key      2332901747    u        UNIQUE (b ASC, c ASC)
 
 query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
@@ -945,18 +947,19 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-conname      contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
-check_c      c        false          false        true          57        0         0
-unique_a     u        false          false        true          59        0         0
-uwi_b_c      u        false          false        true          59        0         0
-fk           f        false          false        true          57        0         450499961
-fk_b_c       f        false          false        true          60        0         0
-check_b      c        false          false        true          57        0         0
-primary      p        false          false        true          55        0         450499963
-fk_a_ref_t4  f        false          false        true          60        0         0
-fk           f        false          false        true          56        0         450499960
-t1_a_key     u        false          false        true          55        0         450499960
-index_key    u        false          false        true          55        0         450499961
+conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
+uwi_b_partial  u        false          false        true          59        0         0
+check_c        c        false          false        true          57        0         0
+unique_a       u        false          false        true          59        0         0
+uwi_b_c        u        false          false        true          59        0         0
+fk             f        false          false        true          57        0         450499961
+fk_b_c         f        false          false        true          60        0         0
+check_b        c        false          false        true          57        0         0
+primary        p        false          false        true          55        0         450499963
+fk_a_ref_t4    f        false          false        true          60        0         0
+fk             f        false          false        true          56        0         450499960
+t1_a_key       u        false          false        true          55        0         450499960
+index_key      u        false          false        true          55        0         450499961
 
 query T
 SELECT conname
@@ -973,14 +976,15 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confrelid  confupdtype  confdeltype  confmatchtype
-check_c    0          NULL         NULL         NULL
-unique_a   0          NULL         NULL         NULL
-uwi_b_c    0          NULL         NULL         NULL
-check_b    0          NULL         NULL         NULL
-primary    0          NULL         NULL         NULL
-t1_a_key   0          NULL         NULL         NULL
-index_key  0          NULL         NULL         NULL
+conname        confrelid  confupdtype  confdeltype  confmatchtype
+uwi_b_partial  0          NULL         NULL         NULL
+check_c        0          NULL         NULL         NULL
+unique_a       0          NULL         NULL         NULL
+uwi_b_c        0          NULL         NULL         NULL
+check_b        0          NULL         NULL         NULL
+primary        0          NULL         NULL         NULL
+t1_a_key       0          NULL         NULL         NULL
+index_key      0          NULL         NULL         NULL
 
 query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -1002,18 +1006,19 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-conname      conislocal  coninhcount  connoinherit  conkey
-check_c      true        0            true          {3}
-unique_a     true        0            true          NULL
-uwi_b_c      true        0            true          NULL
-fk           true        0            true          {1,2}
-fk_b_c       true        0            true          {2,3}
-check_b      true        0            true          {2}
-primary      true        0            true          {1}
-fk_a_ref_t4  true        0            true          {1}
-fk           true        0            true          {1}
-t1_a_key     true        0            true          {2}
-index_key    true        0            true          {3,4}
+conname        conislocal  coninhcount  connoinherit  conkey
+uwi_b_partial  true        0            true          NULL
+check_c        true        0            true          {3}
+unique_a       true        0            true          NULL
+uwi_b_c        true        0            true          NULL
+fk             true        0            true          {1,2}
+fk_b_c         true        0            true          {2,3}
+check_b        true        0            true          {2}
+primary        true        0            true          {1}
+fk_a_ref_t4    true        0            true          {1}
+fk             true        0            true          {1}
+t1_a_key       true        0            true          {2}
+index_key      true        0            true          {3,4}
 
 query TTTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
@@ -1022,14 +1027,15 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
-check_c    NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
-unique_a   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
-uwi_b_c    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
-check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
-primary    NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
-index_key  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
+conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
+uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
+check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
+unique_a       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
+uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
+check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
+primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
+index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
