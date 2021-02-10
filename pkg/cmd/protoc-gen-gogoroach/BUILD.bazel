@@ -40,7 +40,6 @@ go_proto_compiler(
     valid_archive = True,
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/uuid",
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//sortkeys",
         "@com_github_gogo_protobuf//types",
@@ -61,7 +60,6 @@ go_proto_compiler(
     valid_archive = True,
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/uuid",
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//sortkeys",
         "@com_github_gogo_protobuf//types",

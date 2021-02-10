@@ -64,6 +64,7 @@ go_proto_library(
         "//pkg/util",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
+        "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.
