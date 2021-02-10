@@ -1003,6 +1003,44 @@ func TestStatusVars(t *testing.T) {
 	}
 }
 
+// TestStatusVarsTxnMetrics verifies that the metrics from the /_status/vars
+// endpoint for txns and the special cockroach_restart savepoint are correct.
+func TestStatusVarsTxnMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer db.Close()
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := db.Exec("BEGIN;" +
+		"SAVEPOINT cockroach_restart;" +
+		"SELECT 1;" +
+		"RELEASE SAVEPOINT cockroach_restart;" +
+		"ROLLBACK;"); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := getText(s, s.AdminURL()+statusPrefix+"vars")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(body, []byte("sql_txn_begin_count 1")) {
+		t.Errorf("expected `sql_txn_begin_count 1`, got: %s", body)
+	}
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_count 1")) {
+		t.Errorf("expected `sql_restart_savepoint_count 1`, got: %s", body)
+	}
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count 1")) {
+		t.Errorf("expected `sql_restart_savepoint_release_count 1`, got: %s", body)
+	}
+	if !bytes.Contains(body, []byte("sql_txn_commit_count 1")) {
+		t.Errorf("expected `sql_txn_commit_count 1`, got: %s", body)
+	}
+	if !bytes.Contains(body, []byte("sql_txn_rollback_count 0")) {
+		t.Errorf("expected `sql_txn_rollback_count 0`, got: %s", body)
+	}
+}
+
 func TestSpanStatsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
