@@ -23,7 +23,7 @@ chmod o+rwx "${artifacts}"
 # Disable global -json flag.
 export PATH=$PATH:$(GOFLAGS=; go env GOPATH)/bin
 
-build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
+make bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
 
 # Set up Google credentials. Note that we need this for all clouds since we upload
 # perf artifacts to Google Storage at the end.
