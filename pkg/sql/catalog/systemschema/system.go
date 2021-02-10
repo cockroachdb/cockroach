@@ -345,6 +345,17 @@ CREATE TABLE system.sqlliveness (
     expiration       DECIMAL NOT NULL,
   	FAMILY fam0_session_id_expiration (session_id, expiration)
 )`
+
+	MigrationsTableSchema = `
+CREATE TABLE system.migrations (
+    major        INT8 NOT NULL,
+    minor        INT8 NOT NULL,
+    patch        INT8 NOT NULL,
+    internal     INT8 NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL,
+    FAMILY "primary" (major, minor, patch, internal, completed_at),
+    PRIMARY KEY (major, minor, patch, internal)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1687,6 +1698,54 @@ var (
 		NextIndexID:  2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// MigrationsTable is the descriptor for the migrations table. It stores facts
+	// about the completion state of long-running migrations. It is used to
+	// prevent migrations from running again after they have been completed.
+	MigrationsTable = tabledesc.NewImmutable(descpb.TableDescriptor{
+		Name:                    "migrations",
+		ID:                      keys.MigrationsID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "major", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "minor", ID: 2, Type: types.Int, Nullable: false},
+			{Name: "patch", ID: 3, Type: types.Int, Nullable: false},
+			{Name: "internal", ID: 4, Type: types.Int, Nullable: false},
+			{Name: "completed_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
+		},
+		NextColumnID: 6,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"major", "minor", "patch", "internal", "completed_at"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
+				DefaultColumnID: 5,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:        tabledesc.PrimaryKeyIndexName,
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"major", "minor", "patch", "internal"},
+			ColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+			},
+			ColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
+		},
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

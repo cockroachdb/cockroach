@@ -25,13 +25,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const claimableStatusTupleString = `(` +
-	`'` + string(StatusRunning) + `', ` +
-	`'` + string(StatusPending) + `', ` +
-	`'` + string(StatusCancelRequested) + `', ` +
-	`'` + string(StatusPauseRequested) + `', ` +
-	`'` + string(StatusReverting) + `'` +
-	`)`
+const (
+	claimableStatusList = `'` + string(StatusRunning) + `', ` +
+		`'` + string(StatusPending) + `', ` +
+		`'` + string(StatusCancelRequested) + `', ` +
+		`'` + string(StatusPauseRequested) + `', ` +
+		`'` + string(StatusReverting) + `'`
+
+	claimableStatusTupleString = `(` + claimableStatusList + `)`
+
+	nonTerminalStatusList = claimableStatusList + `, ` +
+		`'` + string(StatusPaused) + `'`
+
+	// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
+	// non-terminal jobs.
+	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
+)
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.

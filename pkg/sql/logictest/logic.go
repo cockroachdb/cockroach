@@ -39,7 +39,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1396,6 +1398,23 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				binaryMinSupportedVersion,
 				false, /* initializeVersion */
 			)
+
+			// If we're injecting fake versions, hook up logic to simulate the end
+			// version existing.
+			from := clusterversion.ClusterVersion{Version: cfg.bootstrapVersion}
+			to := clusterversion.ClusterVersion{Version: cfg.binaryVersion}
+			if len(clusterversion.ListBetween(from, to)) == 0 {
+				mm, ok := nodeParams.Knobs.MigrationManager.(*migrationmanager.TestingKnobs)
+				if !ok {
+					mm = &migrationmanager.TestingKnobs{}
+					nodeParams.Knobs.MigrationManager = mm
+				}
+				mm.ListBetweenOverride = func(
+					from, to clusterversion.ClusterVersion,
+				) []clusterversion.ClusterVersion {
+					return []clusterversion.ClusterVersion{to}
+				}
+			}
 		}
 		paramsPerNode[i] = nodeParams
 	}

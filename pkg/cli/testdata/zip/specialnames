@@ -22,7 +22,7 @@ requesting table details for defaultdb.public."../system"... writing: debug/sche
 requesting database details for postgres... writing: debug/schema/postgres@details.json
 0 tables found
 requesting database details for system... writing: debug/schema/system-1@details.json
-29 tables found
+30 tables found
 requesting table details for system.public.namespace... writing: debug/schema/system-1/public_namespace.json
 requesting table details for system.public.descriptor... writing: debug/schema/system-1/public_descriptor.json
 requesting table details for system.public.users... writing: debug/schema/system-1/public_users.json
@@ -52,3 +52,4 @@ requesting table details for system.public.statement_diagnostics_requests... wri
 requesting table details for system.public.statement_diagnostics... writing: debug/schema/system-1/public_statement_diagnostics.json
 requesting table details for system.public.scheduled_jobs... writing: debug/schema/system-1/public_scheduled_jobs.json
 requesting table details for system.public.sqlliveness... writing: debug/schema/system-1/public_sqlliveness.json
+requesting table details for system.public.migrations... writing: debug/schema/system-1/public_migrations.json

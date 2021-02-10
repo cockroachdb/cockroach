@@ -774,6 +774,7 @@ system         public              statement_diagnostics_requests         BASE T
 system         public              statement_diagnostics                  BASE TABLE   YES                 1
 system         public              scheduled_jobs                         BASE TABLE   YES                 1
 system         public              sqlliveness                            BASE TABLE   YES                 1
+system         public              migrations                             BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -859,6 +860,12 @@ system              public             630200280_21_2_not_null   system         
 system              public             630200280_21_3_not_null   system         public        locations                        CHECK            NO             NO
 system              public             630200280_21_4_not_null   system         public        locations                        CHECK            NO             NO
 system              public             primary                   system         public        locations                        PRIMARY KEY      NO             NO
+system              public             630200280_40_1_not_null   system         public        migrations                       CHECK            NO             NO
+system              public             630200280_40_2_not_null   system         public        migrations                       CHECK            NO             NO
+system              public             630200280_40_3_not_null   system         public        migrations                       CHECK            NO             NO
+system              public             630200280_40_4_not_null   system         public        migrations                       CHECK            NO             NO
+system              public             630200280_40_5_not_null   system         public        migrations                       CHECK            NO             NO
+system              public             primary                   system         public        migrations                       PRIMARY KEY      NO             NO
 system              public             630200280_2_1_not_null    system         public        namespace                        CHECK            NO             NO
 system              public             630200280_2_2_not_null    system         public        namespace                        CHECK            NO             NO
 system              public             primary                   system         public        namespace                        PRIMARY KEY      NO             NO
@@ -1089,6 +1096,11 @@ system              public             630200280_37_9_not_null   executor_type I
 system              public             630200280_39_1_not_null   session_id IS NOT NULL
 system              public             630200280_39_2_not_null   expiration IS NOT NULL
 system              public             630200280_3_1_not_null    id IS NOT NULL
+system              public             630200280_40_1_not_null   major IS NOT NULL
+system              public             630200280_40_2_not_null   minor IS NOT NULL
+system              public             630200280_40_3_not_null   patch IS NOT NULL
+system              public             630200280_40_4_not_null   internal IS NOT NULL
+system              public             630200280_40_5_not_null   completed_at IS NOT NULL
 system              public             630200280_4_1_not_null    username IS NOT NULL
 system              public             630200280_4_3_not_null    isRole IS NOT NULL
 system              public             630200280_5_1_not_null    id IS NOT NULL
@@ -1118,6 +1130,10 @@ system         public        lease                            nodeID          sy
 system         public        lease                            version         system              public             primary
 system         public        locations                        localityKey     system              public             primary
 system         public        locations                        localityValue   system              public             primary
+system         public        migrations                       internal        system              public             primary
+system         public        migrations                       major           system              public             primary
+system         public        migrations                       minor           system              public             primary
+system         public        migrations                       patch           system              public             primary
 system         public        namespace                        name            system              public             primary
 system         public        namespace                        parentID        system              public             primary
 system         public        namespace2                       name            system              public             primary
@@ -1282,6 +1298,11 @@ system         public        locations                        latitude          
 system         public        locations                        localityKey               1
 system         public        locations                        localityValue             2
 system         public        locations                        longitude                 4
+system         public        migrations                       completed_at              5
+system         public        migrations                       internal                  4
+system         public        migrations                       major                     1
+system         public        migrations                       minor                     2
+system         public        migrations                       patch                     3
 system         public        namespace                        id                        3
 system         public        namespace                        name                      2
 system         public        namespace                        parentID                  1
@@ -2041,6 +2062,16 @@ NULL     root     system         public              locations                  
 NULL     root     system         public              locations                              INSERT          NULL          NO
 NULL     root     system         public              locations                              SELECT          NULL          YES
 NULL     root     system         public              locations                              UPDATE          NULL          NO
+NULL     admin    system         public              migrations                             DELETE          NULL          NO
+NULL     admin    system         public              migrations                             GRANT           NULL          NO
+NULL     admin    system         public              migrations                             INSERT          NULL          NO
+NULL     admin    system         public              migrations                             SELECT          NULL          YES
+NULL     admin    system         public              migrations                             UPDATE          NULL          NO
+NULL     root     system         public              migrations                             DELETE          NULL          NO
+NULL     root     system         public              migrations                             GRANT           NULL          NO
+NULL     root     system         public              migrations                             INSERT          NULL          NO
+NULL     root     system         public              migrations                             SELECT          NULL          YES
+NULL     root     system         public              migrations                             UPDATE          NULL          NO
 NULL     admin    system         public              namespace                              GRANT           NULL          NO
 NULL     admin    system         public              namespace                              SELECT          NULL          YES
 NULL     root     system         public              namespace                              GRANT           NULL          NO
@@ -2627,6 +2658,16 @@ NULL     root     system         public              sqlliveness                
 NULL     root     system         public              sqlliveness                            INSERT          NULL          NO
 NULL     root     system         public              sqlliveness                            SELECT          NULL          YES
 NULL     root     system         public              sqlliveness                            UPDATE          NULL          NO
+NULL     admin    system         public              migrations                             DELETE          NULL          NO
+NULL     admin    system         public              migrations                             GRANT           NULL          NO
+NULL     admin    system         public              migrations                             INSERT          NULL          NO
+NULL     admin    system         public              migrations                             SELECT          NULL          YES
+NULL     admin    system         public              migrations                             UPDATE          NULL          NO
+NULL     root     system         public              migrations                             DELETE          NULL          NO
+NULL     root     system         public              migrations                             GRANT           NULL          NO
+NULL     root     system         public              migrations                             INSERT          NULL          NO
+NULL     root     system         public              migrations                             SELECT          NULL          YES
+NULL     root     system         public              migrations                             UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

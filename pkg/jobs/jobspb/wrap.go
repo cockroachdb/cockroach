@@ -30,6 +30,7 @@ var _ Details = CreateStatsDetails{}
 var _ Details = SchemaChangeGCDetails{}
 var _ Details = StreamIngestionDetails{}
 var _ Details = NewSchemaChangeDetails{}
+var _ Details = MigrationDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -42,6 +43,7 @@ var _ ProgressDetails = CreateStatsProgress{}
 var _ ProgressDetails = SchemaChangeGCProgress{}
 var _ ProgressDetails = StreamIngestionProgress{}
 var _ ProgressDetails = NewSchemaChangeProgress{}
+var _ ProgressDetails = MigrationProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -75,6 +77,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeStreamIngestion
 	case *Payload_NewSchemaChange:
 		return TypeNewSchemaChange
+	case *Payload_Migration:
+		return TypeMigration
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -109,6 +113,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_StreamIngest{StreamIngest: &d}
 	case NewSchemaChangeProgress:
 		return &Progress_NewSchemaChange{NewSchemaChange: &d}
+	case MigrationProgress:
+		return &Progress_Migration{Migration: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -138,6 +144,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.StreamIngestion
 	case *Payload_NewSchemaChange:
 		return *d.NewSchemaChange
+	case *Payload_Migration:
+		return *d.Migration
 	default:
 		return nil
 	}
@@ -167,6 +175,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.StreamIngest
 	case *Progress_NewSchemaChange:
 		return *d.NewSchemaChange
+	case *Progress_Migration:
+		return *d.Migration
 	default:
 		return nil
 	}
@@ -209,6 +219,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_StreamIngestion{StreamIngestion: &d}
 	case NewSchemaChangeDetails:
 		return &Payload_NewSchemaChange{NewSchemaChange: &d}
+	case MigrationDetails:
+		return &Payload_Migration{Migration: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -244,7 +256,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 12
+const NumJobTypes = 13
 
 func init() {
 	if len(Type_name) != NumJobTypes {
