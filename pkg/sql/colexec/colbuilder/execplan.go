@@ -459,15 +459,13 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, monitorNamePrefix,
 			)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
-			if args.TestingKnobs.NumForcedRepartitions != 0 {
-				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
-			}
 			es := colexec.NewExternalSorter(
 				unlimitedAllocator,
 				standaloneMemAccount,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
+				args.TestingKnobs.NumForcedRepartitions,
 				args.TestingKnobs.DelegateFDAcquisitions,
 				args.DiskQueueCfg,
 				args.FDSemaphore,
