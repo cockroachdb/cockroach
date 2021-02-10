@@ -64,6 +64,7 @@ func randTables(r *rand.Rand) string {
 	sb.WriteString(`
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
+		SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
 	`)
 
 	// Create the random tables.

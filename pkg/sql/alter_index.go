@@ -85,6 +85,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				n.tableDesc,
 				*n.indexDesc,
 				t.PartitionBy,
+				nil, /* allowedNewColumnNames */
 			)
 			if err != nil {
 				return err
