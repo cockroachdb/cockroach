@@ -206,7 +206,7 @@ func TestClusterConnectivity(t *testing.T) {
 						return err
 					}
 					defer func() {
-						_ = conn.Close()
+						_ = conn.Close() // nolint:grpcconnclose
 					}()
 
 					client := serverpb.NewInitClient(conn)

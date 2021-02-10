@@ -150,7 +150,8 @@ func (d *MockDialer) DialNoBreaker(
 
 // Close must be called after the test is done.
 func (d *MockDialer) Close() {
-	if err := d.mu.conn.Close(); err != nil {
+	err := d.mu.conn.Close() // nolint:grpcconnclose
+	if err != nil {
 		panic(err)
 	}
 }
