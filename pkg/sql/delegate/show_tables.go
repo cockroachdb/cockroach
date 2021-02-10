@@ -13,10 +13,18 @@ package delegate
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
+
+var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
+	"sql.show_tables.estimated_row_count.enabled",
+	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
+		"will improve SHOW TABLES performance.",
+	true,
 )
 
 // delegateShowTables implements SHOW TABLES which returns all the tables.
@@ -61,18 +69,25 @@ SELECT ns.nspname AS schema_name,
        ELSE 'table'
        END AS type,
        rl.rolname AS owner,
-       s.estimated_row_count AS estimated_row_count,
+			 %[5]s
        ct.locality AS locality
        %[3]s
 FROM %[1]s.pg_catalog.pg_class AS pc
 LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
 JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
 %[4]s
-LEFT JOIN crdb_internal.table_row_statistics AS s ON (s.table_id = pc.oid::INT8)
+%[6]s
 LEFT JOIN crdb_internal.tables AS ct ON (pc.oid::int8 = ct.table_id)
 WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
 ORDER BY schema_name, table_name
 `
+	var estimatedRowCount string
+	var estimatedRowCountJoin string
+	if showEstimatedRowCountClusterSetting.Get(&d.evalCtx.Settings.SV) {
+		estimatedRowCount = "s.estimated_row_count AS estimated_row_count, "
+		estimatedRowCountJoin = `
+  LEFT JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)`
+	}
 	var descJoin string
 	var comment string
 	if n.WithComment {
@@ -88,6 +103,8 @@ ORDER BY schema_name, table_name
 		schemaClause,
 		comment,
 		descJoin,
+		estimatedRowCount,
+		estimatedRowCountJoin,
 	)
 	return parse(query)
 }

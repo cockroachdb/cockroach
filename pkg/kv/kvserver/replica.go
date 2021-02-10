@@ -1187,6 +1187,15 @@ func (r *Replica) checkExecutionCanProceed(
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// Has the replica been initialized?
+	// NB: this should have already been checked in Store.Send, so we don't need
+	// to handle this case particularly well, but if we do reach here (as some
+	// tests that call directly into Replica.Send have), it's better to return
+	// an error than to panic in checkSpanInRangeRLocked.
+	if !r.isInitializedRLocked() {
+		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
+	}
+
 	// Is the replica destroyed?
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return kvserverpb.LeaseStatus{}, err
