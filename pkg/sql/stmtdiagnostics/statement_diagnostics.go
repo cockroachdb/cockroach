@@ -455,13 +455,20 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		var err error
-		rows, err = r.ie.QueryEx(ctx, "stmt-diag-poll", nil, /* txn */
+		it, err := r.ie.QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
 			},
 			"SELECT id, statement_fingerprint FROM system.statement_diagnostics_requests "+
 				"WHERE completed = false")
+		if err != nil {
+			return err
+		}
+		rows = rows[:0]
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			rows = append(rows, it.Cur())
+		}
 		if err != nil {
 			return err
 		}

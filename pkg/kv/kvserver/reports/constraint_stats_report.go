@@ -173,15 +173,17 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	}
 	const prevViolations = "select zone_id, subzone_id, type, config, " +
 		"violating_ranges from system.replication_constraint_stats"
-	rows, err := ex.Query(
+	it, err := ex.QueryIterator(
 		ctx, "get-previous-replication-constraint-stats", txn, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(ConstraintReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(ConstraintReport)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		key := ConstraintStatusKey{}
 		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID((*row[1].(*tree.DInt)))
@@ -189,8 +191,7 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 		key.Constraint = (ConstraintRepr)(*row[3].(*tree.DString))
 		r.previousVersion[key] = ConstraintStatus{(int)(*row[4].(*tree.DInt))}
 	}
-
-	return nil
+	return err
 }
 
 func (r *replicationConstraintStatsReportSaver) updateTimestamp(
