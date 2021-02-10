@@ -248,6 +248,8 @@ func (p *planner) AlterPrimaryKey(
 	var allowedNewColumnNames []tree.Name
 	// isNewPartitionAllBy is set if a new PARTITON ALL BY statement is introduced.
 	isNewPartitionAllBy := false
+	// dropPartitionAllBy is set if we should be dropping from PARTITION ALL BY.
+	dropPartitionAllBy := false
 	var partitionAllBy *tree.PartitionBy
 	var err error
 	if alterPrimaryKeyLocalitySwap != nil {
@@ -287,6 +289,13 @@ func (p *planner) AlterPrimaryKey(
 					localityConfigSwap.OldLocalityConfig.Locality,
 					localityConfigSwap.NewLocalityConfig.Locality,
 				)
+			}
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			switch localityConfigSwap.NewLocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_Global_,
+				*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+				// We don't want a PARTITION ALL BY anymore.
+				dropPartitionAllBy = true
 			}
 		default:
 			return errors.AssertionFailedf(
@@ -395,6 +404,15 @@ func (p *planner) AlterPrimaryKey(
 		// Clone the index that we want to rewrite.
 		newIndex := protoutil.Clone(idx).(*descpb.IndexDescriptor)
 		basename := newIndex.Name + "_rewrite_for_primary_key_change"
+
+		// Drop any PARTITION ALL BY clause.
+		if dropPartitionAllBy {
+			newIndex.ColumnNames = newIndex.ColumnNames[newIndex.Partitioning.NumImplicitColumns:]
+			newIndex.ColumnIDs = newIndex.ColumnIDs[newIndex.Partitioning.NumImplicitColumns:]
+			newIndex.ColumnDirections = newIndex.ColumnDirections[newIndex.Partitioning.NumImplicitColumns:]
+			newIndex.Partitioning = descpb.PartitioningDescriptor{}
+		}
+
 		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
 			return err
