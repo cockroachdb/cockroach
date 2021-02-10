@@ -1215,18 +1215,32 @@ func (m mvccValueFormatter) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, kvserver.SprintKeyValue(m.kv, false /* printKey */))
 }
 
+type lockValueFormatter struct {
+	value []byte
+}
+
+func (m lockValueFormatter) Format(f fmt.State, c rune) {
+	fmt.Fprint(f, kvserver.SprintIntent(m.value))
+}
+
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
 	// between kvserver and storage.
-	// TODO(sumeer): fix this to also format EngineKey KVs.
 	storage.EngineComparer.FormatValue = func(key, value []byte) fmt.Formatter {
-		decoded, err := storage.DecodeMVCCKey(key)
-		if err != nil {
-			return mvccValueFormatter{err: err}
+		decoded, ok := storage.DecodeEngineKey(key)
+		if !ok {
+			return mvccValueFormatter{err: errors.Errorf("invalid encoded engine key: %x", key)}
 		}
-		return mvccValueFormatter{kv: storage.MVCCKeyValue{Key: decoded, Value: value}}
+		if decoded.IsMVCCKey() {
+			mvccKey, err := decoded.ToMVCCKey()
+			if err != nil {
+				return mvccValueFormatter{err: err}
+			}
+			return mvccValueFormatter{kv: storage.MVCCKeyValue{Key: mvccKey, Value: value}}
+		}
+		return lockValueFormatter{value: value}
 	}
 
 	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator

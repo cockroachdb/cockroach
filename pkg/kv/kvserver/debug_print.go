@@ -75,6 +75,14 @@ func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 	panic("unreachable")
 }
 
+func SprintIntent(value []byte) string {
+	if out, err := tryIntent(storage.MVCCKeyValue{Value: value}); err == nil {
+		return out
+	} else {
+		return fmt.Sprintf("%x", value)
+	}
+}
+
 func tryRangeDescriptor(kv storage.MVCCKeyValue) (string, error) {
 	if err := IsRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
@@ -394,4 +402,5 @@ func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
 	} else {
 		fmt.Fprintf(&sb, "%x", v)
 	}
+	fmt.Println(sb.String())
 }
