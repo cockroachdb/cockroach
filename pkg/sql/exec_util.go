@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -796,8 +797,16 @@ type ExecutorConfig struct {
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
-	// that allow us to eventually remove legacy code.
-	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
+	// that allow us to eventually remove legacy code. It will only be populated
+	// on the system tenant.
+	//
+	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
+	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
+
+	// MigrationJobDeps is used to drive migrations.
+	//
+	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
+	MigrationJobDeps migration.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
 	// object which mostly just holds on to an ExecConfig.

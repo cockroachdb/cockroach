@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "migrations",
+    srcs = [
+        "migrations.go",
+        "migrations_table.go",
+        "truncated_state.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/migration",
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sqlmigrations",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "migrations_test",
+    srcs = [
+        "main_test.go",
+        "truncated_state_external_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/stateloader",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

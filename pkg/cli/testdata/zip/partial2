@@ -58,7 +58,7 @@ requesting goroutine files for node 1... writing: debug/nodes/1/goroutines.err.t
   ^- resulted in ...
 requesting log file ...
 requesting log file ...
-requesting ranges... 35 found
+requesting ranges... 36 found
 writing: debug/nodes/1/ranges/1.json
 writing: debug/nodes/1/ranges/2.json
 writing: debug/nodes/1/ranges/3.json
@@ -94,6 +94,7 @@ writing: debug/nodes/1/ranges/32.json
 writing: debug/nodes/1/ranges/33.json
 writing: debug/nodes/1/ranges/34.json
 writing: debug/nodes/1/ranges/35.json
+writing: debug/nodes/1/ranges/36.json
 writing: debug/nodes/3/status.json
 using SQL connection URL for node 3: postgresql://...
 retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/3/crdb_internal.feature_usage.txt
@@ -124,7 +125,7 @@ requesting goroutine files for node 3... writing: debug/nodes/3/goroutines.err.t
   ^- resulted in ...
 requesting log file ...
 requesting log file ...
-requesting ranges... 35 found
+requesting ranges... 36 found
 writing: debug/nodes/3/ranges/1.json
 writing: debug/nodes/3/ranges/2.json
 writing: debug/nodes/3/ranges/3.json
@@ -160,6 +161,7 @@ writing: debug/nodes/3/ranges/32.json
 writing: debug/nodes/3/ranges/33.json
 writing: debug/nodes/3/ranges/34.json
 writing: debug/nodes/3/ranges/35.json
+writing: debug/nodes/3/ranges/36.json
 doctor examining cluster...No problems found!
 writing: debug/reports/doctor.txt
 requesting list of SQL databases... 3 found
@@ -168,7 +170,7 @@ requesting database details for defaultdb... writing: debug/schema/defaultdb@det
 requesting database details for postgres... writing: debug/schema/postgres@details.json
 0 tables found
 requesting database details for system... writing: debug/schema/system@details.json
-29 tables found
+30 tables found
 requesting table details for system.public.namespace... writing: debug/schema/system/public_namespace.json
 requesting table details for system.public.descriptor... writing: debug/schema/system/public_descriptor.json
 requesting table details for system.public.users... writing: debug/schema/system/public_users.json
@@ -198,5 +200,6 @@ requesting table details for system.public.statement_diagnostics_requests... wri
 requesting table details for system.public.statement_diagnostics... writing: debug/schema/system/public_statement_diagnostics.json
 requesting table details for system.public.scheduled_jobs... writing: debug/schema/system/public_scheduled_jobs.json
 requesting table details for system.public.sqlliveness... writing: debug/schema/system/public_sqlliveness.json
+requesting table details for system.public.migrations... writing: debug/schema/system/public_migrations.json
 writing: debug/pprof-summary.sh
 writing: debug/hot-ranges.sh
