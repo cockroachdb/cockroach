@@ -78,7 +78,6 @@ func newOrdinalityProcessor(
 func (o *ordinalityProcessor) Start(ctx context.Context) {
 	o.input.Start(ctx)
 	ctx = o.StartInternal(ctx, ordinalityProcName)
-	_ = ctx // make linter happy
 }
 
 // Next is part of the RowSource interface.
