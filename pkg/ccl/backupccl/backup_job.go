@@ -431,15 +431,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
-	if err != nil {
-		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
-			return err
-		}
-		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
-		numClusterNodes = 1
-	}
-
 	statsCache := p.ExecCfg().TableStatsCache
 	res, err := backup(
 		ctx,
@@ -504,6 +495,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// Collect telemetry.
 	{
+		numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+		if err != nil {
+			if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
+				return err
+			}
+			log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+			numClusterNodes = 1
+		}
+
 		telemetry.Count("backup.total.succeeded")
 		const mb = 1 << 20
 		sizeMb := res.DataSize / mb

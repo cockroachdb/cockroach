@@ -41,9 +41,28 @@ func TestFullClusterBackup(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
+
+	// Closed when the restore is allowed to progress with the rest of the backup.
+	allowProgressAfterPreRestore := make(chan struct{})
+	// Closed to signal the the zones have been restored.
+	restoredZones := make(chan struct{})
+	for _, server := range tcRestore.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.afterPreRestore = func() error {
+					close(restoredZones)
+					<-allowProgressAfterPreRestore
+					return nil
+				}
+				return r
+			},
+		}
+	}
 
 	// The claim_session_id field in jobs is a uuid and so needs to be excluded
 	// when comparing jobs pre/post restore.
@@ -138,7 +157,28 @@ CREATE TABLE data2.foo (a int);
 		[][]string{{"0"}},
 	)
 
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+	doneRestore := make(chan struct{})
+	go func() {
+		sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+		close(doneRestore)
+	}()
+
+	// Check that zones are restored during pre-restore.
+	t.Run("ensure zones are restored during pre-restore", func(t *testing.T) {
+		<-restoredZones
+		checkZones := "SELECT * FROM system.zones"
+		sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
+
+		// Check that no data has been restored yet.
+		sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.bank")
+	})
+
+	// Allow the restore to make progress after we've checked the pre-restore
+	// stage.
+	close(allowProgressAfterPreRestore)
+
+	// Wait for the restore to finish before checking that it did the right thing.
+	<-doneRestore
 
 	t.Run("ensure all databases restored", func(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(t,

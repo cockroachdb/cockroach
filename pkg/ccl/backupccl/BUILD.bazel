@@ -11,6 +11,7 @@ go_library(
         "backup_processor.go",
         "backup_processor_planning.go",
         "create_scheduled_backup.go",
+        "data_bundle.go",
         "manifest_handling.go",
         "restore_data_processor.go",
         "restore_job.go",
