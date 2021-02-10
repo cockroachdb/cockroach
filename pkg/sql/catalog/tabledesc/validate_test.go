@@ -197,6 +197,16 @@ var validationMap = []struct {
 		},
 	},
 	{
+		obj: descpb.UniqueWithoutIndexConstraint{},
+		fieldMap: map[string]validationStatusInfo{
+			"TableID":   {status: iSolemnlySwearThisFieldIsValidated},
+			"ColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":      {status: thisFieldReferencesNoObjects},
+			"Validity":  {status: thisFieldReferencesNoObjects},
+			"Predicate": {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
+	{
 		obj: descpb.TypeDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
 			"Name":                     {status: iSolemnlySwearThisFieldIsValidated},

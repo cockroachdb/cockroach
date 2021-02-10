@@ -163,14 +163,18 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 	for i := 0; i < tab.UniqueCount(); i++ {
 		var withoutIndexStr string
-		if tab.Unique(i).WithoutIndex() {
+		uniq := tab.Unique(i)
+		if uniq.WithoutIndex() {
 			withoutIndexStr = "WITHOUT INDEX "
 		}
-		child.Childf(
+		c := child.Childf(
 			"UNIQUE %s%s",
 			withoutIndexStr,
 			formatCols(tab, tab.Unique(i).ColumnCount(), tab.Unique(i).ColumnOrdinal),
 		)
+		if pred, isPartial := uniq.Predicate(); isPartial {
+			c.Childf("WHERE %s", pred)
+		}
 	}
 
 	// TODO(radu): show stats.
@@ -240,8 +244,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		}
 	}
 	if pred, isPartial := idx.Predicate(); isPartial {
-		c := child.Child("WHERE")
-		c.Childf(pred)
+		child.Childf("WHERE %s", pred)
 	}
 }
 

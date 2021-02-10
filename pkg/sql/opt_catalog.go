@@ -723,6 +723,7 @@ func newOptTable(
 			name:         u.Name,
 			table:        ot.ID(),
 			columns:      u.ColumnIDs,
+			predicate:    u.Predicate,
 			withoutIndex: true,
 			validity:     u.Validity,
 		})
@@ -783,6 +784,7 @@ func newOptTable(
 				table:        ot.ID(),
 				columns:      idxDesc.ColumnIDs[idxDesc.Partitioning.NumImplicitColumns:],
 				withoutIndex: true,
+				predicate:    idxDesc.Predicate,
 				// TODO(rytaft): will we ever support an unvalidated unique constraint
 				// here?
 				validity: descpb.ConstraintValidity_Validated,
@@ -1488,8 +1490,9 @@ func (oi *optFamily) Table() cat.Table {
 type optUniqueConstraint struct {
 	name string
 
-	table   cat.StableID
-	columns []descpb.ColumnID
+	table     cat.StableID
+	columns   []descpb.ColumnID
+	predicate string
 
 	withoutIndex bool
 	validity     descpb.ConstraintValidity
@@ -1523,6 +1526,11 @@ func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 	optTab := tab.(*optTable)
 	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
 	return ord
+}
+
+// Predicate is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) Predicate() (string, bool) {
+	return u.predicate, u.predicate != ""
 }
 
 // WithoutIndex is part of the cat.UniqueConstraint interface.

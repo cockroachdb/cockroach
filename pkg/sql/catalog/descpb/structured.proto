@@ -113,6 +113,11 @@ message UniqueWithoutIndexConstraint {
                                         (gogoproto.casttype) = "ColumnID"];
   optional string name = 3 [(gogoproto.nullable) = false];
   optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+
+  // Predicate, if it's not empty, indicates that the constraint is a partial
+  // unique constraint with Predicate as the expression. Columns are referred to
+  // in the expression by their name.
+  optional string predicate = 5 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
