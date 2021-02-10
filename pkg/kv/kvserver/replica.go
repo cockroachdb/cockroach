@@ -809,6 +809,11 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
+	if r.mu.state.Version == nil {
+		// TODO(irfansharif,tbg): This is a stop-gap for #58523.
+		return roachpb.Version{}
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.Version
