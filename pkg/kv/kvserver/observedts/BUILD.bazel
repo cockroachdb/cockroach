@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "observedts_test",
+    size = "small",
     srcs = [
         "limit_test.go",
         "uncertainty_test.go",

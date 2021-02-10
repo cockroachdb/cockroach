@@ -90,6 +90,7 @@ go_library(
 
 go_test(
     name = "builtins_test",
+    size = "small",
     srcs = [
         "aggregate_builtins_test.go",
         "all_builtins_test.go",
@@ -103,6 +104,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":builtins"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/kv",

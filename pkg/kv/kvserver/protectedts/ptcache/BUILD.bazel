@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "ptcache_test",
+    size = "medium",
     srcs = [
         "cache_test.go",
         "main_test.go",

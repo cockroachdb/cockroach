@@ -33,6 +33,7 @@ go_library(
 
 go_test(
     name = "workload_test",
+    size = "small",
     srcs = [
         "bench_test.go",
         "csv_test.go",

@@ -49,6 +49,7 @@ go_library(
 
 go_test(
     name = "storageccl_test",
+    size = "large",
     srcs = [
         "encryption_test.go",
         "export_test.go",

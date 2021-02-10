@@ -95,6 +95,7 @@ go_library(
 
 go_test(
     name = "rowexec_test",
+    size = "medium",
     srcs = [
         "aggregator_test.go",
         "backfiller_test.go",

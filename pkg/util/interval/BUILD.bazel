@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "interval_test",
+    size = "small",
     srcs = [
         "btree_based_interval_test.go",
         "range_group_test.go",

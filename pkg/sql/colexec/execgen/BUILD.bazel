@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "execgen_test",
+    size = "small",
     srcs = [
         "datadriven_test.go",
         "inline_test.go",

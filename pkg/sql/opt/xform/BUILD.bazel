@@ -51,6 +51,7 @@ go_library(
 
 go_test(
     name = "xform_test",
+    size = "small",
     srcs = [
         "coster_test.go",
         "join_order_builder_test.go",
@@ -60,6 +61,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":xform"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",

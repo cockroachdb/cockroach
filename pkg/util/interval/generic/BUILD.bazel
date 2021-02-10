@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "generic_test",
+    size = "large",
     srcs = ["example_interval_btree_test.go"],
     embed = [":generic"],
     deps = [

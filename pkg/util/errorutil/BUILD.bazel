@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "errorutil_test",
+    size = "small",
     srcs = ["error_test.go"],
     embed = [":errorutil"],
 )

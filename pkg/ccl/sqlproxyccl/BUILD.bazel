@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "sqlproxyccl_test",
+    size = "small",
     srcs = [
         "authentication_test.go",
         "frontend_admitter_test.go",
@@ -39,6 +40,7 @@ go_test(
         "server_test.go",
     ],
     embed = [":sqlproxyccl"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl",

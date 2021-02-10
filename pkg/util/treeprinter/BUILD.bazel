@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "treeprinter_test",
+    size = "small",
     srcs = ["tree_printer_test.go"],
     embed = [":treeprinter"],
 )

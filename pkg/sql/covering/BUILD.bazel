@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "covering_test",
+    size = "small",
     srcs = [
         "bench_test.go",
         "main_test.go",

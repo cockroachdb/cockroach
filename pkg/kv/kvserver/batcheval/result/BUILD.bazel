@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "result_test",
+    size = "small",
     srcs = ["result_test.go"],
     embed = [":result"],
     deps = [

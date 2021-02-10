@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "txnrecovery_test",
+    size = "small",
     srcs = ["manager_test.go"],
     embed = [":txnrecovery"],
     deps = [

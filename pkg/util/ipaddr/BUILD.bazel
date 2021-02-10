@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "ipaddr_test",
+    size = "small",
     srcs = ["ipaddr_test.go"],
     embed = [":ipaddr"],
     deps = ["//pkg/util/uint128"],

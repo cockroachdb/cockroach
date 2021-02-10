@@ -37,6 +37,7 @@ go_library(
 
 go_test(
     name = "distsql_test",
+    size = "small",
     srcs = [
         "columnar_operators_test.go",
         "columnar_utils_test.go",

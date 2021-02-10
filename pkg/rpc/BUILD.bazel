@@ -69,6 +69,7 @@ go_library(
 
 go_test(
     name = "rpc_test",
+    size = "small",
     srcs = [
         "auth_test.go",
         "clock_offset_test.go",

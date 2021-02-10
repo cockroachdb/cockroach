@@ -13,7 +13,9 @@ go_library(
 
 go_test(
     name = "passesutil_test",
+    size = "small",
     srcs = ["passes_util_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/testutils/lint/passes/descriptormarshal",
         "//pkg/testutils/lint/passes/unconvert",

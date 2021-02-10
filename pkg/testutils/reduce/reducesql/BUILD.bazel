@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "reducesql_test",
+    size = "small",
     srcs = ["reducesql_test.go"],
     data = glob(["testdata/**"]),
     deps = [

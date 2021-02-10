@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "cloudimpltests_test",
+    size = "medium",
     srcs = [
         "aws_kms_test.go",
         "azure_storage_test.go",

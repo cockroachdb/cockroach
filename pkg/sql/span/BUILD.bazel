@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "span_test",
+    size = "small",
     srcs = ["span_builder_test.go"],
     embed = [":span"],
     deps = [

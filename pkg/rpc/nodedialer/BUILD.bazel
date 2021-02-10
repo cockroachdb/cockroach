@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "nodedialer_test",
+    size = "small",
     srcs = ["nodedialer_test.go"],
     embed = [":nodedialer"],
     deps = [

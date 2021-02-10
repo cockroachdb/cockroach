@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "backupbase_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "system_schema_test.go",

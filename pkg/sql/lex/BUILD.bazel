@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "lex_test",
+    size = "small",
     srcs = ["encode_test.go"],
     deps = [
         ":lex",

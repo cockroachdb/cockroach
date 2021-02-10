@@ -17,6 +17,7 @@ go_library(
 
 go_test(
     name = "split_test",
+    size = "small",
     srcs = [
         "decider_test.go",
         "finder_test.go",

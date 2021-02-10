@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "idalloc_test",
+    size = "small",
     srcs = [
         "helpers_test.go",
         "id_alloc_test.go",

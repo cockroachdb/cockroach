@@ -16,6 +16,7 @@ go_library(
 
 go_test(
     name = "faker_test",
+    size = "small",
     srcs = ["faker_test.go"],
     embed = [":faker"],
     deps = [

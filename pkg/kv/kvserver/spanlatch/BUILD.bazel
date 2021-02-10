@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "spanlatch_test",
+    size = "large",
     srcs = [
         "latch_interval_btree_test.go",
         "manager_test.go",

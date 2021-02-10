@@ -36,6 +36,7 @@ go_library(
 
 go_test(
     name = "explain_test",
+    size = "small",
     srcs = [
         "explain_factory_test.go",
         "output_test.go",

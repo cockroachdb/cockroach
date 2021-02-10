@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "oidext_test",
+    size = "small",
     srcs = ["oidext_test.go"],
     embed = [":oidext"],
     deps = [

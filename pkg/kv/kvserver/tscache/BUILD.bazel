@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "tscache_test",
+    size = "medium",
     srcs = [
         "cache_test.go",
         "interval_skl_test.go",

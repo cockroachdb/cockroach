@@ -39,10 +39,12 @@ go_library(
 
 go_test(
     name = "invertedidx_test",
+    size = "small",
     srcs = [
         "geo_test.go",
         "json_array_test.go",
     ],
+    tags = ["broken_in_bazel"],
     deps = [
         ":invertedidx",
         "//pkg/geo",

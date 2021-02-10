@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "uint128_test",
+    size = "small",
     srcs = ["uint128_test.go"],
     embed = [":uint128"],
 )

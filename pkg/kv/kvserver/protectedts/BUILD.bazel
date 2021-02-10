@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "protectedts_test",
+    size = "small",
     srcs = ["protectedts_test.go"],
     embed = [":protectedts"],
 )

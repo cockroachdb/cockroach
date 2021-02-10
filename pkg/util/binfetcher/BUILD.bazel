@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "binfetcher_test",
+    size = "small",
     srcs = ["binfetcher_test.go"],
     embed = [":binfetcher"],
     deps = [

@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "colinfo_test",
+    size = "small",
     srcs = ["result_columns_test.go"],
     embed = [":colinfo"],
     deps = ["//pkg/sql/types"],

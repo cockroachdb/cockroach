@@ -23,6 +23,7 @@ go_binary(
 
 go_test(
     name = "publish-provisional-artifacts_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":publish-provisional-artifacts_lib"],
     deps = [

@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "cdctest_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "validator_test.go",

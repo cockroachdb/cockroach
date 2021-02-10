@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "constraint_test",
+    size = "small",
     srcs = [
         "columns_test.go",
         "constraint_set_test.go",

@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "mon_test",
+    size = "small",
     srcs = ["bytes_usage_test.go"],
     embed = [":mon"],
     deps = [

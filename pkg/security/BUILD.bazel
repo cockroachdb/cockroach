@@ -44,6 +44,7 @@ go_library(
 
 go_test(
     name = "security_test",
+    size = "medium",
     srcs = [
         "auth_test.go",
         "certificate_loader_test.go",

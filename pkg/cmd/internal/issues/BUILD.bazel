@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "issues_test",
+    size = "small",
     srcs = [
         "condense_test.go",
         "issues_test.go",

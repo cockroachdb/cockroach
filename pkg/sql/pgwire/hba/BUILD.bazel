@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "hba_test",
+    size = "small",
     srcs = [
         "hba_test.go",
         "scanner_test.go",

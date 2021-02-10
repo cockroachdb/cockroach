@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "gcjob_test",
+    size = "small",
     srcs = [
         "helpers_test.go",
         "main_test.go",

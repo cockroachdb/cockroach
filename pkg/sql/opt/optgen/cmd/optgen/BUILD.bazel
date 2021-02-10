@@ -34,6 +34,7 @@ go_binary(
 
 go_test(
     name = "optgen_test",
+    size = "small",
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":optgen_lib"],

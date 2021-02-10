@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "exprgen_test",
+    size = "small",
     srcs = ["expr_gen_test.go"],
     data = glob(["testdata/**"]),
     deps = [

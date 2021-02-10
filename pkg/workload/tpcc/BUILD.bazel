@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "tpcc_test",
+    size = "small",
     srcs = [
         "partition_test.go",
         "stats_test.go",

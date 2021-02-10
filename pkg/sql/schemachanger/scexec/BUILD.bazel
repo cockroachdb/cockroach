@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "scexec_test",
+    size = "small",
     srcs = [
         "executor_external_test.go",
         "main_test.go",

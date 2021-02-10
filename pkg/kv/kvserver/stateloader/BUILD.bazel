@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "stateloader_test",
+    size = "small",
     srcs = ["initial_test.go"],
     embed = [":stateloader"],
     deps = [

@@ -34,6 +34,7 @@ go_library(
 
 go_test(
     name = "geogfn_test",
+    size = "small",
     srcs = [
         "azimuth_test.go",
         "best_projection_test.go",
@@ -47,6 +48,7 @@ go_test(
         "unary_operators_test.go",
     ],
     embed = [":geogfn"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",
