@@ -55,14 +55,49 @@ func appendGeomFlatCoordsReprs(p1 geomFlatCoordsRepr, p2 geomFlatCoordsRepr) geo
 	return geomFlatCoordsRepr{flatCoords: append(p1.flatCoords, p2.flatCoords...), ends: append(p1.ends, p2.ends...)}
 }
 
+type multiPolygonFlatCoordsRepr struct {
+	flatCoords []float64
+	endss      [][]int
+}
+
+func makeMultiPolygonFlatCoordsRepr(p geomFlatCoordsRepr) multiPolygonFlatCoordsRepr {
+	if p.flatCoords == nil {
+		return multiPolygonFlatCoordsRepr{flatCoords: nil, endss: [][]int{nil}}
+	}
+	return multiPolygonFlatCoordsRepr{flatCoords: p.flatCoords, endss: [][]int{p.ends}}
+}
+
+func appendMultiPolygonFlatCoordsRepr(
+	p1 multiPolygonFlatCoordsRepr, p2 multiPolygonFlatCoordsRepr,
+) multiPolygonFlatCoordsRepr {
+	p1LastEndsLastEnd := 0
+	for i := len(p1.endss) - 1; i >= 0; i-- {
+		if len(p1.endss[i]) > 0 {
+			p1LastEndsLastEnd = p1.endss[i][len(p1.endss[i])-1]
+			break
+		}
+	}
+	if p1LastEndsLastEnd > 0 {
+		for i, _ := range p2.endss {
+			for j, _ := range p2.endss[i] {
+				p2.endss[i][j] += p1LastEndsLastEnd
+			}
+		}
+	}
+	return multiPolygonFlatCoordsRepr{
+		flatCoords: append(p1.flatCoords, p2.flatCoords...), endss: append(p1.endss, p2.endss...),
+	}
+}
+
 %}
 
 %union {
-	str       string
-	geom      geom.T
-	coord     float64
-	coordList []float64
-	flatRepr  geomFlatCoordsRepr
+	str               string
+	geom              geom.T
+	coord             float64
+	coordList         []float64
+	flatRepr          geomFlatCoordsRepr
+	multiPolyFlatRepr multiPolygonFlatCoordsRepr
 }
 
 %token <str> POINT POINTM POINTZ POINTZM
@@ -70,12 +105,13 @@ func appendGeomFlatCoordsReprs(p1 geomFlatCoordsRepr, p2 geomFlatCoordsRepr) geo
 %token <str> POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
+%token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 %token <str> EMPTY
-//%token <str> MULTIPOLYGON GEOMETRYCOLLECTION
+//%token <str> GEOMETRYCOLLECTION
 %token <coord> NUM
 
 %type <geom> geometry
-%type <geom> point linestring polygon multipoint multilinestring
+%type <geom> point linestring polygon multipoint multilinestring multipolygon
 
 // TODO(ayang) reorganize the list of %type statements
 %type <coordList> two_coords three_coords four_coords
@@ -98,6 +134,23 @@ func appendGeomFlatCoordsReprs(p1 geomFlatCoordsRepr, p2 geomFlatCoordsRepr) geo
 %type <flatRepr> two_coords_line_list_allowing_empty_lines
 %type <flatRepr> three_coords_line_list_allowing_empty_lines
 %type <flatRepr> four_coords_line_list_allowing_empty_lines
+%type <flatRepr> two_coords_polygon three_coords_polygon four_coords_polygon empty_polygon
+
+%type <multiPolyFlatRepr> two_coords_polygon_multi_poly_flat_repr
+%type <multiPolyFlatRepr> three_coords_polygon_multi_poly_flat_repr
+%type <multiPolyFlatRepr> four_coords_polygon_multi_poly_flat_repr
+%type <multiPolyFlatRepr> empty_polygon_multi_poly_flat_repr
+
+%type <multiPolyFlatRepr> three_coords_polygon_list
+%type <multiPolyFlatRepr> four_coords_polygon_list
+
+%type <multiPolyFlatRepr> two_coords_polygon_allowing_empty
+%type <multiPolyFlatRepr> three_coords_polygon_allowing_empty
+%type <multiPolyFlatRepr> four_coords_polygon_allowing_empty
+
+%type <multiPolyFlatRepr> two_coords_polygon_list_allowing_empty_polygons
+%type <multiPolyFlatRepr> three_coords_polygon_list_allowing_empty_polygons
+%type <multiPolyFlatRepr> four_coords_polygon_list_allowing_empty_polygons
 
 %%
 
@@ -113,6 +166,7 @@ geometry:
 |	polygon
 |	multipoint
 |	multilinestring
+|	multipolygon
 
 point:
 	POINT two_coords_point_with_parens
@@ -199,29 +253,29 @@ linestring:
 	}
 
 polygon:
-	POLYGON '(' two_coords_ring_list ')'
+	POLYGON two_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XY, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XY, $2.flatCoords, $2.ends)
 	}
-|	POLYGON '(' three_coords_ring_list ')'
+|	POLYGON three_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XYZ, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XYZ, $2.flatCoords, $2.ends)
 	}
-|	POLYGON '(' four_coords_ring_list ')'
+|	POLYGON four_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XYZM, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XYZM, $2.flatCoords, $2.ends)
 	}
-|	POLYGONM '(' three_coords_ring_list ')'
+|	POLYGONM three_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XYM, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XYM, $2.flatCoords, $2.ends)
 	}
-|	POLYGONZ '(' three_coords_ring_list ')'
+|	POLYGONZ three_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XYZ, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XYZ, $2.flatCoords, $2.ends)
 	}
-|	POLYGONZM '(' four_coords_ring_list ')'
+|	POLYGONZM four_coords_polygon
 	{
-		$$ = geom.NewPolygonFlat(geom.XYZM, $3.flatCoords, $3.ends)
+		$$ = geom.NewPolygonFlat(geom.XYZM, $2.flatCoords, $2.ends)
 	}
 |	POLYGON EMPTY
 	{
@@ -322,6 +376,143 @@ multilinestring:
 |	MULTILINESTRINGZM EMPTY
 	{
 		$$ = geom.NewMultiLineString(geom.XYZM)
+	}
+
+multipolygon:
+	MULTIPOLYGON '(' two_coords_polygon_list_allowing_empty_polygons ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XY, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGON '(' three_coords_polygon_list ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XYZ, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGON '(' four_coords_polygon_list ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XYZM, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGONM '(' three_coords_polygon_list_allowing_empty_polygons ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XYM, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGONZ '(' three_coords_polygon_list_allowing_empty_polygons ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XYZ, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGONZM '(' four_coords_polygon_list_allowing_empty_polygons ')'
+	{
+		$$ = geom.NewMultiPolygonFlat(geom.XYZM, $3.flatCoords, $3.endss)
+	}
+|	MULTIPOLYGON EMPTY
+	{
+		$$ = geom.NewMultiPolygon(geom.XY)
+	}
+|	MULTIPOLYGONM EMPTY
+	{
+		$$ = geom.NewMultiPolygon(geom.XYM)
+	}
+|	MULTIPOLYGONZ EMPTY
+	{
+		$$ = geom.NewMultiPolygon(geom.XYZ)
+	}
+|	MULTIPOLYGONZM EMPTY
+	{
+		$$ = geom.NewMultiPolygon(geom.XYZM)
+	}
+
+three_coords_polygon_list:
+	three_coords_polygon_list ',' three_coords_polygon_multi_poly_flat_repr
+	{
+		$$ = appendMultiPolygonFlatCoordsRepr($1, $3)
+	}
+|	three_coords_polygon_multi_poly_flat_repr
+
+four_coords_polygon_list:
+	four_coords_polygon_list ',' four_coords_polygon_multi_poly_flat_repr
+	{
+		$$ = appendMultiPolygonFlatCoordsRepr($1, $3)
+	}
+|	four_coords_polygon_multi_poly_flat_repr
+
+two_coords_polygon_list_allowing_empty_polygons:
+	two_coords_polygon_list_allowing_empty_polygons ',' two_coords_polygon_allowing_empty
+	{
+		$$ = appendMultiPolygonFlatCoordsRepr($1, $3)
+	}
+|	two_coords_polygon_allowing_empty
+
+three_coords_polygon_list_allowing_empty_polygons:
+	three_coords_polygon_list_allowing_empty_polygons ',' three_coords_polygon_allowing_empty
+	{
+		$$ = appendMultiPolygonFlatCoordsRepr($1, $3)
+	}
+|	three_coords_polygon_allowing_empty
+
+four_coords_polygon_list_allowing_empty_polygons:
+	four_coords_polygon_list_allowing_empty_polygons ',' four_coords_polygon_allowing_empty
+	{
+		$$ = appendMultiPolygonFlatCoordsRepr($1, $3)
+	}
+|	four_coords_polygon_allowing_empty
+
+two_coords_polygon_allowing_empty:
+	two_coords_polygon_multi_poly_flat_repr
+|	empty_polygon_multi_poly_flat_repr
+
+three_coords_polygon_allowing_empty:
+	three_coords_polygon_multi_poly_flat_repr
+|	empty_polygon_multi_poly_flat_repr
+
+four_coords_polygon_allowing_empty:
+	four_coords_polygon_multi_poly_flat_repr
+|	empty_polygon_multi_poly_flat_repr
+
+two_coords_polygon_multi_poly_flat_repr:
+	two_coords_polygon
+	{
+		$$ = makeMultiPolygonFlatCoordsRepr($1)
+	}
+
+three_coords_polygon_multi_poly_flat_repr:
+	three_coords_polygon
+	{
+		$$ = makeMultiPolygonFlatCoordsRepr($1)
+	}
+
+four_coords_polygon_multi_poly_flat_repr:
+	four_coords_polygon
+	{
+		$$ = makeMultiPolygonFlatCoordsRepr($1)
+	}
+
+empty_polygon_multi_poly_flat_repr:
+	empty_polygon
+	{
+		$$ = makeMultiPolygonFlatCoordsRepr($1)
+	}
+
+two_coords_polygon:
+	'(' two_coords_ring_list ')'
+	{
+		$$ = $2
+	}
+
+three_coords_polygon:
+	'(' three_coords_ring_list ')'
+	{
+		$$ = $2
+	}
+
+four_coords_polygon:
+	'(' four_coords_ring_list ')'
+	{
+		$$ = $2
+	}
+
+empty_polygon:
+	EMPTY
+	{
+		$$ = makeGeomFlatCoordsRepr(nil)
 	}
 
 two_coords_ring_list:
