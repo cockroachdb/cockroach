@@ -50,6 +50,7 @@ go_proto_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/util/hlc",
+        "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
