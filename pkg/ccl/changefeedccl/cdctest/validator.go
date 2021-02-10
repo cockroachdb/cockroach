@@ -33,6 +33,7 @@ type Validator interface {
 	Failures() []string
 }
 
+// StreamValidator is an extension of the Validator interface.
 type StreamValidator interface {
 	Validator
 	// GetValuesForKeyBelowTimestamp returns the streamed KV updates for `key`
@@ -75,6 +76,8 @@ func NewOrderValidator(topic string) Validator {
 	}
 }
 
+// NewStreamOrderValidator returns an extension of the Validator interface as
+// explained above NewOrderValidator.
 func NewStreamOrderValidator() StreamValidator {
 	return &orderValidator{
 		topic:                 "unused",

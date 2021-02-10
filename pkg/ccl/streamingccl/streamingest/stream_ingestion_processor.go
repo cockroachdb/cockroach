@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 var streamIngestionResultTypes = []*types.T{
@@ -151,7 +151,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 		}
 		eventChs[partitionAddress] = eventCh
 	}
-	sip.eventCh = merge(ctx, eventChs)
+	sip.eventCh = sip.merge(ctx, eventChs)
 
 	return ctx
 }
@@ -223,17 +223,14 @@ func (sip *streamIngestionProcessor) flush() error {
 
 // merge takes events from all the streams and merges them into a single
 // channel.
-func merge(
+func (sip *streamIngestionProcessor) merge(
 	ctx context.Context, partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
 ) chan partitionEvent {
 	merged := make(chan partitionEvent)
 
-	var wg sync.WaitGroup
-	wg.Add(len(partitionStreams))
-
+	var g errgroup.Group
 	for partition, eventCh := range partitionStreams {
-		go func(partition streamingccl.PartitionAddress, eventCh <-chan streamingccl.Event) {
-			defer wg.Done()
+		g.Go(func() error {
 			for event := range eventCh {
 				pe := partitionEvent{
 					Event:     event,
@@ -245,13 +242,17 @@ func merge(
 				case <-ctx.Done():
 					// TODO: Add ctx.Err() to an error channel once ConsumePartition
 					// supports an error ch.
-					return
+					return ctx.Err()
 				}
 			}
-		}(partition, eventCh)
+			return nil
+		})
 	}
 	go func() {
-		wg.Wait()
+		err := g.Wait()
+		if err != nil {
+			sip.ingestionErr = err
+		}
 		close(merged)
 	}()
 
