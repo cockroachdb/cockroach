@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -207,6 +208,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		return err
 	}
 
+	var newColID *descpb.ColumnID
+	var newColDefaultExpr *string
 	if !createDefaultRegionCol {
 		// If the column is not public, we cannot use it yet.
 		if !partCol.Public() {
@@ -241,8 +244,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	} else {
 		// No crdb_region column is found so we are implicitly creating it.
 		// We insert the column definition before altering the primary key.
+
+		primaryRegion, err := n.dbDesc.PrimaryRegionName()
+		if err != nil {
+			return err
+		}
+		// No crdb_region column is found so we are implicitly creating it.
+		// We insert the column definition before altering the primary key.
 		defaultColDef := &tree.AlterTableAddColumn{
-			ColumnDef: regionalByRowDefaultColDef(enumOID),
+			ColumnDef: regionalByRowDefaultColDef(
+				enumOID,
+				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
 		if err != nil {
@@ -272,6 +285,22 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 			return err
 		}
+
+		col := n.tableDesc.GetMutations()[mutationIdx].GetColumn()
+		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
+			params.ctx,
+			regionalByRowGatewayRegionDefaultExpr(enumOID),
+			col.Type,
+			"REGIONAL BY ROW DEFAULT",
+			params.p.SemaCtx(),
+			tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(finalDefaultExpr)
+		newColDefaultExpr = &s
+		newColID = &col.ID
 	}
 
 	// Preserve the same PK columns - implicit partitioning will be added in
@@ -312,6 +341,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 				NewLocalityConfig: tabledesc.LocalityConfigRegionalByRow(
 					newLocality.RegionalByRowColumn,
 				),
+				NewRegionalByRowColumnID:          newColID,
+				NewRegionalByRowColumnDefaultExpr: newColDefaultExpr,
 			},
 			mutationIdxAllowedInSameTxn: mutationIdxAllowedInSameTxn,
 			newColumnName:               newColumnName,

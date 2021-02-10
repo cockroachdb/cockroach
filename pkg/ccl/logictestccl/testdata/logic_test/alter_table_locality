@@ -448,6 +448,12 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               voter_constraints = '[+region=ca-central-1]',
                               lease_preferences = '[[+region=ca-central-1]]'
 
+# Check the row was backfilled to the primary region.
+query TI
+SELECT crdb_region, pk FROM created_as_global ORDER BY pk ASC
+----
+ca-central-1  0
+
 # Drop the table and try again with the crdb_region column defined.
 statement ok
 DROP TABLE created_as_global;

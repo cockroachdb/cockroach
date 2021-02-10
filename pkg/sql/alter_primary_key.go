@@ -246,7 +246,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	var allowedNewColumnNames []tree.Name
-	// isNewPartitionAllBy is set if a new PARTITON ALL BY statement is introduced.
+	// isNewPartitionAllBy is set if a new PARTITION ALL BY statement is introduced.
 	isNewPartitionAllBy := false
 	var partitionAllBy *tree.PartitionBy
 	var err error
