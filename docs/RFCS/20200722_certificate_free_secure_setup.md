@@ -10,6 +10,11 @@
 
 This RFC proposes a means of creating a CRDB single or multi-node cluster running in the default secure mode without requiring an operator to create or manage certificates. _It should "just work"._ In addition it proposes a means by which an operator may add nodes to a running cluster via an operator-opaque `joinToken` which would prove membership and enable nodes to self-manage the cluster's internal trust mechanisms.
 
+**A note on kubernetes and PKI**
+While it is expected that the proposed approach may improve the kubernetes deployment experience, this RFC preserves compatibility with and makes no attempt to substitute for an externally managed PKI.
+
+Due to the prefered readonly mount nature of Kubernetes Secrets we avoid their use to faciliate certificate rotation without requiring the application to understand and be provisioned for kubernetes secret APIs.
+
 # Motivation
 
 After reviewing the existing CockroachDB trust mechanisms, it seems that the effort and complexity of certificate management drives users to test and prototype with the `--insecure` flag rather than the default (secure) state. Our "Getting Started" guide highlights this where the "insecure" guide (https://www.cockroachlabs.com/docs/v20.1/start-a-local-cluster.html) starts with `cockroach start` whereas the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) has four complex certificate generation steps before the user may start their cluster.
@@ -231,7 +236,7 @@ To add a new region an operator may copy the `interNodeCa` to the nodes in the n
 
 # Detailed Design
 
-`TODO(aaron-crl): More here pending consensus on the above`
+
 
 ## Establishing Initial Node Trust
 
@@ -240,19 +245,55 @@ _Reference implementation here:_ https://github.com/aaron-crl/toy-secure-init-ha
 Internode trust is established though a bootstrapped TLS process. Nodes provided with the right constraints and an `initialization-token` will take the following steps:
 * generate a self-signed CA
 * use that CA to generate a service certificate signed by that CA
+* Write these certificates to local storage to enable a node to survive a restart
 * start a listener using that certificate that hosts two endpoints
   * the CA public key and a MAC generated using the shared secret
   * an `initialization-bundle` receiver
 * Nodes will also make **insecure** TLS connection requests to all peers to request their CA public key and MACs (in the reference implementation this is a bidirectional share to reduce the number of required connections)
-* Nodes will verify the MAC for each peer and (if correct) add the CA to a peer address map
+* Nodes will verify the MAC for each peer and (if correct) add the CA to a peer address map (it may be prudent to store this map to disk to reduce brittleness)
 
-Once all nodes have exchanged public CA keys, the node with the "lowest" certificate signature value self nominates to generate the `initialization-bundle`. Once this bundle is created, this node uses the public key for each peer's CA to create strong TLS connections to each peer using their trusted CA and deliver the `initialization-bundle` in addition to a MAC of the bundle generated with the `initialization-token` to prove authenticity.
+Once all nodes have exchanged public CA keys*, the node with the "lowest" certificate signature value self nominates to generate the `initialization-bundle`. Once this bundle is created, this node uses the public key for each peer's CA to create strong TLS connections to each peer using their trusted CA and deliver the `initialization-bundle` in addition to a MAC of the bundle generated with the `initialization-token` to prove authenticity.
 
-**N.B.:** Since at this point all nodes should be provisioned and functional, it may be reasonable to have the same node that generates the `initialization-bundle` also begin the KV init process.
+\* Drawing from the reference implementation; all peering above establishes bidirectional trust meaning that once a node has the correct number of peers it can safely cease to respond to binding requests. If it has the "lowest" signature it has the trust materials to provision its peers and can immediately begin doing so. Otherwise it will wait until its lowest signature peer has finished binding to all of its other peers.
 
 **initialization-token**
 The initialization token can be any string of bytes though for security it is recommended that they be of a adequate length and entropy to resist guessing for the duration of the initialization period.
 
+### Initialization Failure states
+
+In general the cluster is fragile during binding and operators should watch for any unanticipated restarts or container failures during this critical period. We're enumerated some failure states that may occur during binding and provisioning. This list is not exhaustive but may be useful to an operator. 
+1. Node dies before writing CA and leaf to disk.
+Same node or a replacement is spun up to replace it.
+2. Node dies between certificate generation and binding
+Node restart adequate
+3. Node dies with some binds complete, without loss of storage
+Node restart should be adequate
+4. Node dies mid-bind after delivering certificate to server but before storing the server's CA
+Potentially dead cluster. Restarted node will attempt to rebind and should succeed as long as other nodes are still attempting to bind.
+5. Node dies with some binds complete, loss of storage
+Dead cluster: wipe autogenerated certificates and restart all nodes
+6. Node dies before provisioning takes place but with all binds complete, no loss of storage
+Node restart adequate
+7. Node dies before provisioning takes place but with all binds complete, loss of storage
+Dead cluster: wipe autogenerated certificates and restart all nodes
+8. Provisioner dies after partial provisioning
+Broken cluster, possible to repair by manually copying certificates to remaining nodes but not recommended.
+
+**N.B.:** Since at this point all nodes should be provisioned and functional, it may be reasonable to have the same node that generates the `initialization-bundle` also begin the KV init process.
+
+### Kubernetes Considerations
+
+The use of an `initialization-token` may reduce the deployment complexity for kubernetes by providing the token along with other node starting arguments. After initialization this flag will be ignored by members of this initial set since they will already have the expected certificates installed.
+
+Certificates are expected to be stored in a node specific r/w persistent mount. Care should be used to ensure that this mount is adequately protected as access to these certificates may translate to database access.
+
+**Example configurations:**
+1. Eternally signed SQL certificate but nodes self manage internode trust:
+Deploy containers with the signed SQL certificates in place and supply a `initialization-token`. The nodes will provision the rest themselves.
+2. Intermediate CA scoped just to CRDB cluster for the `interNodeCa` with a permissive security policy:
+Deploy nodes with that CA mounted and have nodes automatically generated their host certificates.
+3. Wildcard SQL certificate (public, private keys), Corporate CA (public key only), self manage `interNodeCa`
+Mount SQL cert and key, Corporate CA cert, and start nodes with `initialization-token`. Node will self provision internode CA, host using provided SQL certificates, and only accept users with certificates signed by the Corporate CA.
 
 ## Joining a Cluster
 
@@ -271,11 +312,11 @@ The provisioning service does not require mTLS. It has:
 * An endpoint that respondes to HTTPS POSTs and provides a valid cluster CA bundle. These requests must contain a `proof-of-membership`.
 
 **New Term:** `proof-of-membership`
-Proof of membership is a struct containing `tokenId`, and a MAC of the `tokenId` keyed with the `sharedSecret`.
+Proof of membership is a struct containing `tokenId`, and a `sharedSecret`.
 ```
 type addJoinProof struct {
-	TokenID []byte // tokenID of joinToken
-	MAC     []byte // HMAC(tokenID, sharedSecret)
+	TokenID      []byte // tokenID of joinToken
+	SharedSecret []byte // sharedSecret
 }
 ```
 
@@ -318,14 +359,15 @@ func (jt joinToken) Marshal(caPublicKey []byte) string {
     2. The new node will create a secure TLS connection to a peer's provisioning service and request an `initialization-bundle` by sending its `token-uuid`, and `proof-of-membership`.
         - The server will:
             - Look up the token associated with this `token-uuid`
-            - Confirm the `proof-of-membership` using its own ca cert public key and the `sharedSecret` stored in the `joinTokens` table with the specified `token-uuid`
+            - Confirm the `proof-of-membership` by checking the `sharedSecret` stored in the `joinTokens` table with the specified `token-uuid`
             - Upon success the server will collect and return an `initialization-bundle` to the new node.
             - The server will delete the `joinToken` from the `joinTokens` table to avoid reuse.
     3. The new node installs the `initialization-bundle` to its local private storage, mints any required host certificates, then restarts into an operational state.
 
 **N.B.:** Before checking for `token-uuid` presence in the `joinToken`'s table the system checks expiration for all unexpired `joinToken`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintenance. This check should also probably be atomic to avoid potential pruning races. This process should probably also log and remove expired tokens to keep the table small.
 
-
+**Certificate rotation and `joinToken`'s**
+Because `joinToken`s are pinned to the cluster `interNodeCa` at time of creation, operators should avoid issuing `joinToken`s with lifespans that overlap with a rotation of the cluster CA. In the event that an otherwise valid `joinToken` is used after an `interNodeCa` is rotated it will fail to validate the certificate for any peer it attempts to join. This can remedied by reissuing a `joinToken` and using it to restart the joining node. The defunct `joinToken` will be pruned after its marked expiration naturally.
 
 ### What does it do
 
