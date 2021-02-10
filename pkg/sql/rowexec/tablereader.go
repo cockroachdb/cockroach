@@ -17,8 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -91,21 +89,20 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
+	virtualColumn := tabledesc.FindVirtualColumn(tableDesc, spec.VirtualColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = tableDesc.AllColumns()
+		cols = tableDesc.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)
+	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
 
 	// Add all requested system columns to the output.
-	var sysColDescs []descpb.ColumnDescriptor
 	if spec.HasSystemColumns {
-		sysColDescs = colinfo.AllSystemColumnDescs
-	}
-	for i := range sysColDescs {
-		resultTypes = append(resultTypes, sysColDescs[i].Type)
-		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
+		for _, sysCol := range tableDesc.SystemColumns() {
+			resultTypes = append(resultTypes, sysCol.GetType())
+			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
+		}
 	}
 
 	tr.ignoreMisplannedRanges = flowCtx.Local
@@ -146,8 +143,8 @@ func newTableReader(
 		spec.Visibility,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
-		sysColDescs,
-		spec.VirtualColumn,
+		spec.HasSystemColumns,
+		virtualColumn,
 	); err != nil {
 		return nil, err
 	}

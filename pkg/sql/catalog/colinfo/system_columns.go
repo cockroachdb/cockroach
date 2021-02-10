@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // Similar to Postgres, we also expose hidden system columns on tables.
@@ -74,17 +73,6 @@ var TableOIDColumnDesc = descpb.ColumnDescriptor{
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {
 	return GetSystemColumnKindFromColumnID(colID) != descpb.SystemColumnKind_NONE
-}
-
-// GetSystemColumnDescriptorFromID returns a column descriptor corresponding
-// to the system column referred to by the input column ID.
-func GetSystemColumnDescriptorFromID(colID descpb.ColumnID) (*descpb.ColumnDescriptor, error) {
-	for i := range AllSystemColumnDescs {
-		if AllSystemColumnDescs[i].ID == colID {
-			return &AllSystemColumnDescs[i], nil
-		}
-	}
-	return nil, errors.AssertionFailedf("unsupported system column ID %d", colID)
 }
 
 // GetSystemColumnKindFromColumnID returns the kind of system column that colID

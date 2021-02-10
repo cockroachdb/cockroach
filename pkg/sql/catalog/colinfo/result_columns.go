@@ -11,6 +11,7 @@
 package colinfo
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -51,6 +52,13 @@ func ResultColumnsFromColDescPtrs(
 ) ResultColumns {
 	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
 		return colDescs[i]
+	})
+}
+
+// ResultColumnsFromColumns converts []catalog.Column to []ResultColumn.
+func ResultColumnsFromColumns(tableID descpb.ID, columns []catalog.Column) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(columns), func(i int) *descpb.ColumnDescriptor {
+		return columns[i].ColumnDesc()
 	})
 }
 

@@ -1955,7 +1955,7 @@ func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []descpb.
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *tab.getColDesc(i))
+		colDescs = append(colDescs, *tab.getCol(i).ColumnDesc())
 	}
 	return colDescs
 }
