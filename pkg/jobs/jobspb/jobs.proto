@@ -94,7 +94,11 @@ message StreamIngestionDetails {
 }
 
 message StreamIngestionProgress {
-
+  // MarkedForCompletion is used to signal to the stream ingestion job to
+  // complete its ingestion. This involves stopping any subsequent ingestion,
+  // and rolling back to the latest resolved ts to bring the ingested cluster to
+  // a consistent state.
+  bool markedForCompletion = 1;
 }
 
 message BackupDetails {
