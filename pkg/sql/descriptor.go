@@ -258,9 +258,9 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 	return nil
 }
 
-// addRegionToRegionConfig adds the supplied region to the RegionConfig in the
-// supplied database descriptor.
-func (p *planner) addRegionToRegionConfig(
+// addActiveRegionToRegionConfig adds the supplied region to the RegionConfig in
+// the supplied database descriptor if the region is currently active.
+func (p *planner) addActiveRegionToRegionConfig(
 	ctx context.Context, desc *dbdesc.Mutable, regionToAdd *tree.AlterDatabaseAddRegion,
 ) error {
 	liveRegions, err := p.getLiveClusterRegions(ctx)
@@ -268,13 +268,16 @@ func (p *planner) addRegionToRegionConfig(
 		return err
 	}
 
-	regionConfig := desc.RegionConfig
-
 	// Ensure that the region we're adding is currently active.
 	region := descpb.RegionName(regionToAdd.Region)
 	if err := checkLiveClusterRegion(liveRegions, region); err != nil {
 		return err
 	}
+	return addRegionToRegionConfig(desc, region)
+}
+
+func addRegionToRegionConfig(desc *dbdesc.Mutable, region descpb.RegionName) error {
+	regionConfig := desc.RegionConfig
 
 	// Ensure that the region doesn't already exist in the database.
 	for _, r := range regionConfig.Regions {
@@ -305,6 +308,7 @@ func (p *planner) addRegionToRegionConfig(
 	}
 
 	return nil
+
 }
 
 // createRegionConfig creates a new region config from the given parameters.
