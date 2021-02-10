@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -249,8 +250,10 @@ func (n *alterDatabaseAddRegionNode) Values() tree.Datums          { return tree
 func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
 
 type alterDatabaseDropRegionNode struct {
-	n    *tree.AlterDatabaseDropRegion
-	desc *dbdesc.Mutable
+	n                     *tree.AlterDatabaseDropRegion
+	desc                  *dbdesc.Mutable
+	removingPrimaryRegion bool
+	toDrop                []*typedesc.Mutable
 }
 
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
@@ -280,15 +283,92 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
+	removingPrimaryRegion := false
+	var toDrop []*typedesc.Mutable
+
 	if dbDesc.RegionConfig.PrimaryRegion == descpb.RegionName(n.Region) {
-		return nil, errors.WithHintf(
-			errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
-			"You must designate another region as the primary region or remove all "+
-				"other regions before attempting to drop region %q", n.Region,
-		)
+		removingPrimaryRegion = true
+
+		typeID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return nil, err
+		}
+		regions, err := typeDesc.RegionNames()
+		if err != nil {
+			return nil, err
+		}
+		if len(regions) != 1 {
+			return nil, errors.WithHintf(
+				errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
+				"You must designate another region as the primary region using "+
+					"ALTER DATABASE %s SET PRIMARY REGION <region name> or remove all other regions before "+
+					"attempting to drop region %q", dbDesc.GetName(), n.Region,
+			)
+		}
+
+		// When the last region is removed from the database, we also clean up
+		// detritus multi-region type descriptor. This includes both the
+		// type descriptor and its array counterpart.
+		toDrop = append(toDrop, typeDesc)
+		arrayTypeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
+		if err != nil {
+			return nil, err
+		}
+		toDrop = append(toDrop, arrayTypeDesc)
+		for _, desc := range toDrop {
+			// canDropTypeDesc ensures that there are no references to tables on the
+			// type descriptor. This is what we expect when dropping the final
+			// (primary) region from a database, as REGIONAL BY ROW tables and
+			// REGIONAL BY TABLE tables (homed explicitly in the final region) will
+			// store a reference on the type descriptor. It is sufficient to simply
+			// check for stored references and not go through the validation that
+			// happens in the type_schema changer in this scenario.
+			if err := p.canDropTypeDesc(ctx, desc, tree.DropRestrict); err != nil {
+				return nil, errors.Wrapf(
+					err, "error removing primary region from database %s", dbDesc.Name)
+			}
+		}
 	}
 
-	return &alterDatabaseDropRegionNode{n, dbDesc}, nil
+	return &alterDatabaseDropRegionNode{
+		n,
+		dbDesc,
+		removingPrimaryRegion,
+		toDrop,
+	}, nil
+}
+
+// removeLocalityConfigFromAllTablesInDB removes the locality config from all
+// tables under the supplied database.
+func removeLocalityConfigFromAllTablesInDB(
+	ctx context.Context, p *planner, desc *dbdesc.Immutable,
+) error {
+	if !desc.IsMultiRegion() {
+		return errors.AssertionFailedf(
+			"cannot remove locality configs from tables in non multi-region database with ID %d",
+			desc.GetID(),
+		)
+	}
+	b := p.Txn().NewBatch()
+	if err := forEachTableDesc(ctx, p, desc, hideVirtual,
+		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
+			mutDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{})
+			if err != nil {
+				return err
+			}
+			mutDesc.LocalityConfig = nil
+			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+		return err
+	}
+	return p.Txn().Run(ctx, b)
 }
 
 func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
@@ -301,36 +381,54 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		return err
 	}
 
-	// dropEnumValue tries to remove the region value from the multi-region type
-	// descriptor. Among other things, it validates that the region is not in
-	// use by any tables. A region is considered "in use" if either a REGIONAL BY
-	// TABLE table is explicitly homed in that region or a row in a REGIONAL BY
-	// ROW table is homed in that region. The type schema changer is responsible
-	// for all the requisite validation.
-	if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
-		return err
-	}
-
-	idx := 0
-	found := false
-	for i, region := range n.desc.RegionConfig.Regions {
-		if region.Name == descpb.RegionName(n.n.Region) {
-			idx = i
-			found = true
-			break
+	if n.removingPrimaryRegion {
+		for _, desc := range n.toDrop {
+			jobDesc := fmt.Sprintf("drop multi-region enum with ID %d", desc.ID)
+			err := params.p.dropTypeImpl(params.ctx, desc, jobDesc, true /* queueJob */)
+			if err != nil {
+				return err
+			}
 		}
-	}
-	if !found {
-		// This shouldn't happen and is simply a sanity check to ensure the database
-		// descriptor regions and multi-region enum regions are indeed consistent.
-		return errors.AssertionFailedf(
-			"attempting to drop region %s not on database descriptor %d but found on type descriptor",
-			n.n.Region, n.desc.GetID(),
-		)
-	}
 
-	n.desc.RegionConfig.Regions = append(n.desc.RegionConfig.Regions[:idx],
-		n.desc.RegionConfig.Regions[idx+1:]...)
+		err = removeLocalityConfigFromAllTablesInDB(params.ctx, params.p, &n.desc.Immutable)
+		if err != nil {
+			return errors.Wrap(err, "error removing locality configs from tables")
+		}
+
+		n.desc.UnsetMultiRegionConfig()
+	} else {
+		// dropEnumValue tries to remove the region value from the multi-region type
+		// descriptor. Among other things, it validates that the region is not in
+		// use by any tables. A region is considered "in use" if either a REGIONAL BY
+		// TABLE table is explicitly homed in that region or a row in a REGIONAL BY
+		// ROW table is homed in that region. The type schema changer is responsible
+		// for all the requisite validation.
+		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+			return err
+		}
+
+		// Remove the region from the database descriptor as well.
+		idx := 0
+		found := false
+		for i, region := range n.desc.RegionConfig.Regions {
+			if region.Name == descpb.RegionName(n.n.Region) {
+				idx = i
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// This shouldn't happen and is simply a sanity check to ensure the database
+			// descriptor regions and multi-region enum regions are indeed consistent.
+			return errors.AssertionFailedf(
+				"attempting to drop region %s not on database descriptor %d but found on type descriptor",
+				n.n.Region, n.desc.GetID(),
+			)
+		}
+		n.desc.RegionConfig.Regions = append(n.desc.RegionConfig.Regions[:idx],
+			n.desc.RegionConfig.Regions[idx+1:]...)
+	}
 
 	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx,

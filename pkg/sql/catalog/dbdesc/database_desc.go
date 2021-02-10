@@ -387,3 +387,9 @@ func (desc *Mutable) SetOffline(reason string) {
 func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }
+
+// UnsetMultiRegionConfig removes the stored multi-region config from the
+// database descriptor.
+func (desc *Mutable) UnsetMultiRegionConfig() {
+	desc.RegionConfig = nil
+}

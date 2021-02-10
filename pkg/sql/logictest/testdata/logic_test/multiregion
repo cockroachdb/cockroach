@@ -841,7 +841,7 @@ ALTER DATABASE non_multi_region_db DROP REGION "ca-central-1"
 statement ok
 CREATE DATABASE drop_region_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
 
-statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region or remove all other regions before attempting to drop region "ca-central-1"
+statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
 statement ok
@@ -891,7 +891,7 @@ CREATE TABLE start_off_non_multi_region.public.t(a INT);
 ALTER DATABASE start_off_non_multi_region PRIMARY REGION "ca-central-1";
 ALTER DATABASE start_off_non_multi_region ADD REGION "ap-southeast-2"
 
-statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region or remove all other regions before attempting to drop region "ca-central-1"
+statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE start_off_non_multi_region SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE start_off_non_multi_region DROP REGION "ca-central-1"
 
 statement ok
@@ -913,7 +913,6 @@ database                   region          primary  zones
 txn_database_drop_regions  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 txn_database_drop_regions  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 txn_database_drop_regions  us-east-1       false    {us-az1,us-az2,us-az3}
-
 
 statement ok
 BEGIN;
@@ -964,3 +963,80 @@ ALTER DATABASE drop_regions_alter_patterns DROP REGION "us-east-1"
 statement ok
 DROP TABLE east;
 DROP TABLE southeast;
+
+statement ok
+CREATE DATABASE drop_primary_regions_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE TABLE drop_primary_regions_db.primary(k INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+CREATE TABLE drop_primary_regions_db.east(k INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+CREATE TABLE drop_primary_regions_db.ca(k INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+ALTER DATABASE drop_primary_regions_db PRIMARY REGION "us-east-1"
+
+statement error pq: could not remove enum value "ca-central-1" as it is the home region for table "ca"
+ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
+
+statement ok
+DROP TABLE drop_primary_regions_db.ca
+
+# As the primary region has been changed to "us-east-1", this drop should succeed.
+statement ok
+ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
+
+# Cannot drop the primary region yet, as there are other regions in the db.
+statement error pq: cannot drop region "us-east-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_primary_regions_db SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "us-east-1"
+ALTER DATABASE drop_primary_regions_db DROP REGION "us-east-1"
+
+statement ok
+ALTER DATABASE drop_primary_regions_db DROP REGION "ap-southeast-2"
+
+statement error pq: error removing primary region from database drop_primary_regions_db: cannot drop type "crdb_internal_region" because other objects \(\[drop_primary_regions_db.public.east\]\) still depend on it
+ALTER DATABASE drop_primary_regions_db DROP REGION "us-east-1"
+
+statement ok
+DROP TABLE drop_primary_regions_db.east
+
+# This should succeed, even though the table "primary" hasn't been dropped, as
+# homing RTTs in primary regions does not block drops.
+statement ok
+ALTER DATABASE drop_primary_regions_db DROP REGION "us-east-1"
+
+# Accessing the table should work without an issue even after the database is
+# no longer multi-region.
+statement ok
+SELECT * FROM drop_primary_regions_db.primary
+
+# Adding a region to the multi-region database should be possible as well,
+# with no trace that this database was ever a multi-region db before.
+statement ok
+ALTER DATABASE drop_primary_regions_db PRIMARY REGION "ca-central-1"
+
+query TT colnames
+SHOW ZONE CONFIGURATION FOR TABLE drop_primary_regions_db.primary
+----
+target                            raw_config_sql
+DATABASE drop_primary_regions_db  ALTER DATABASE drop_primary_regions_db CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 90000,
+                                  num_replicas = 3,
+                                  num_voters = 3,
+                                  constraints = '{+region=ca-central-1: 1}',
+                                  voter_constraints = '[+region=ca-central-1]',
+                                  lease_preferences = '[[+region=ca-central-1]]'
+
+
+
+statement ok
+ALTER TABLE drop_primary_regions_db.primary SET LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement error pq: error removing primary region from database drop_primary_regions_db: cannot drop type "crdb_internal_region" because other objects \(\[drop_primary_regions_db.public."primary"\]\) still depend on it
+ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
+
+statement ok
+ALTER TABLE drop_primary_regions_db.primary SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
