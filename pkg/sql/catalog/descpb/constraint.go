@@ -120,3 +120,8 @@ type ConstraintDetail struct {
 	// Only populated for Check Constraints.
 	CheckConstraint *TableDescriptor_CheckConstraint
 }
+
+// IsPartial returns true if the index is a partial index.
+func (uc *UniqueWithoutIndexConstraint) IsPartial() bool {
+	return uc.Predicate != ""
+}

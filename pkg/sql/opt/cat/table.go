@@ -268,6 +268,11 @@ type UniqueConstraint interface {
 	// constraint.
 	ColumnOrdinal(tab Table, i int) int
 
+	// Predicate returns the partial index predicate expression and true if the
+	// index is a partial index. If it is not a partial index, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
+
 	// WithoutIndex is true if this unique constraint is not enforced by an index.
 	WithoutIndex() bool
 

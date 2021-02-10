@@ -185,11 +185,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.WithoutIndex {
+					var pred string
+					if d.Predicate != nil {
+						var err error
+						pred, err = schemaexpr.ValidateUniqueWithoutIndexPredicate(
+							params.ctx, *tn, n.tableDesc, d.Predicate, params.p.SemaCtx(),
+						)
+						if err != nil {
+							return err
+						}
+					}
 					if err := addUniqueWithoutIndexTableDef(
 						params.ctx,
 						params.EvalContext(),
 						params.SessionData(),
 						d,
+						pred,
 						n.tableDesc,
 						NonEmptyTable,
 						t.ValidationBehavior,

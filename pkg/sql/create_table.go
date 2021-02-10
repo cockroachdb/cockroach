@@ -639,7 +639,13 @@ func addUniqueWithoutIndexColumnTableDef(
 	}
 	// Add a unique constraint.
 	if err := ResolveUniqueWithoutIndexConstraint(
-		ctx, desc, string(d.Unique.ConstraintName), []string{string(d.Name)}, ts, validationBehavior,
+		ctx,
+		desc,
+		string(d.Unique.ConstraintName),
+		[]string{string(d.Name)},
+		"", /* predicate */
+		ts,
+		validationBehavior,
 	); err != nil {
 		return err
 	}
@@ -654,6 +660,7 @@ func addUniqueWithoutIndexTableDef(
 	evalCtx *tree.EvalContext,
 	sessionData *sessiondata.SessionData,
 	d *tree.UniqueConstraintTableDef,
+	predicate string,
 	desc *tabledesc.Mutable,
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
@@ -683,20 +690,13 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.Predicate != nil {
-		// TODO(rytaft): It may be necessary to support predicates so that partial
-		// unique indexes will work correctly in multi-region deployments.
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"unique constraints with a predicate but without an index are not supported",
-		)
-	}
 	// Add a unique constraint.
 	colNames := make([]string, len(d.Columns))
 	for i := range colNames {
 		colNames[i] = string(d.Columns[i].Column)
 	}
 	if err := ResolveUniqueWithoutIndexConstraint(
-		ctx, desc, string(d.Name), colNames, ts, validationBehavior,
+		ctx, desc, string(d.Name), colNames, predicate, ts, validationBehavior,
 	); err != nil {
 		return err
 	}
@@ -715,6 +715,7 @@ func ResolveUniqueWithoutIndexConstraint(
 	tbl *tabledesc.Mutable,
 	constraintName string,
 	colNames []string,
+	predicate string,
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
@@ -771,6 +772,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		Name:      constraintName,
 		TableID:   tbl.ID,
 		ColumnIDs: columnIDs,
+		Predicate: predicate,
 		Validity:  validity,
 	}
 
@@ -2124,8 +2126,18 @@ func NewTableDesc(
 
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
+				var pred string
+				if d.Predicate != nil {
+					var err error
+					pred, err = schemaexpr.ValidateUniqueWithoutIndexPredicate(
+						ctx, n.Table, &desc, d.Predicate, semaCtx,
+					)
+					if err != nil {
+						return nil, err
+					}
+				}
 				if err := addUniqueWithoutIndexTableDef(
-					ctx, evalCtx, sessionData, d, &desc, NewTable, tree.ValidationDefault,
+					ctx, evalCtx, sessionData, d, pred, &desc, NewTable, tree.ValidationDefault,
 				); err != nil {
 					return nil, err
 				}
