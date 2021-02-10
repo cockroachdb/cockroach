@@ -23,6 +23,7 @@ go_proto_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],

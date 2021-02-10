@@ -49,6 +49,9 @@ func authenticate(clientConn, crdbConn net.Conn) error {
 		case *pgproto3.ParameterStatus:
 			// Server sent status message; keep reading messages until
 			// `pgproto3.ReadyForQuery` is encountered.
+		case *pgproto3.BackendKeyData:
+		// Server sent backend key data; keep reading messages until
+		// `pgproto3.ReadyForQuery` is encountered.
 		case *pgproto3.ErrorResponse:
 			// Server has rejected the authentication response from the client and
 			// has closed the connection.
