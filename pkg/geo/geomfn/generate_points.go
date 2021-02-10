@@ -118,65 +118,60 @@ func generateRandomPointsFromPolygon(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not prepare geometry")
 	}
-	res, err := func() (*geom.MultiPoint, error) {
-		// Generate a slice of points - for every cell on a grid store coordinates.
-		n := sampleHeight * sampleWidth
-		cells := make([]geom.Coord, n)
-		for i := 0; i < sampleWidth; i++ {
-			for j := 0; j < sampleHeight; j++ {
-				cells[i*sampleHeight+j] = geom.Coord{float64(i), float64(j)}
-			}
+	defer geos.PreparedGeomDestroy(gPrep)
+
+	// Generate a slice of points - for every cell on a grid store coordinates.
+	n := sampleHeight * sampleWidth
+	cells := make([]geom.Coord, n)
+	for i := 0; i < sampleWidth; i++ {
+		for j := 0; j < sampleHeight; j++ {
+			cells[i*sampleHeight+j] = geom.Coord{float64(i), float64(j)}
 		}
-		// Shuffle the points. Without shuffling, the generated point will
-		// always be adjacent to the previous one (in terms of grid cells).
-		if n > 1 {
-			rng.Shuffle(n, func(i int, j int) {
-				temp := cells[j]
-				cells[j] = cells[i]
-				cells[i] = temp
-			})
-		}
-		results := geom.NewMultiPoint(geom.XY)
-		// Generate points and test them.
-		for nPointsGenerated, iterations := 0, 0; nPointsGenerated < nPoints && iterations <= nPoints*10; iterations++ {
-			for _, cell := range cells {
-				y := bbox.LoY + cell.X()*sampleCellSize
-				x := bbox.LoX + cell.Y()*sampleCellSize
-				x += rng.Float64() * sampleCellSize
-				y += rng.Float64() * sampleCellSize
-				if x > bbox.HiX || y > bbox.HiY {
-					continue
-				}
-				gpt, err := geo.MakeGeometryFromPointCoords(x, y)
-				if err != nil {
-					return nil, errors.Wrap(err, "could not create geometry Point")
-				}
-				intersects, err := geos.PreparedIntersects(gPrep, gpt.EWKB())
-				if err != nil {
-					return nil, errors.Wrap(err, "could not check prepared intersection")
-				}
-				if intersects {
-					nPointsGenerated++
-					p := geom.NewPointFlat(geom.XY, []float64{x, y})
-					srid := g.SRID()
-					p.SetSRID(int(srid))
-					err = results.Push(p)
-					if err != nil {
-						return nil, errors.Wrap(err, "could not add point to the results")
-					}
-					if nPointsGenerated == nPoints {
-						return results, nil
-					}
-				}
-			}
-		}
-		return results, nil
-	}()
-	if err != nil {
-		destroyErr := geos.PreparedGeomDestroy(gPrep)
-		return nil, errors.CombineErrors(destroyErr, err)
 	}
-	return res, nil
+	// Shuffle the points. Without shuffling, the generated point will
+	// always be adjacent to the previous one (in terms of grid cells).
+	if n > 1 {
+		rng.Shuffle(n, func(i int, j int) {
+			temp := cells[j]
+			cells[j] = cells[i]
+			cells[i] = temp
+		})
+	}
+	results := geom.NewMultiPoint(geom.XY)
+	// Generate points and test them.
+	for nPointsGenerated, iterations := 0, 0; nPointsGenerated < nPoints && iterations <= nPoints*10; iterations++ {
+		for _, cell := range cells {
+			y := bbox.LoY + cell.X()*sampleCellSize
+			x := bbox.LoX + cell.Y()*sampleCellSize
+			x += rng.Float64() * sampleCellSize
+			y += rng.Float64() * sampleCellSize
+			if x > bbox.HiX || y > bbox.HiY {
+				continue
+			}
+			gpt, err := geo.MakeGeometryFromPointCoords(x, y)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not create geometry Point")
+			}
+			intersects, err := geos.PreparedIntersects(gPrep, gpt.EWKB())
+			if err != nil {
+				return nil, errors.Wrap(err, "could not check prepared intersection")
+			}
+			if intersects {
+				nPointsGenerated++
+				p := geom.NewPointFlat(geom.XY, []float64{x, y})
+				srid := g.SRID()
+				p.SetSRID(int(srid))
+				err = results.Push(p)
+				if err != nil {
+					return nil, errors.Wrap(err, "could not add point to the results")
+				}
+				if nPointsGenerated == nPoints {
+					return results, nil
+				}
+			}
+		}
+	}
+	return results, nil
 }
 
 func generateRandomPointsFromMultiPolygon(
