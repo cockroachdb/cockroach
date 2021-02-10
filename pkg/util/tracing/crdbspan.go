@@ -29,8 +29,8 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
-	traceID      uint64 // probabilistically unique.
-	spanID       uint64 // probabilistically unique.
+	traceID      uint64 // probabilistically unique
+	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
 	goroutineID  uint64
 
@@ -65,7 +65,8 @@ type crdbSpanMu struct {
 		// children contains the list of child spans started after this Span
 		// started recording.
 		children []*crdbSpan
-		// remoteSpan contains the list of remote child spans manually imported.
+		// remoteSpan contains the list of remote child span recordings that
+		// were manually imported.
 		remoteSpans []tracingpb.RecordedSpan
 	}
 

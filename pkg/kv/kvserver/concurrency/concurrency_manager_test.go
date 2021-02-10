@@ -904,7 +904,8 @@ func newMonitor() *monitor {
 }
 
 func (m *monitor) runSync(opName string, fn func(context.Context)) {
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), opName)
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+		context.Background(), tracing.NewTracer(), opName)
 	g := &monitoredGoroutine{
 		opSeq:   0, // synchronous
 		opName:  opName,
@@ -919,7 +920,8 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 
 func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), opName)
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+		context.Background(), tracing.NewTracer(), opName)
 	g := &monitoredGoroutine{
 		opSeq:   m.seq,
 		opName:  opName,
