@@ -151,7 +151,7 @@ func checkColumnDoesNotExist(
 	tableDesc catalog.TableDescriptor, name tree.Name,
 ) (isPublic bool, err error) {
 	col, _ := tableDesc.FindColumnWithName(name)
-	if col == nil {
+	if col == nil || col.IsSystemColumn() {
 		return false, nil
 	}
 	if col.Public() {

@@ -192,7 +192,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
-	p.ResultColumns = colinfo.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
+	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
 		// Note that empty rows argument is handled by ConstructValues first -
@@ -236,7 +236,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		Spans:            trSpec.Spans[:0],
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
-		VirtualColumn:    getVirtualColumn(colCfg.virtualColumn, cols),
+	}
+	if vc := getVirtualColumn(colCfg.virtualColumn, cols); vc != nil {
+		trSpec.VirtualColumn = vc.ColumnDesc()
 	}
 
 	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)

@@ -667,8 +667,8 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
-	ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
-	for _, column := range desc.AllColumns() {
+	ib.cols = make([]descpb.ColumnDescriptor, 0, len(desc.DeletableColumns()))
+	for _, column := range desc.DeletableColumns() {
 		columnDesc := *column.ColumnDesc()
 		if column.Public() {
 			if column.IsComputed() && column.IsVirtual() {
