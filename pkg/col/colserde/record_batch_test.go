@@ -314,7 +314,7 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	}
 	b.SetLength(coldata.BatchSize())
 
-	originalMemoryEstimate := colmem.GetBatchMemSize(b)
+	originalMemorySize := colmem.GetBatchMemSize(b)
 
 	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
@@ -322,12 +322,17 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	require.NoError(t, err)
 	b, err = roundTripBatch(b, c, r, typs)
 	require.NoError(t, err)
+	newMemorySize := colmem.GetBatchMemSize(b)
 
-	// We expect that the original memory estimate to be no smaller than the
-	// current estimate because in the original case the underlying flat []byte
-	// slice could have extra capacity which will not be present after
-	// round-tripping.
-	require.GreaterOrEqual(t, originalMemoryEstimate, colmem.GetBatchMemSize(b))
+	// We expect that the original and the new memory sizes are relatively close
+	// to each other (do not differ by more than a third). We cannot guarantee
+	// more precise bound here because the capacities of the underlying []byte
+	// slices is unpredictable. However, this check is sufficient to ensure that
+	// we don't double count memory under `Bytes.data`.
+	const maxDeviation = float64(0.33)
+	deviation := math.Abs(float64(originalMemorySize-newMemorySize) / (float64(originalMemorySize)))
+	require.GreaterOrEqualf(t, maxDeviation, deviation,
+		"new memory size %d is too far away from original %d", newMemorySize, originalMemorySize)
 }
 
 func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
