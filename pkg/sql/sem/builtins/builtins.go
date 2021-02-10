@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -112,6 +115,7 @@ const (
 	categoryString              = "String and byte"
 	categorySystemInfo          = "System info"
 	categorySystemRepair        = "System repair"
+	categoryStreamIngestion     = "Stream Ingestion"
 )
 
 func categorizeType(t *types.T) string {
@@ -4762,6 +4766,121 @@ may increase either contention or retry errors, or both.`,
 				"feature name is hashed for privacy purposes.",
 			Volatility: tree.VolatilityVolatile,
 		},
+	),
+
+	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryStreamIngestion,
+		},
+		func() tree.Overload {
+			signalCompleteToIngestionJob := func(ctx context.Context,
+				evalCtx *tree.EvalContext, jobID int, txn *kv.Txn) error {
+				// Get the job payload for job_id.
+				const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1`
+				row, err := evalCtx.InternalExecutor.QueryRow(ctx,
+					"get-stream-ingestion-job-metadata", txn, jobsQuery, jobID)
+				if err != nil {
+					return err
+				}
+				// If an entry does not exist for the provided job_id we return an
+				// error.
+				if row == nil {
+					return errors.Newf("job %d: not found in system.jobs table", jobID)
+				}
+
+				// Unmarshal the progress.
+				// TODO(adityamaru): Dep cycle if we try to use jobs.UnmarshalProgress.
+				progress := &jobspb.Progress{}
+				bytes, ok := row[0].(*tree.DBytes)
+				if !ok {
+					return errors.Errorf(
+						"job: failed to unmarshal Progress as DBytes (was %T)", row[0])
+				}
+				if err := protoutil.Unmarshal([]byte(*bytes), progress); err != nil {
+					return err
+				}
+
+				var sp *jobspb.Progress_StreamIngest
+				if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+					return errors.Newf("job %d: not of expected type StreamIngest")
+				}
+
+				// Update the sentinel being polled by the stream ingestion job to
+				// check if a complete has been signaled.
+				sp.StreamIngest.MarkedForCompletion = true
+				progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
+				progressBytes, err := protoutil.Marshal(progress)
+				if err != nil {
+					return err
+				}
+				updateJobQuery := `UPDATE system.jobs SET payload=$1 WHERE id=$2`
+				_, err = evalCtx.InternalExecutor.Query(evalCtx.Context,
+					"set-stream-ingestion-job-metadata", txn, updateJobQuery, progressBytes, jobID)
+				return err
+			}
+
+			// Poll the job until we observe that it has finished.
+			pollIngestionJobTillFinished := func(jobID int, evalCtx *tree.EvalContext) (string, error) {
+				pollQuery := fmt.Sprintf(`SELECT progress, finished FROM system.jobs WHERE id=%d`, jobID)
+				pollQuery = fmt.Sprintf(
+					`SELECT * FROM [%s]
+			 WHERE
+			    IF(finished IS NULL,
+			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
+			      0
+			    ) = 0`, pollQuery)
+				row, err := evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
+					"poll-stream-ingestion-job-completion", nil /* txn */, pollQuery)
+				if err != nil {
+					return "", err
+				}
+
+				// If an entry does not exist for the provided job_id we return an
+				// error.
+				if row == nil {
+					return "", errors.Newf("job %d: not found in system.jobs table", jobID)
+				}
+
+				// Unmarshal the progress.
+				progress := &jobspb.Progress{}
+				bytes, ok := row[0].(*tree.DBytes)
+				if !ok {
+					return "", errors.Errorf(
+						"job: failed to unmarshal Progress as DBytes (was %T)", row[0])
+				}
+				if err := protoutil.Unmarshal([]byte(*bytes), progress); err != nil {
+					return "", err
+				}
+
+				hw := *progress.GetHighWater()
+				return fmt.Sprintf("job %d: ingested up to %s", jobID, hw.String()), err
+			}
+
+			return tree.Overload{
+				Types:      tree.ArgTypes{{"job_id", types.Int}},
+				ReturnType: tree.FixedReturnType(types.String),
+				Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+					var res tree.Datum
+					jobID := int(*args[0].(*tree.DInt))
+					// TODO(adityamaru): Verify this is the correct txn to be running this
+					// in. We can't run it in ctx.Txn since that commits only after the
+					// builtin is run.
+					err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+						return signalCompleteToIngestionJob(ctx, evalCtx, jobID, txn)
+					})
+					if err != nil {
+						return res, err
+					}
+					resStr, err := pollIngestionJobTillFinished(jobID, evalCtx)
+					res = tree.NewDString(resStr)
+					return res, err
+				},
+				Info: "This function can be used to signal a running stream ingestion job to complete. " +
+					"The job will then stop ingesting, revert to the latest resolved timestamp and leave the " +
+					"cluster in a consistent state, after which this function will return.",
+				Volatility: tree.VolatilityVolatile,
+			}
+		}(),
 	),
 
 	"num_nulls": makeBuiltin(
