@@ -52,19 +52,23 @@ func (s *liveClusterRegions) toStrings() []string {
 // getLiveClusterRegions returns a set of live region names in the cluster.
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.
-func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
-	nodes, err := getAllNodeDescriptors(p)
+func (p *planner) getLiveClusterRegions(ctx context.Context) (liveClusterRegions, error) {
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		ctx,
+		"get_live_cluster_regions",
+		p.txn,
+		sessiondata.InternalExecutorOverride{
+			User: p.SessionData().User(),
+		},
+		"SELECT region FROM [SHOW REGIONS FROM CLUSTER]",
+	)
 	if err != nil {
 		return nil, err
 	}
-	var ret liveClusterRegions = make(map[descpb.RegionName]struct{})
-	for _, node := range nodes {
-		for _, tier := range node.Locality.Tiers {
-			if tier.Key == "region" {
-				ret[descpb.RegionName(tier.Value)] = struct{}{}
-				break
-			}
-		}
+
+	var ret liveClusterRegions = make(map[descpb.RegionName]struct{}, len(rows))
+	for _, row := range rows {
+		ret[descpb.RegionName(*row[0].(*tree.DString))] = struct{}{}
 	}
 	return ret, nil
 }
