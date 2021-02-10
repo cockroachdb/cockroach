@@ -648,7 +648,8 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 		log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
 	}
 	if grpcConn := conn.grpcConn; grpcConn != nil {
-		if err := grpcConn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
+		err := grpcConn.Close() // nolint:grpcconnclose
+		if err != nil && !grpcutil.IsClosedConnection(err) {
 			if log.V(1) {
 				log.Health.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
 			}

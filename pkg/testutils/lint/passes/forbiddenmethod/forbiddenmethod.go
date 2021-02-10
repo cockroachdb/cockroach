@@ -38,6 +38,9 @@ type Options struct {
 	// If calls to `(github.com/somewhere/somepkg.Foo).Bar` are
 	// disallowed, this is populated as `github.com/somewhere/somepkg`,
 	// `Foo`, and `Bar`, respectively.
+	//
+	// Note that vendoring is handled transparently. The Package should be
+	// specified via its ultimate import path, i.e. no "vendor" component.
 	Package, Type, Method string
 	// Hint is added when the pass emits a warning. The warning already
 	// contains forbidden method, so the hint typically concerns itself
@@ -71,6 +74,23 @@ func Analyzer(options Options) *analysis.Analyzer {
 				if !ok {
 					return
 				}
+
+				// Set this to true to emit a warning for each function call.
+				// This makes it easier to figure out what to set the pkg to when
+				// vendoring is in play. (However, see gprcconnclose for an example
+				// of what the pkg is in that case).
+				const debug = false
+				if debug {
+					pkgPath := ""
+					if f.Pkg() != nil {
+						pkgPath = f.Pkg().Path()
+					}
+					pass.Report(analysis.Diagnostic{
+						Pos:     n.Pos(),
+						Message: fmt.Sprintf("method call: pkgpath=%s recvtype=%s method=%s", pkgPath, namedRecvTypeFor(f), f.Name()),
+					})
+				}
+
 				if f.Pkg() == nil || f.Pkg().Path() != options.Package || f.Name() != options.Method {
 					return
 				}
@@ -91,18 +111,25 @@ func Analyzer(options Options) *analysis.Analyzer {
 	}
 }
 
-func isMethodForNamedType(f *types.Func, name string) bool {
+func namedRecvTypeFor(f *types.Func) string {
 	sig := f.Type().(*types.Signature)
 	recv := sig.Recv()
 	if recv == nil { // not a method
-		return false
+		return ""
 	}
 	switch recv := recv.Type().(type) {
 	case *types.Named:
-		return recv.Obj().Name() == name
+		return recv.Obj().Name()
 	case *types.Pointer:
 		named, ok := recv.Elem().(*types.Named)
-		return ok && named.Obj().Name() == name
+		if !ok {
+			return ""
+		}
+		return named.Obj().Name()
 	}
-	return false
+	return ""
+}
+
+func isMethodForNamedType(f *types.Func, name string) bool {
+	return namedRecvTypeFor(f) == name
 }

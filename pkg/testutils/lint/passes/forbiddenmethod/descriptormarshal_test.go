@@ -22,4 +22,5 @@ func Test(t *testing.T) {
 	skip.UnderStress(t)
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, forbiddenmethod.DescriptorMarshalAnalyzer, "descmarshaltest")
+	analysistest.Run(t, testdata, forbiddenmethod.GRPCClientConnCloseAnalyzer, "grpcconnclosetest")
 }

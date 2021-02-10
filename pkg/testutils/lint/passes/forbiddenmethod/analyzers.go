@@ -24,11 +24,26 @@ var descriptorMarshalOptions = Options{
 	Hint:     "see descpb.TableFromDescriptor()",
 }
 
+var grpcClientConnCloseOptions = Options{
+	PassName: "grpcconnclose",
+	Doc:      `prevent calls to (grpc.ClientConn).Close`,
+	Package:  "google.golang.org/grpc",
+	Type:     "ClientConn",
+	Method:   "Close",
+	Hint:     "must elide the call to Close() if the ClientConn is from an *rpc.Context",
+}
+
 // DescriptorMarshalAnalyzer checks for correct unmarshaling of descpb
 // descriptors by disallowing calls to (descpb.Descriptor).GetTable().
 var DescriptorMarshalAnalyzer = Analyzer(descriptorMarshalOptions)
 
+// GRPCClientConnCloseAnalyzer checks for calls to (*grpc.ClientConn).Close.
+// We mostly pull these objects from *rpc.Context, which manages their lifecycle.
+// Errant calls to Close() disrupt the connection for all users.
+var GRPCClientConnCloseAnalyzer = Analyzer(grpcClientConnCloseOptions)
+
 // Analyzers are all of the Analyzers defined in this package.
 var Analyzers = []*analysis.Analyzer{
 	DescriptorMarshalAnalyzer,
+	GRPCClientConnCloseAnalyzer,
 }
