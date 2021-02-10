@@ -1088,6 +1088,7 @@ func getTargetStoreOrFatal(
 func verifyNotLeaseHolderErrors(
 	t *testing.T, ba roachpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
 ) {
+	t.Helper()
 	notLeaseholderErrs, err := countNotLeaseHolderErrors(ba, repls)
 	if err != nil {
 		t.Fatal(err)
