@@ -163,22 +163,30 @@ type FetcherTableArgs struct {
 func (fta *FetcherTableArgs) InitCols(
 	desc catalog.TableDescriptor,
 	scanVisibility execinfrapb.ScanVisibility,
-	systemColumns []descpb.ColumnDescriptor,
-	virtualColumn *descpb.ColumnDescriptor,
+	withSystemColumns bool,
+	virtualColumn catalog.Column,
 ) {
-	cols := desc.PublicColumns()
+	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
+		cols = append(cols, desc.ReadableColumns()...)
+	} else {
+		cols = append(cols, desc.PublicColumns()...)
 	}
-	fta.Cols = make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
-	for i, col := range cols {
-		if virtualColumn != nil && col.GetID() == virtualColumn.ID {
-			fta.Cols[i] = *virtualColumn
-		} else {
-			fta.Cols[i] = *col.ColumnDesc()
+	if virtualColumn != nil {
+		for i, col := range cols {
+			if col.GetID() == virtualColumn.GetID() {
+				cols[i] = virtualColumn
+				break
+			}
 		}
 	}
-	fta.Cols = append(fta.Cols, systemColumns...)
+	if withSystemColumns {
+		cols = append(cols, desc.SystemColumns()...)
+	}
+	fta.Cols = make([]descpb.ColumnDescriptor, len(cols))
+	for i, col := range cols {
+		fta.Cols[i] = *col.ColumnDesc()
+	}
 }
 
 // Fetcher handles fetching kvs and forming table rows for an
@@ -1135,7 +1143,7 @@ func (rf *Fetcher) processValueSingle(
 	if rf.traceKV || table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
+				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
 			}
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
@@ -1210,7 +1218,7 @@ func (rf *Fetcher) processValueBytes(
 		idx := table.colIdxMap.GetDefault(colID)
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.AllColumns()[idx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
 		}
 
 		var encValue rowenc.EncDatum

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -625,8 +624,8 @@ func newOptTable(
 	}
 
 	// First, determine how many columns we will potentially need.
-	cols := ot.desc.AllColumns()
-	numCols := len(cols) + len(colinfo.AllSystemColumnDescs)
+	cols := ot.desc.DeletableColumns()
+	numCols := len(ot.desc.AllColumns())
 	// One for each inverted index virtual column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
@@ -687,24 +686,23 @@ func newOptTable(
 	}
 
 	// Set up any registered system columns. However, we won't add the column
-	// in case a column with the same name already exists in the table.
-	// Note that the column does not exist when err != nil. This check is done
-	// for migration purposes. We need to avoid adding the system column if the
-	// table has a column with this name for some reason.
-	for i := range colinfo.AllSystemColumnDescs {
-		sysCol := &colinfo.AllSystemColumnDescs[i]
-		if c, _ := desc.FindColumnWithName(tree.Name(sysCol.Name)); c == nil {
+	// in case a non-system column with the same name already exists in the table.
+	// This check is done for migration purposes. We need to avoid adding the
+	// system column if the table has a column with this name for some reason.
+	for _, sysCol := range ot.desc.SystemColumns() {
+		found, _ := desc.FindColumnWithName(sysCol.ColName())
+		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
 			col.InitNonVirtual(
 				ord,
-				cat.StableID(sysCol.ID),
-				tree.Name(sysCol.Name),
+				cat.StableID(sysCol.GetID()),
+				sysCol.ColName(),
 				cat.System,
-				sysCol.Type,
-				sysCol.Nullable,
-				cat.MaybeHidden(sysCol.Hidden),
-				sysCol.DefaultExpr,
-				sysCol.ComputeExpr,
+				sysCol.GetType(),
+				sysCol.IsNullable(),
+				cat.MaybeHidden(sysCol.IsHidden()),
+				sysCol.ColumnDesc().DefaultExpr,
+				sysCol.ColumnDesc().ComputeExpr,
 			)
 		}
 	}
@@ -987,17 +985,10 @@ func (ot *optTable) Column(i int) *cat.Column {
 	return &ot.columns[i]
 }
 
-// getColDesc is part of optCatalogTableInterface.
-func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
+// getCol is part of optCatalogTableInterface.
+func (ot *optTable) getCol(i int) catalog.Column {
 	if i < len(ot.desc.AllColumns()) {
-		return ot.desc.AllColumns()[i].ColumnDesc()
-	}
-	// Check if the column matches any registered system columns.
-	for j := range colinfo.AllSystemColumnDescs {
-		colDesc := &colinfo.AllSystemColumnDescs[j]
-		if descpb.ColumnID(ot.columns[i].ColID()) == colDesc.ID {
-			return colDesc
-		}
+		return ot.desc.AllColumns()[i]
 	}
 	return nil
 }
@@ -1820,10 +1811,10 @@ func (ot *optVirtualTable) Column(i int) *cat.Column {
 	return &ot.columns[i]
 }
 
-// getColDesc is part of optCatalogTableInterface.
-func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
+// getCol is part of optCatalogTableInterface.
+func (ot *optVirtualTable) getCol(i int) catalog.Column {
 	if i > 0 && i <= len(ot.desc.PublicColumns()) {
-		return ot.desc.PublicColumns()[i-1].ColumnDesc()
+		return ot.desc.PublicColumns()[i-1]
 	}
 	return nil
 }
@@ -2121,9 +2112,9 @@ func (oi *optVirtualFamily) Table() cat.Table {
 }
 
 type optCatalogTableInterface interface {
-	// getColDesc returns the column descriptor that is backing a given column,
+	// getCol returns the catalog.Column interface backing a given column,
 	// (or nil if it is a virtual column).
-	getColDesc(i int) *descpb.ColumnDescriptor
+	getCol(i int) catalog.Column
 }
 
 var _ optCatalogTableInterface = &optTable{}

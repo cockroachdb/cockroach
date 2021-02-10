@@ -154,6 +154,11 @@ func checkColumnDoesNotExist(
 	if col == nil {
 		return false, nil
 	}
+	if col.IsSystemColumn() {
+		return false, pgerror.Newf(pgcode.DuplicateColumn,
+			"column name %q conflicts with a system column name",
+			col.GetName())
+	}
 	if col.Public() {
 		return true, sqlerrors.NewColumnAlreadyExistsError(tree.ErrString(&name), tableDesc.GetName())
 	}

@@ -490,8 +490,8 @@ func (z *zigzagJoiner) setupInfo(
 		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		nil, /* systemColumns */
-		nil, /* virtualColumn */
+		false, /* withSystemColumns */
+		nil,   /* virtualColumn */
 	)
 	if err != nil {
 		return err

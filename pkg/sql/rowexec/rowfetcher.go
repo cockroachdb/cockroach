@@ -74,8 +74,8 @@ func initRowFetcher(
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	systemColumns []descpb.ColumnDescriptor,
-	virtualColumn *descpb.ColumnDescriptor,
+	withSystemColumns bool,
+	virtualColumn catalog.Column,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	if indexIdx >= len(desc.ActiveIndexes()) {
 		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
@@ -91,7 +91,7 @@ func initRowFetcher(
 		IsSecondaryIndex: isSecondaryIndex,
 		ValNeededForCol:  valNeededForCol,
 	}
-	tableArgs.InitCols(desc, scanVisibility, systemColumns, virtualColumn)
+	tableArgs.InitCols(desc, scanVisibility, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,

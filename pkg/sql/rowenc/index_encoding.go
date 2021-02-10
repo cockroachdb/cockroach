@@ -253,7 +253,7 @@ func NeededColumnFamilyIDs(
 	}
 
 	// Build some necessary data structures for column metadata.
-	columns := table.AllColumns()
+	columns := table.DeletableColumns()
 	colIdxMap := catalog.ColumnIDToOrdinalMap(columns)
 	var indexedCols util.FastIntSet
 	var compositeCols util.FastIntSet

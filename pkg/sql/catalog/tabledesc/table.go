@@ -507,3 +507,20 @@ func FindPublicColumnWithID(
 	}
 	return col, nil
 }
+
+// FindVirtualColumn returns a catalog.Column matching the virtual column
+// descriptor in `spec` if not nil, nil otherwise.
+func FindVirtualColumn(
+	desc catalog.TableDescriptor, virtualColDesc *descpb.ColumnDescriptor,
+) catalog.Column {
+	if virtualColDesc == nil {
+		return nil
+	}
+	found, err := desc.FindColumnWithID(virtualColDesc.ID)
+	if err != nil {
+		panic(errors.HandleAsAssertionFailure(err))
+	}
+	virtualColumn := found.DeepCopy()
+	*virtualColumn.ColumnDesc() = *virtualColDesc
+	return virtualColumn
+}
