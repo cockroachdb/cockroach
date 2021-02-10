@@ -1482,6 +1482,7 @@ func NewTableDesc(
 	// Add implied columns under REGIONAL BY ROW.
 	locality := n.Locality
 	var partitionAllBy *tree.PartitionBy
+	primaryIndexColumnSet := make(map[string]struct{})
 	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
 		// TODO(#59629): consider decoupling implicit column partitioning from the
 		// REGIONAL BY ROW experimental flag.
@@ -1599,20 +1600,32 @@ func NewTableDesc(
 			*dbDesc.RegionConfig,
 			regionalByRowCol,
 		)
+		// Leading region column of REGIONAL BY ROW is part of the primary
+		// index column set.
+		primaryIndexColumnSet[string(regionalByRowCol)] = struct{}{}
 	}
 
-	if n.PartitionByTable.ContainsPartitioningClause() && n.PartitionByTable.All {
-		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
-			return nil, errors.WithHint(
-				pgerror.New(
-					pgcode.FeatureNotSupported,
-					"PARTITION ALL BY LIST/RANGE is currently experimental",
-				),
-				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
-			)
+	if n.PartitionByTable.ContainsPartitioningClause() {
+		// Table PARTITION BY columns are always part of the primary index
+		// column set.
+		if n.PartitionByTable.PartitionBy != nil {
+			for _, field := range n.PartitionByTable.PartitionBy.Fields {
+				primaryIndexColumnSet[string(field)] = struct{}{}
+			}
 		}
-		desc.PartitionAllBy = true
-		partitionAllBy = n.PartitionByTable.PartitionBy
+		if n.PartitionByTable.All {
+			if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+				return nil, errors.WithHint(
+					pgerror.New(
+						pgcode.FeatureNotSupported,
+						"PARTITION ALL BY LIST/RANGE is currently experimental",
+					),
+					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
+				)
+			}
+			desc.PartitionAllBy = true
+			partitionAllBy = n.PartitionByTable.PartitionBy
+		}
 	}
 
 	for i, def := range n.Defs {
@@ -1745,7 +1758,6 @@ func NewTableDesc(
 		}
 	}
 
-	var primaryIndexColumnSet map[string]struct{}
 	setupShardedIndexForNewTable := func(d *tree.IndexTableDef, idx *descpb.IndexDescriptor) error {
 		if n.PartitionByTable.ContainsPartitions() {
 			return pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
@@ -1947,7 +1959,6 @@ func NewTableDesc(
 						"interleave not supported in primary key constraint definition",
 					)
 				}
-				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
@@ -1970,12 +1981,9 @@ func NewTableDesc(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
 	}
 
-	if primaryIndexColumnSet != nil {
-		// Primary index columns are not nullable.
-		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
-				desc.Columns[i].Nullable = false
-			}
+	for i := range desc.Columns {
+		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
+			desc.Columns[i].Nullable = false
 		}
 	}
 
