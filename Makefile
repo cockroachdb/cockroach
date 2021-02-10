@@ -250,10 +250,6 @@ endif
 
 $(info GOPATH set to $(GOPATH))
 
-# We install our vendored tools to a directory within this repository to avoid
-# overwriting any user-installed binaries of the same name in the default GOBIN.
-GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install
-
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
 export PATH := $(abspath bin):$(PATH)
@@ -319,12 +315,6 @@ ifeq (, $(shell which bazel))
 $(info $(yellow)Warning: 'bazel' not found (`brew install bazel` for macs)$(term-reset))
 endif
 
-# Force vendor directory to rebuild.
-.PHONY: vendor_rebuild
-vendor_rebuild: bin/.submodules-initialized
-	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
-	./build/vendor_rebuild.sh
-
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
 # up-to-date on the next invocation of Make, even though it is likely corrupt.
@@ -367,32 +357,6 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	rm -rf pkg/ui/node_modules/@types/node
 	touch $@
 
-# Update the git hooks and install commands from dependencies whenever they
-# change.
-# These should be synced with `./pkg/cmd/import-tools/main.go`.
-bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
-	@$(GO_INSTALL) -v \
-		github.com/client9/misspell/cmd/misspell \
-		github.com/cockroachdb/crlfmt \
-		github.com/cockroachdb/gostdlib/cmd/gofmt \
-		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
-		github.com/cockroachdb/stress \
-		github.com/goware/modvendor \
-		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		github.com/kevinburke/go-bindata/go-bindata \
-		github.com/kisielk/errcheck \
-		github.com/mattn/goveralls \
-		github.com/mibk/dupl \
-		github.com/mmatczuk/go_generics/cmd/go_generics \
-		github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc \
-		github.com/wadey/gocovmerge \
-		golang.org/x/lint/golint \
-		golang.org/x/perf/cmd/benchstat \
-		golang.org/x/tools/cmd/goyacc \
-		golang.org/x/tools/cmd/stringer \
-		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
-		honnef.co/go/tools/cmd/staticcheck
-	touch $@
 
 IGNORE_GOVERS :=
 
@@ -452,6 +416,10 @@ xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
 override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
 endif
+
+# We install our vendored tools to a directory within this repository to avoid
+# overwriting any user-installed binaries of the same name in the default GOBIN.
+GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(xgo) install
 
 C_DEPS_DIR := $(abspath c-deps)
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
@@ -583,6 +551,12 @@ vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submo
 	@echo '// #cgo CPPFLAGS: -DGO_LIBEDIT_NO_BUILD' >> $@
 	@echo '// #cgo !windows LDFLAGS: -ledit -lncurses' >> $@
 	@echo 'import "C"' >> $@
+
+# Force vendor directory to rebuild.
+.PHONY: vendor_rebuild
+vendor_rebuild: bin/.submodules-initialized
+	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
+	./build/vendor_rebuild.sh
 
 # BUILD ARTIFACT CACHING
 #
@@ -1747,11 +1721,38 @@ bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 
+# Update the git hooks and install commands from dependencies whenever they
+# change.
+# These should be synced with `./pkg/cmd/import-tools/main.go`.
+bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
+	@$(GO_INSTALL) -v \
+		github.com/client9/misspell/cmd/misspell \
+		github.com/cockroachdb/crlfmt \
+		github.com/cockroachdb/gostdlib/cmd/gofmt \
+		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/cockroachdb/stress \
+		github.com/goware/modvendor \
+		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		github.com/kevinburke/go-bindata/go-bindata \
+		github.com/kisielk/errcheck \
+		github.com/mattn/goveralls \
+		github.com/mibk/dupl \
+		github.com/mmatczuk/go_generics/cmd/go_generics \
+		github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc \
+		github.com/wadey/gocovmerge \
+		golang.org/x/lint/golint \
+		golang.org/x/perf/cmd/benchstat \
+		golang.org/x/tools/cmd/goyacc \
+		golang.org/x/tools/cmd/stringer \
+		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
+		honnef.co/go/tools/cmd/staticcheck
+	touch $@
+
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
 	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
-	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
+	$(GO_INSTALL) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
