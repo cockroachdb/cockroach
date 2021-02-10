@@ -37,6 +37,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/settings",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
