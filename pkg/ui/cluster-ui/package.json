@@ -26,6 +26,7 @@
   "keywords": [],
   "license": "MIT",
   "dependencies": {
+    "@babel/runtime": "^7.12.13",
     "@cockroachlabs/crdb-protobuf-client": "^0.0.6",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.14-alpha.0",
@@ -49,6 +50,7 @@
     "@babel/plugin-proposal-class-properties": "^7.8.0",
     "@babel/plugin-proposal-object-rest-spread": "^7.8.0",
     "@babel/plugin-transform-modules-commonjs": "^7.10.4",
+    "@babel/plugin-transform-runtime": "^7.12.15",
     "@babel/preset-env": "^7.11.0",
     "@babel/preset-react": "^7.10.4",
     "@babel/preset-typescript": "^7.8.0",
