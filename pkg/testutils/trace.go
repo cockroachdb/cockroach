@@ -50,3 +50,25 @@ func MatchInOrder(s string, res ...string) error {
 	}
 	return nil
 }
+
+// MatchEach matches interprets the given slice of strings as a slice of
+// regular expressions and checks that they individually match against the given string.
+// For example, if s=abcdefg and res=bc,ab,fg no error is returned, whereas
+// res=abc,cdg would return a descriptive error about failing to match cde.
+func MatchEach(s string, res ...string) error {
+	for i := range res {
+		reStr := "(?ms)" + res[i]
+		re, err := regexp.Compile(reStr)
+		if err != nil {
+			return errors.Errorf("regexp %d (%q) does not compile: %s", i, reStr, err)
+		}
+		if re.FindStringIndex(s) == nil {
+			// Not found.
+			return errors.Errorf(
+				"unable to find regexp %d (%q) in string:\n\n%s",
+				i, reStr, s,
+			)
+		}
+	}
+	return nil
+}

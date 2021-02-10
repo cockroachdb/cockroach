@@ -145,12 +145,9 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
     ('querying next range at /Table/56/1/0',
-     'querying next range at /Table/56/1/10',
-     '=== SPAN START: kv.DistSender: sending partial batch ==='
-    )
+     'querying next range at /Table/56/1/10')
 ----
 querying next range at /Table/56/1/0
-=== SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/56/1/10
 
 # Regression test for #46123 (rowexec.TableReader not implementing

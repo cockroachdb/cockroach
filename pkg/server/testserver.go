@@ -1398,7 +1398,7 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
-// Tracer is part of the TestServerInterface
+// Tracer is part of the TestServerInterface.
 func (ts *TestServer) Tracer() interface{} {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }

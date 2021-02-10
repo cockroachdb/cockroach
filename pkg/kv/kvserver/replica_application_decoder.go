@@ -151,7 +151,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			} else {
 				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
 					ctx,
-					"raft application",
+					opName,
 					// NB: we are lying here - we are not actually going to propagate
 					// the recording towards the root. That seems ok.
 					tracing.WithParentAndManualCollection(spanMeta),

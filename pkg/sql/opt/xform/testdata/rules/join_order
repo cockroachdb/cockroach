@@ -2244,6 +2244,47 @@ Joins Considered: 6
 --------------------------------------------------------------------------------
 ----Join Tree #4----
 inner-join (hash)
+ ├── scan abc [as=a1]
+ ├── inner-join (hash)
+ │    ├── scan abc [as=a2]
+ │    ├── distinct-on
+ │    │    └── scan abc [as=a5]
+ │    └── filters
+ │         └── a2.c = a5.c
+ └── filters
+      └── a1.a = a2.a
+
+----Vertexes----
+C:
+scan abc [as=a1]
+
+A:
+scan abc [as=a2]
+
+B:
+distinct-on
+ └── scan abc [as=a5]
+
+----Edges----
+a2.c = a5.c [inner]
+a1.a = a2.a [inner]
+
+----Joining CA----
+C A    refs [CA] [inner]
+A C    refs [CA] [inner]
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+----Joining CAB----
+C AB    refs [CA] [inner]
+AB C    refs [CA] [inner]
+CA B    refs [AB] [inner]
+B CA    refs [AB] [inner]
+
+Joins Considered: 8
+--------------------------------------------------------------------------------
+----Join Tree #5----
+inner-join (hash)
  ├── inner-join (hash)
  │    ├── scan abc [as=a1]
  │    ├── semi-join (hash)
@@ -2289,7 +2330,7 @@ D CA    refs [AD] [inner]
 
 Joins Considered: 8
 --------------------------------------------------------------------------------
-----Join Tree #5----
+----Join Tree #6----
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── inner-join (hash)
@@ -2375,5 +2416,5 @@ WHERE EXISTS (SELECT 1 FROM dz WHERE z = y)
 AND EXISTS (SELECT 1 FROM bx WHERE x = y)
 AND EXISTS (SELECT 1 FROM abc WHERE a = y)
 ----
-Rules Applied: 149
-Groups Added: 76
+Rules Applied: 169
+Groups Added: 86
