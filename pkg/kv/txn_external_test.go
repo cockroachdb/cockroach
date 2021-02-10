@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,10 +128,13 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			leaseHolder, err := tc.FindRangeLeaseHolder(rdesc, nil /* hint */)
 			require.NoError(t, err)
 			var db *kv.DB
+			var tr *tracing.Tracer
 			if leaseHolder.NodeID == 1 {
 				db = tc.Servers[1].DB()
+				tr = tc.Servers[1].Tracer().(*tracing.Tracer)
 			} else {
 				db = tc.Servers[0].DB()
+				tr = tc.Servers[0].Tracer().(*tracing.Tracer)
 			}
 
 			txn := db.NewTxn(ctx, "test")
@@ -190,7 +194,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 				require.Equal(t, roachpb.STAGING, queryTxnRes.QueriedTxn.Status)
 
 				// Perform transaction recovery.
-				require.NoError(t, kvclientutils.CheckPushResult(ctx, db, *txn.TestingCloneTxn(),
+				require.NoError(t, kvclientutils.CheckPushResult(ctx, db, tr, *txn.TestingCloneTxn(),
 					kvclientutils.ExpectCommitted, kvclientutils.ExpectPusheeTxnRecovery))
 			}
 

@@ -1760,7 +1760,6 @@ WHERE message IN
     )
 ----
 querying next range at /Table/73/1/0
-=== SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/73/1/10
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.

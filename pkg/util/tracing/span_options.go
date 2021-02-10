@@ -171,11 +171,11 @@ func (o tagsOption) apply(opts spanOptions) spanOptions {
 type followsFromOpt struct{}
 
 // WithFollowsFrom instructs StartSpan to use a FollowsFrom relationship
-// should a child span be created (i.e. should WithParentAndAutoCollection or WithParentAndManualCollection
-// be supplied as well). A WithFollowsFrom child is expected to, in the common
-// case, outlive the parent span (for example: asynchronous cleanup work),
-// whereas a "regular" child span is not (i.e. the parent span typically
-// waits for the child to Finish()).
+// should a child span be created (i.e. should WithParentAndAutoCollection or
+// WithParentAndManualCollection be supplied as well). A WithFollowsFrom child
+// is expected to, in the common case, outlive the parent span (for example:
+// asynchronous cleanup work), whereas a "regular" child span is not (i.e. the
+// parent span typically waits for the child to Finish()).
 //
 // There is no penalty for getting this wrong, but it can help external
 // trace systems visualize the traces better.

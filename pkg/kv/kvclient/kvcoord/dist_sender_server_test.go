@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -3197,8 +3198,9 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			})
 
 			require.Regexp(t, "injected", txn.CommitInBatch(ctx, b))
+			tr := s.Tracer().(*tracing.Tracer)
 			err = kvclientutils.CheckPushResult(
-				ctx, db, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
+				ctx, db, tr, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
 			require.NoError(t, err)
 		})
 	}

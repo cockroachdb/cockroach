@@ -8431,7 +8431,9 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	}
 	r.mu.Unlock()
 
-	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+	tr := tc.store.ClusterSettings().Tracer
+	tr.TestingIncludeAsyncSpansInRecordings() // we assert on async span traces in this test
+	opCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer cancel()
 
 	ba = roachpb.BatchRequest{}
