@@ -2,8 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "descriptormarshal",
-    srcs = ["descriptor_marshal.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal",
+    srcs = [
+        "descriptor_marshal.go",
+        "forbiddenmethod.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/testutils/lint/passes/passesutil",
@@ -15,6 +18,16 @@ go_library(
 
 go_test(
     name = "descriptormarshal_test",
+    srcs = ["descriptormarshal_test.go"],
+    deps = [
+        ":descriptormarshal",
+        "//pkg/testutils/skip",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)
+
+go_test(
+    name = "forbiddenmethod_test",
     srcs = ["descriptormarshal_test.go"],
     deps = [
         ":descriptormarshal",
