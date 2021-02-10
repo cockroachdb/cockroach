@@ -14,7 +14,9 @@ go_library(
 
 go_test(
     name = "a_test",
+    size = "small",
     srcs = ["a_test.go"],
     embed = [":a"],
+    tags = ["broken_in_bazel"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
 )

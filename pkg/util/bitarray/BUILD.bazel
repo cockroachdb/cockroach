@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "bitarray_test",
+    size = "small",
     srcs = ["bitarray_test.go"],
     embed = [":bitarray"],
     deps = ["//pkg/util/randutil"],

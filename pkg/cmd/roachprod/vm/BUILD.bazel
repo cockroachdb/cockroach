@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "vm_test",
+    size = "small",
     srcs = ["vm_test.go"],
     embed = [":vm"],
     deps = ["@com_github_stretchr_testify//assert"],

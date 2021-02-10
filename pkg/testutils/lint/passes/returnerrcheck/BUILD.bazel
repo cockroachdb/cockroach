@@ -16,7 +16,9 @@ go_library(
 
 go_test(
     name = "returnerrcheck_test",
+    size = "small",
     srcs = ["returnerrcheck_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":returnerrcheck",
         "//pkg/testutils/skip",

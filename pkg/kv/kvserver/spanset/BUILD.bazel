@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "spanset_test",
+    size = "small",
     srcs = ["spanset_test.go"],
     embed = [":spanset"],
     deps = [

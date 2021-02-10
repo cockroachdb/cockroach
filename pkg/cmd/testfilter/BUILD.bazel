@@ -16,6 +16,7 @@ go_binary(
 
 go_test(
     name = "testfilter_test",
+    size = "small",
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":testfilter_lib"],

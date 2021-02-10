@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "logictest_test",
+    size = "large",
     srcs = [
         "logic_test.go",
         "main_test.go",
@@ -52,6 +53,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":logictest"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

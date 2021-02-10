@@ -12,6 +12,7 @@ go_library(
 
 go_test(
     name = "fuzzystrmatch_test",
+    size = "small",
     srcs = [
         "leven_test.go",
         "soundex_test.go",

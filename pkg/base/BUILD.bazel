@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "base_test",
+    size = "small",
     srcs = [
         "addr_validation_test.go",
         "cluster_id_test.go",

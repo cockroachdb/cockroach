@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "bench_test",
+    size = "medium",
     srcs = [
         "bench_test.go",
         "fk_test.go",

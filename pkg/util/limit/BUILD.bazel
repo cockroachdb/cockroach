@@ -13,6 +13,7 @@ go_library(
 
 go_test(
     name = "limit_test",
+    size = "small",
     srcs = ["limiter_test.go"],
     embed = [":limit"],
     deps = [

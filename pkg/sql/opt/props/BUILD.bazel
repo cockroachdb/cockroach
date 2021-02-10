@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "props_test",
+    size = "small",
     srcs = [
         "cardinality_test.go",
         "col_stats_map_test.go",

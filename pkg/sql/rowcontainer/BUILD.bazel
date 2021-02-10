@@ -34,6 +34,7 @@ go_library(
 
 go_test(
     name = "rowcontainer_test",
+    size = "small",
     srcs = [
         "datum_row_container_test.go",
         "disk_row_container_test.go",

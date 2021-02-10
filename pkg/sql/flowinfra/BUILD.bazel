@@ -43,6 +43,7 @@ go_library(
 
 go_test(
     name = "flowinfra_test",
+    size = "medium",
     srcs = [
         "cluster_test.go",
         "dep_test.go",

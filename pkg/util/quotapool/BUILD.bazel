@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "quotapool_test",
+    size = "small",
     srcs = [
         "bench_test.go",
         "example_test.go",

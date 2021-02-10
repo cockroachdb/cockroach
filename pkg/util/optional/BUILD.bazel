@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "optional_test",
+    size = "small",
     srcs = [
         "duration_test.go",
         "uint_test.go",

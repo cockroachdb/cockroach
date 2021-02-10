@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "acceptance_test",
+    size = "enormous",
     srcs = [
         "adapter_test.go",
         "cli_test.go",
@@ -34,6 +35,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":acceptance"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/security",

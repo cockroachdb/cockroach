@@ -71,6 +71,7 @@ go_library(
 
 go_test(
     name = "kvcoord_test",
+    size = "medium",
     srcs = [
         "batch_test.go",
         "condensable_span_set_test.go",

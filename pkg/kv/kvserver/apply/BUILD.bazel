@@ -17,6 +17,7 @@ go_library(
 
 go_test(
     name = "apply_test",
+    size = "small",
     srcs = [
         "doc_test.go",
         "task_test.go",

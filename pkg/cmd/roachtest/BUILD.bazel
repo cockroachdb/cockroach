@@ -188,6 +188,7 @@ go_binary(
 
 go_test(
     name = "roachtest_test",
+    size = "small",
     srcs = [
         "blocklist_test.go",
         "cluster_test.go",
@@ -195,6 +196,7 @@ go_test(
         "tpcc_test.go",
     ],
     embed = [":roachtest_lib"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

@@ -10,10 +10,12 @@ go_library(
 
 go_test(
     name = "caller_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "resolver_test.go",
     ],
     embed = [":caller"],
+    tags = ["broken_in_bazel"],
     deps = ["//pkg/util/log"],
 )

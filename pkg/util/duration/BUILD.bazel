@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "duration_test",
+    size = "small",
     srcs = ["duration_test.go"],
     embed = [":duration"],
     deps = ["//pkg/util/log"],

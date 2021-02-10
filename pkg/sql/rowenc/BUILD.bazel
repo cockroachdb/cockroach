@@ -53,6 +53,7 @@ go_library(
 
 go_test(
     name = "rowenc_test",
+    size = "medium",
     srcs = [
         "client_index_encoding_test.go",
         "column_type_encoding_test.go",

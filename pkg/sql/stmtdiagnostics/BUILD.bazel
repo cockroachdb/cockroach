@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "stmtdiagnostics_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "stament_diagnostics_helpers_test.go",

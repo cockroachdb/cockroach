@@ -35,6 +35,7 @@ go_library(
 
 go_test(
     name = "testcluster_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "testcluster_test.go",

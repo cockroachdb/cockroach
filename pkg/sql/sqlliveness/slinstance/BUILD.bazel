@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "slinstance_test",
+    size = "small",
     srcs = [
         "helpers_test.go",
         "slinstance_test.go",

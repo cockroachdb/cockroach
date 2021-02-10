@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "movr_test",
+    size = "small",
     srcs = ["movr_test.go"],
     embed = [":movr"],
     deps = ["@com_github_stretchr_testify//require"],

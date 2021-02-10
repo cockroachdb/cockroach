@@ -36,6 +36,7 @@ go_library(
 
 go_test(
     name = "colbuilder_test",
+    size = "small",
     srcs = [
         "execplan_test.go",
         "main_test.go",

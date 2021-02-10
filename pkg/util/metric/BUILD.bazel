@@ -33,6 +33,7 @@ go_library(
 
 go_test(
     name = "metric_test",
+    size = "small",
     srcs = [
         "metric_test.go",
         "prometheus_exporter_test.go",

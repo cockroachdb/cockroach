@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "tests_test",
+    size = "medium",
     srcs = [
         "bank_test.go",
         "hash_sharded_test.go",

@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "abortspan_test",
+    size = "small",
     srcs = ["abortspan_test.go"],
     embed = [":abortspan"],
     deps = [

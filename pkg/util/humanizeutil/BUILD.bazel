@@ -17,6 +17,7 @@ go_library(
 
 go_test(
     name = "humanizeutil_test",
+    size = "small",
     srcs = [
         "duration_test.go",
         "humanize_test.go",

@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "partitionccl_test",
+    size = "medium",
     srcs = [
         "drop_test.go",
         "main_test.go",

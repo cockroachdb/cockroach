@@ -20,6 +20,8 @@ go_binary(
 
 go_test(
     name = "teamcity-trigger_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":teamcity-trigger_lib"],
+    tags = ["broken_in_bazel"],
 )

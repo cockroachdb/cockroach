@@ -37,6 +37,7 @@ go_library(
 
 go_test(
     name = "cat_test",
+    size = "small",
     srcs = ["utils_test.go"],
     deps = [
         ":cat",

@@ -34,6 +34,7 @@ go_library(
 
 go_test(
     name = "rangefeed_test",
+    size = "small",
     srcs = [
         "processor_test.go",
         "registry_test.go",

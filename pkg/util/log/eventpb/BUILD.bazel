@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "eventpb_test",
+    size = "small",
     srcs = ["event_test.go"],
     embed = [":eventpb"],
     deps = [

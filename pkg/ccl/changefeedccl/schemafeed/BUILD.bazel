@@ -33,6 +33,7 @@ go_library(
 
 go_test(
     name = "schemafeed_test",
+    size = "medium",
     srcs = [
         "schema_feed_test.go",
         "table_event_filter_test.go",

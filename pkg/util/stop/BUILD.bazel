@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "stop_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "stopper_test.go",

@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "coldataext_test",
+    size = "small",
     srcs = ["datum_vec_test.go"],
     embed = [":coldataext"],
     deps = [

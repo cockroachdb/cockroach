@@ -36,6 +36,7 @@ go_library(
 
 go_test(
     name = "sqlsmith_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "sqlsmith_test.go",

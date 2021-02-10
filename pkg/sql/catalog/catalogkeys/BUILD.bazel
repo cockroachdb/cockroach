@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "catalogkeys_test",
+    size = "small",
     srcs = ["keys_test.go"],
     embed = [":catalogkeys"],
     deps = [

@@ -396,6 +396,7 @@ go_library(
 
 go_test(
     name = "sql_test",
+    size = "medium",
     srcs = [
         "alter_column_type_test.go",
         "ambiguous_commit_test.go",
@@ -487,6 +488,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":sql"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

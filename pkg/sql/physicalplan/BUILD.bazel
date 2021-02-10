@@ -35,6 +35,7 @@ go_library(
 
 go_test(
     name = "physicalplan_test",
+    size = "medium",
     srcs = [
         "aggregator_funcs_test.go",
         "fake_span_resolver_test.go",

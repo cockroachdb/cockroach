@@ -31,6 +31,7 @@ go_library(
 
 go_test(
     name = "bulk_test",
+    size = "medium",
     srcs = [
         "kv_buf_test.go",
         "main_test.go",

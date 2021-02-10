@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "replicaoracle_test",
+    size = "small",
     srcs = ["oracle_test.go"],
     embed = [":replicaoracle"],
     deps = [

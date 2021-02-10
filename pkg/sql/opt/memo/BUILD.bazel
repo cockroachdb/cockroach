@@ -47,6 +47,7 @@ go_library(
 
 go_test(
     name = "memo_test",
+    size = "small",
     srcs = [
         "cost_test.go",
         "expr_test.go",
@@ -59,6 +60,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":memo"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",

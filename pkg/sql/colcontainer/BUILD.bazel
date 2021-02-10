@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "colcontainer_test",
+    size = "small",
     srcs = [
         "diskqueue_test.go",
         "main_test.go",

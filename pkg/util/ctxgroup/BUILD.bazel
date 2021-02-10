@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "ctxgroup_test",
+    size = "small",
     srcs = ["ctxgroup_test.go"],
     embed = [":ctxgroup"],
     deps = [

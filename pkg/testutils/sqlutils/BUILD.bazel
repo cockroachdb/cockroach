@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "sqlutils_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "sql_runner_test.go",

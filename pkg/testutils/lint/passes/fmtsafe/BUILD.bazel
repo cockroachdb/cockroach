@@ -20,7 +20,9 @@ go_library(
 
 go_test(
     name = "fmtsafe_test",
+    size = "small",
     srcs = ["fmtsafe_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":fmtsafe",
         "//pkg/testutils/skip",

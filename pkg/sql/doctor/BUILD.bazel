@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "doctor_test",
+    size = "small",
     srcs = ["doctor_test.go"],
     deps = [
         ":doctor",

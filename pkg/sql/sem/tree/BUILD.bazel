@@ -157,6 +157,7 @@ go_library(
 
 go_test(
     name = "tree_test",
+    size = "small",
     srcs = [
         "casts_test.go",
         "col_types_test.go",
@@ -193,6 +194,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tree"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/internal/rsg",
         "//pkg/kv",

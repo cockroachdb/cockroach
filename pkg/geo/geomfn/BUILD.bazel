@@ -56,6 +56,7 @@ go_library(
 
 go_test(
     name = "geomfn_test",
+    size = "small",
     srcs = [
         "affine_transforms_test.go",
         "angle_test.go",
@@ -89,6 +90,7 @@ go_test(
         "voronoi_test.go",
     ],
     embed = [":geomfn"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",

@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "gcjobnotifier_test",
+    size = "small",
     srcs = ["notifier_test.go"],
     embed = [":gcjobnotifier"],
     deps = [

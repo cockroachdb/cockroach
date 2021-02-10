@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "logcrash_test",
+    size = "small",
     srcs = [
         "crash_reporting_packet_test.go",
         "crash_reporting_test.go",

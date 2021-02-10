@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "typedesc_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "safe_format_test.go",

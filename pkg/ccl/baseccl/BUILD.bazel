@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "baseccl_test",
+    size = "small",
     srcs = ["encryption_spec_test.go"],
     embed = [":baseccl"],
     deps = ["//pkg/util/leaktest"],

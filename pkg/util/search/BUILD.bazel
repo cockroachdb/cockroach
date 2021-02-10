@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "search_test",
+    size = "small",
     srcs = ["search_test.go"],
     embed = [":search"],
     deps = [

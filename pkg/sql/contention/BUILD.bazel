@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "contention_test",
+    size = "small",
     srcs = ["registry_test.go"],
     data = glob(["testdata/**"]),
     embed = [":contention"],

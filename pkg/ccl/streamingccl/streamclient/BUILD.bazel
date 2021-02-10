@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "streamclient_test",
+    size = "small",
     srcs = ["client_test.go"],
     embed = [":streamclient"],
     deps = [

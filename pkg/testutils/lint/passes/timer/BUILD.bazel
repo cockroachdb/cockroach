@@ -14,7 +14,9 @@ go_library(
 
 go_test(
     name = "timer_test",
+    size = "small",
     srcs = ["timer_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":timer",
         "//pkg/testutils/skip",
