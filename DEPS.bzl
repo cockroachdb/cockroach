@@ -837,11 +837,19 @@ def go_deps():
         version = "v0.0.0-20190707114632-bbf5a6c351f4",
     )
     go_repository(
+        name = "com_github_fortytw2_leaktest",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/fortytw2/leaktest",
+        sum = "h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=",
+        version = "v1.3.0",
+    )
+
+    go_repository(
         name = "com_github_frankban_quicktest",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/frankban/quicktest",
-        sum = "h1:kV0lw0TH1j1hozahVmcpFCsbV5hcS4ZalH+U7UoeTow=",
-        version = "v1.7.3",
+        sum = "h1:19ARM85nVi4xH7xPXuc5eM/udya5ieh7b/Sv+d844Tk=",
+        version = "v1.10.2",
     )
     go_repository(
         name = "com_github_fsnotify_fsnotify",
@@ -1107,8 +1115,8 @@ def go_deps():
         name = "com_github_google_go_cmp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-cmp",
-        sum = "h1:xsAVV57WRhGj6kEIi8ReJzQlHHqcBYCElAvkovg3B/4=",
-        version = "v0.4.0",
+        sum = "h1:X2ev0eStA3AbceY54o37/0PQ/UWqKEiiO2dKL5OPaFM=",
+        version = "v0.5.2",
     )
     go_repository(
         name = "com_github_google_go_github",
@@ -1646,8 +1654,8 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sum = "h1:GhthINjveNZAdFUD8QoQYfjxnOONZgztK/Yr6M23UTY=",
-        version = "v1.9.0",
+        sum = "h1:0hzRabrMN4tSTvMfnL3SCv1ZGeAP23ynzodBgaHeMeg=",
+        version = "v1.11.7",
     )
     go_repository(
         name = "com_github_klauspost_cpuid",
@@ -2161,8 +2169,8 @@ def go_deps():
         name = "com_github_pierrec_lz4",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pierrec/lz4",
-        sum = "h1:mFe7ttWaflA46Mhqh+jUfjp2qTbPYxLB2/OyBppH9dg=",
-        version = "v2.4.1+incompatible",
+        sum = "h1:Ix9yFKn1nSPBLFl/yZknTp8TU5G4Ps0JDmguYK6iH1A=",
+        version = "v2.6.0+incompatible",
     )
     go_repository(
         name = "com_github_pierrre_compare",
@@ -2280,8 +2288,8 @@ def go_deps():
         name = "com_github_rcrowley_go_metrics",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rcrowley/go-metrics",
-        sum = "h1:dY6ETXrvDG7Sa4vE8ZQG4yqWg6UnOcbqTAahkV813vQ=",
-        version = "v0.0.0-20190826022208-cac0b30c2563",
+        sum = "h1:N/ElC8H3+5XpJzTSTfLsJV/mx9Q9g7kxmchpfZyxgzM=",
+        version = "v0.0.0-20201227073835-cf1acfcdf475",
     )
     go_repository(
         name = "com_github_rogpeppe_fastuuid",
@@ -2372,8 +2380,8 @@ def go_deps():
         name = "com_github_shopify_sarama",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Shopify/sarama",
-        sum = "h1:SgZvxOvp9NLnAjkIiby0LQgXH0yQNTk2eDzbYPVoTA4=",
-        version = "v1.22.2-0.20190604114437-cd910a683f9f",
+        sum = "h1:1EyY1dsxNDUQEv0O/4TsjosHI2CgB1uo9H/v56xzTxc=",
+        version = "v1.27.2",
     )
     go_repository(
         name = "com_github_shopify_toxiproxy",
@@ -2729,8 +2737,8 @@ def go_deps():
         name = "in_gopkg_check_v1",
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/check.v1",
-        sum = "h1:BLraFXnmrev5lT+xlilqcH8XK9/i0At2xKjWk4p6zsU=",
-        version = "v1.0.0-20200227125254-8fa46927fb4f",
+        sum = "h1:QRR6H1YWRnHb4Y/HeNFCTJLFVxaq6wH4YuVdsUOr75U=",
+        version = "v1.0.0-20200902074654-038fdea0a05b",
     )
     go_repository(
         name = "in_gopkg_cheggaaa_pb_v1",
@@ -2850,8 +2858,8 @@ def go_deps():
         name = "in_gopkg_yaml_v3",
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/yaml.v3",
-        sum = "h1:dUUwHk2QECo/6vqA44rthZ8ie2QXMNeKRTHCNY2nXvo=",
-        version = "v3.0.0-20200313102051-9f266ea9e77c",
+        sum = "h1:tQIYjPdBoyREyB9XMu+nnTclpTYkz2zFM+lzLJFO4gQ=",
+        version = "v3.0.0-20200615113413-eeeca48fe776",
     )
     go_repository(
         name = "io_etcd_go_bbolt",
