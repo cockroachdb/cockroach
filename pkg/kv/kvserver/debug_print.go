@@ -33,7 +33,7 @@ func PrintKeyValue(kv storage.MVCCKeyValue) {
 	fmt.Println(SprintKeyValue(kv, true /* printKey */))
 }
 
-// SprintKey pretty-prings the specified MVCCKey.
+// SprintKey pretty-prints the specified MVCCKey.
 func SprintKey(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
 }
@@ -73,6 +73,14 @@ func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		return sb.String()
 	}
 	panic("unreachable")
+}
+
+// SprintIntent pretty-prints the specified intent value.
+func SprintIntent(value []byte) string {
+	if out, err := tryIntent(storage.MVCCKeyValue{Value: value}); err == nil {
+		return out
+	}
+	return fmt.Sprintf("%x", value)
 }
 
 func tryRangeDescriptor(kv storage.MVCCKeyValue) (string, error) {
@@ -394,4 +402,5 @@ func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
 	} else {
 		fmt.Fprintf(&sb, "%x", v)
 	}
+	fmt.Println(sb.String())
 }
