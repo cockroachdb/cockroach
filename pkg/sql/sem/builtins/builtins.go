@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -112,6 +113,7 @@ const (
 	categoryString              = "String and byte"
 	categorySystemInfo          = "System info"
 	categorySystemRepair        = "System repair"
+	categoryStreamIngestion     = "Stream Ingestion"
 )
 
 func categorizeType(t *types.T) string {
@@ -4760,6 +4762,29 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "This function can be used to report the usage of an arbitrary feature. The " +
 				"feature name is hashed for privacy purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryStreamIngestion,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"job_id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				jobID := int(*args[0].(*tree.DInt))
+				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID)
+				return tree.NewDInt(tree.DInt(jobID)), err
+			},
+			Info: "This function can be used to signal a running stream ingestion job to complete. " +
+				"The job will eventually stop ingesting, revert to the latest resolved timestamp and leave the " +
+				"cluster in a consistent state. " +
+				"This function does not wait for the job to reach a terminal state, " +
+				"but instead returns the job id as soon as it has signaled the job to complete. " +
+				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
+				" job has left the cluster in a consistent state.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
