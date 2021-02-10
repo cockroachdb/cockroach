@@ -1173,36 +1173,57 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 
+					// We will add up to two options - one for the table itself, and one
+					// for all the new indexes associated with the table.
+					opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 2)
+
 					// For locality configs, we need to update the zone configs to match
 					// the new multi-region locality configuration, instead of
 					// copying the old zone configs over.
-					switch lcSwap.NewLocalityConfig.Locality.(type) {
-					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-						// Apply new zone configurations for all newly partitioned indexes,
-						// including the primary key and the table itself.
-						if err := applyZoneConfigForMultiRegionTable(
-							ctx,
-							txn,
-							sc.execCfg,
-							*dbDesc.RegionConfig,
-							scTable,
+					if mutation.Direction == descpb.DescriptorMutation_ADD {
+						opts = append(
+							opts,
 							applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 								lcSwap.NewLocalityConfig,
 							),
-							applyZoneConfigForMultiRegionTableOptionNewIndexes(
-								append(
-									[]descpb.IndexID{pkSwap.NewPrimaryIndexId},
-									pkSwap.NewIndexes...,
-								)...,
-							),
-						); err != nil {
-							return err
-						}
-					default:
-						return errors.AssertionFailedf(
-							"unknown locality on PK swap: %T",
-							lcSwap.NewLocalityConfig.Locality,
 						)
+						switch lcSwap.NewLocalityConfig.Locality.(type) {
+						case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+							// Apply new zone configurations for all newly partitioned indexes.
+							opts = append(
+								opts,
+								applyZoneConfigForMultiRegionTableOptionNewIndexes(
+									append(
+										[]descpb.IndexID{pkSwap.NewPrimaryIndexId},
+										pkSwap.NewIndexes...,
+									)...,
+								),
+							)
+						default:
+							return errors.AssertionFailedf(
+								"unknown locality on PK swap: %T",
+								lcSwap.NewLocalityConfig.Locality,
+							)
+						}
+					} else {
+						// DROP is hit on cancellation, in which case we must roll back.
+						opts = append(
+							opts,
+							applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+								lcSwap.OldLocalityConfig,
+							),
+						)
+					}
+
+					if err := applyZoneConfigForMultiRegionTable(
+						ctx,
+						txn,
+						sc.execCfg,
+						*dbDesc.RegionConfig,
+						scTable,
+						opts...,
+					); err != nil {
+						return err
 					}
 				} else {
 					// For the normal case, copy the zone configs over.
@@ -1269,14 +1290,31 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				// For locality swaps, ensure the table descriptor fields are correctly filled.
 				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					scTable.LocalityConfig = &lcSwap.NewLocalityConfig
-					switch lcSwap.NewLocalityConfig.Locality.(type) {
+					newConfig := &lcSwap.NewLocalityConfig
+					if mutation.Direction == descpb.DescriptorMutation_ADD {
+						// Sanity check that locality has not been changed during backfill.
+						if !scTable.LocalityConfig.Equal(lcSwap.OldLocalityConfig) {
+							return errors.AssertionFailedf(
+								"expected locality on table to match old locality\ngot: %s\nwant %s",
+								scTable.LocalityConfig,
+								lcSwap.OldLocalityConfig,
+							)
+						}
+					} else {
+						// DROP is hit on cancellation, in which case we must roll back.
+						newConfig = &lcSwap.OldLocalityConfig
+					}
+					scTable.LocalityConfig = newConfig
+					switch newConfig.Locality.(type) {
+					case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_,
+						*descpb.TableDescriptor_LocalityConfig_Global_:
+						scTable.PartitionAllBy = false
 					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 						scTable.PartitionAllBy = true
 					default:
 						return errors.AssertionFailedf(
 							"unknown locality on PK swap: %T",
-							lcSwap.NewLocalityConfig.Locality,
+							newConfig.Locality,
 						)
 					}
 

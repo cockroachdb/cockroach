@@ -209,6 +209,14 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
+	// Make sure all of the leases have dropped before attempting to validate.
+	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil
+		}
+		return err
+	}
+
 	// For all the read only members the current job is responsible for, either
 	// promote them to writeable or remove them from the descriptor entirely,
 	// as dictated by the direction.
