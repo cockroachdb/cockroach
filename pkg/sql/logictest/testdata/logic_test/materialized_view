@@ -161,3 +161,43 @@ SELECT * FROM t57108_v
 ----
 NULL
 1
+
+user testuser
+
+# testuser should not be able to refresh the materialized view without
+# ownership.
+statement error pq: must be owner of materialized view with_options
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+user root
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+# testuser should now be able to refresh the materialized view as a member of
+# root.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+statement ok
+REVOKE root FROM testuser
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER MATERIALIZED VIEW with_options OWNER TO testuser
+
+# root should still be able to refresh the view.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+user testuser
+
+# testuser should now be able to refresh the materialized view as the owner.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
