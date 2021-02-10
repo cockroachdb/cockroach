@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1931,8 +1932,9 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	// Not sure whether run in the past and so sees clock uncertainty push.
+	// Must be a DDL as a regular DML would use the lease and not get pushed.
 	if _, err := tx1.Exec(`
-INSERT INTO t.kv VALUES ('c', 'd');
+ALTER TABLE t.kv RENAME COLUMN v TO vv;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2526,4 +2528,99 @@ func TestOutstandingLeasesMetric(t *testing.T) {
 	if actual < 3 {
 		t.Errorf("expected at least 3 outstanding leases, found %d", actual)
 	}
+}
+
+// Test that attempts to use a descriptor at a timestamp that precedes when
+// a descriptor is dropped but follows the notification that that descriptor
+// was dropped will successfully acquire the lease.
+func TestLeaseAcquireAfterDropWithEarlierTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// descID is the ID of the table we're dropping.
+	var descID atomic.Value
+	descID.Store(descpb.ID(0))
+	type refreshEvent struct {
+		unblock chan struct{}
+		ts      hlc.Timestamp
+	}
+	refreshed := make(chan refreshEvent)
+	var stopper *stop.Stopper
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &lease.ManagerTestingKnobs{
+					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+						if descpb.GetDescriptorID(descriptor) != descID.Load().(descpb.ID) {
+							return
+						}
+						unblock := make(chan struct{})
+						select {
+						case refreshed <- refreshEvent{
+							unblock: unblock,
+							ts:      descpb.GetDescriptorModificationTime(descriptor),
+						}:
+						case <-stopper.ShouldQuiesce():
+						}
+						select {
+						case <-unblock:
+						case <-stopper.ShouldQuiesce():
+						}
+					},
+				},
+			},
+		},
+	})
+	stopper = tc.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Create a schema, create a table in that schema, insert into it, drop it,
+	// detect the drop has made its way to the lease manager and thus the lease
+	// has been removed, and note the timestamp at which the drop occurred, then
+	// ensure that the descriptors can be read at the previous timestamp.
+	tdb.Exec(t, "CREATE SCHEMA sc")
+	tdb.Exec(t, "CREATE TABLE sc.foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "INSERT INTO sc.foo VALUES (1)")
+	{
+		var id descpb.ID
+		tdb.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`, "sc").Scan(&id)
+		require.NotEqual(t, descpb.ID(0), id)
+		descID.Store(id)
+	}
+	dropErr := make(chan error, 1)
+	go func() {
+		_, err := tc.ServerConn(0).Exec("DROP SCHEMA sc CASCADE")
+		dropErr <- err
+	}()
+
+	// Observe that the lease manager has now marked the descriptor as dropped.
+	ev := <-refreshed
+
+	// Ensure that reads at the previous timestamp will succeed. Before the
+	// commit that introduced this test, they would fail because the fallback
+	// used to read the table descriptor from the store did not exist for the
+	// schema. After this commit, there is no fallback and the lease manager
+	// properly serves the right version for both.
+	tdb.CheckQueryResults(t,
+		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.Prev().AsOfSystemTime(),
+		[][]string{{"1"}})
+
+	// Test that using a timestamp equal to the timestamp at which the descriptor
+	// is dropped results in the proper error.
+	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
+		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.AsOfSystemTime())
+
+	// Also ensure that the subsequent timestamp gets the same error.
+	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
+		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.Next().AsOfSystemTime())
+
+	// Allow everything to continue.
+	close(ev.unblock)
+	require.NoError(t, <-dropErr)
+
+	// Test again, after the namespace entry has been fully removed, that the
+	// query returns the exact same error.
+	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
+		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.AsOfSystemTime())
 }
