@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -106,6 +107,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
+	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
 	t.Run("finite stream client", func(t *testing.T) {
 		v := roachpb.MakeValueFromString("value_1")
@@ -127,7 +129,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
-		out, err := runStreamIngestionProcessor(ctx, t, kvDB, "some://stream", partitionAddresses,
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "some://stream",
+			partitionAddresses,
 			startTime, nil /* interceptEvents */, mockClient)
 		require.NoError(t, err)
 
@@ -160,8 +163,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	t.Run("error stream client", func(t *testing.T) {
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
-		out, err := runStreamIngestionProcessor(ctx, t, kvDB, "some://stream", partitionAddresses,
-			startTime, nil /* interceptEvents */, &errorStreamClient{})
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "some://stream",
+			partitionAddresses, startTime, nil /* interceptEvents */, &errorStreamClient{})
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -278,18 +281,13 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
+	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	kvDB := tc.Server(0).DB()
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// TODO: Consider testing variations on these parameters.
-	valueRange := 100
-	kvsPerResolved := 1_000
-	kvFrequency := 50 * time.Nanosecond
-	numPartitions := 4
-	dupProbability := 0.2
-	streamAddr := makeTestStreamURI(valueRange, kvsPerResolved, numPartitions,
-		int(roachpb.SystemTenantID.ToUint64()), kvFrequency, dupProbability)
+	streamAddr := getTestRandomClientURI(int(roachpb.SystemTenantID.ToUint64()))
 
 	// The random client returns system and table data partitions.
 	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
@@ -297,7 +295,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	topo, err := streamClient.GetTopology(streamingccl.StreamAddress(streamAddr))
 	require.NoError(t, err)
 	// One system and two table data partitions.
-	require.Equal(t, numPartitions, len(topo.Partitions))
+	require.Equal(t, 2 /* numPartitions */, len(topo.Partitions))
 
 	startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
@@ -307,7 +305,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
 	streamValidator := newStreamClientValidator()
 	validator := registerValidatorWithClient(streamValidator)
-	out, err := runStreamIngestionProcessor(ctx, t, kvDB, streamAddr, topo.Partitions,
+	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr, topo.Partitions,
 		startTime, []func(streamingccl.Event, streamingccl.PartitionAddress){cancelAfterCheckpoints,
 			validator}, nil /* mockClient */)
 	require.NoError(t, err)
@@ -353,7 +351,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	}
 
 	// Ensure that no errors were reported to the validator.
-	for _, failure := range streamValidator.Failures() {
+	for _, failure := range streamValidator.failures() {
 		t.Error(failure)
 	}
 
@@ -374,6 +372,7 @@ func TestRandomClientGeneration(t *testing.T) {
 func runStreamIngestionProcessor(
 	ctx context.Context,
 	t *testing.T,
+	registry *jobs.Registry,
 	kvDB *kv.DB,
 	streamAddr string,
 	partitionAddresses []streamingccl.PartitionAddress,
@@ -389,8 +388,9 @@ func runStreamIngestionProcessor(
 
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
-			DB:       kvDB,
+			Settings:    st,
+			DB:          kvDB,
+			JobRegistry: registry,
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,

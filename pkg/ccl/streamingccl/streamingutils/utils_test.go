@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -50,7 +51,11 @@ func TestCutoverBuiltin(t *testing.T) {
 		},
 		Progress: jobspb.StreamIngestionProgress{},
 	}
-	job, err := jobs.TestingCreateAndStartJob(ctx, registry, tc.Server(0).DB(), streamIngestJobRecord)
+	var job *jobs.StartableJob
+	id := registry.MakeJobID()
+	err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		return registry.CreateStartableJobWithTxn(ctx, &job, id, txn, streamIngestJobRecord)
+	})
 	require.NoError(t, err)
 
 	// Check that sentinel is not set.
@@ -59,14 +64,48 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
-	cutoverTime := timeutil.Now()
-	var jobID int
+	// This should fail since no highwatermark is set on the progress.
+	cutoverTime := timeutil.Now().Round(time.Microsecond)
+	_, err = db.ExecContext(
+		ctx,
+		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
+		job.ID(), cutoverTime)
+	require.Error(t, err, "cannot cutover to a timestamp")
+
+	var highWater time.Time
+	err = job.HighWaterProgressed(ctx, nil /* txn */, func(ctx context.Context, txn *kv.Txn,
+		details jobspb.ProgressDetails) (hlc.Timestamp, error) {
+		highWater = timeutil.Now().Round(time.Microsecond)
+		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
+		return hlcHighWater, nil
+	})
+	require.NoError(t, err)
+
+	// This should fail since the highwatermark is less than the cutover time
+	// passed to the builtin.
+	cutoverTime = timeutil.Now().Round(time.Microsecond)
+	_, err = db.ExecContext(
+		ctx,
+		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
+		job.ID(), cutoverTime)
+	require.Error(t, err, "cannot cutover to a timestamp")
+
+	// This should succeed since the highwatermark is equal to the cutover time.
+	var jobID int64
 	err = db.QueryRowContext(
 		ctx,
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), cutoverTime).Scan(&jobID)
+		job.ID(), highWater).Scan(&jobID)
 	require.NoError(t, err)
 	require.Equal(t, job.ID(), jobspb.JobID(jobID))
+
+	// This should fail since we already have a cutover time set on the job
+	// progress.
+	_, err = db.ExecContext(
+		ctx,
+		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
+		job.ID(), highWater)
+	require.Error(t, err, "cutover timestamp already set")
 
 	// Check that sentinel is set on the job progress.
 	sj, err := registry.LoadJob(ctx, job.ID())
@@ -74,8 +113,5 @@ func TestCutoverBuiltin(t *testing.T) {
 	progress = sj.Progress()
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
-	// The builtin only offers microsecond precision and so we must account for
-	// that when comparing against our chosen time.
-	cutoverTime = cutoverTime.Round(time.Microsecond)
-	require.Equal(t, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}, sp.StreamIngest.CutoverTime)
+	require.Equal(t, hlc.Timestamp{WallTime: highWater.UnixNano()}, sp.StreamIngest.CutoverTime)
 }

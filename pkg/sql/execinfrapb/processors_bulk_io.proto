@@ -148,6 +148,8 @@ message StreamIngestionDataSpec {
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
   // StreamAddress locate the stream so that a stream client can be initialized.
   optional string stream_address = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress",(gogoproto.nullable) = false];
+  // JobID is the job ID of the stream ingestion job.
+  optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 }
 
 message StreamIngestionFrontierSpec {
