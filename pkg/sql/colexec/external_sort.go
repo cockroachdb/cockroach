@@ -130,6 +130,7 @@ type externalSorter struct {
 	// firstPartitionIdx is the index of the first partition to merge next.
 	firstPartitionIdx   int
 	maxNumberPartitions int
+	numForcedMerges     int
 
 	// fdState is used to acquire file descriptors up front.
 	fdState struct {
@@ -164,6 +165,9 @@ var _ closableOperator = &externalSorter{}
 // the unlimitedAllocator).
 // - maxNumberPartitions (when non-zero) overrides the semi-dynamically
 // computed maximum number of partitions to have at once.
+// - numForcedMerges (when non-zero) specifies the number of times the repeated
+// merging occurs even if the maximum number of partitions hasn't been reached.
+// It should only be used in tests.
 // - delegateFDAcquisitions specifies whether the external sorter should let
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
@@ -175,6 +179,7 @@ func NewExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
+	numForcedMerges int,
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
@@ -234,6 +239,7 @@ func NewExternalSorter(
 		ordering:            ordering,
 		columnOrdering:      execinfrapb.ConvertToColumnOrdering(ordering),
 		maxNumberPartitions: maxNumberPartitions,
+		numForcedMerges:     numForcedMerges,
 	}
 	es.fdState.fdSemaphore = fdSemaphore
 	es.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
@@ -280,12 +286,17 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.inMemSorterInput.interceptReset = true
 				s.inMemSorter.reset(ctx)
 				s.numPartitions++
-				if s.numPartitions == s.maxNumberPartitions-1 {
-					// We have reached the maximum number of active partitions
-					// that we know that we'll be able to merge without
-					// exceeding the limit, so we need to merge all of them and
+				forceRepeatedMerging := s.numForcedMerges > 0 && s.numPartitions == 2
+				if s.numPartitions == s.maxNumberPartitions-1 || forceRepeatedMerging {
+					// We either have reached the maximum number of active
+					// partitions that we know that we'll be able to merge
+					// without exceeding the limit or we're forced to merge the
+					// partitions in tests, so we need to merge all of them and
 					// spill the new partition to disk before we can proceed on
 					// consuming the input.
+					if forceRepeatedMerging {
+						s.numForcedMerges--
+					}
 					s.state = externalSorterRepeatedMerging
 					continue
 				}
