@@ -28,5 +28,8 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl",
     proto = ":licenseccl_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/util/uuid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )

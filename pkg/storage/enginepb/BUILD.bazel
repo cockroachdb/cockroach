@@ -27,6 +27,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/hlc",
+        "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
