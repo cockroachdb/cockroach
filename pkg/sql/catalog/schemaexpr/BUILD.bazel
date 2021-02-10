@@ -13,6 +13,7 @@ go_library(
         "expr_filter.go",
         "partial_index.go",
         "select_name_resolution.go",
+        "unique_contraint.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr",
     visibility = ["//visibility:public"],

@@ -191,8 +191,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 						params.SessionData(),
 						d,
 						n.tableDesc,
+						*tn,
 						NonEmptyTable,
 						t.ValidationBehavior,
+						params.p.SemaCtx(),
 					); err != nil {
 						return err
 					}
