@@ -39,7 +39,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/util/hlc",
-        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/span",
         "//pkg/util/syncutil",
@@ -58,7 +57,6 @@ go_test(
     srcs = [
         "main_test.go",
         "stream_ingestion_frontier_processor_test.go",
-        "stream_ingestion_job_test.go",
         "stream_ingestion_processor_test.go",
         "stream_ingestion_test.go",
     ],
@@ -69,6 +67,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/ccl/streamingccl/streamingutils",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
