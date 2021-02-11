@@ -171,11 +171,11 @@ vectorized: true
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
 │
-└── • sort
-    │ order: +a
+└── • index join
+    │ table: json_tab@primary
     │
-    └── • index join
-        │ table: json_tab@primary
+    └── • sort
+        │ order: +a
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
@@ -186,7 +186,7 @@ vectorized: true
                   table: json_tab@json_inv
                   spans: 4 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fv2j4Qx99_f8XpXkp_85Q4oarkp7RrqlExYAnSNkE0GXLrMlE7s03FhPjfpyS0W7oSwUMi350_d1_f6bZof65QYPx5MrwajKB3M0in6cfhOaTxMH43BQm3yfgD_LBafXVyAZ_ex0kMvQVE87XvhwRnsxlnEGTZ2TmMkxeRkEF_H7mJE7j-AhIZKp3TSD6QRTFDjhnD0uglWatN5drWFwb5BoXPsFDl2lXujOFSG0KxRVe4FaHAqVysKCGZk_F8ZJiTk8WqTvskOKoPhXpEhmkplRXgcd-7Mqb--NuW5U0MfSs2scpBqhwuQbvvZCwyHK-dgIizKMBsx1Cv3R9Z1sl7QsF37HjpA_VIxlF-W6wcGTIeb-t_iseb0oBWEHEBttIP1knjxBwv53Pf96tf-MqJ_1_9g8ZGIJWfgvA5Qt2B8J8OHHx-cMrz73Sh9oMLDgyuNMWDNL-O6314SvFUG0fGC9uFI_7mYPr-KemfR9pvF2j8AnpR8Mr2CCHu0vHoutmi9pX9Gj1fOWIaF6coTsiWWllq6T2U2d9lDCm_p2ZXrV6bJU2MXtZlGnNcc7UjJ-uaKG-MgWpClcC_Yd4JB91w0AmH3XDYCfe74X4nfPECznb__Q4AAP__3TS2RA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fv2j4Qx99_f8XpXkp_85Q4oarkp7RrqlExYAnSNkE0GXLrMlE7s03FhPjfpyS0W7oSwUMi350_5-_5fFu0P1coMP48GV4NRtC7GaTT9OPwHNJ4GL-bgoTbZPwBflitvjq5gE_v4ySG3gKi-dr3Q4Kz2YwzCLLs7BzGyYtIyKC_j9zECVx_AYkMlc5pJB_Iopghx4xhafSSrNWmcm3rDYN8g8JnWKhy7Sp3xnCpDaHYoivcilDgVC5WlJDMyXg-MszJyWJVp30SHNWLQj0iw7SUygrwuO9dGVN__G3L8iaGvhWbWOUgVQ6XoN13MhYZjtdOQMRZFGC2Y6jX7o8s6-Q9oeA7drz0gXok4yi_LVaODBmPt_U_xeNNaUAriLgAW-kH66RxYo6X87nv-9UvfGXF_6_-QWMjkMpPQfgcob6B8J8bOFh-cEr5qTaOjBe0i474m4Ppw1PS3-lC7d9FeOBdlKZ4kObXca3tn3L4c0v77aMbv4BeFLwyPUKIu3Q8um6mqL1lP0bPW47oxsUpihOypVaWWnoPZfZ3GUPK76mZVavXZkkTo5f1MY05rrnakZN1TZQ3xkA1oUrg3zDvhINuOOiEw2447IT73XC_E754AWe7_34HAAD__4w7tkQ=
 
 # Combine predicates with OR.
 query T
@@ -221,11 +221,11 @@ vectorized: true
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
 │
-└── • sort
-    │ order: +a
+└── • index join
+    │ table: json_tab@primary
     │
-    └── • index join
-        │ table: json_tab@primary
+    └── • sort
+        │ order: +a
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
@@ -236,7 +236,7 @@ vectorized: true
                   table: json_tab@json_inv
                   spans: 3 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU02P0zAQvfMrRnPZD4wSJ12QfMoumxVdlbYklQC1EXKbYQnq2sF2V0VV_ztKQgsBJdCLNV9v3huPZof22xoFxh-mo-vhGM5vh-ksfTe6gDQexa9ncAl3yeQtfLVafXJyCe_fxEkM50uIFhvfDwnO5mF2dgGTpB2ccwZB1mRu4wRuPoJEhkrnNJaPZFHMkWPGsDR6RdZqU4V2dcEw36LwGRaq3LgqnDFcaUModugKtyYUOJPLNSUkczKejwxzcrJY120PWqPaKNQTMkxLqawAj_vetTFe-OJoeVNDn4ttrHKQKocr0O4LGYsMJxsnIOIsCjDbM9Qb90uOdfKBUPA9-3_JQ_VExlF-V6wdGTIeb-s-5ONtaUAriLgAW-kG66RxYoGvFgvf96snPFr8snpfNj4CqfzfhXyBUE8b_DVt56jBKaPe60L9XE7QsZzSFI_SfG_9M4vCTv7wFP5UG0fGC9vcEX_e2X5wSvvjBgdtgiYu4DwK2vchhLhPJ-Ob5k5a2cOhHEs6JV6dIjEhW2plqSWwq7O_zxhS_kDNDVq9MSuaGr2qaRp3UuPqQE7WNVneOEPVpCqBv4N5LzjoBwe94LAfHPaCB_3gQS_46g9wtn_2IwAA___7DKoE
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v0zAQx9_5K073sh8YJU46kPyUjWWiU2lLUglQGyG3OUZQZwfbnYqq_u8oCS0ElEBfLN-Pz933dLod2m9rFBh_mI6uh2M4vx2ms_Td6ALSeBS_nsEl3CWTt_DVavXJySW8fxMnMZwvIVpsfD8kOJuH2dkFTJK2c84ZBFkTuY0TuPkIEhkqndNYPpJFMUeOGcPS6BVZq03l2tUJw3yLwmdYqHLjKnfGcKUNodihK9yaUOBMLteUkMzJeD4yzMnJYl2XPWiN6k-hnpBhWkplBXjc966N8cIXx583NfS52MYqB6lyuALtvpCxyHCycQIizqIAsz1DvXG_5FgnHwgF37P_lzxUT2Qc5XfF2pEh4_G27kM83pYGtIKIC7CVbrBOGicW-Gqx8H2_esLjj19W78vGRiCV_zuRLxDqaYO_pu0cNThl1FQbR8YL2gNG_Hln-fCU8ve6UD93H3bsvjTFozTfW2tkUdjZf3BK_-MGB-3ujV_AeRS070MIcZ9OxjfNnbSih0M5pnRKvDpFYkK21MpSS2BXZX-fMaT8gZobtHpjVjQ1elW3acxJzdWOnKxrorwxhqoJVQJ_h3kvHPTDQS8c9sNhLzzohwe98NUfcLZ_9iMAAP__ygWqBA==
 
 # More complex combination.
 query T

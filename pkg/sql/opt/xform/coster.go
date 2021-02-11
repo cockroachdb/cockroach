@@ -540,9 +540,14 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	numKeyCols := len(required.Ordering.Columns)
 	numPreorderedCols := len(sort.InputOrdering.Columns)
 
-	stats := sort.Relational().Stats
+	rel := sort.Relational()
+	stats := rel.Stats
 	numSegments := c.countSegments(sort)
-	cost := memo.Cost(0)
+
+	// Start with a cost of storing each row; this takes the total number of
+	// columns into account so that a sort on fewer columns is preferred (e.g.
+	// sort before projecting a new column).
+	cost := memo.Cost(cpuCostFactor * float64(rel.OutputCols.Len()) * stats.RowCount)
 
 	if !sort.InputOrdering.Any() {
 		// Add the cost for finding the segments: each row is compared to the

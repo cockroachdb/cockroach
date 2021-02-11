@@ -94,16 +94,16 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 4163.18
+ │         └── cost: 4167.63
  ├── G2: (limit G4 G5 ordering=+1)
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
- │         └── cost: 4163.16
+ │         └── cost: 4167.61
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7)
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 4163.14
+ │    │    └── cost: 4167.59
  │    └── []
  │         ├── best: (select G6 G7)
  │         └── cost: 4124.04
@@ -111,7 +111,7 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G6: (scan t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 9.00]
  │    │    ├── best: (sort G6)
- │    │    └── cost: 2582.66
+ │    │    └── cost: 2622.66
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
  │         └── cost: 2104.02
@@ -119,7 +119,7 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G8: (index-join G10 t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 13.50]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 22095.08
+ │    │    └── cost: 22155.08
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
  │         └── cost: 21342.03
@@ -215,7 +215,7 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G6: (scan t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 9.00]
  │    │    ├── best: (sort G6)
- │    │    └── cost: 2582.66
+ │    │    └── cost: 2622.66
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
  │         └── cost: 2104.02
