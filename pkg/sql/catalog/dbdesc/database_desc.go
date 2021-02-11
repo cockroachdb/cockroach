@@ -13,6 +13,7 @@
 package dbdesc
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -253,7 +254,7 @@ func (desc *Mutable) SetName(name string) {
 // Validate validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *Immutable) Validate() error {
+func (desc *Immutable) Validate(_ context.Context, _ catalog.DescGetter) error {
 	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}

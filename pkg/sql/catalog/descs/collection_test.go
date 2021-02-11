@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,11 +67,36 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
 		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
-			ID:                      42,
+			ID:                      142,
 			Name:                    "table2",
 			Version:                 1,
 			ParentID:                mut.GetParentID(),
 			UnexposedParentSchemaID: mut.GetParentSchemaID(),
+			Columns: []descpb.ColumnDescriptor{
+				{ID: 1, Name: "a", Type: types.Int},
+			},
+			Families: []descpb.ColumnFamilyDescriptor{
+				{
+					ID:              0,
+					Name:            "primary",
+					ColumnNames:     []string{"a"},
+					ColumnIDs:       []descpb.ColumnID{1},
+					DefaultColumnID: 1,
+				},
+			},
+			PrimaryIndex: descpb.IndexDescriptor{
+				ID:               1,
+				Name:             "pk",
+				ColumnIDs:        []descpb.ColumnID{1},
+				ColumnNames:      []string{"a"},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			},
+			Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+			NextColumnID:   2,
+			NextFamilyID:   1,
+			NextIndexID:    2,
+			NextMutationID: 1,
+			FormatVersion:  descpb.FamilyFormatVersion,
 		})
 		b := txn.NewBatch()
 

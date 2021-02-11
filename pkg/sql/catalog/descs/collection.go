@@ -1347,7 +1347,9 @@ func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	// TODO(ajwerner): Add validation here.
+	if err := desc.Validate(ctx, nil /* descGetter */); err != nil {
+		return err
+	}
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
