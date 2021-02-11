@@ -21,10 +21,20 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+// maxAllowedGridSize is the upper bound limit for a generated grid size.
+const maxAllowedGridSize = 100 * geo.MaxAllowedSplitPoints
+
 // GenerateRandomPoints generates provided number of pseudo-random points for the input area.
 func GenerateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geometry, error) {
 	if nPoints < 0 {
 		return geo.Geometry{}, nil
+	}
+	if nPoints > geo.MaxAllowedSplitPoints {
+		return geo.Geometry{}, errors.Newf(
+			"failed to generate random points, too many points to generate: requires %d points, max %d",
+			nPoints,
+			geo.MaxAllowedSplitPoints,
+		)
 	}
 	pointsAsGeometry, err := generateRandomPoints(g, nPoints, rng)
 	if err != nil {
@@ -113,6 +123,15 @@ func generateRandomPointsFromPolygon(
 		sampleWidth = int(math.Ceil(sampleNPoints / float64(sampleHeight)))
 		sampleCellSize = bboxHeight / float64(sampleHeight)
 	}
+	n := sampleHeight * sampleWidth
+	if n > maxAllowedGridSize {
+		return nil, errors.Newf(
+			"generated area is too large: %d, max %d",
+			n,
+			maxAllowedGridSize,
+		)
+	}
+
 	// Prepare the polygon for fast true/false testing.
 	gPrep, err := geos.PrepareGeometry(g.EWKB())
 	if err != nil {
@@ -121,7 +140,6 @@ func generateRandomPointsFromPolygon(
 	defer geos.PreparedGeomDestroy(gPrep)
 
 	// Generate a slice of points - for every cell on a grid store coordinates.
-	n := sampleHeight * sampleWidth
 	cells := make([]geom.Coord, n)
 	for i := 0; i < sampleWidth; i++ {
 		for j := 0; j < sampleHeight; j++ {
@@ -139,7 +157,7 @@ func generateRandomPointsFromPolygon(
 	}
 	results := geom.NewMultiPoint(geom.XY)
 	// Generate points and test them.
-	for nPointsGenerated, iterations := 0, 0; nPointsGenerated < nPoints && iterations <= nPoints*10; iterations++ {
+	for nPointsGenerated, iterations := 0, 0; nPointsGenerated < nPoints && iterations <= 100; iterations++ {
 		for _, cell := range cells {
 			y := bbox.LoY + cell.X()*sampleCellSize
 			x := bbox.LoX + cell.Y()*sampleCellSize

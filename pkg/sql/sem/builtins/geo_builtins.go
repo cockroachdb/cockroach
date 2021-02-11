@@ -1970,7 +1970,8 @@ Flags shown square brackets after the geometry type have the following meaning:
 				return tree.NewDGeometry(generatedPoints), nil
 			},
 			Info: infoBuilder{
-				info: "Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.",
+				info: `Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.
+The requested number of points must be not larger than 65336.`,
 			}.String(),
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -1991,7 +1992,8 @@ Flags shown square brackets after the geometry type have the following meaning:
 				return tree.NewDGeometry(generatedPoints), nil
 			},
 			Info: infoBuilder{
-				info: "Generates pseudo-random points until the requested number are found within the input area.",
+				info: `Generates pseudo-random points until the requested number are found within the input area.
+The requested number of points must be not larger than 65336.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
