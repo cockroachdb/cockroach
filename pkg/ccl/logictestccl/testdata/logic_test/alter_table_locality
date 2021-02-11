@@ -471,6 +471,19 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               voter_constraints = '[+region=ca-central-1]',
                               lease_preferences = '[[+region=ca-central-1]]'
 
+query T
+INSERT INTO created_as_global (pk) VALUES (1) RETURNING crdb_region
+----
+ap-southeast-2
+
+# Check the row was backfilled to the primary region, but the row
+# just inserted is on the current gateway_region.
+query TI
+SELECT crdb_region, pk FROM created_as_global ORDER BY pk ASC
+----
+ca-central-1    0
+ap-southeast-2  1
+
 # Drop the table and try again with the crdb_region column defined.
 statement ok
 DROP TABLE created_as_global;

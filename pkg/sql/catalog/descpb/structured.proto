@@ -565,6 +565,21 @@ message PrimaryKeySwap {
     option (gogoproto.equal) = true;
     optional TableDescriptor.LocalityConfig old_locality_config = 1 [(gogoproto.nullable) = false];
     optional TableDescriptor.LocalityConfig new_locality_config = 2 [(gogoproto.nullable) = false];
+
+    // NewRegionalByRowColumnID is set when we are creating a new column for a
+    // REGIONAL BY ROW table. It is used by NewRegionalByRowColumnDefaultExpr
+    // to identify the column we may have to change DefaultExpr for.
+    optional uint32 new_regional_by_row_column_id = 3 [(gogoproto.casttype) = "ColumnID", (gogoproto.customname) = "NewRegionalByRowColumnID"];
+    // NewRegionalByRowColumnDefaultExpr is the default expression to set when a
+    // REGIONAL BY ROW involving a new crdb_region column is required.
+    // This is required so that the backfill uses a well-known value, but after
+    // the backfill is complete we can set it to use the gateway_region.
+    //
+    // This must be set at mutation creation time, as the schema changer loses
+    // context on what the database is. The default expression should be already
+    // serialized in the same internal format as default_expr on the
+    // ColumnDescriptor.
+    optional string new_regional_by_row_column_default_expr = 4;
   }
   // LocalityConfigSwap is set for ALTER TABLE SET LOCALITY when the command
   // requires PK changes. If set, additional zone configurations are set to
