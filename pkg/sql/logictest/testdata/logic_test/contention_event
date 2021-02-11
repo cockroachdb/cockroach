@@ -41,18 +41,24 @@ ROLLBACK
 
 user root
 
-# Check that the number of payloads in the open trace is at least 1.
-# TODO(angelapwen): when we have a way to pull particular payloads for
-# a trace, we should verify that we're seeing the right contention event.
-# As is, the payloads could be something else (though we verified manually
-# and there is a contention event).
+# Check that there is at least 1 contention event payload in all spans in the
+# open trace.
 #
 # NB: the contention event is not in our trace span but in one of its
 # children, so it wouldn't be found if we filtered by the trace span ID.
 #
 # NB: this needs the 5node-pretend59315 config because otherwise the span is not
 # tracked.
+#
 query B
-SELECT count(num_payloads) > 0 FROM crdb_internal.node_inflight_trace_spans WHERE trace_id = crdb_internal.trace_id();
+WITH spans AS (
+  SELECT span_id FROM crdb_internal.node_inflight_trace_spans
+  WHERE trace_id = crdb_internal.trace_id()
+), payload_types AS (
+    SELECT jsonb_array_elements(crdb_internal.payloads_for_span(span_id))->>'@type' AS payload_type
+    FROM spans
+) SELECT count(*) > 0
+    FROM payload_types
+    WHERE payload_type = 'type.googleapis.com/cockroach.roachpb.ContentionEvent';
 ----
 true
