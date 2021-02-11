@@ -15,7 +15,7 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2!null
  ├── stats: [rows=1000]
- ├── cost: 1273.34569
+ ├── cost: 1283.34569
  ├── ordering: -2
  └── scan a
       ├── columns: f:2!null
@@ -53,7 +53,7 @@ SELECT * FROM abc ORDER BY b, c, a
 sort
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000]
- ├── cost: 1305.40805
+ ├── cost: 1335.40805
  ├── ordering: +2,+3,+1
  └── scan abc
       ├── columns: a:1 b:2 c:3
@@ -67,7 +67,7 @@ SELECT * FROM abc ORDER BY a, b, c
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
- ├── cost: 1114.03
+ ├── cost: 1144.03
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
@@ -82,7 +82,7 @@ SELECT * FROM abc ORDER BY c, b, a
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1114.03
+ ├── cost: 1144.03
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
@@ -97,7 +97,7 @@ SELECT * FROM abc ORDER BY c, a, b
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
- ├── cost: 1174.79049
+ ├── cost: 1204.79049
  ├── ordering: +3,+1,+2
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
@@ -130,7 +130,7 @@ SELECT * FROM abc ORDER BY a, b, c
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
- ├── cost: 13097.1869
+ ├── cost: 13397.1869
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
@@ -145,7 +145,7 @@ SELECT * FROM abc  WHERE a = b ORDER BY b, a, c
 sort (segmented)
  ├── columns: a:1!null b:2!null c:3
  ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
- ├── cost: 11262.6714
+ ├── cost: 11322.6714
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
  └── select

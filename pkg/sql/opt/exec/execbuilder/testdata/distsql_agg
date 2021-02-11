@@ -508,14 +508,13 @@ EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d 
 distribution: full
 vectorized: true
 ·
-• render
+• sort
+│ order: +c,+d
 │
-└── • group
-    │ group by: c, d
-    │ ordered: +c,+d
+└── • render
     │
-    └── • sort
-        │ order: +c,+d
+    └── • group
+        │ group by: c, d
         │
         └── • render
             │
@@ -524,7 +523,7 @@ vectorized: true
                   table: data@primary
                   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl9tr60YQxt_7VyzzZKM18l6Ui56UnpMWg4-c2g70UExQrMUJJJa7UkpDyP9edEliyc2OzEZgv0mbfPpGM_P7kF8g_fsBfLj882p8MQpJ7_toNp_9Me6T2eX48tucLCmJKUmfHnsRccjS90fh_KxPHBL9s-rdEofEffLbdPKDxFEWkd-nk-sr8uvPQkYm0--X07c7oLBOYhVGjyoF_y9gQIEDBQEUJFDwYEFho5OlStNE5__yUghG8b_gDyncrzdPWX68oLBMtAL_BbL77EGBD_Po9kFNVRQr7Q6BQqyy6P6hsMnLCjb6_jHSz0BhtonWqU8GLiPROiaMJNmd0kBhqtax0j4JmBOI8i0pCbgTSEoCQUkgYfFKIXnKPspIs2ilwGevtH2ps0RnSrtevcpAODSQzqcWfB-Li9VKq1WUJdplw6YPDfJmT3SstIp98nZwEf68CSfzm_B6PO4For9zJPOj2fWPXsDer3h-9W1yHc6L63rxH_XcPpO7KL1rVMJowGHx-vGO4tN3_HhUUtbdfJRDA-6UDzM1o9n0ooTtZlQH9Tdnu83g7y0Q71dvDboZ5e3w-rWdylfpbY_cwPt0znKfOYfJINm4vDHiXVPHsLteJ02vKqv3-7MSTmolsPakszaku2zg8q5YR4qtWD-xYR2x2F5vdqyssw5Ybzb90FlH5lwRxb6Odd4eNN4KND5wRVegIcVWoJ3agIZYbO8WP1bQeAegNZt-6KAhc65A418HmmgPmmgFmhi4sivQkGIr0M5sQEMstndLHCtoogPQmk0_dNCQOVegia8DTbYHTbYCTQ5cryvQkGIr0M5tQEMstndLHitosgPQmk0_dNCQOVegyW5-Jv6P4VSlm2Sdqla__ob5NFS8UuUE0-RJL9WVTpaFTXk7KXTFQazSrPwrK29G6_JPeYHbYmYUc7OYN8VsWyxqYraf-NxGzKSV2sqbI97C2HBpbrg0ij2zs2ce9YnZ-sSoPjWLT43iM7P4zGbLzGJk0mYxtmWI2sob27JzcyYMkVAwRwqyZ8ycKQwJFbbDV10uEPkOYPusC6JGZoaosYXB5Hbu2Mowc7gwD-m7OV6wnTHHC0PyhZkDhiEJw6wiBlFjU7MLGUxu547ujDlnOJIz3CpnOPLtgn28mHOGIznDrXIGUWNfIHY5g8nt3LGd4eac4UjO8P1yZvH6y38BAAD__9PhRac=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl9FvqkgUxt_3r5icJw1jcGbAWp6me293Y-LFrtpkbzamoTKxTVpwB9xs0_R_vwFqq1TnYMBE3wD78Z055_y-lFdI_n0CD67_vhleDXzS-j6YTCd_Ddtkcj28_jYlc0pCSpLVcysgFpl73sCf9tvEIsF_i9Y9sUjYJn-MRz9IGKQB-XM8ur0hv__MZWQ0_n49Xt8BhSgOlR88qwS8f4ABBQ4UBFBwgIILMwpLHc9VksQ6-5PXXDAI_wevS-ExWq7S7PGMwjzWCrxXSB_TJwUeTIP7JzVWQai03QUKoUqDx6fcJitLLvXjc6BfgMJkGUSJRzo2I0EUEkbi9EFpoDBWUai0RySzpChOSYnklnQokYIS6cDsjUK8Sj_LSNJgocBjb7R6qVeLhVaLII217W5XKgWVWSOu_J93_mh6598Ohy0p2l8eOdmjye2PlmQfVzy7-ja69af59Xapn-73L-QhSB5KxoxKDrO3zxPxvSf6fNUqinWotAq3Xpa_xXBm1t3lXT4h-3po_nFU8XG1bsTdIDu2294aYza99ehs6e6dnjhken7ciZc2K03uw1QU65J77zV0DjGcxDpV2ubltnGLSmEBhdEq9bKTZtvD9nq6FQa6a5wgmUUlt2DnXItucLe0AbtL6G2VwKoDzaoAbbOOzY-FNFLsxnr3zgRp1iTS7LSRRqb3jnSvOaQRwzXS5bbVQppX54lX4ol3bHEsnpBiN3br4kx44k3yxE-bJ2R67zxdNMcTYrjmqdy2WjyJ6jyJSjyJju0ciyek2I3d6p8JT6JJnsRp84RM752nfnM8IYZrnsptq8WTU50npxJPTsd2j8UTUuzGbl2eCU9Okzw5p80TMr13ni6b4wkxXPNUbltjn3A7PMcqWcZRoip9mXWzgatwoYrtSOKVnqsbHc9zm-J2lOvyB6FK0uJXVtwMouKnrMBNMSuL2aaYb4nZYeJ-HTETtdS1vDnizY0NF-aGC6PYMYsdo9g1l-0axbxntu4Z1Rdm8UWdLTOLkUmbxdiWIepa3tiW9Y0NvzQ3_NKcCV0kFMyRguwZ-0LXtjlHzL_gdVAkmdVYLpjVaCgh8nru2MIwc7QwJFuYOVyYi8jN8YLtjDleGJIvrFbAIGpsavUiBpPXc0d3xpwyDIkZZs4ZjuQMr5Uz3JwzHMkZXitnEDUyNUSN7Qwmr-eO_vtjzhmO5Aw35wxHcoYfljOzt99-BQAA__8WaCXH
 
 # There should be no "by hash" routers if there is a single stream.
 query T
