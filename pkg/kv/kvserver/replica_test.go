@@ -6272,6 +6272,9 @@ func TestRangeStatsComputation(t *testing.T) {
 		// Account for TxnDidNotUpdateMeta
 		expMS.LiveBytes += 2
 		expMS.ValBytes += 2
+		if storage.EnabledSeparatedIntents {
+			expMS.SeparatedIntentCount++
+		}
 	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)

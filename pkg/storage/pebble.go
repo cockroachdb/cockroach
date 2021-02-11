@@ -762,12 +762,13 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Engine interface.
 func (p *Pebble) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	if p.useWrappedIntentWriter {
-		_, err := p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
-		return err
+		_, separatedIntentCountDelta, err :=
+			p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
+		return separatedIntentCountDelta, err
 	}
-	return p.clear(MVCCKey{Key: key})
+	return 0, p.clear(MVCCKey{Key: key})
 }
 
 // ClearEngineKey implements the Engine interface.
@@ -858,12 +859,13 @@ func (p *Pebble) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	if p.useWrappedIntentWriter {
-		_, err := p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
-		return err
+		_, separatedIntentCountDelta, err :=
+			p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, nil)
+		return separatedIntentCountDelta, err
 	}
-	return p.put(MVCCKey{Key: key}, value)
+	return 0, p.put(MVCCKey{Key: key}, value)
 }
 
 // PutEngineKey implements the Engine interface.
@@ -1392,7 +1394,7 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 
 func (p *pebbleReadOnly) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	panic("not implemented")
 }
 
@@ -1438,7 +1440,7 @@ func (p *pebbleReadOnly) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	panic("not implemented")
 }
 

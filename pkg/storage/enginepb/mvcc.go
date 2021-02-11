@@ -166,6 +166,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
+	ms.SeparatedIntentCount += oms.SeparatedIntentCount
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
 	ms.AbortSpanBytes += oms.AbortSpanBytes
@@ -192,6 +193,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
+	ms.SeparatedIntentCount -= oms.SeparatedIntentCount
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
 	ms.AbortSpanBytes -= oms.AbortSpanBytes

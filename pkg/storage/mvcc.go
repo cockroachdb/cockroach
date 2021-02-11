@@ -324,6 +324,7 @@ func updateStatsOnPut(
 	prevValSize int64,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
+	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -471,6 +472,7 @@ func updateStatsOnPut(
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
 	}
+	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
 
 	return ms
 }
@@ -485,6 +487,7 @@ func updateStatsOnResolve(
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
 	commit bool,
+	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -574,6 +577,7 @@ func updateStatsOnResolve(
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
 	}
+	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
 
 	return ms
 }
@@ -587,6 +591,7 @@ func updateStatsOnClear(
 	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
+	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 
 	var ms enginepb.MVCCStats
@@ -657,6 +662,7 @@ func updateStatsOnClear(
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
 	}
+	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
 
 	return ms
 }
@@ -1049,11 +1055,11 @@ func (b *putBuffer) putIntentMeta(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	meta *enginepb.MVCCMetadata,
-) (keyBytes, valBytes int64, err error) {
+) (keyBytes, valBytes int64, separatedIntentCountDelta int, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
-		return 0, 0, errors.AssertionFailedf(
+		return 0, 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
 	if !DisallowSeparatedIntents {
@@ -1073,12 +1079,13 @@ func (b *putBuffer) putIntentMeta(
 
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	if err := writer.PutIntent(key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
-		return 0, 0, err
+	if separatedIntentCountDelta, err = writer.PutIntent(
+		key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		return 0, 0, 0, err
 	}
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -1712,8 +1719,9 @@ func mvccPutInternal(
 	newMeta.Deleted = value == nil
 
 	var metaKeySize, metaValSize int64
+	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
-		metaKeySize, metaValSize, err = buf.putIntentMeta(
+		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
 			writer, metaKey, precedingIntentState, txnDidNotUpdateMeta, newMeta)
 		if err != nil {
 			return err
@@ -1742,7 +1750,7 @@ func mvccPutInternal(
 	// Update MVCC stats.
 	if ms != nil {
 		ms.Add(updateStatsOnPut(key, prevValSize, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, newMeta))
+			metaKeySize, metaValSize, meta, newMeta, separatedIntentCountDelta))
 	}
 
 	// Log the logical MVCC operation.
@@ -2188,11 +2196,11 @@ func MVCCClearTimeRange(
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 				ms.Add(updateStatsOnClear(
-					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
+					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime, 0,
 				))
 			} else {
 				// We cleared a revision of a different key, so nothing was "restored".
-				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
+				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
 			}
 			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
@@ -2238,7 +2246,7 @@ func MVCCClearTimeRange(
 		// If we cleared on the last iteration, no older revision of that key was
 		// "restored", since otherwise we would have iterated over it.
 		origMetaKeySize := int64(clearedMetaKey.EncodedSize())
-		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
+		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
 	}
 
 	return resume, flushClearedKeys(MVCCKey{Key: endKey})
@@ -2816,6 +2824,7 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
+	var separatedIntentCountDelta int
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
@@ -2843,11 +2852,12 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
-			metaKeySize, metaValSize, err = buf.putIntentMeta(
+			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
 				rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
+			separatedIntentCountDelta, err =
+				rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -2902,7 +2912,7 @@ func mvccResolveWriteIntent(
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, meta, &buf.newMeta, commit))
+				metaKeySize, metaValSize, meta, &buf.newMeta, commit, separatedIntentCountDelta))
 		}
 
 		// Log the logical MVCC operation.
@@ -2950,12 +2960,14 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		if separatedIntentCountDelta, err =
+			rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
-			ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
+			ms.Add(updateStatsOnClear(
+				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, separatedIntentCountDelta))
 		}
 		return true, nil
 	}
@@ -2968,7 +2980,8 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err := rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+	if separatedIntentCountDelta, err =
+		rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
@@ -2976,8 +2989,8 @@ func mvccResolveWriteIntent(
 
 	// Update stat counters with older version.
 	if ms != nil {
-		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
+		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize,
+			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime, separatedIntentCountDelta))
 	}
 
 	return true, nil
@@ -3503,8 +3516,11 @@ func ComputeStatsForRange(
 	callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-
+	// Only some callers are providing an MVCCIterator. The others don't have
+	// any intents.
+	iterForSeparatedIntents, countSeparatedIntents := iter.(MVCCIterator)
 	var meta enginepb.MVCCMetadata
+	var isSeparatedIntentMeta bool
 	var prevKey []byte
 	first := false
 
@@ -3560,6 +3576,7 @@ func ComputeStatsForRange(
 		if implicitMeta {
 			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
+			isSeparatedIntentMeta = false
 			meta.KeyBytes = MVCCVersionTimestampSize
 			meta.ValBytes = int64(len(unsafeValue))
 			meta.Deleted = len(unsafeValue) == 0
@@ -3578,6 +3595,9 @@ func ComputeStatsForRange(
 			if !implicitMeta {
 				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+				}
+				if countSeparatedIntents {
+					isSeparatedIntentMeta = iterForSeparatedIntents.IsCurIntentSeparated()
 				}
 			}
 
@@ -3622,6 +3642,9 @@ func ComputeStatsForRange(
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
+					if isSeparatedIntentMeta {
+						ms.SeparatedIntentCount++
+					}
 					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {

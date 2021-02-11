@@ -97,11 +97,11 @@ func TestMVCCHistories(t *testing.T) {
 					return
 				}
 				if strings.Contains(path, "_allow_separated") &&
-					(DisallowSeparatedIntents || enabledSeparatedIntents) {
+					(DisallowSeparatedIntents || EnabledSeparatedIntents) {
 					return
 				}
 				if strings.Contains(path, "_enable_separated") &&
-					(DisallowSeparatedIntents || !enabledSeparatedIntents) {
+					(DisallowSeparatedIntents || !EnabledSeparatedIntents) {
 					return
 				}
 				// We start from a clean slate in every test file.
@@ -521,7 +521,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 	state PrecedingIntentState,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	fmt.Fprintf(rw.buf, "called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID)
@@ -529,7 +529,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 
 func (rw intentPrintingReadWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
+) (int, error) {
 	fmt.Fprintf(rw.buf, "called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
