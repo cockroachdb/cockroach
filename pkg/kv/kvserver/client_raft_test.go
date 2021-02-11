@@ -3711,7 +3711,6 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59453, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
@@ -5124,9 +5123,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Restart store 0 so that it forgets about the newer replicaID.
 		tc.StopServer(0)
+		lhsPartition.deactivate()
 		require.NoError(t, tc.RestartServer(0))
 
-		lhsPartition.deactivate()
 		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 		hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 		require.Equal(t, uint64(0), hs.Commit)
@@ -5197,7 +5196,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	})
 
 	// This case is set up like the previous one except after the RHS learns about
-	// its higher replica ID the store crahes and forgets. The RHS replica gets
+	// its higher replica ID the store crashes and forgets. The RHS replica gets
 	// initialized by the split.
 	t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
 		tc, db, keyA, keyB, _, lhsPartition, stickyEngineRegistry := setup(t)
@@ -5252,9 +5251,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 
 		tc.StopServer(0)
+		lhsPartition.deactivate()
 		require.NoError(t, tc.RestartServer(0))
 
-		lhsPartition.deactivate()
 		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 		// In this case the store has forgotten that it knew the RHS of the split
 		// could not exist. We ensure that it has been initialized to the initial
