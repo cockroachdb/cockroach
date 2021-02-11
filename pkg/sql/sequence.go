@@ -157,8 +157,24 @@ func (p *planner) incrementSequenceUsingCache(
 			}
 			return 0, 0, 0, err
 		}
-		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
-			return 0, 0, 0, boundsExceededError(descriptor)
+
+		if seqOpts.Increment > 0 {
+			// This sequence has exceeded its bounds after performing this increment.
+			if endValue > seqOpts.MaxValue {
+				// If the sequence exceeded its bounds prior to the increment, then return an error.
+				if endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue {
+					return 0, 0, 0, boundsExceededError(descriptor)
+				}
+				// Otherwise, intermediate values can be cached.
+				return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, int64(math.Abs(float64(seqOpts.MaxValue-(endValue-seqOpts.Increment*cacheSize)))) / seqOpts.Increment, nil
+			}
+		} else {
+			if endValue < seqOpts.MinValue {
+				if endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue {
+					return 0, 0, 0, boundsExceededError(descriptor)
+				}
+				return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, int64(math.Abs(float64(seqOpts.MinValue-(endValue-seqOpts.Increment*cacheSize)))) / seqOpts.Increment * -1, nil
+			}
 		}
 
 		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
