@@ -393,12 +393,13 @@ func (c *Connector) dialAddrs(ctx context.Context) error {
 		randStart := rand.Intn(len(c.addrs))
 		for i := range c.addrs {
 			addr := c.addrs[(i+randStart)%len(c.addrs)]
-			conn, err := c.dialAddr(ctx, addr)
-			if err != nil {
+			var client roachpb.InternalClient
+			if err := c.dialAddr(ctx, addr, func(cc *grpc.ClientConn) {
+				client = roachpb.NewInternalClient(cc)
+			}); err != nil {
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 				continue
 			}
-			client := roachpb.NewInternalClient(conn)
 			c.mu.Lock()
 			c.mu.client = client
 			c.mu.Unlock()
@@ -408,15 +409,13 @@ func (c *Connector) dialAddrs(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (c *Connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
+func (c *Connector) dialAddr(ctx context.Context, addr string, do func(cc *grpc.ClientConn)) error {
 	if c.rpcDialTimeout == 0 {
-		return c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+		return c.rpcContext.GRPCUnvalidatedDial(addr).ConnectWith(ctx, do)
 	}
-	err = contextutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
-		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
-		return err
+	return contextutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
+		return c.rpcContext.GRPCUnvalidatedDial(addr).ConnectWith(ctx, do)
 	})
-	return conn, err
 }
 
 func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.InternalClient) {

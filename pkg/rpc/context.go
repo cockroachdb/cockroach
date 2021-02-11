@@ -244,9 +244,28 @@ func newConnectionToNodeID(stopper *stop.Stopper, remoteNodeID roachpb.NodeID) *
 	return c
 }
 
-// Connect returns the underlying grpc.ClientConn after it has been validated,
+// ConnectClient validates (and possibly establishes) the connection and on
+// success, invokes the given closure. Please do not leak the supplied
+// *ClientConn outside of the closure and do not call its Close method.
+//
+// The intended use is the following pattern:
+//
+//    var client somepb.SomeClient
+//    if err := conn.ConnectWith(ctx, func(cc *grpc.ClientConn) {
+//      client = somepb.NewSomeClient(cc)
+//    }; err != nil { return err }
+func (c *Connection) ConnectWith(ctx context.Context, wrap func(cc *grpc.ClientConn)) error {
+	cc, err := c.connect(ctx)
+	if err != nil {
+		return err
+	}
+	wrap(cc)
+	return nil
+}
+
+// connect returns the underlying grpc.ClientConn after it has been validated,
 // or an error if dialing or validation fails.
-func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+func (c *Connection) connect(ctx context.Context) (*grpc.ClientConn, error) {
 	if c.dialErr != nil {
 		return nil, c.dialErr
 	}

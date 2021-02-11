@@ -2467,12 +2467,14 @@ func (s *adminServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.server.rpcContext.GRPCDialNode(
-		addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
-	if err != nil {
+	var c serverpb.AdminClient
+	if err := s.server.rpcContext.GRPCDialNode(
+		addr.String(), nodeID, rpc.DefaultClass).ConnectWith(ctx, func(cc *grpc.ClientConn) {
+		c = serverpb.NewAdminClient(cc)
+	}); err != nil {
 		return nil, err
 	}
-	return serverpb.NewAdminClient(conn), nil
+	return c, nil
 }
 
 // adminPrivilegeChecker is a helper struct to check whether given usernames

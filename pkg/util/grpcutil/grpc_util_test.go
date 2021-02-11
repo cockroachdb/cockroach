@@ -125,4 +125,5 @@ func TestRequestDidNotStart_OpenBreaker(t *testing.T) {
 	err := errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", 42)
 	res := grpcutil.RequestDidNotStart(err)
 	assert.True(t, res)
+
 }

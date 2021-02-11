@@ -409,12 +409,14 @@ func (s *statusServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID,
-		rpc.DefaultClass).Connect(ctx)
-	if err != nil {
+	var sc serverpb.StatusClient
+	if err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID,
+		rpc.DefaultClass).ConnectWith(ctx, func(cc *grpc.ClientConn) {
+		sc = serverpb.NewStatusClient(cc)
+	}); err != nil {
 		return nil, err
 	}
-	return serverpb.NewStatusClient(conn), nil
+	return sc, nil
 }
 
 // Gossip returns gossip network status.
