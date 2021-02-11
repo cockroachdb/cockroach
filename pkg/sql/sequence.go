@@ -640,9 +640,9 @@ func maybeAddSequenceDependencies(
 		return nil, err
 	}
 	var seqDescs []*tabledesc.Mutable
+	var tn tree.TableName
+	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
-		var tn tree.TableName
-
 		if seqIdentifier.IsByID() {
 			name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
 			if err != nil {
@@ -658,6 +658,7 @@ func maybeAddSequenceDependencies(
 		}
 
 		var seqDesc *tabledesc.Mutable
+		var err error
 		p, ok := sc.(*planner)
 		if ok {
 			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
@@ -671,6 +672,8 @@ func maybeAddSequenceDependencies(
 				return nil, err
 			}
 		}
+		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+
 		// If we had already modified this Sequence as part of this transaction,
 		// we only want to modify a single instance of it instead of overwriting it.
 		// So replace seqDesc with the descriptor that was previously modified.
@@ -689,13 +692,23 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      seqIdentifier.IsByID(),
+				ByID:      true, // All new sequences are by ID.
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
 		}
 		seqDescs = append(seqDescs, seqDesc)
 	}
+
+	if len(seqIdentifiers) > 0 {
+		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return nil, err
+		}
+		s := tree.Serialize(newExpr)
+		col.DefaultExpr = &s
+	}
+
 	return seqDescs, nil
 }
 
