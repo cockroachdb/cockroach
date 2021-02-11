@@ -227,10 +227,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	}
 
 	// Update the database's zone configuration.
-	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
-		tree.Name(n.desc.Name),
-		*n.desc.RegionConfig); err != nil {
+		n.desc.ID,
+		*n.desc.RegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
 		return err
 	}
 
@@ -538,10 +541,13 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	// Update the database's zone configuration.
-	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
-		tree.Name(n.desc.Name),
-		*n.desc.RegionConfig); err != nil {
+		n.desc.ID,
+		*n.desc.RegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
 		return err
 	}
 
@@ -757,10 +763,13 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 	}
 
 	// Update the database's zone configuration.
-	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
-		tree.Name(n.desc.Name),
-		*n.desc.RegionConfig); err != nil {
+		n.desc.ID,
+		*n.desc.RegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
 		return err
 	}
 

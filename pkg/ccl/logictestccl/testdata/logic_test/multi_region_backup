@@ -1,0 +1,174 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+query TTTT
+SHOW REGIONS
+----
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
+us-east-1       {us-az1,us-az2,us-az3}  {}  {}
+
+statement ok
+CREATE DATABASE mr_backup primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE DATABASE mr_backup_2 primary region "ap-southeast-2" regions "ca-central-1", "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup
+----
+DATABASE mr_backup  ALTER DATABASE mr_backup CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup_2
+----
+DATABASE mr_backup_2  ALTER DATABASE mr_backup_2 CONFIGURE ZONE USING
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 90000,
+                      num_replicas = 5,
+                      num_voters = 3,
+                      constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                      voter_constraints = '[+region=ap-southeast-2]',
+                      lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+ALTER DATABASE mr_backup CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER DATABASE mr_backup_2 CONFIGURE ZONE USING gc.ttlseconds = 1
+
+statement ok
+BACKUP DATABASE mr_backup TO 'nodelocal://self/mr_backup/';
+BACKUP DATABASE mr_backup_2 TO 'nodelocal://self/mr_backup_2/';
+BACKUP DATABASE mr_backup, mr_backup_2 TO 'nodelocal://self/mr_backup_combined/'
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+mr_backup
+mr_backup_2
+postgres
+system
+test
+
+statement ok
+DROP DATABASE mr_backup;
+DROP DATABASE mr_backup_2
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+postgres
+system
+test
+
+statement ok
+RESTORE DATABASE mr_backup FROM 'nodelocal://self/mr_backup/'
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+mr_backup
+postgres
+system
+test
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup
+----
+DATABASE mr_backup  ALTER DATABASE mr_backup CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+RESTORE DATABASE mr_backup_2 FROM 'nodelocal://self/mr_backup_2/'
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+mr_backup
+mr_backup_2
+postgres
+system
+test
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup_2
+----
+DATABASE mr_backup_2  ALTER DATABASE mr_backup_2 CONFIGURE ZONE USING
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 90000,
+                      num_replicas = 5,
+                      num_voters = 3,
+                      constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                      voter_constraints = '[+region=ap-southeast-2]',
+                      lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+DROP DATABASE mr_backup;
+DROP DATABASE mr_backup_2
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+postgres
+system
+test
+
+statement ok
+RESTORE DATABASE mr_backup, mr_backup_2 FROM 'nodelocal://self/mr_backup_combined/'
+
+query T
+select database_name from [show databases]
+----
+defaultdb
+mr_backup
+mr_backup_2
+postgres
+system
+test
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup
+----
+DATABASE mr_backup  ALTER DATABASE mr_backup CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE mr_backup_2
+----
+DATABASE mr_backup_2  ALTER DATABASE mr_backup_2 CONFIGURE ZONE USING
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 90000,
+                      num_replicas = 5,
+                      num_voters = 3,
+                      constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                      voter_constraints = '[+region=ap-southeast-2]',
+                      lease_preferences = '[[+region=ap-southeast-2]]'
