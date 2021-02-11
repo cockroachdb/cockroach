@@ -87,20 +87,6 @@ func (o oneLevelMapDescGetter) GetDesc(
 	return unwrapDescriptorMutable(ctx, nil, mt, &desc)
 }
 
-func (o oneLevelMapDescGetter) GetDescs(
-	ctx context.Context, reqs []descpb.ID,
-) ([]catalog.Descriptor, error) {
-	resps := make([]catalog.Descriptor, len(reqs))
-	for i, r := range reqs {
-		var err error
-		resps[i], err = o.GetDesc(ctx, r)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return resps, nil
-}
-
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {
 	f, err := os.Open(descriptorCSVPath)
 	require.NoError(t, err)

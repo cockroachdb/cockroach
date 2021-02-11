@@ -393,6 +393,37 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	})
 }
 
+// Maybe wait to update leases on table descriptors for tables which a newly-
+// created index is going to be interleaved into.
+// If we don't do this, it's possible to hold a lease on an older version which
+// does not yet have the corresponding interleaved_by reference, which would
+// cause validations to fail.
+func (sc *SchemaChanger) maybeCreateIndexInterleaved(
+	ctx context.Context, table catalog.TableDescriptor,
+) error {
+	for _, mutation := range table.GetMutations() {
+		if mutation.MutationID != sc.mutationID {
+			// Mutations are applied in a FIFO order. Only apply the first set of
+			// mutations if they have the mutation ID we're looking for.
+			break
+		}
+		if index := mutation.GetIndex(); index != nil &&
+			mutation.Direction == descpb.DescriptorMutation_ADD &&
+			mutation.State == descpb.DescriptorMutation_DELETE_ONLY &&
+			index.IsInterleaved() {
+			for _, ancestor := range index.Interleave.Ancestors {
+				if ancestor.TableID == table.GetID() {
+					continue
+				}
+				if err := WaitToUpdateLeases(ctx, sc.leaseMgr, ancestor.TableID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // drainNamesForDescriptor will drain remove the draining names from the
 // descriptor with the specified ID. If it is a schema, it will also remove the
 // names from the parent database.
@@ -666,6 +697,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	if err := sc.maybeMakeAddTablePublic(ctx, tableDesc); err != nil {
+		return err
+	}
+
+	if err := sc.maybeCreateIndexInterleaved(ctx, tableDesc); err != nil {
 		return err
 	}
 

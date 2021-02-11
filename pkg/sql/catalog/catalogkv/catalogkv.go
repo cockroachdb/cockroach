@@ -280,21 +280,6 @@ func (t *oneLevelUncachedDescGetter) GetDescs(
 
 var _ catalog.DescGetter = (*oneLevelUncachedDescGetter)(nil)
 
-func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog.Descriptor) error {
-	switch desc := desc.(type) {
-	case catalog.TableDescriptor:
-		return desc.Validate(ctx, dg)
-	case catalog.DatabaseDescriptor:
-		return desc.Validate()
-	case catalog.TypeDescriptor:
-		return desc.Validate(ctx, dg)
-	case catalog.SchemaDescriptor:
-		return nil
-	default:
-		return errors.AssertionFailedf("unknown descriptor type %T", desc)
-	}
-}
-
 // unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
 // it into an immutable implementation of Descriptor. It ensures that
 // the ModificationTime is set properly and will validate the descriptor if
@@ -327,7 +312,13 @@ func unwrapDescriptor(
 		return nil, nil
 	}
 	if validate {
-		if err := validateDescriptor(ctx, dg, unwrapped); err != nil {
+		var err error
+		if dg == nil {
+			err = unwrapped.ValidateSelf(ctx)
+		} else {
+			err = unwrapped.Validate(ctx, dg)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -350,13 +341,13 @@ func unwrapDescriptorMutable(
 		if err != nil {
 			return nil, err
 		}
-		if err := mutTable.ValidateTable(ctx); err != nil {
+		if err := mutTable.ValidateSelf(ctx); err != nil {
 			return nil, err
 		}
 		return mutTable, nil
 	case database != nil:
 		dbDesc := dbdesc.NewExistingMutable(*database)
-		if err := dbDesc.Validate(); err != nil {
+		if err := dbDesc.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
 		return dbDesc, nil
@@ -432,7 +423,7 @@ func GetAllDescriptors(
 		dg[desc.GetID()] = desc
 	}
 	for _, desc := range descs {
-		if err := validateDescriptor(ctx, dg, desc); err != nil {
+		if err := desc.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
 	}
