@@ -1948,7 +1948,17 @@ func NewTableDesc(
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return nil, err
 			}
-			if d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy {
+			// Specifying a partitioning on a PRIMARY KEY constraint should be disallowed by the
+			// syntax, but do a sanity check.
+			if d.PrimaryKey && d.PartitionByIndex.ContainsPartitioningClause() {
+				return nil, errors.AssertionFailedf(
+					"PRIMARY KEY partitioning should be defined at table level",
+				)
+			}
+			// We should only do partitioning of non-primary indexes at this point -
+			// the PRIMARY KEY CreatePartitioning is done at the of CreateTable, so
+			// avoid the duplicate work.
+			if !d.PrimaryKey && (d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy) {
 				partitionBy := partitionAllBy
 				if !desc.PartitionAllBy {
 					if d.PartitionByIndex.ContainsPartitions() {
@@ -2095,7 +2105,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			// During CreatePartitioning, implicitly partitioned columns may be
-			// created. AllocateIDs which allocates ExtraColumnIDs to each index
+			// created. AllocateIDs which allocates column IDs to each index
 			// needs to be called before CreatePartitioning as CreatePartitioning
 			// requires IDs to be allocated.
 			//
