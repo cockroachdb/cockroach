@@ -63,7 +63,7 @@ ORDER BY gen_random_uuid(); -- to mix it up
 `, dbID)
 		for rows.Next() {
 			var encoded []byte
-			rows.Scan(&encoded)
+			require.NoError(t, rows.Scan(&encoded))
 			var decoded descpb.Descriptor
 			require.NoError(t, protoutil.Unmarshal(encoded, &decoded))
 			descriptors = append(descriptors, &decoded)

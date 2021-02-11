@@ -1351,8 +1351,19 @@ func IterateRangeDescriptors(
 // store needs to be bootstrapped).
 func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
+	value, _, err := storage.MVCCGet(ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{},  storage.MVCCGetOptions{})
+	found := value != nil
+	// If we found a result, parse it regardless of the error returned by MVCCGet.
+	if found {
+		// If the unmarshal failed, return its result. Otherwise, pass
+		// through the underlying error (which may be a WriteIntentError
+		// to be handled specially alongside the returned value).
+		if err := value.GetProto(&ident); err != nil {
+			return found, err
+		}
+	}
 	ok, err := storage.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
+		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident,
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
