@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/knz/strtime"
 )
 
@@ -3594,6 +3595,41 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.payloads_for_span": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"span ID", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				builder := json.NewArrayBuilder(len(args))
+
+				spanID := uint64(*(args[0].(*tree.DInt)))
+				span, found := ctx.Settings.Tracer.GetActiveSpanFromID(spanID)
+				// A span may not be found if its ID was surfaced previously but its
+				// corresponding trace has ended by the time this builtin was run.
+				if !found {
+					// Returns an empty JSON array.
+					return tree.NewDJSON(builder.Build()), nil
+				}
+
+				for _, rec := range span.GetRecording() {
+					rec.Structured(func(item *pbtypes.Any) {
+						payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
+						if err != nil {
+							return
+						}
+						if payload != nil {
+							builder.Add(payload)
+						}
+					})
+				}
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info:       "Returns the payload(s) of the span whose ID is passed in the argument.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
