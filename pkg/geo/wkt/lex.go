@@ -19,6 +19,9 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+// Constant expected by parser when lexer reaches EOF.
+const eof = 0
+
 // LexError is an error that occurs during lexing.
 type LexError struct {
 	expectedTokType string
@@ -48,16 +51,154 @@ func (e *ParseError) Error() string {
 	return err
 }
 
-// Constant expected by parser when lexer reaches EOF.
-const eof = 0
+// We define a base type geometry as a geometry type keyword without a type suffix.
+// For example, POINT is a base type and POINTZ is not.
+//
+// The layout of the geometry is determined by the first geometry type keyword if it is a M, Z, or ZM variant.
+// If it is a base type geometry, the layout is determined by the number of coordinates in the first point.
+// If it is a geometrycollection, the type is the type of the first geometry in the collection.
+//
+// Edge cases involving geometrycollections:
+// 1. GEOMETRYCOLLECTION (no type suffix) is allowed to be of type M. Normally a geometry without a type suffix
+//    is only allowed to be XY, XYZ, or XYZM.
+// 2. A base type empty geometry (e.g. POINT EMPTY) in a GEOMETRYCOLLECTIONM, GEOMETRYCOLLECTIONZ, GEOMETRYCOLLECTIONZM
+//    is permitted and takes on the type of the collection. Normally, such a geometry is XY.
+// 3. As a consequence of 1. and 2., special care must be given to parsing base geometry types inside a XYM
+//    geometrycollection since a base geometry type is permitted inside a GEOMETRYCOLECTIONM only if it is empty.
+//    For example, GEOMETRYCOLLECTION M (POINT EMPTY) should parse while GEOMETRYCOLLECTION M (POINT(0 0 0)) shouldn't.
 
+// layoutStackObj is a stack object used in the layout parsing stack.
+type layoutStackObj struct {
+	// layout is the currently parsed geometry type.
+	layout geom.Layout
+	// inBaseTypeCollection is a bool where true means we are at the top-level or in a base type GEOMETRYCOLLECTION.
+	inBaseTypeCollection bool
+	// nextPointMustBeEmpty is a bool where true means the next scanned point must be EMPTY. It is used to handle
+	// the edge case where a base type geometry is allowed in a GEOMETRYCOLLECTIONM but only if it is EMPTY.
+	nextPointMustBeEmpty bool
+}
+
+// layoutStack is a stack used for parsing the geometry type. An initial frame is pushed for the top level context.
+// After that, a frame is pushed for each (nested) geometrycollection is encountered and it is popped when we
+// finish scanning that geometrycollection. The initial frame should never be popped off.
+type layoutStack struct {
+	data []layoutStackObj
+}
+
+// makeLayoutStack returns a newly created layoutStack. An initial frame is pushed for the top level context.
+func makeLayoutStack() layoutStack {
+	return layoutStack{
+		data: []layoutStackObj{{layout: geom.NoLayout, inBaseTypeCollection: true}},
+	}
+}
+
+// push constructs a layoutStackObj for a layout and pushes it onto the layout stack.
+func (s *layoutStack) push(layout geom.Layout) {
+	// inBaseTypeCollection inherits from outer context.
+	stackObj := layoutStackObj{
+		layout:               layout,
+		inBaseTypeCollection: s.topInBaseTypeCollection(),
+	}
+
+	switch layout {
+	case geom.NoLayout:
+		stackObj.layout = s.topLayout()
+	case geom.XYM, geom.XYZ, geom.XYZM:
+		stackObj.inBaseTypeCollection = false
+	default:
+		// This should never happen.
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
+	}
+
+	s.data = append(s.data, stackObj)
+}
+
+// pop pops a layoutStackObj from the layout stack and returns its layout.
+func (s *layoutStack) pop() geom.Layout {
+	s.checkNotEmpty()
+	if s.atTopLevel() {
+		panic("top level stack frame should never be popped")
+	}
+	curTopLayout := s.topLayout()
+	s.data = s.data[:len(s.data)-1]
+	return curTopLayout
+}
+
+// top returns a pointer to the layoutStackObj currently at the top of the stack.
+func (s *layoutStack) top() *layoutStackObj {
+	s.checkNotEmpty()
+	return &s.data[len(s.data)-1]
+}
+
+// topLayout returns the layout field of the topmost layoutStackObj.
+func (s layoutStack) topLayout() geom.Layout {
+	return s.top().layout
+}
+
+// topLayout returns the inBaseTypeCollection field of the topmost layoutStackObj.
+func (s layoutStack) topInBaseTypeCollection() bool {
+	return s.top().inBaseTypeCollection
+}
+
+// topLayout returns the nextPointMustBeEmpty field of the topmost layoutStackObj.
+func (s layoutStack) topNextPointMustBeEmpty() bool {
+	return s.top().nextPointMustBeEmpty
+}
+
+// setTopLayout sets the layout field of the topmost layoutStackObj.
+func (s layoutStack) setTopLayout(layout geom.Layout) {
+	switch layout {
+	case geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
+		s.top().layout = layout
+	default:
+		// This should never happen.
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
+	}
+}
+
+// setTopNextPointMustBeEmpty sets the nextPointMustBeEmpty field of the topmost layoutStackObj.
+func (s layoutStack) setTopNextPointMustBeEmpty(nextPointMustBeEmpty bool) {
+	if s.topLayout() != geom.XYM {
+		panic("setTopNextPointMustBeEmpty called for non-XYM geometry collection")
+	}
+	s.top().nextPointMustBeEmpty = nextPointMustBeEmpty
+}
+
+// checkNotEmpty checks that the stack is not empty and panics if it is.
+func (s layoutStack) checkNotEmpty() {
+	// Layout stack should never be empty.
+	if len(s.data) == 0 {
+		panic("layout stack is empty")
+	}
+}
+
+// checkNoGeometryCollectionFramesLeft checks that no frames corresponding to geometrycollections are left on the stack.
+func (s layoutStack) checkNoGeometryCollectionFramesLeft() {
+	// The initial stack frame should be the only one remaining at the end.
+	if !s.atTopLevel() {
+		panic("layout stack still has geometrycollection frames")
+	}
+}
+
+// atTopLevel returns whether or not the stack has only the first frame which represents that we are currently
+// not inside a geometrycollection.
+func (s layoutStack) atTopLevel() bool {
+	return len(s.data) == 1
+}
+
+// wktLex is the lexer for lexing WKT tokens.
 type wktLex struct {
-	line      string
-	pos       int
-	lastPos   int
-	ret       geom.T
-	curLayout geom.Layout
-	lastErr   error
+	line     string
+	pos      int
+	lastPos  int
+	ret      geom.T
+	lytStack layoutStack
+	lastErr  error
+}
+
+// newWKTLex returns a pointer to a newly created wktLex.
+func newWKTLex(line string) *wktLex {
+	return &wktLex{line: line, lytStack: makeLayoutStack()}
 }
 
 // Lex lexes a token from the input.
@@ -85,7 +226,303 @@ func (l *wktLex) Lex(yylval *wktSymType) int {
 	}
 }
 
-func getKeywordToken(tokStr string) int {
+// keyword lexes a string keyword.
+func (l *wktLex) keyword() int {
+	var b strings.Builder
+
+	for {
+		c := l.peek()
+		if !unicode.IsLetter(c) {
+			break
+		}
+		// Add the uppercase letter to the string builder.
+		b.WriteRune(unicode.ToUpper(l.next()))
+	}
+
+	// Check for extra dimensions for geometry types.
+	if b.String() != "EMPTY" {
+		l.trimLeft()
+		if unicode.ToUpper(l.peek()) == 'Z' {
+			l.next()
+			b.WriteRune('Z')
+		}
+		if unicode.ToUpper(l.peek()) == 'M' {
+			l.next()
+			b.WriteRune('M')
+		}
+	}
+
+	ret := keywordToken(b.String())
+	if ret == eof {
+		l.setLexError("keyword")
+	}
+
+	return ret
+}
+
+// num lexes a number.
+func (l *wktLex) num(yylval *wktSymType) int {
+	var b strings.Builder
+
+	for {
+		c := l.peek()
+		if !isNumRune(c) {
+			break
+		}
+		b.WriteRune(l.next())
+	}
+
+	fl, err := strconv.ParseFloat(b.String(), 64)
+	if err != nil {
+		l.setLexError("number")
+		return eof
+	}
+	yylval.coord = fl
+	return NUM
+}
+
+// peek returns the next rune to be read.
+func (l *wktLex) peek() rune {
+	if l.pos == len(l.line) {
+		return eof
+	}
+	return rune(l.line[l.pos])
+}
+
+// next returns the next rune to be read and advances the pos counter.
+func (l *wktLex) next() rune {
+	c := l.peek()
+	if c != eof {
+		l.pos++
+	}
+	return c
+}
+
+// trimLeft increments the pos counter until the next rune to be read is no longer a whitespace character.
+func (l *wktLex) trimLeft() {
+	for {
+		c := l.peek()
+		if c == eof || !unicode.IsSpace(c) {
+			break
+		}
+		l.next()
+	}
+}
+
+// validateStrideAndSetDefaultLayoutIfNoLayout validates whether a stride is consistent with the currently parsed
+// layout and sets the layout with the default layout for that stride if no layout has been determined yet.
+func (l *wktLex) validateStrideAndSetDefaultLayoutIfNoLayout(stride int) bool {
+	if !isValidStrideForLayout(stride, l.curLayout()) {
+		l.setIncorrectStrideError(stride, "")
+		return false
+	}
+	l.setLayoutIfNoLayout(defaultLayoutForStride(stride))
+	return true
+}
+
+// validateNonEmptyGeometryAllowed validates whether a non-empty geometry is allowed given the currently
+// parsed layout. It is used to handle the edge case where a GEOMETRYCOLLECTIONM may have base type
+// geometries only if they are empty.
+func (l *wktLex) validateNonEmptyGeometryAllowed() bool {
+	if l.nextScannedPointMustBeEmpty() {
+		if l.curLayout() != geom.XYM {
+			panic("nextPointMustBeEmpty is true but layout is not XYM")
+		}
+		l.setIncorrectUsageOfBaseTypeInsteadOfMVariantInGeometryCollectionError()
+		return false
+	}
+	return true
+}
+
+// validateAndSetLayoutIfNoLayout validates whether a newly parsed layout is compatible with the currently parsed
+// layout and sets the layout if the current layout is unknown.
+func (l *wktLex) validateAndSetLayoutIfNoLayout(layout geom.Layout) bool {
+	if !isCompatibleLayout(l.curLayout(), layout) {
+		l.setIncorrectLayoutError(layout, "")
+		return false
+	}
+	l.setLayoutIfNoLayout(layout)
+	return true
+}
+
+// validateBaseGeometryTypeAllowed validates whether a base geometry type is permitted based on the parsed layout.
+func (l *wktLex) validateBaseGeometryTypeAllowed() bool {
+	// Base type geometry are permitted in GEOMETRYCOLLECTIONM, GEOMETRYCOLLECTIONZ, GEOMETRYCOLLECTIONZM.
+	// The stride of the coordinates/whether EMPTY is allowed will be validated later.
+	if !l.currentlyInBaseTypeCollection() {
+		// A base type is only permitted in a GEOMETRYCOLLECTIONM if it is EMPTY. We require an EMPTY instead of
+		// coordinates follow this base type keyword.
+		if l.curLayout() == geom.XYM {
+			l.lytStack.setTopNextPointMustBeEmpty(true)
+		}
+		return true
+	}
+
+	// At the top level, a base geometry type is permitted. In a base type GEOMETRYCOLLECTION, a base type geometry
+	// is only not permitted if the parsed layout is XYM.
+	switch l.curLayout() {
+	case geom.XYM:
+		if l.lytStack.atTopLevel() {
+			panic("base geometry check for XYM layout should not happen at top level")
+		}
+		l.setIncorrectUsageOfBaseTypeInsteadOfMVariantInGeometryCollectionError()
+		return false
+	default:
+		return true
+	}
+}
+
+// validateBaseTypeEmptyAllowed validates whether a base type EMPTY is permitted based on the parsed layout.
+func (l *wktLex) validateBaseTypeEmptyAllowed() bool {
+	// EMPTY is always permitted in a non-base type collection.
+	if !l.currentlyInBaseTypeCollection() {
+		// A base type EMPTY geometry is the only permitted base type geometry in a GEOMETRYCOLLECTIONM
+		// and we have now finished reading one.
+		if l.curLayout() == geom.XYM {
+			l.lytStack.setTopNextPointMustBeEmpty(false)
+		}
+		return true
+	}
+
+	// In a base type collection (or at the top level), EMPTY can only be XY.
+	switch l.curLayout() {
+	case geom.NoLayout:
+		l.setLayoutIfNoLayout(geom.XY)
+		fallthrough
+	case geom.XY:
+		return true
+	default:
+		l.setIncorrectLayoutError(geom.XY, "EMPTY is XY layout in base geometry type")
+		return false
+	}
+}
+
+// validateAndPushLayoutStackFrame validates that a given layout is valid and pushes a frame to the layout stack.
+func (l *wktLex) validateAndPushLayoutStackFrame(layout geom.Layout) bool {
+	// Check that the new layout is compatible with the previous one.
+	// Note a base type GEOMETRYCOLLECTION is permitted inside every layout.
+	if layout != geom.NoLayout && !isCompatibleLayout(l.curLayout(), layout) {
+		l.setIncorrectLayoutError(layout, "")
+		return false
+	}
+	l.lytStack.push(layout)
+	return true
+}
+
+// validateAndPopLayoutStackFrame pops a frame from the layout stack and validates that the type is valid.
+func (l *wktLex) validateAndPopLayoutStackFrame() bool {
+	poppedLayout := l.lytStack.pop()
+	// Update the outer context with the type we parsed in the inner context.
+	if !isCompatibleLayout(l.curLayout(), poppedLayout) {
+		// This should never happen. Any layout incompatibility should error at the point it's discovered.
+		panic("uncaught layout incompatibility")
+	}
+	l.setLayoutIfNoLayout(poppedLayout)
+	return true
+}
+
+// validateLayoutStackAtEnd returns whether the layout stack is in the expected state at the end of parsing.
+func (l *wktLex) validateLayoutStackAtEnd() bool {
+	l.lytStack.checkNoGeometryCollectionFramesLeft()
+	return true
+}
+
+// setLayoutIfNoLayout sets the parsed layout if no layout has been determined yet.
+func (l *wktLex) setLayoutIfNoLayout(layout geom.Layout) {
+	if l.curLayout() == geom.NoLayout {
+		l.lytStack.setTopLayout(layout)
+	}
+}
+
+// setIncorrectUsageOfBaseTypeInsteadOfMVariantInGeometryCollectionError sets the error when a
+// base type geometry is used in a base type GEOMETRYCOLLECTION when the parsed layout is XYM.
+func (l *wktLex) setIncorrectUsageOfBaseTypeInsteadOfMVariantInGeometryCollectionError() {
+	l.setIncorrectLayoutError(
+		geom.NoLayout,
+		"the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs",
+	)
+}
+
+// setIncorrectStrideError sets the error when a newly parsed stride doesn't match the currently parsed layout.
+func (l *wktLex) setIncorrectStrideError(incorrectStride int, hint string) {
+	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s so expecting %d coords but got %d coords",
+		layoutName(l.curLayout()), l.curLayout().Stride(), incorrectStride)
+	l.setParseError(problem, hint)
+}
+
+// setIncorrectLayoutError sets the error when a newly parsed layout doesn't match the currently parsed layout.
+func (l *wktLex) setIncorrectLayoutError(incorrectLayout geom.Layout, hint string) {
+	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s but encountered layout of %s",
+		layoutName(l.curLayout()), layoutName(incorrectLayout))
+	l.setParseError(problem, hint)
+}
+
+// curLayout returns the currently parsed layout.
+func (l *wktLex) curLayout() geom.Layout {
+	return l.lytStack.topLayout()
+}
+
+// currentlyInBaseTypeCollection returns whether we are currently scanning inside a base type GEOMETRYCOLLECTION.
+func (l *wktLex) currentlyInBaseTypeCollection() bool {
+	return l.lytStack.topInBaseTypeCollection()
+}
+
+// nextScannedPointMustBeEmpty returns whether the next scanned point must be empty.
+func (l *wktLex) nextScannedPointMustBeEmpty() bool {
+	return l.lytStack.topNextPointMustBeEmpty()
+}
+
+// setLexError is called by Lex when a lexing (tokenizing) error is detected.
+func (l *wktLex) setLexError(expectedTokType string) {
+	l.setError(&LexError{
+		expectedTokType: expectedTokType,
+		pos:             l.lastPos,
+		str:             l.line,
+	})
+}
+
+// setParseError is called when a context-sensitive error is detected during parsing.
+// The generated wktParse function can only catch context-free errors.
+func (l *wktLex) setParseError(problem string, hint string) {
+	errProblem := "syntax error: " + problem
+	l.setError(&ParseError{
+		problem: errProblem,
+		pos:     l.lastPos,
+		str:     l.line,
+		hint:    hint,
+	})
+}
+
+// Error is called by wktParse if an error is encountered during parsing (takes place after lexing).
+func (l *wktLex) Error(s string) {
+	// NB: Lex errors are set in the Lex function.
+	l.setError(&ParseError{
+		problem: s,
+		pos:     l.lastPos,
+		str:     l.line,
+	})
+}
+
+// setError sets the lastErr field of the wktLex object with the given error.
+func (l *wktLex) setError(err error) {
+	// Lex errors take precedence.
+	if l.lastErr == nil {
+		l.lastErr = err
+	}
+}
+
+// isNumRune returns whether a rune could potentially be a part of a number (coordinate).
+func isNumRune(r rune) bool {
+	switch r {
+	case '-', '.':
+		return true
+	default:
+		return unicode.IsDigit(r)
+	}
+}
+
+// keywordToken returns the yacc token for a WKT keyword.
+func keywordToken(tokStr string) int {
 	switch tokStr {
 	case "EMPTY":
 		return EMPTY
@@ -137,132 +574,23 @@ func getKeywordToken(tokStr string) int {
 		return MULTIPOLYGONZ
 	case "MULTIPOLYGONZM":
 		return MULTIPOLYGONZM
+	case "GEOMETRYCOLLECTION":
+		return GEOMETRYCOLLECTION
+	case "GEOMETRYCOLLECTIONM":
+		return GEOMETRYCOLLECTIONM
+	case "GEOMETRYCOLLECTIONZ":
+		return GEOMETRYCOLLECTIONZ
+	case "GEOMETRYCOLLECTIONZM":
+		return GEOMETRYCOLLECTIONZM
 	default:
 		return eof
 	}
 }
 
-// keyword lexes a string keyword.
-func (l *wktLex) keyword() int {
-	var b strings.Builder
-
-	for {
-		c := l.peek()
-		if !unicode.IsLetter(c) {
-			break
-		}
-		// Add the uppercase letter to the string builder.
-		b.WriteRune(unicode.ToUpper(l.next()))
-	}
-
-	// Check for extra dimensions for geometry types.
-	if b.String() != "EMPTY" {
-		l.trimLeft()
-		if unicode.ToUpper(l.peek()) == 'Z' {
-			l.next()
-			b.WriteRune('Z')
-		}
-		if unicode.ToUpper(l.peek()) == 'M' {
-			l.next()
-			b.WriteRune('M')
-		}
-	}
-
-	ret := getKeywordToken(b.String())
-	if ret == eof {
-		l.setLexError("keyword")
-	}
-
-	return ret
-}
-
-func isNumRune(r rune) bool {
-	switch r {
-	case '-', '.':
-		return true
-	default:
-		return unicode.IsDigit(r)
-	}
-}
-
-// num lexes a number.
-func (l *wktLex) num(yylval *wktSymType) int {
-	var b strings.Builder
-
-	for {
-		c := l.peek()
-		if !isNumRune(c) {
-			break
-		}
-		b.WriteRune(l.next())
-	}
-
-	fl, err := strconv.ParseFloat(b.String(), 64)
-	if err != nil {
-		l.setLexError("number")
-		return eof
-	}
-	yylval.coord = fl
-	return NUM
-}
-
-func (l *wktLex) peek() rune {
-	if l.pos == len(l.line) {
-		return eof
-	}
-	return rune(l.line[l.pos])
-}
-
-func (l *wktLex) next() rune {
-	c := l.peek()
-	if c != eof {
-		l.pos++
-	}
-	return c
-}
-
-func (l *wktLex) trimLeft() {
-	for {
-		c := l.peek()
-		if c == eof || !unicode.IsSpace(c) {
-			break
-		}
-		l.next()
-	}
-}
-
-func getDefaultLayoutForStride(stride int) geom.Layout {
-	switch stride {
-	case 2:
-		return geom.XY
-	case 3:
-		return geom.XYZ
-	case 4:
-		return geom.XYZM
-	default:
-		// This should never happen.
-		panic("unsupported stride")
-	}
-}
-
-func (l *wktLex) validateStrideAndSetLayoutIfNoLayout(stride int) bool {
-	if !l.validateStride(stride) {
-		return false
-	}
-	l.setLayoutIfNoLayout(getDefaultLayoutForStride(stride))
-	return true
-}
-
-func (l *wktLex) validateStride(stride int) bool {
-	if !l.isValidStrideForLayout(stride) {
-		l.setIncorrectStrideError(stride, "")
-		return false
-	}
-	return true
-}
-
-func (l *wktLex) isValidStrideForLayout(stride int) bool {
-	switch l.curLayout {
+// isValidStrideForLayout returns whether a stride is consistent with a parsed layout.
+// It is used for ensuring points have the right number of coordinates for the parsed layout.
+func isValidStrideForLayout(stride int, layout geom.Layout) bool {
+	switch layout {
 	case geom.NoLayout:
 		return true
 	case geom.XY:
@@ -275,52 +603,42 @@ func (l *wktLex) isValidStrideForLayout(stride int) bool {
 		return stride == 4
 	default:
 		// This should never happen.
-		panic("unknown geom.Layout")
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
 	}
 }
 
-func (l *wktLex) setLayout(layout geom.Layout) bool {
-	if layout == l.curLayout {
-		return true
+// defaultLayoutForStride returns the default layout for a base type geometry with the given stride.
+func defaultLayoutForStride(stride int) geom.Layout {
+	switch stride {
+	case 2:
+		return geom.XY
+	case 3:
+		return geom.XYZ
+	case 4:
+		return geom.XYZM
+	default:
+		// This should never happen.
+		panic(fmt.Sprintf("unsupported stride %d", stride))
 	}
-	if l.curLayout != geom.NoLayout {
-		l.setIncorrectLayoutError(layout, "")
+}
+
+// isCompatibleLayout returns whether a second layout is compatible with the first layout.
+// It is used for ensuring the layout of each nested geometry is consistent with the previously parsed layout.
+func isCompatibleLayout(outerLayout geom.Layout, innerLayout geom.Layout) bool {
+	assertValidLayout(outerLayout)
+	assertValidLayout(innerLayout)
+	if outerLayout != innerLayout && outerLayout != geom.NoLayout {
 		return false
 	}
-	l.setLayoutIfNoLayout(layout)
 	return true
 }
 
-func (l *wktLex) setLayoutEmptyInCollection() bool {
-	if l.curLayout == geom.XY {
-		return true
-	}
-	if l.curLayout == geom.NoLayout {
-		l.curLayout = geom.XY
-		return true
-	}
-	l.setIncorrectLayoutError(geom.XY, "EMPTY is XY layout in base geometry type collection")
-	return false
-}
-
-func (l *wktLex) setLayoutIfNoLayout(layout geom.Layout) {
-	switch l.curLayout {
-	case geom.NoLayout:
-		l.curLayout = layout
-	case geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
-		break
-	default:
-		// This should never happen.
-		panic("unknown geom.Layout")
-	}
-}
-
-func (l *wktLex) setLexError(expectedTokType string) {
-	l.lastErr = &LexError{expectedTokType: expectedTokType, pos: l.lastPos, str: l.line}
-}
-
-func getLayoutName(layout geom.Layout) string {
+// layoutName returns the string representation of each layout.
+func layoutName(layout geom.Layout) string {
 	switch layout {
+	// geom.NoLayout is used when a base type geometry is read.
+	case geom.NoLayout:
+		return "not XYM"
 	case geom.XY:
 		return "XY"
 	case geom.XYM:
@@ -331,39 +649,16 @@ func getLayoutName(layout geom.Layout) string {
 		return "XYZM"
 	default:
 		// This should never happen.
-		panic("unknown geom.Layout")
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
 	}
 }
 
-func (l *wktLex) setIncorrectStrideError(incorrectStride int, hint string) {
-	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s so expecting %d coords but got %d coords",
-		getLayoutName(l.curLayout), l.curLayout.Stride(), incorrectStride)
-	l.setParseError(problem, hint)
-}
-
-func (l *wktLex) setIncorrectLayoutError(incorrectLayout geom.Layout, hint string) {
-	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s but encountered layout of %s",
-		getLayoutName(l.curLayout), getLayoutName(incorrectLayout))
-	l.setParseError(problem, hint)
-}
-
-func (l *wktLex) setParseError(problem string, hint string) {
-	// Lex errors take precedence.
-	if l.lastErr != nil {
+// assertValidLayout asserts that a given layout is valid and panics if it is not.
+func assertValidLayout(layout geom.Layout) {
+	switch layout {
+	case geom.NoLayout, geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
 		return
-	}
-	errProblem := "syntax error: " + problem
-	l.lastErr = &ParseError{
-		problem: errProblem,
-		pos:     l.lastPos,
-		str:     l.line,
-		hint:    hint,
-	}
-}
-
-func (l *wktLex) Error(s string) {
-	// NB: Lex errors are set in the Lex function.
-	if l.lastErr == nil {
-		l.lastErr = &ParseError{problem: s, pos: l.lastPos, str: l.line}
+	default:
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
 	}
 }
