@@ -96,7 +96,7 @@ func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descri
 			parent, schema := getDescriptorParentAndSchema(d)
 			if err := injectNamespaceEntry(tx, parent, schema, name, id); err != nil {
 				return errors.Wrapf(err, "failed to inject namespace entry (%d, %d, %s) %d",
-					parent, schema, name, id, d)
+					parent, schema, name, id)
 			}
 		}
 		return nil
