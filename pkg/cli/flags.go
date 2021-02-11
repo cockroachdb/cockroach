@@ -787,6 +787,12 @@ func init() {
 		boolFlag(f, &sqlfmtCtx.align, cliflags.SQLFmtAlign)
 	}
 
+	// version command.
+	{
+		f := versionCmd.Flags()
+		boolFlag(f, &cliCtx.showVersionUsingOnlyBuildTag, cliflags.BuildTag)
+	}
+
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()

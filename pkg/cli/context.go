@@ -162,6 +162,9 @@ type cliContext struct {
 	// provided this way.
 	// TODO(knz): Relax this when SCRAM is implemented.
 	allowUnencryptedClientPassword bool
+
+	// For `cockroach version --build-tag`.
+	showVersionUsingOnlyBuildTag bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -193,6 +196,7 @@ func setCliContextDefaults() {
 	cliCtx.sqlConnDBName = ""
 	cliCtx.extraConnURLOptions = nil
 	cliCtx.allowUnencryptedClientPassword = false
+	cliCtx.showVersionUsingOnlyBuildTag = false
 }
 
 // sqlCtx captures the command-line parameters of the `sql` command.
