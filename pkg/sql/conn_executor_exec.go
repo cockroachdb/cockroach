@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -94,6 +94,17 @@ func (ex *connExecutor) execStmt(
 	var payload fsm.EventPayload
 	var err error
 
+	if true /* HACK */ || ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+		remove := func() {}
+		ctx, remove = pprofutil.AddLabels(ctx,
+			// The caller set these to placeholders, but here we can put in something
+			// real.
+			"stmt.tag", ast.StatementTag(),
+			"stmt.anonymized", anonymizeStmt(ast),
+		)
+		defer remove()
+	}
+
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
 		// Note: when not using explicit transactions, we go through this transition
@@ -102,25 +113,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast)
 
 	case stateOpen:
-		// HACK
-		if true || ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
-			remoteAddr := "internal"
-			if rAddr := ex.sessionData.RemoteAddr; rAddr != nil {
-				remoteAddr = rAddr.String()
-			}
-			_ = remoteAddr
-			labels := pprof.Labels(
-				"appname", ex.sessionData.ApplicationName,
-				//"addr", remoteAddr,
-				"stmt.tag", ast.StatementTag(),
-				"stmt.anonymized", anonymizeStmt(ast),
-			)
-			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
-			})
-		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
-		}
+		ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()

@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1426,6 +1427,27 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	cmd, pos, err := ex.stmtBuf.CurCmd()
 	if err != nil {
 		return err // err could be io.EOF
+	}
+
+	if true {
+		remoteAddr := "internal"
+		if rAddr := ex.sessionData.RemoteAddr; rAddr != nil {
+			remoteAddr = rAddr.String()
+		}
+
+		_ = remoteAddr
+		remove := func() {}
+		s := fmt.Sprintf("<%s>", cmd.command())
+		ctx, remove = pprofutil.AddLabels(ctx,
+			//"addr", remoteAddr,
+			"appname", ex.sessionData.ApplicationName,
+			// Placeholders - make sure we set tag and anonymized to something
+			// half-sensible. We really set them in execStmt but lots of CPU
+			// can be spent on cmds that aren't actually ExecStmts (prepare).
+			"stmt.tag", s,
+			"stmt.anonymized", s,
+		)
+		defer remove()
 	}
 
 	ctx, sp := tracing.EnsureChildSpan(

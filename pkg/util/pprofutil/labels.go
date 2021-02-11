@@ -35,54 +35,70 @@ const (
 	labelServeRPC = "rpc-serve"
 )
 
-func extractGoroutineLabels(ctx context.Context) []string {
-	var sl []string
-	runtimepprof.ForLabels(ctx, func(k, v string) bool {
-		sl = append(sl, k, v)
-		return true // more
-	})
+func appendGRPCIncomingLabels(ctx context.Context, dest []string) []string {
 	md, _ := metadata.FromIncomingContext(ctx)
-	return append(sl, md[metadataGoroutineLabelKey]...)
+	return append(dest, md[metadataGoroutineLabelKey]...)
 }
+
+// func appendGoroutineLabels(ctx context.Context, dest []string) []string {
+// 	runtimepprof.ForLabels(ctx, func(k, v string) bool {
+// 		dest = append(dest, k, v)
+// 		return true // more
+// 	})
+// 	return dest
+// }
 
 var e = log.Every(5 * time.Second)
 
-func (gl *GoroutineLabelingInterceptor) collectLabels(
-	ctx context.Context, rpcName string,
-) []string {
-	// NB: gl.labels intentionally takes precedence over anything
-	// coming in from the other side.
-	labels := extractGoroutineLabels(ctx)
-	labels = append(labels, gl.labels...)
-	if rpcName != "" {
-		labels = append(labels, labelServeRPC, rpcName)
+// Only called server-side.
+func appendRPCLabels(dest []string, rpcName string) []string {
+	dest = append(dest, labelServeRPC, rpcName)
+
+	if rpcName != "/cockroach.roachpb.Internal/Batch" {
+		return dest
 	}
 
-	if rpcName == "/cockroach.roachpb.Internal/Batch" {
-		var ok bool
-		for k := range labels {
-			if k%2 == 1 {
-				continue
-			}
-			if labels[k] == "stmt.tag" {
-				ok = true
-				break
-			}
+	// Hacky stuff to track how many requests are slipping in without
+	// a label. Assumes that appendRPCLables is called only when dest
+	// already reflects the grpc metadata carried labels.
+	var ok bool
+	for k := range dest {
+		if k%2 == 1 {
+			continue
 		}
-		if !ok {
-			labels = append(labels, "stmt.tag", "missing-server", "stmt.anonymized", "missing-client")
-			if e.ShouldLog() {
-				debug.PrintStack()
-			}
+		if dest[k] == "stmt.tag" {
+			ok = true
+			break
 		}
 	}
+	if !ok {
+		dest = append(dest, "stmt.tag", "not-found-at-server", "stmt.anonymized", "not-found-at-server")
+		if e.ShouldLog() {
+			debug.PrintStack()
+		}
+	}
+	return dest
+}
+
+// Get the labels from the grpc metadata in ctx, add RPC-specific
+// labels, add interceptor's hard-coded labels.
+// Does not look at the goroutine labels already registered in the context;
+// there shouldn't be any.
+func (gl *GoroutineLabelingInterceptor) collectLabelsServer(
+	ctx context.Context, rpcName string,
+) []string {
+	var labels []string
+	labels = appendGRPCIncomingLabels(ctx, labels)
+	labels = appendRPCLabels(labels, rpcName)
+	labels = append(labels, gl.labels...)
 	return labels
 }
 
-func (gl *GoroutineLabelingInterceptor) Do(
+func (gl *GoroutineLabelingInterceptor) foo(
 	ctx context.Context, rpcName string, f func(ctx context.Context),
 ) {
-	runtimepprof.Do(ctx, runtimepprof.Labels(gl.collectLabels(ctx, rpcName)...), f)
+	panic("unused")
+	// runtimepprof.Do(ctx, runtimepprof.Labels(gl.collectLabels(ctx, rpcName)...), f)
 }
 
 func (gl *GoroutineLabelingInterceptor) UnaryServerInterceptor(
@@ -90,7 +106,7 @@ func (gl *GoroutineLabelingInterceptor) UnaryServerInterceptor(
 ) (interface{}, error) {
 	var result interface{}
 	var err error
-	labels := gl.collectLabels(ctx, info.FullMethod)
+	labels := gl.collectLabelsServer(ctx, info.FullMethod)
 	runtimepprof.Do(ctx, runtimepprof.Labels(labels...), func(ctx context.Context) {
 		result, err = handler(ctx, req)
 	})
@@ -113,7 +129,7 @@ func (gl *GoroutineLabelingInterceptor) StreamServerInterceptor(
 	srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 ) error {
 	ctx := ss.Context()
-	labels := gl.collectLabels(ctx, info.FullMethod)
+	labels := gl.collectLabelsServer(ctx, info.FullMethod)
 	origSS := ss
 	var err error
 	runtimepprof.Do(ctx, runtimepprof.Labels(labels...), func(ctx context.Context) {
@@ -132,19 +148,25 @@ func wrapOutgoingContext(ctx context.Context) context.Context {
 	} else {
 		md = md.Copy() // since we will modify below
 	}
-	var found = true
-	runtimepprof.ForLabels(ctx, func(k, v string) bool {
-		md[metadataGoroutineLabelKey] = append(md[metadataGoroutineLabelKey], k, v)
-		if k == "stmt.tag" {
-			found = true
+
+	{
+		var ok bool
+		runtimepprof.ForLabels(ctx, func(k, v string) bool {
+			md[metadataGoroutineLabelKey] = append(md[metadataGoroutineLabelKey], k, v)
+			if k == "stmt.tag" {
+				ok = true
+			}
+			return true // more
+		})
+		if !ok {
+			if e.ShouldLog() {
+				debug.PrintStack()
+			}
+			md[metadataGoroutineLabelKey] = append(
+				md[metadataGoroutineLabelKey],
+				"stmt.tag", "not-found-at-client", "stmt.anonymized", "not-found-at-client",
+			)
 		}
-		return true // more
-	})
-	if found == false {
-		md[metadataGoroutineLabelKey] = append(
-			md[metadataGoroutineLabelKey],
-			"stmt.tag", "missing-client", "stmt.anonymized", "missing-client",
-		)
 	}
 
 	return metadata.NewOutgoingContext(ctx, md)
@@ -176,4 +198,11 @@ func (gl *GoroutineLabelingInterceptor) StreamClientInterceptor(
 ) (grpc.ClientStream, error) {
 	ctx = wrapOutgoingContext(ctx)
 	return streamer(ctx, desc, cc, method, opts...)
+}
+
+func AddLabels(ctx context.Context, labels ...string) (_ context.Context, undo func()) {
+	origCtx := ctx
+	ctx = runtimepprof.WithLabels(ctx, runtimepprof.Labels(labels...))
+	runtimepprof.SetGoroutineLabels(ctx)
+	return ctx, func() { runtimepprof.SetGoroutineLabels(origCtx) }
 }

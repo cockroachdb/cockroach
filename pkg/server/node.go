@@ -878,9 +878,10 @@ func (n *Node) batchInternal(
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
 		if isLocalReq {
-			n.localRPCGoroutineLabelingInterceptor.Do(ctx, "/cockroach.roachpb.Internal/Batch", func(ctx context.Context) {
-				br, pErr = n.stores.Send(ctx, *args)
-			})
+			panic("i disabled this") // HACK
+			// n.localRPCGoroutineLabelingInterceptor.Do(ctx, "/cockroach.roachpb.Internal/Batch", func(ctx context.Context) {
+			// 	br, pErr = n.stores.Send(ctx, *args)
+			// })
 		} else {
 			br, pErr = n.stores.Send(ctx, *args)
 		}

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -268,6 +269,11 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
+		// Just a hack - I'm trying to figure out of there's anything coming into Node.Batch without
+		// the tag and anonymized labels. I think I've got SQL covered, but the request batcher is
+		// another prominent users, so this takes it out of the equation.
+		ctx, remove := pprofutil.AddLabels(ctx, "stmt.tag", "reqbatcher", "stmt.anonymized", "reqbatcher")
+		defer remove()
 		defer b.sendDone(ba)
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {

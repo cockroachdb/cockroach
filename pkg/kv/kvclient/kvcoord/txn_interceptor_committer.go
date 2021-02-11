@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -445,6 +446,10 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
+			var remove func()
+			ctx, remove = pprofutil.AddLabels(ctx, "stmt.tag", "async commit", "stmt.anonymized", "async commit")
+			defer remove()
+
 			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, canFwdRTS); err != nil {
 				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 			}
