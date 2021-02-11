@@ -292,28 +292,11 @@ func replaceWithSequenceNames(
 	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		// If it's not an AnnotateTypeExpr, don't do anything to this node.
-		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+		_, id, ok := GetTypeExprAndSeqID(expr)
 		if !ok {
 			return true, expr, nil
 		}
-
-		// If it's not a regclass, don't do anything to this node.
-		if typ, safe := tree.GetStaticallyKnownType(annotateTypeExpr.Type); !safe || typ.Oid() != oid.T_regclass {
-			return true, expr, nil
-		}
-
-		// If it's not a constant int, don't do anything to this node.
-		numVal, ok := annotateTypeExpr.Expr.(*tree.NumVal)
-		if !ok {
-			return true, expr, nil
-		}
-		id, err := numVal.AsInt64()
-		if err != nil {
-			return true, expr, nil //nolint:returnerrcheck
-		}
-
-		// If it's not a sequence or the resolution fails, don't do anything to this node.
+		// If it's not a sequence or the resolution fails, skip this node.
 		seqName, err := semaCtx.TableNameResolver.GetQualifiedTableNameByID(ctx, id, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return true, expr, nil //nolint:returnerrcheck
@@ -328,4 +311,34 @@ func replaceWithSequenceNames(
 
 	newExpr, err := tree.SimpleVisit(rootExpr, replaceFn)
 	return newExpr, err
+}
+
+// GetTypeExprAndSeqID takes an expr and looks for a sequence ID in
+// this expr. If it finds one, it will return that ID as well as the
+// AnnotateTypeExpr that contains it.
+func GetTypeExprAndSeqID(expr tree.Expr) (*tree.AnnotateTypeExpr, int64, bool) {
+	// If it's not an AnnotateTypeExpr, skip this node.
+	annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+	if !ok {
+		return nil, 0, false
+	}
+
+	// If it's not a regclass, skip this node.
+	if typ, safe := tree.GetStaticallyKnownType(
+		annotateTypeExpr.Type,
+	); !safe || typ.Oid() != oid.T_regclass {
+		return nil, 0, false
+	}
+
+	// If it's not a constant int, skip this node.
+	numVal, ok := annotateTypeExpr.Expr.(*tree.NumVal)
+	if !ok {
+		return nil, 0, false
+	}
+	id, err := numVal.AsInt64()
+	if err != nil {
+		return nil, 0, false
+	}
+
+	return annotateTypeExpr, id, true
 }

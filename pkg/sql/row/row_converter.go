@@ -248,7 +248,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // expression using the sequence.
 func (c *DatumRowConverter) getSequenceAnnotation(
 	evalCtx *tree.EvalContext, cols []descpb.ColumnDescriptor,
-) (map[string]*SequenceMetadata, error) {
+) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
 	sequenceIDs := make(map[descpb.ID]struct{})
 	for _, col := range cols {
@@ -258,12 +258,14 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	}
 
 	if len(sequenceIDs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var seqNameToMetadata map[string]*SequenceMetadata
+	var seqIDToMetadata map[descpb.ID]*SequenceMetadata
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
+		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
 		txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()})
 		for seqID := range sequenceIDs {
 			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
@@ -276,14 +278,16 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
 			}
 
-			seqNameToMetadata[seqDesc.GetName()] = &SequenceMetadata{
+			seqMetadata := &SequenceMetadata{
 				id:      seqID,
 				seqDesc: seqDesc,
 			}
+			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
+			seqIDToMetadata[seqDesc.GetID()] = seqMetadata
 		}
 		return nil
 	})
-	return seqNameToMetadata, err
+	return seqNameToMetadata, seqIDToMetadata, err
 }
 
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
@@ -363,11 +367,12 @@ func NewDatumRowConverter(
 	var cellInfoAnnot CellInfoAnnotation
 	// Currently, this is only true for an IMPORT INTO CSV.
 	if seqChunkProvider != nil {
-		seqNameToMetadata, err := c.getSequenceAnnotation(evalCtx, c.cols)
+		seqNameToMetadata, seqIDToMetadata, err := c.getSequenceAnnotation(evalCtx, c.cols)
 		if err != nil {
 			return nil, err
 		}
 		cellInfoAnnot.seqNameToMetadata = seqNameToMetadata
+		cellInfoAnnot.seqIDToMetadata = seqIDToMetadata
 		cellInfoAnnot.seqChunkProvider = seqChunkProvider
 	}
 	cellInfoAnnot.uniqueRowIDInstance = 0
