@@ -171,8 +171,8 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		}
 
 		mb.ensureWithID()
-		fkInput, withScanCols, _ := mb.makeCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
-		mb.fkChecks = append(mb.fkChecks, h.buildDeletionCheck(fkInput, withScanCols))
+		withScanScope, _ := mb.buildCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
+		mb.fkChecks = append(mb.fkChecks, h.buildDeletionCheck(withScanScope.expr, withScanScope.colList()))
 	}
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
@@ -336,15 +336,17 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		// performance either: we would be incurring extra cost (more complicated
 		// expressions, scanning the input buffer twice) for a rare case.
 
-		oldRows, colsForOldRow, _ := mb.makeCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
-		newRows, colsForNewRow, _ := mb.makeCheckInputScan(checkInputScanNewVals, h.tabOrdinals)
+		oldRowsScope, _ := mb.buildCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
+		newRowsScope, _ := mb.buildCheckInputScan(checkInputScanNewVals, h.tabOrdinals)
+		colsForOldRow := oldRowsScope.colList()
+		colsForNewRow := newRowsScope.colList()
 
 		// The rows that no longer exist are the ones that were "deleted" by virtue
 		// of being updated _from_, minus the ones that were "added" by virtue of
 		// being updated _to_.
 		deletedRows := mb.b.factory.ConstructExcept(
-			oldRows,
-			newRows,
+			oldRowsScope.expr,
+			newRowsScope.expr,
 			&memo.SetPrivate{
 				LeftCols:  colsForOldRow,
 				RightCols: colsForNewRow,
@@ -439,22 +441,24 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		// insertions (using a "canaryCol IS NOT NULL" condition). But the rows we
 		// would filter out have all-null fetched values anyway and will never match
 		// in the semi join.
-		oldRows, colsForOldRow, _ := mb.makeCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
-		newRows, colsForNewRow, _ := mb.makeCheckInputScan(checkInputScanNewVals, h.tabOrdinals)
+		oldRowsScope, _ := mb.buildCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
+		newRowsScope, _ := mb.buildCheckInputScan(checkInputScanNewVals, h.tabOrdinals)
+		colsForOldRow := oldRowsScope.colList()
+		colsForNewRow := newRowsScope.colList()
 
 		// The rows that no longer exist are the ones that were "deleted" by virtue
 		// of being updated _from_, minus the ones that were "added" by virtue of
 		// being updated _to_.
 		deletedRows := mb.b.factory.ConstructExcept(
-			oldRows,
-			newRows,
+			oldRowsScope.expr,
+			newRowsScope.expr,
 			&memo.SetPrivate{
 				LeftCols:  colsForOldRow,
 				RightCols: colsForNewRow,
 				OutCols:   colsForOldRow,
 			},
 		)
-		mb.fkChecks = append(mb.fkChecks, h.buildDeletionCheck(deletedRows, colsForOldRow))
+		mb.fkChecks = append(mb.fkChecks, h.buildDeletionCheck(deletedRows, oldRowsScope.colList()))
 	}
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
@@ -638,11 +642,11 @@ func (h *fkCheckHelper) allocOrdinals(numCols int) {
 // The input to the insertion check will be produced from the input to the
 // mutation operator.
 func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
-	fkInput, withScanCols, notNullWithScanCols := h.mb.makeCheckInputScan(
+	withScanScope, notNullWithScanCols := h.mb.buildCheckInputScan(
 		checkInputScanNewVals, h.tabOrdinals,
 	)
 
-	numCols := len(withScanCols)
+	numCols := len(withScanScope.cols)
 	f := h.mb.b.factory
 	if notNullWithScanCols.Len() < numCols {
 		// The columns we are inserting might have NULLs. These require special
@@ -667,17 +671,17 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 			// Filter out any rows which have a NULL; build filters of the form
 			//   (a IS NOT NULL) AND (b IS NOT NULL) ...
 			filters := make(memo.FiltersExpr, 0, numCols-notNullWithScanCols.Len())
-			for _, col := range withScanCols {
-				if !notNullWithScanCols.Contains(col) {
+			for _, col := range withScanScope.cols {
+				if !notNullWithScanCols.Contains(col.id) {
 					filters = append(filters, f.ConstructFiltersItem(
 						f.ConstructIsNot(
-							f.ConstructVariable(col),
+							f.ConstructVariable(col.id),
 							memo.NullSingleton,
 						),
 					))
 				}
 			}
-			fkInput = f.ConstructSelect(fkInput, filters)
+			withScanScope.expr = f.ConstructSelect(withScanScope.expr, filters)
 
 		case tree.MatchFull:
 			// Filter out any rows which have NULLs on all referencing columns.
@@ -690,9 +694,9 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 			// Build a filter of the form
 			//   (a IS NOT NULL) OR (b IS NOT NULL) ...
 			var condition opt.ScalarExpr
-			for _, col := range withScanCols {
+			for _, col := range withScanScope.cols {
 				is := f.ConstructIsNot(
-					f.ConstructVariable(col),
+					f.ConstructVariable(col.id),
 					memo.NullSingleton,
 				)
 				if condition == nil {
@@ -701,8 +705,8 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 					condition = f.ConstructOr(condition, is)
 				}
 			}
-			fkInput = f.ConstructSelect(
-				fkInput,
+			withScanScope.expr = f.ConstructSelect(
+				withScanScope.expr,
 				memo.FiltersExpr{f.ConstructFiltersItem(condition)},
 			)
 
@@ -722,7 +726,7 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 	for j := 0; j < numCols; j++ {
 		antiJoinFilters[j] = f.ConstructFiltersItem(
 			f.ConstructEq(
-				f.ConstructVariable(withScanCols[j]),
+				f.ConstructVariable(withScanScope.cols[j].id),
 				f.ConstructVariable(scanScope.cols[j].id),
 			),
 		)
@@ -731,14 +735,14 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 	if h.mb.b.evalCtx.SessionData.PreferLookupJoinsForFKs {
 		p.Flags = memo.PreferLookupJoinIntoRight
 	}
-	antiJoin := f.ConstructAntiJoin(fkInput, scanScope.expr, antiJoinFilters, &p)
+	antiJoin := f.ConstructAntiJoin(withScanScope.expr, scanScope.expr, antiJoinFilters, &p)
 
 	return f.ConstructFKChecksItem(antiJoin, &memo.FKChecksItemPrivate{
 		OriginTable:     h.mb.tabID,
 		ReferencedTable: refTabMeta.MetaID,
 		FKOutbound:      true,
 		FKOrdinal:       h.fkOrdinal,
-		KeyCols:         withScanCols,
+		KeyCols:         withScanScope.colList(),
 		OpName:          h.mb.opName,
 	})
 }

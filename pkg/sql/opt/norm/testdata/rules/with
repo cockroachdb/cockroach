@@ -579,7 +579,7 @@ with &2 (cte)
  │    └── f-k-checks
  │         └── f-k-checks-item: child(p) -> parent(p)
  │              └── anti-join (hash)
- │                   ├── columns: column2:6(int!null)
+ │                   ├── columns: p:6(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
  │                   ├── cost: 1036.5775
@@ -588,9 +588,9 @@ with &2 (cte)
  │                   ├── cte-uses
  │                   │    └── &1: count=1 used-columns=(5)
  │                   ├── with-scan &1
- │                   │    ├── columns: column2:6(int!null)
+ │                   │    ├── columns: p:6(int!null)
  │                   │    ├── mapping:
- │                   │    │    └──  column2:5(int) => column2:6(int)
+ │                   │    │    └──  column2:5(int) => p:6(int)
  │                   │    ├── cardinality: [1 - 1]
  │                   │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
  │                   │    ├── cost: 0.01
@@ -609,7 +609,7 @@ with &2 (cte)
  │                   │    └── unfiltered-cols: (7,8)
  │                   └── filters
  │                        └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
- │                             ├── variable: column2:6 [type=int]
+ │                             ├── variable: p:6 [type=int]
  │                             └── variable: t.public.parent.p:7 [type=int]
  └── union
       ├── columns: c:12(int!null)
