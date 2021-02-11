@@ -155,6 +155,7 @@ type Tracer struct {
 	// removed on .Finish().
 	//
 	// The map can be introspected by `Tracer.VisitSpans`.
+	// TODO(angelapwen): Key this map on span ID instead of its memory address.
 	activeSpans struct {
 		// NB: it might be tempting to use a sync.Map here, but
 		// this incurs an allocation per Span (sync.Map does
