@@ -17,6 +17,7 @@ go_library(
 
 go_test(
     name = "geotransform_test",
+    size = "small",
     srcs = ["geotransform_test.go"],
     embed = [":geotransform"],
     deps = [

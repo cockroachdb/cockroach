@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "hydratedtables_test",
+    size = "small",
     srcs = ["hydratedcache_test.go"],
     embed = [":hydratedtables"],
     deps = [

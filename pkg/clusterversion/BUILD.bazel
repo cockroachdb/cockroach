@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "clusterversion_test",
+    size = "small",
     srcs = ["cockroach_versions_test.go"],
     embed = [":clusterversion"],
     deps = [

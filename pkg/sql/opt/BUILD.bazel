@@ -39,6 +39,7 @@ go_library(
 
 go_test(
     name = "opt_test",
+    size = "small",
     srcs = [
         "colset_test.go",
         "metadata_test.go",

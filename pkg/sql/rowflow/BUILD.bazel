@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "rowflow_test",
+    size = "small",
     srcs = [
         "dep_test.go",
         "input_sync_test.go",

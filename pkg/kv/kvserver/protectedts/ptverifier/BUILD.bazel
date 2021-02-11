@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "ptverifier_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "verifier_test.go",

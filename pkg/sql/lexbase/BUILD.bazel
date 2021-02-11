@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "lexbase_test",
+    size = "small",
     srcs = ["encode_test.go"],
     deps = [":lexbase"],
 )

@@ -46,6 +46,7 @@ go_library(
 
 go_test(
     name = "ts_test",
+    size = "medium",
     srcs = [
         "db_test.go",
         "iterator_test.go",

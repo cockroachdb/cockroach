@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "shuffle_test",
+    size = "small",
     srcs = ["shuffle_test.go"],
     embed = [":shuffle"],
     deps = ["//pkg/util/leaktest"],

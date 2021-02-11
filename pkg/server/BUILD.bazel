@@ -229,6 +229,7 @@ go_library(
 
 go_test(
     name = "server_test",
+    size = "medium",
     srcs = [
         "admin_cluster_test.go",
         "admin_test.go",
@@ -260,6 +261,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":server"],
     shard_count = 16,
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/build",

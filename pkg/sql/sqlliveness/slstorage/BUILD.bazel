@@ -33,6 +33,7 @@ go_library(
 
 go_test(
     name = "slstorage_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "slstorage_test.go",

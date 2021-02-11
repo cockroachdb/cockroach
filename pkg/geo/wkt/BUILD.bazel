@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "wkt_test",
+    size = "small",
     srcs = ["wkt_test.go"],
     embed = [":wkt"],
     deps = [

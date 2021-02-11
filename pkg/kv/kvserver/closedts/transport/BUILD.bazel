@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "transport_test",
+    size = "small",
     srcs = [
         "transport_test.go",
         "transport_util_test.go",

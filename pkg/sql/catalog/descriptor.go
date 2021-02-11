@@ -203,10 +203,12 @@ type TableDescriptor interface {
 	AllColumns() []Column
 	PublicColumns() []Column
 	WritableColumns() []Column
+	DeletableColumns() []Column
 	NonDropColumns() []Column
 	VisibleColumns() []Column
 	ReadableColumns() []Column
 	UserDefinedTypeColumns() []Column
+	SystemColumns() []Column
 
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
 	FindColumnWithName(name tree.Name) (Column, error)
@@ -377,6 +379,9 @@ type Column interface {
 	// ColumnDescDeepCopy returns a deep copy of the underlying proto.
 	ColumnDescDeepCopy() descpb.ColumnDescriptor
 
+	// DeepCopy returns a deep copy of the receiver.
+	DeepCopy() Column
+
 	// Ordinal returns the ordinal of the column in its parent table descriptor.
 	//
 	// The ordinal of a column in a `tableDesc descpb.TableDescriptor` is
@@ -470,6 +475,9 @@ type Column interface {
 	// if the PGAttributeNum is set (non-zero). Returns the ID of the
 	// column descriptor if the PGAttributeNum is not set.
 	GetPGAttributeNum() uint32
+
+	// IsSystemColumn returns true iff the column is a system column.
+	IsSystemColumn() bool
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
@@ -750,12 +758,12 @@ func ColumnTypes(columns []Column) []*types.T {
 // ColumnTypesWithVirtualCol returns the types of all given columns,
 // If virtualCol is non-nil, substitutes the type of the virtual
 // column instead of the column with the same ID.
-func ColumnTypesWithVirtualCol(columns []Column, virtualCol *descpb.ColumnDescriptor) []*types.T {
+func ColumnTypesWithVirtualCol(columns []Column, virtualCol Column) []*types.T {
 	t := make([]*types.T, len(columns))
 	for i, col := range columns {
 		t[i] = col.GetType()
-		if virtualCol != nil && col.GetID() == virtualCol.ID {
-			t[i] = virtualCol.Type
+		if virtualCol != nil && col.GetID() == virtualCol.GetID() {
+			t[i] = virtualCol.GetType()
 		}
 	}
 	return t

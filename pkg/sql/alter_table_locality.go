@@ -68,11 +68,11 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
 		ctx,
 		p.txn,
 		tableDesc.GetParentID(),
-		tree.DatabaseLookupFlags{},
+		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
 		return nil, err
@@ -115,8 +115,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID,
+		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -188,8 +189,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID,
+		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -220,6 +222,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	params runParams, newLocality *tree.Locality,
 ) error {
 	enumTypeID, err := n.dbDesc.MultiRegionEnumID()
+
 	if err != nil {
 		return err
 	}
@@ -559,7 +562,8 @@ func setNewLocalityConfig(
 	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
-		dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return nil, err
 		}

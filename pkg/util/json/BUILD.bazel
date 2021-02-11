@@ -32,12 +32,14 @@ go_library(
 
 go_test(
     name = "json_test",
+    size = "small",
     srcs = [
         "encode_test.go",
         "json_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":json"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

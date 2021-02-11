@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "raftentry_test",
+    size = "small",
     srcs = ["cache_test.go"],
     embed = [":raftentry"],
     deps = [

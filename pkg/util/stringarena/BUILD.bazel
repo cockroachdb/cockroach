@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "stringarena_test",
+    size = "small",
     srcs = ["arena_test.go"],
     embed = [":stringarena"],
 )

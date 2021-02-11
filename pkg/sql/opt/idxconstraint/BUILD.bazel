@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "idxconstraint_test",
+    size = "small",
     srcs = ["index_constraints_test.go"],
     data = glob(["testdata/**"]),
     deps = [

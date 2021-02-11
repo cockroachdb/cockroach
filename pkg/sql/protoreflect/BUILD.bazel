@@ -16,6 +16,7 @@ go_library(
 
 go_test(
     name = "protoreflect_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "utils_test.go",

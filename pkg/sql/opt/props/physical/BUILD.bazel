@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "physical_test",
+    size = "small",
     srcs = [
         "ordering_choice_test.go",
         "required_test.go",

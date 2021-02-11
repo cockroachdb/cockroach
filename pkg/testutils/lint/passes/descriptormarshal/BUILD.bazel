@@ -15,7 +15,9 @@ go_library(
 
 go_test(
     name = "descriptormarshal_test",
+    size = "small",
     srcs = ["descriptormarshal_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":descriptormarshal",
         "//pkg/testutils/skip",

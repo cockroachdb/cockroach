@@ -13,7 +13,9 @@ go_library(
 
 go_test(
     name = "hash_test",
+    size = "small",
     srcs = ["hash_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":hash",
         "//pkg/testutils/skip",

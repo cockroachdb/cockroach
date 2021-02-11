@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "geographiclib_test",
+    size = "small",
     srcs = ["geographiclib_test.go"],
     embed = [":geographiclib"],
     deps = [

@@ -116,6 +116,7 @@ go_library(
 
 go_test(
     name = "status_test",
+    size = "small",
     srcs = [
         "health_check_test.go",
         "jemalloc_test.go",

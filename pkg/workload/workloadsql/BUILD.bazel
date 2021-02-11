@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "workloadsql_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "sliceslice_test.go",

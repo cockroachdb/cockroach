@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "provider_test",
+    size = "small",
     srcs = ["provider_test.go"],
     deps = [
         ":provider",

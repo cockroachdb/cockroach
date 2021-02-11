@@ -20,6 +20,7 @@ go_binary(
 
 go_test(
     name = "github-pull-request-make_test",
+    size = "small",
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":github-pull-request-make_lib"],

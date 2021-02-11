@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "diagnosticspb_test",
+    size = "small",
     srcs = ["dep_test.go"],
     embed = [":diagnosticspb"],
     deps = [

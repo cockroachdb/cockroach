@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "systemschema_test",
+    size = "small",
     srcs = ["system_test.go"],
     embed = [":systemschema"],
     deps = [

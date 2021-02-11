@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -202,20 +201,19 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
+	virtualColumn := tabledesc.FindVirtualColumn(table, spec.VirtualColumn)
 	cols := table.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.AllColumns()
+		cols = table.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithVirtualCol(cols, spec.VirtualColumn)
+	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
 
 	// Add all requested system columns to the output.
-	var sysColDescs []descpb.ColumnDescriptor
 	if spec.HasSystemColumns {
-		sysColDescs = colinfo.AllSystemColumnDescs
-		for i := range sysColDescs {
-			typs = append(typs, sysColDescs[i].Type)
-			columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
+		for _, sysCol := range table.SystemColumns() {
+			typs = append(typs, sysCol.GetType())
+			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
 		}
 	}
 
@@ -235,7 +233,7 @@ func NewColBatchScan(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
+		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
 	); err != nil {
 		return nil, err
 	}
@@ -269,7 +267,7 @@ func initCRowFetcher(
 	colIdxMap catalog.TableColMap,
 	valNeededForCol util.FastIntSet,
 	spec *execinfrapb.TableReaderSpec,
-	systemColumnDescs []descpb.ColumnDescriptor,
+	withSystemColumns bool,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	indexIdx := int(spec.IndexIdx)
 	if indexIdx >= len(desc.ActiveIndexes()) {
@@ -286,7 +284,9 @@ func initCRowFetcher(
 		IsSecondaryIndex: isSecondaryIndex,
 		ValNeededForCol:  valNeededForCol,
 	}
-	tableArgs.InitCols(desc, spec.Visibility, systemColumnDescs, spec.VirtualColumn)
+
+	virtualColumn := tabledesc.FindVirtualColumn(desc, spec.VirtualColumn)
+	tableArgs.InitCols(desc, spec.Visibility, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,

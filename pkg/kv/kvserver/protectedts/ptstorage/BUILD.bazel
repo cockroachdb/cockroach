@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "ptstorage_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "storage_test.go",

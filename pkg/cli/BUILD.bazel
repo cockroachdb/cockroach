@@ -259,6 +259,7 @@ go_library(
 
 go_test(
     name = "cli_test",
+    size = "large",
     srcs = [
         "cli_debug_test.go",
         "cli_test.go",
@@ -285,6 +286,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":cli"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/build",

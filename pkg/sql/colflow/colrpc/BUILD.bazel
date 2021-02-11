@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "colrpc_test",
+    size = "small",
     srcs = [
         "colrpc_test.go",
         "inbox_test.go",

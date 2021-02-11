@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "coldata_test",
+    size = "small",
     srcs = [
         "batch_test.go",
         "bytes_test.go",

@@ -97,6 +97,7 @@ go_library(
 
 go_test(
     name = "changefeedccl_test",
+    size = "medium",
     srcs = [
         "avro_test.go",
         "bench_test.go",
@@ -111,6 +112,7 @@ go_test(
         "validations_test.go",
     ],
     embed = [":changefeedccl"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

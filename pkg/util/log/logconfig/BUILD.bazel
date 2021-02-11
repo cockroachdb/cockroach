@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "logconfig_test",
+    size = "small",
     srcs = [
         "config_test.go",
         "export_test.go",

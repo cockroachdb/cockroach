@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "cmpconn_test",
+    size = "small",
     srcs = ["compare_test.go"],
     embed = [":cmpconn"],
     deps = ["@com_github_cockroachdb_apd_v2//:apd"],

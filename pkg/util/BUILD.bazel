@@ -37,6 +37,7 @@ go_library(
 
 go_test(
     name = "util_test",
+    size = "small",
     srcs = [
         "every_n_test.go",
         "fast_int_map_test.go",

@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "exit_test",
+    size = "small",
     srcs = ["codes_test.go"],
     embed = [":exit"],
 )

@@ -13,6 +13,7 @@ go_library(
 
 go_test(
     name = "team_test",
+    size = "small",
     srcs = ["team_test.go"],
     embed = [":team"],
     deps = ["@com_github_stretchr_testify//require"],

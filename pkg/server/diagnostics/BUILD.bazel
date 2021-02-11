@@ -47,6 +47,7 @@ go_library(
 
 go_test(
     name = "diagnostics_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "reporter_test.go",

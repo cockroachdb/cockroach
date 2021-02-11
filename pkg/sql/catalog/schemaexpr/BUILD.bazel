@@ -33,6 +33,7 @@ go_library(
 
 go_test(
     name = "schemaexpr_test",
+    size = "small",
     srcs = [
         "check_constraint_test.go",
         "column_test.go",

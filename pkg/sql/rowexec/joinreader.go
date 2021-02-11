@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -211,14 +210,12 @@ func newJoinReader(
 	indexI := jr.desc.ActiveIndexes()[indexIdx]
 	jr.index = indexI.IndexDesc()
 	isSecondary = !indexI.Primary()
-	var columnTypes []*types.T
+	cols := jr.desc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		jr.colIdxMap = catalog.ColumnIDToOrdinalMap(jr.desc.AllColumns())
-		columnTypes = catalog.ColumnTypes(jr.desc.AllColumns())
-	} else {
-		jr.colIdxMap = catalog.ColumnIDToOrdinalMap(jr.desc.PublicColumns())
-		columnTypes = catalog.ColumnTypes(jr.desc.PublicColumns())
+		cols = jr.desc.DeletableColumns()
 	}
+	jr.colIdxMap = catalog.ColumnIDToOrdinalMap(cols)
+	columnTypes := catalog.ColumnTypes(cols)
 
 	columnIDs, _ := jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
@@ -227,12 +224,10 @@ func newJoinReader(
 	}
 
 	// Add all requested system columns to the output.
-	var sysColDescs []descpb.ColumnDescriptor
 	if spec.HasSystemColumns {
-		sysColDescs = colinfo.AllSystemColumnDescs
-		for i := range sysColDescs {
-			columnTypes = append(columnTypes, sysColDescs[i].Type)
-			jr.colIdxMap.Set(sysColDescs[i].ID, jr.colIdxMap.Len())
+		for _, sysCol := range jr.desc.SystemColumns() {
+			columnTypes = append(columnTypes, sysCol.GetType())
+			jr.colIdxMap.Set(sysCol.GetID(), jr.colIdxMap.Len())
 		}
 	}
 
@@ -294,7 +289,7 @@ func newJoinReader(
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
-		spec.LockingWaitPolicy, sysColDescs, nil, /* virtualColumn */
+		spec.LockingWaitPolicy, spec.HasSystemColumns, nil, /* virtualColumn */
 	)
 
 	if err != nil {

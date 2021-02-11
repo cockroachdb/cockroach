@@ -78,6 +78,7 @@ go_library(
 
 go_test(
     name = "optbuilder_test",
+    size = "small",
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",

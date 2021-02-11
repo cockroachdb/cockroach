@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "migrations_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "truncated_state_external_test.go",

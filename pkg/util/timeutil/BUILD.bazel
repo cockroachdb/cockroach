@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "timeutil_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "manual_time_test.go",

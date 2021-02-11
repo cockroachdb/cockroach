@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "zerofields_test",
+    size = "small",
     srcs = ["no_zero_field_test.go"],
     embed = [":zerofields"],
     deps = ["@com_github_cockroachdb_errors//:errors"],

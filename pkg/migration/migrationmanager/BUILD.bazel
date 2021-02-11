@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "migrationmanager_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "manager_external_test.go",

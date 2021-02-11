@@ -47,11 +47,13 @@ go_library(
 
 go_test(
     name = "execbuilder_test",
+    size = "small",
     srcs = [
         "builder_test.go",
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/security",
         "//pkg/security/securitytest",

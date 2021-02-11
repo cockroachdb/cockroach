@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "dbdesc_test",
+    size = "small",
     srcs = ["database_test.go"],
     embed = [":dbdesc"],
     deps = [

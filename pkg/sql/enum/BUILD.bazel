@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "enum_test",
+    size = "small",
     srcs = ["enum_test.go"],
     embed = [":enum"],
     deps = [

@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "kvfollowerreadsccl_test",
+    size = "medium",
     srcs = [
         "followerreads_test.go",
         "main_test.go",

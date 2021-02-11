@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "heapprofiler_test",
+    size = "small",
     srcs = [
         "profiler_common_test.go",
         "profilestore_test.go",

@@ -55,6 +55,7 @@ go_library(
 
 go_test(
     name = "roachpb_test",
+    size = "small",
     srcs = [
         "api_test.go",
         "app_stats_test.go",

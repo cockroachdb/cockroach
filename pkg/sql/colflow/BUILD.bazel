@@ -39,6 +39,7 @@ go_library(
 
 go_test(
     name = "colflow_test",
+    size = "medium",
     srcs = [
         "colbatch_scan_test.go",
         "dep_test.go",

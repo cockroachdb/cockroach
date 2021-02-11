@@ -81,7 +81,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	var colIdxMap catalog.TableColMap
 	for i, c := range scan.cols {
-		colIdxMap.Set(c.ID, i)
+		colIdxMap.Set(c.GetID(), i)
 	}
 	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()

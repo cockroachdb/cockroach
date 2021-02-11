@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "schemachange_test",
+    size = "medium",
     srcs = [
         "alter_column_type_test.go",
         "main_test.go",

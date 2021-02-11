@@ -35,6 +35,7 @@ go_library(
 
 go_test(
     name = "testutils_test",
+    size = "small",
     srcs = [
         "net_test.go",
         "soon_test.go",

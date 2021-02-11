@@ -27,11 +27,13 @@ go_library(
 
 go_test(
     name = "metamorphic_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "meta_test.go",
     ],
     embed = [":metamorphic"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

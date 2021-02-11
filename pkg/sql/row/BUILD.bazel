@@ -61,6 +61,7 @@ go_library(
 
 go_test(
     name = "row_test",
+    size = "small",
     srcs = [
         "expr_walker_test.go",
         "fetcher_mvcc_test.go",

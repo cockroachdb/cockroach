@@ -62,6 +62,7 @@ go_library(
 
 go_test(
     name = "sysutil_test",
+    size = "small",
     srcs = [
         "large_file_test.go",
         "sysutil_test.go",
