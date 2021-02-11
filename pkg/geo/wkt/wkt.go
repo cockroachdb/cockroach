@@ -16,7 +16,7 @@ import "github.com/twpayne/go-geom"
 
 // Unmarshal accepts a string and parses it to a geom.T.
 func Unmarshal(wkt string) (geom.T, error) {
-	wktlex := &wktLex{line: wkt}
+	wktlex := newWKTLex(wkt)
 	wktParse(wktlex)
 	if wktlex.lastErr != nil {
 		return nil, wktlex.lastErr
