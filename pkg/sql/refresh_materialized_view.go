@@ -48,6 +48,26 @@ func (p *planner) RefreshMaterializedView(
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "view is already being refreshed")
 		}
 	}
+
+	// Only the owner or an admin (superuser) can refresh the view.
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if !(hasOwnership || hasAdminRole) {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"must be owner of materialized view %s",
+			desc.Name,
+		)
+	}
+
 	return &refreshMaterializedViewNode{n: n, desc: desc}, nil
 }
 
