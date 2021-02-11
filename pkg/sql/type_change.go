@@ -381,10 +381,6 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-					if err := dbDesc.Validate(); err != nil {
-						return errors.Wrapf(err, "could not re-add region to the database descriptor")
-					}
-
 					if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
 						return err
 					}

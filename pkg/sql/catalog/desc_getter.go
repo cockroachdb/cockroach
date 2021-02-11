@@ -23,6 +23,22 @@ type DescGetter interface {
 	GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error)
 }
 
+// GetDescsSequential is a helper function for implementing the GetDescs
+// method of DescGetter as a sequence of GetDesc calls.
+func GetDescsSequential(
+	ctx context.Context, descGetter DescGetter, reqs []descpb.ID,
+) ([]Descriptor, error) {
+	ret := make([]Descriptor, len(reqs))
+	for i, id := range reqs {
+		desc, err := descGetter.GetDesc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		ret[i] = desc
+	}
+	return ret, nil
+}
+
 // GetTypeDescFromID retrieves the type descriptor for the type ID passed
 // in using an existing descGetter. It returns an error if the descriptor
 // doesn't exist or if it exists and is not a type descriptor.
@@ -65,9 +81,5 @@ func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (Descriptor, e
 
 // GetDescs implements the catalog.DescGetter interface.
 func (m MapDescGetter) GetDescs(ctx context.Context, ids []descpb.ID) ([]Descriptor, error) {
-	ret := make([]Descriptor, len(ids))
-	for i, id := range ids {
-		ret[i], _ = m.GetDesc(ctx, id)
-	}
-	return ret, nil
+	return GetDescsSequential(ctx, m, ids)
 }

@@ -11,6 +11,7 @@
 package schemadesc
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -163,6 +164,21 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 			Schema: &desc.SchemaDescriptor,
 		},
 	}
+}
+
+// ValidateSelf implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateSelf(_ context.Context) error {
+	return nil
+}
+
+// Validate punts to ValidateSelf.
+func (desc *Immutable) Validate(ctx context.Context, _ catalog.DescGetter) error {
+	return desc.ValidateSelf(ctx)
+}
+
+// ValidateTxnCommit punts to Validate.
+func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
+	return desc.Validate(ctx, descGetter)
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.

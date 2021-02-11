@@ -138,6 +138,7 @@ func TestAllocateIDs(t *testing.T) {
 }
 func TestValidateDatabaseDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testData := []struct {
 		err  string
@@ -195,7 +196,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			if err := d.desc.Validate(); err == nil {
+			if err := d.desc.Validate(ctx, nil /* descGetter */); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 			} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)

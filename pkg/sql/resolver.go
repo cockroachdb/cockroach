@@ -800,15 +800,7 @@ func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.
 func (l *internalLookupCtx) GetDescs(
 	ctx context.Context, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	ret := make([]catalog.Descriptor, len(reqs))
-	for i := 0; i < len(reqs); i++ {
-		var err error
-		ret[i], err = l.GetDesc(ctx, reqs[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ret, nil
+	return catalog.GetDescsSequential(ctx, l, reqs)
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding

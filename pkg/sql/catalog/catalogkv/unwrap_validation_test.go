@@ -90,15 +90,7 @@ func (o oneLevelMapDescGetter) GetDesc(
 func (o oneLevelMapDescGetter) GetDescs(
 	ctx context.Context, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	resps := make([]catalog.Descriptor, len(reqs))
-	for i, r := range reqs {
-		var err error
-		resps[i], err = o.GetDesc(ctx, r)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return resps, nil
+	return catalog.GetDescsSequential(ctx, o, reqs)
 }
 
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {
