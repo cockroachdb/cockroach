@@ -263,6 +263,9 @@ const (
 	// Previously this was implemented as an async task with no guarantees about
 	// completion.
 	NamespaceTableWithSchemasMigration
+	// ForeignKeyRepresentationMigration is used to ensure that all no table
+	// descriptors use the pre-19.2 foreign key migration.
+	ForeignKeyRepresentationMigration
 
 	// Step (1): Add new versions here.
 )
@@ -448,6 +451,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     NamespaceTableWithSchemasMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 40},
+	},
+
+	{
+		Key:     ForeignKeyRepresentationMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 42},
 	},
 	// Step (2): Add new versions here.
 })
