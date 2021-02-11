@@ -161,6 +161,12 @@ message RestoreDetails {
   // stages have completed via these flags.
   bool prepare_completed = 8;
   bool stats_inserted = 9;
+  // SystemTablesRestored keeps track of dynamic states that need to happen only
+  // once during the lifetime of a job. Note, that this state may be shared
+  // between job versions, so updates to this map must be considered carefully.
+  // It maps system table names to whether or not they have already been
+  // restored.
+  map<string, bool> system_tables_restored = 17;
   // DescriptorsPublished indicates whether or not the descriptors written in
   // the job have been transactionally updated after the data was restored.
   bool descriptors_published = 10;
@@ -168,7 +174,7 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   BackupEncryptionOptions encryption = 12;
-  // NEXT ID: 17.
+  // NEXT ID: 18.
 }
 
 message RestoreProgress {
