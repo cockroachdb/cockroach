@@ -419,11 +419,11 @@ EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +a
+• index join
+│ table: d@primary
 │
-└── • index join
-    │ table: d@primary
+└── • sort
+    │ order: +a
     │
     └── • inverted filter
         │ inverted column: b_inverted_key
@@ -440,11 +440,11 @@ EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +a
+• index join
+│ table: d@primary
 │
-└── • index join
-    │ table: d@primary
+└── • sort
+    │ order: +a
     │
     └── • inverted filter
         │ inverted column: b_inverted_key

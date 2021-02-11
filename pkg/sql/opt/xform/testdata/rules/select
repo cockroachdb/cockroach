@@ -1085,15 +1085,16 @@ New expression 1 of 2:
    └── ordering: +1 opt(4) [actual: +1]
 
 New expression 2 of 2:
-  sort
+  index-join kifs
    ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4) [actual: +1]
-   └── index-join kifs
-        ├── columns: k:1!null i:2 f:3 s:4!null
+   └── sort
+        ├── columns: k:1!null i:2 s:4!null
         ├── key: (1)
-        ├── fd: ()-->(4), (1)-->(2,3)
+        ├── fd: ()-->(4), (1)-->(2)
+        ├── ordering: +1 opt(4) [actual: +1]
         └── scan kifs@si_idx
              ├── columns: k:1!null i:2 s:4!null
              ├── constraint: /-4/-2/1: [/'foo' - /'foo']
@@ -1109,14 +1110,14 @@ memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 15.58
+ │    │    └── cost: 15.88
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4),constrained)
  │         └── cost: 14.71
  ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1293.35
+ │    │    └── cost: 1323.35
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4))
  │         └── cost: 1074.02
