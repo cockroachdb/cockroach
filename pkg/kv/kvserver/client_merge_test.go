@@ -4049,6 +4049,7 @@ func sendWithTxn(
 // time, but don't contain the subsumption time in their uncertainty interval.
 func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	maxOffset := 100 * time.Millisecond
@@ -4136,6 +4137,7 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 // Regression test for #52517.
 func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	numNodes := 2

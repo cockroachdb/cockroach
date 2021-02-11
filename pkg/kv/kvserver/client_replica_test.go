@@ -1710,6 +1710,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 // figuring out what info to return to the client.
 func TestRangeInfoAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -3354,6 +3355,7 @@ func TestProposalOverhead(t *testing.T) {
 //   concurrency/testdata/concurrency_manager/discover_lock_after_lease_race
 func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// Use a manual clock so we can efficiently force leases to expire.
