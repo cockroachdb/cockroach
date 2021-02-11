@@ -42,6 +42,97 @@ type joinReaderSpanGenerator interface {
 var _ joinReaderSpanGenerator = &defaultSpanGenerator{}
 var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 
+type defaultSpanGenerator struct {
+	spanBuilder *span.Builder
+	numKeyCols  int
+	lookupCols  []uint32
+
+	indexKeyRow rowenc.EncDatumRow
+	// keyToInputRowIndices maps a lookup span key to the input row indices that
+	// desire that span. This is used for joins other than index joins, for
+	// de-duping spans, and to map the fetched rows to the input rows that need
+	// to join with them. Index joins already have unique rows in the input that
+	// generate unique spans for fetch, and simply output the fetched rows, do
+	// do not use this map.
+	keyToInputRowIndices map[string][]int
+
+	scratchSpans roachpb.Spans
+}
+
+// Generate spans for a given row.
+// If lookup columns are specified will use those to collect the relevant
+// columns. Otherwise the first rows are assumed to correspond with the index.
+// It additionally returns whether the row contains null, which is needed to
+// decide whether or not to split the generated span into separate family
+// specific spans.
+func (g *defaultSpanGenerator) generateSpan(
+	row rowenc.EncDatumRow,
+) (_ roachpb.Span, containsNull bool, _ error) {
+	numLookupCols := len(g.lookupCols)
+	if numLookupCols > g.numKeyCols {
+		return roachpb.Span{}, false, errors.Errorf(
+			"%d lookup columns specified, expecting at most %d", numLookupCols, g.numKeyCols)
+	}
+
+	g.indexKeyRow = g.indexKeyRow[:0]
+	for _, id := range g.lookupCols {
+		g.indexKeyRow = append(g.indexKeyRow, row[id])
+	}
+	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
+}
+
+func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
+	for _, colIdx := range g.lookupCols {
+		if row[colIdx].IsNull() {
+			return true
+		}
+	}
+	return false
+}
+
+// generateSpans is part of the joinReaderSpanGenerator interface.
+func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb.Spans, error) {
+	// This loop gets optimized to a runtime.mapclear call.
+	for k := range g.keyToInputRowIndices {
+		delete(g.keyToInputRowIndices, k)
+	}
+	// We maintain a map from index key to the corresponding input rows so we can
+	// join the index results to the inputs.
+	g.scratchSpans = g.scratchSpans[:0]
+	for i, inputRow := range rows {
+		if g.hasNullLookupColumn(inputRow) {
+			continue
+		}
+		generatedSpan, containsNull, err := g.generateSpan(inputRow)
+		if err != nil {
+			return nil, err
+		}
+		if g.keyToInputRowIndices == nil {
+			// Index join.
+			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+		} else {
+			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
+			if inputRowIndices == nil {
+				g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+			}
+			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
+		}
+	}
+	return g.scratchSpans, nil
+}
+
+// getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
+func (g *defaultSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
+	return g.keyToInputRowIndices[string(key)]
+}
+
+// maxLookupCols is part of the joinReaderSpanGenerator interface.
+func (g *defaultSpanGenerator) maxLookupCols() int {
+	return len(g.lookupCols)
+}
+
 // multiSpanGenerator is the joinReaderSpanGenerator used when each lookup will
 // scan multiple spans in the index. This is the case when some of the index
 // columns can take on multiple constant values. For example, the
