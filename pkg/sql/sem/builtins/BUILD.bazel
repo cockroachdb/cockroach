@@ -57,6 +57,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "//pkg/streaming",
         "//pkg/util",
         "//pkg/util/arith",
         "//pkg/util/bitarray",
