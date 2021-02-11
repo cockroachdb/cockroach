@@ -122,6 +122,14 @@ func getKeywordToken(tokStr string) int {
 		return MULTILINESTRINGZ
 	case "MULTILINESTRINGZM":
 		return MULTILINESTRINGZM
+	case "MULTIPOLYGON":
+		return MULTIPOLYGON
+	case "MULTIPOLYGONM":
+		return MULTIPOLYGONM
+	case "MULTIPOLYGONZ":
+		return MULTIPOLYGONZ
+	case "MULTIPOLYGONZM":
+		return MULTIPOLYGONZM
 	default:
 		return eof
 	}
