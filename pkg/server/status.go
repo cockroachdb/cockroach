@@ -1285,6 +1285,13 @@ func (s *statusServer) Profile(
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
+	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	return resp, err
+}
+
+func (s *statusServer) nodesHelper(
+	ctx context.Context, limit, offset int,
+) (*serverpb.NodesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	startKey := keys.StatusNodePrefix
@@ -1294,9 +1301,16 @@ func (s *statusServer) Nodes(
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Errorf(ctx, "%v", err)
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, 0, status.Errorf(codes.Internal, err.Error())
 	}
-	rows := b.Results[0].Rows
+
+	var next int
+	var rows []kv.KeyValue
+	if len(b.Results[0].Rows) > 0 {
+		var rowsInterface interface{}
+		rowsInterface, next = simplePaginate(b.Results[0].Rows, limit, offset)
+		rows = rowsInterface.([]kv.KeyValue)
+	}
 
 	resp := serverpb.NodesResponse{
 		Nodes: make([]statuspb.NodeStatus, len(rows)),
@@ -1304,14 +1318,13 @@ func (s *statusServer) Nodes(
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
 			log.Errorf(ctx, "%v", err)
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, 0, status.Errorf(codes.Internal, err.Error())
 		}
 	}
 
 	clock := s.admin.server.clock
 	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.Now().GoTime(), s.st)
-
-	return &resp, nil
+	return &resp, next, nil
 }
 
 // nodesStatusWithLiveness is like Nodes but for internal
@@ -1539,24 +1552,38 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
+	resp, _, err := s.rangesHelper(ctx, req, 0, 0)
+	return resp, err
+}
+
+// Ranges returns range info for the specified node.
+func (s *statusServer) rangesHelper(
+	ctx context.Context, req *serverpb.RangesRequest, limit, offset int,
+) (*serverpb.RangesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, 0, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return status.Ranges(ctx, req)
+		resp, err := status.Ranges(ctx, req)
+		if resp != nil && len(resp.Ranges) > 0 {
+			resultInterface, next := simplePaginate(resp.Ranges, limit, offset)
+			resp.Ranges = resultInterface.([]serverpb.RangeInfo)
+			return resp, next, err
+		}
+		return resp, 0, err
 	}
 
 	output := serverpb.RangesResponse{
@@ -1646,6 +1673,18 @@ func (s *statusServer) Ranges(
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
+	// There are two possibilities for ordering of ranges in the results:
+	// it could either be determined by the RangeIDs in the request (if specified),
+	// or be in RangeID order if not (as that's the ordering that
+	// IterateRangeDescriptors works on). The latter is already sorted in a
+	// stable fashion, as far as pagination is concerned. The former case requires
+	// sorting.
+	if len(req.RangeIDs) > 0 {
+		sort.Slice(req.RangeIDs, func(i, j int) bool {
+			return req.RangeIDs[i] < req.RangeIDs[j]
+		})
+	}
+
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		now := store.Clock().NowAsClockTimestamp()
 		if len(req.RangeIDs) == 0 {
@@ -1693,9 +1732,15 @@ func (s *statusServer) Ranges(
 		return nil
 	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, 0, status.Errorf(codes.Internal, err.Error())
 	}
-	return &output, nil
+	var next int
+	if len(req.RangeIDs) > 0 {
+		var outputInterface interface{}
+		outputInterface, next = simplePaginate(output.Ranges, limit, offset)
+		output.Ranges = outputInterface.([]serverpb.RangeInfo)
+	}
+	return &output, next, nil
 }
 
 // HotRanges returns the hottest ranges on each store on the requested node(s).
@@ -1961,12 +2006,14 @@ func (s *statusServer) iterateNodes(
 // paginatedIterateNodes iterates nodeFn over all non-removed nodes
 // sequentially.  It then calls nodeResponse for every valid result of nodeFn,
 // and nodeError on every error result. It returns the next `limit` results
-// after `offset`.
+// after `start`. If `requestedNodes` is specified and non-empty, iteration is
+// only done on that subset of nodes in addition to any nodes already in pagState.
 func (s *statusServer) paginatedIterateNodes(
 	ctx context.Context,
 	errorCtx string,
 	limit int,
 	pagState paginationState,
+	requestedNodes []roachpb.NodeID,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
 	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
@@ -1982,8 +2029,12 @@ func (s *statusServer) paginatedIterateNodes(
 
 	numNodes := len(nodeStatuses)
 	nodeIDs := make([]roachpb.NodeID, 0, numNodes)
-	for nodeID := range nodeStatuses {
-		nodeIDs = append(nodeIDs, nodeID)
+	if len(requestedNodes) > 0 {
+		nodeIDs = append(nodeIDs, requestedNodes...)
+	} else {
+		for nodeID := range nodeStatuses {
+			nodeIDs = append(nodeIDs, nodeID)
+		}
 	}
 	// Sort all nodes by IDs, as this is what mergeNodeIDs expects.
 	sort.Slice(nodeIDs, func(i, j int) bool {
@@ -2070,7 +2121,7 @@ func (s *statusServer) listSessionsHelper(
 	var err error
 	var pagState paginationState
 	if pagState, err = s.paginatedIterateNodes(
-		ctx, "session list", limit, start, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		ctx, "session list", limit, start, nil, dialFn, nodeFn, responseFn, errorFn); err != nil {
 		err := serverpb.ListSessionsError{Message: err.Error()}
 		response.Errors = append(response.Errors, err)
 	}
