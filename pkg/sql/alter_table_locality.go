@@ -217,9 +217,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 }
 
 func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegionalByRow(
-	params runParams,
-	existingLocality *descpb.TableDescriptor_LocalityConfig,
-	newLocality *tree.Locality,
+	params runParams, newLocality *tree.Locality,
 ) error {
 	enumTypeID, err := n.dbDesc.MultiRegionEnumID()
 	if err != nil {
@@ -311,15 +309,34 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 			return err
 		}
 	}
+	return n.alterTableLocalityFromOrToRegionalByRow(
+		params,
+		tabledesc.LocalityConfigRegionalByRow(newLocality.RegionalByRowColumn),
+		mutationIdxAllowedInSameTxn,
+		newColumnName,
+		n.tableDesc.PrimaryIndex.ColumnNames,
+		n.tableDesc.PrimaryIndex.ColumnDirections,
+	)
+}
 
+// alterTableLocalityFromOrToRegionalByRow processes a change for any ALTER TABLE
+// SET LOCALITY where the before OR after state is REGIONAL BY ROW.
+func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
+	params runParams,
+	newLocalityConfig descpb.TableDescriptor_LocalityConfig,
+	mutationIdxAllowedInSameTxn *int,
+	newColumnName *tree.Name,
+	pkColumnNames []string,
+	pkColumnDirections []descpb.IndexDescriptor_Direction,
+) error {
 	// Preserve the same PK columns - implicit partitioning will be added in
 	// AlterPrimaryKey.
-	cols := make([]tree.IndexElem, len(n.tableDesc.PrimaryIndex.ColumnNames))
-	for i, col := range n.tableDesc.PrimaryIndex.ColumnNames {
+	cols := make([]tree.IndexElem, len(pkColumnNames))
+	for i, col := range pkColumnNames {
 		cols[i] = tree.IndexElem{
 			Column: tree.Name(col),
 		}
-		switch dir := n.tableDesc.PrimaryIndex.ColumnDirections[i]; dir {
+		switch dir := pkColumnDirections[i]; dir {
 		case descpb.IndexDescriptor_ASC:
 			cols[i].Direction = tree.Ascending
 		case descpb.IndexDescriptor_DESC:
@@ -346,10 +363,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		},
 		&alterPrimaryKeyLocalitySwap{
 			localityConfigSwap: descpb.PrimaryKeySwap_LocalityConfigSwap{
-				OldLocalityConfig: *existingLocality,
-				NewLocalityConfig: tabledesc.LocalityConfigRegionalByRow(
-					newLocality.RegionalByRowColumn,
-				),
+				OldLocalityConfig: *n.tableDesc.LocalityConfig,
+				NewLocalityConfig: newLocalityConfig,
 			},
 			mutationIdxAllowedInSameTxn: mutationIdxAllowedInSameTxn,
 			newColumnName:               newColumnName,
@@ -380,7 +395,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityNonRegionalByRowToRegionalByRow(
 				params,
-				existingLocality,
 				newLocality,
 			); err != nil {
 				return err
@@ -401,7 +415,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityNonRegionalByRowToRegionalByRow(
 				params,
-				existingLocality,
 				newLocality,
 			); err != nil {
 				return err
@@ -414,13 +427,28 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		explicitColStart := n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			return unimplemented.NewWithIssue(59632, "implementation pending")
+			return n.alterTableLocalityFromOrToRegionalByRow(
+				params,
+				tabledesc.LocalityConfigGlobal(),
+				nil, /* mutationIdxAllowedInSameTxn */
+				nil, /* newColumnName */
+				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+			)
 		case tree.LocalityLevelRow:
-			return unimplemented.New("alter table locality from REGIONAL BY ROW", "implementation pending")
-		case tree.LocalityLevelTable:
 			return unimplemented.NewWithIssue(59632, "implementation pending")
+		case tree.LocalityLevelTable:
+			return n.alterTableLocalityFromOrToRegionalByRow(
+				params,
+				tabledesc.LocalityConfigRegionalByTable(n.n.Locality.TableRegion),
+				nil, /* mutationIdxAllowedInSameTxn */
+				nil, /* newColumnName */
+				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+			)
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}

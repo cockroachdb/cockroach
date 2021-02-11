@@ -78,7 +78,7 @@ func BulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 	for i := 0; i < maxValue+1; i++ {
 		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
 	}
-	_, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ","))
+	_, err := sqlDB.Exec(`INSERT INTO t.test (k, v) VALUES ` + strings.Join(inserts, ","))
 	return err
 }
 
