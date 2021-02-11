@@ -75,11 +75,6 @@ func TestGenerateRandomPoints(t *testing.T) {
 			geo.MustParseGeometry("SRID=4326;MULTIPOINT(0.69465779472271460548 0.92001319545446269554, 2.4417593921811042712 3.71642371685872197062, 2.79787890688424933927 3.8425013135166361522, 1.05776032659919683176 1.77173131482243051416, 1.79695770199420046254 2.42853164217679839965)"),
 		},
 		{
-			"Requires too many iterations over grid",
-			args{geo.MustParseGeometry("POLYGON((0 0,0 100,0.00001 0.00000001,0.99999 0.00000001,1 100,1 0,0 0))"), 5, 1996},
-			geo.MustParseGeometry("MULTIPOINT(0.9999990842784447497849 37.4716712014091797300352, 0.0000035681765926535594 47.1117932985884309005087, 0.000004226396968502996 32.4473691709023412954593, 0.9999921320300672045178 13.3385008252821712915193)"),
-		},
-		{
 			"Invalid Polygon",
 			args{geo.MustParseGeometry("POLYGON((-1 -1,1 -1,0 0,0 1,0 -1,0 0,-1 0,-1 -1))"), 5, 1996},
 			geo.MustParseGeometry("MULTIPOINT(-0.26747218234566871864 -0.88507288494238345322, -0.87713357493233190532 -0.97615754673482446613, -0.44243286372996359912 -0.3727648333352959753, 0.43580610882637776937 -0.55479608815084269224, -0.55844006437980153734 -0.47716362944650048128)"),
@@ -114,6 +109,16 @@ func TestGenerateRandomPoints(t *testing.T) {
 				"Polygon with zero area",
 				args{geo.MustParseGeometry("POLYGON((0 0, 1 1, 1 1, 0 0))"), 4, 1},
 				"zero area input Polygon",
+			},
+			{
+				"polygon too many points to generate",
+				args{geo.MustParseGeometry("POLYGON((1 1,1 2,2 2,2 1,1 1))"), 65337, 1996},
+				"failed to generate random points, too many points to generate: requires 65337 points, max 65336",
+			},
+			{
+				"generated area is too large",
+				args{geo.MustParseGeometry("POLYGON((0 0,0 100,0.00001 0.00000001,0.99999 0.00000001,1 100,1 0,0 0))"), 100, 1996},
+				"generating random points error: generated area is too large: 10001406, max 6533600",
 			},
 		}
 		for _, tt := range errorTestCases {
