@@ -334,6 +334,93 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"MULTIPOLYGON ZM EMPTY", "MULTIPOLYGONZM EMPTY"},
 			expected:    geom.NewMultiPolygon(geom.XYZM),
 		},
+		// GEOMETRYCOLLECTION tests
+		{
+			desc:        "parse 2D geometrycollection with a single point",
+			equivInputs: []string{"GEOMETRYCOLLECTION(POINT(0 0))"},
+			expected:    geom.NewGeometryCollection().MustPush(geom.NewPointFlat(geom.XY, []float64{0, 0})),
+		},
+		{
+			desc: "parse 2D geometrycollection",
+			equivInputs: []string{`GEOMETRYCOLLECTION(
+POINT(0 0),
+LINESTRING(1 1, 0 0, 1 4),
+POLYGON((0 0, 0 100, 100 100, 100 0, 0 0), (10 10, 11 11, 12 10, 10 10), (2 2, 4 4, 5 1, 2 2)),
+MULTIPOINT((23 24), EMPTY),
+MULTILINESTRING((1 1, 0 0, 1 4)),
+MULTIPOLYGON(((0 0, 0 100, 100 100, 100 0, 0 0))),
+GEOMETRYCOLLECTION EMPTY
+)`},
+			expected: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XY, []float64{0, 0}),
+				geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 1, 4}),
+				geom.NewPolygonFlat(geom.XY,
+					[]float64{0, 0, 0, 100, 100, 100, 100, 0, 0, 0, 10, 10, 11, 11, 12, 10, 10, 10, 2, 2, 4, 4, 5, 1, 2, 2},
+					[]int{10, 18, 26}),
+				geom.NewMultiPointFlat(geom.XY, []float64{23, 24}, geom.NewMultiPointFlatOptionWithEnds([]int{2, 2})),
+				geom.NewMultiLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 1, 4}, []int{6}),
+				geom.NewMultiPolygonFlat(geom.XY, []float64{0, 0, 0, 100, 100, 100, 100, 0, 0, 0}, [][]int{{10}}),
+				geom.NewGeometryCollection(),
+			),
+		},
+		{
+			desc: "parse 2D+M geometrycollection",
+			equivInputs: []string{`GEOMETRYCOLLECTION M (
+POINT M (-2 0 0.5),
+LINESTRING M (0 0 200, 0.1 -1 -20),
+POLYGON M ((0 0 7, 1 -1 -50, 2 0 0, 0 0 7)),
+MULTIPOINT M (-1 5 -16, 0.23 7.0 0),
+MULTILINESTRING M ((0 -1 -2, 2 5 7)),
+MULTIPOLYGON M (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
+)`},
+			expected: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XYM, []float64{-2, 0, 0.5}),
+				geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 200, 0.1, -1, -20}),
+				geom.NewPolygonFlat(geom.XYM, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
+				geom.NewMultiPointFlat(geom.XYM, []float64{-1, 5, -16, 0.23, 7, 0}),
+				geom.NewMultiLineStringFlat(geom.XYM, []float64{0, -1, -2, 2, 5, 7}, []int{6}),
+				geom.NewMultiPolygonFlat(geom.XYM, []float64{0, 0, 0, 1, 1, 1, 2, 3, 1, 0, 0, 0}, [][]int{{12}}),
+			),
+		},
+		{
+			desc: "parse 3D geometrycollection",
+			equivInputs: []string{`GEOMETRYCOLLECTION Z (
+POINT Z (2 3 4),
+LINESTRING Z (0 -1 1, 7 -1 -9),
+POLYGON Z ((0 0 7, 1 -1 -50, 2 0 0, 0 0 7)),
+MULTIPOINT Z ((2 3 1), EMPTY),
+MULTILINESTRING Z (EMPTY, EMPTY, (1 1 1, 2 2 2, 3 3 3)),
+MULTIPOLYGON Z (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
+)`},
+			expected: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XYZ, []float64{2, 3, 4}),
+				geom.NewLineStringFlat(geom.XYZ, []float64{0, -1, 1, 7, -1, -9}),
+				geom.NewPolygonFlat(geom.XYZ, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
+				geom.NewMultiPointFlat(geom.XYZ, []float64{2, 3, 1}, geom.NewMultiPointFlatOptionWithEnds([]int{3, 3})),
+				geom.NewMultiLineStringFlat(geom.XYZ, []float64{1, 1, 1, 2, 2, 2, 3, 3, 3}, []int{0, 0, 9}),
+				geom.NewMultiPolygonFlat(geom.XYZ, []float64{0, 0, 0, 1, 1, 1, 2, 3, 1, 0, 0, 0}, [][]int{{12}}),
+			),
+		},
+		{
+			desc: "parse 4D geometrycollection",
+			equivInputs: []string{`GEOMETRYCOLLECTION ZM (
+POINT ZM (0 5 -10 15),
+LINESTRING ZM (0 0 0 0, 1 1 1 1),
+POLYGON ZM ((0 0 12 7, 1 -1 12 -50, 2 0 12 0, 0 0 12 7)),
+MULTIPOINT ZM ((2 -8 17 45), (0 0 0 0)),
+MULTILINESTRING ZM ((0 0 0 0, 1 1 1 1), (-2 -3 -4 -5, 0.5 -0.75 1 -1.25, 0 1 5 7)),
+MULTIPOLYGON ZM (((0 0 0 0, 1 1 1 -1, 2 3 1 -2, 0 0 0 0)))
+)`},
+			expected: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XYZM, []float64{0, 5, -10, 15}),
+				geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, 1}),
+				geom.NewPolygonFlat(geom.XYZM, []float64{0, 0, 12, 7, 1, -1, 12, -50, 2, 0, 12, 0, 0, 0, 12, 7}, []int{16}),
+				geom.NewMultiPointFlat(geom.XYZM, []float64{2, -8, 17, 45, 0, 0, 0, 0}),
+				geom.NewMultiLineStringFlat(geom.XYZM,
+					[]float64{0, 0, 0, 0, 1, 1, 1, 1, -2, -3, -4, -5, 0.5, -0.75, 1, -1.25, 0, 1, 5, 7}, []int{8, 20}),
+				geom.NewMultiPolygonFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, -1, 2, 3, 1, -2, 0, 0, 0, 0}, [][]int{{16}}),
+			),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -572,6 +659,27 @@ MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))
 			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 26
 MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
                           ^`,
+		},
+		{
+			desc:  "2D geometrycollection with EMPTY item",
+			input: "GEOMETRYCOLLECTION(EMPTY)",
+			expectedErrStr: `syntax error: unexpected EMPTY at pos 19
+GEOMETRYCOLLECTION(EMPTY)
+                   ^`,
+		},
+		{
+			desc:  "3D geometrycollection with no items",
+			input: "GEOMETRYCOLLECTION Z ()",
+			expectedErrStr: `syntax error: unexpected ')' at pos 22
+GEOMETRYCOLLECTION Z ()
+                      ^`,
+		},
+		{
+			desc:  "geometrycollection with mixed dimensionality",
+			input: "GEOMETRYCOLLECTION(POINT M (0 0 0), LINESTRING(0 0, 1 1))",
+			expectedErrStr: `syntax error: geometry collection has mixed dimensionality at pos 56
+GEOMETRYCOLLECTION(POINT M (0 0 0), LINESTRING(0 0, 1 1))
+                                                        ^`,
 		},
 	}
 

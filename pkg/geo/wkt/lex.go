@@ -130,6 +130,14 @@ func getKeywordToken(tokStr string) int {
 		return MULTIPOLYGONZ
 	case "MULTIPOLYGONZM":
 		return MULTIPOLYGONZM
+	case "GEOMETRYCOLLECTION":
+		return GEOMETRYCOLLECTION
+	case "GEOMETRYCOLLECTIONM":
+		return GEOMETRYCOLLECTIONM
+	case "GEOMETRYCOLLECTIONZ":
+		return GEOMETRYCOLLECTIONZ
+	case "GEOMETRYCOLLECTIONZM":
+		return GEOMETRYCOLLECTIONZM
 	default:
 		return eof
 	}
@@ -226,6 +234,10 @@ func (l *wktLex) trimLeft() {
 
 func (l *wktLex) setLexError(expectedTokType string) {
 	l.lastErr = &LexError{expectedTokType: expectedTokType, pos: l.lastPos, str: l.line}
+}
+
+func (l *wktLex) setError(err error) {
+	l.lastErr = err
 }
 
 func (l *wktLex) Error(s string) {

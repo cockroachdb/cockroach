@@ -89,6 +89,31 @@ func appendMultiPolygonFlatCoordsRepr(
 	}
 }
 
+func makeGeomCollection(wktlex wktLexer, gs []geom.T, layout geom.Layout) *geom.GeometryCollection {
+	if len(gs) == 0 {
+		return geom.NewGeometryCollection()
+	}
+	if layout == geom.NoLayout {
+		layout = gs[0].Layout()
+	}
+
+	for _, g := range gs {
+		_, ok := g.(*geom.GeometryCollection)
+		if !ok && g.Layout() != layout {
+			wktlex.(*wktLex).Error("syntax error: geometry collection has mixed dimensionality")
+			return nil
+		}
+	}
+
+	newCollection := geom.NewGeometryCollection()
+	err := newCollection.Push(gs...)
+	if err != nil {
+		wktlex.(*wktLex).setError(err)
+		return nil
+	}
+	return newCollection
+}
+
 %}
 
 %union {
@@ -98,48 +123,64 @@ func appendMultiPolygonFlatCoordsRepr(
 	coordList         []float64
 	flatRepr          geomFlatCoordsRepr
 	multiPolyFlatRepr multiPolygonFlatCoordsRepr
+	geomList          []geom.T
 }
 
+// Tokens
 %token <str> POINT POINTM POINTZ POINTZM
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
+%token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> EMPTY
-//%token <str> GEOMETRYCOLLECTION
 %token <coord> NUM
 
+// Geometries
 %type <geom> geometry
-%type <geom> point linestring polygon multipoint multilinestring multipolygon
+%type <geom> point linestring polygon multipoint multilinestring multipolygon geometry_collection
+%type <geomList> geometry_list
 
-// TODO(ayang) reorganize the list of %type statements
+// Points
 %type <coordList> two_coords three_coords four_coords
+%type <coordList> two_coords_point three_coords_point four_coords_point
 %type <coordList> two_coords_point_with_parens three_coords_point_with_parens four_coords_point_with_parens
+
+// LineStrings
 %type <coordList> two_coords_list three_coords_list four_coords_list
 %type <coordList> two_coords_list_with_parens three_coords_list_with_parens four_coords_list_with_parens
 %type <coordList> two_coords_line three_coords_line four_coords_line
+
+// Polygons
+%type <flatRepr> two_coords_polygon three_coords_polygon four_coords_polygon
 %type <flatRepr> two_coords_ring three_coords_ring four_coords_ring
 %type <flatRepr> two_coords_ring_list three_coords_ring_list four_coords_ring_list
-%type <coordList> two_coords_point three_coords_point four_coords_point
-%type <coordList> three_coords_point_list four_coords_point_list
-%type <flatRepr> empty_point empty_line_flat_repr
+
+// MultiPoints
+%type <coordList> three_coords_point_list
+%type <coordList> four_coords_point_list
+
 %type <flatRepr> two_coords_point_allowing_empty three_coords_point_allowing_empty four_coords_point_allowing_empty
 %type <flatRepr> two_coords_point_list_allowing_empty_points
 %type <flatRepr> three_coords_point_list_allowing_empty_points
 %type <flatRepr> four_coords_point_list_allowing_empty_points
-%type <flatRepr> two_coords_line_flat_repr three_coords_line_flat_repr four_coords_line_flat_repr
-%type <flatRepr> two_coords_line_allowing_empty three_coords_line_allowing_empty four_coords_line_allowing_empty
-%type <flatRepr> three_coords_line_list four_coords_line_list
+
+// MultiLineStrings
+%type <flatRepr> three_coords_line_list
+%type <flatRepr> four_coords_line_list
+
 %type <flatRepr> two_coords_line_list_allowing_empty_lines
 %type <flatRepr> three_coords_line_list_allowing_empty_lines
 %type <flatRepr> four_coords_line_list_allowing_empty_lines
-%type <flatRepr> two_coords_polygon three_coords_polygon four_coords_polygon empty_polygon
 
+%type <flatRepr> two_coords_line_flat_repr three_coords_line_flat_repr four_coords_line_flat_repr
+%type <flatRepr> two_coords_line_allowing_empty three_coords_line_allowing_empty four_coords_line_allowing_empty
+
+// MultiPolygons
 %type <multiPolyFlatRepr> two_coords_polygon_multi_poly_flat_repr
 %type <multiPolyFlatRepr> three_coords_polygon_multi_poly_flat_repr
 %type <multiPolyFlatRepr> four_coords_polygon_multi_poly_flat_repr
-%type <multiPolyFlatRepr> empty_polygon_multi_poly_flat_repr
 
 %type <multiPolyFlatRepr> three_coords_polygon_list
 %type <multiPolyFlatRepr> four_coords_polygon_list
@@ -151,6 +192,12 @@ func appendMultiPolygonFlatCoordsRepr(
 %type <multiPolyFlatRepr> two_coords_polygon_list_allowing_empty_polygons
 %type <multiPolyFlatRepr> three_coords_polygon_list_allowing_empty_polygons
 %type <multiPolyFlatRepr> four_coords_polygon_list_allowing_empty_polygons
+
+// Empty representations
+%type <flatRepr> empty_point
+%type <flatRepr> empty_line_flat_repr
+%type <flatRepr> empty_polygon
+%type <multiPolyFlatRepr> empty_polygon_multi_poly_flat_repr
 
 %%
 
@@ -167,6 +214,61 @@ geometry:
 |	multipoint
 |	multilinestring
 |	multipolygon
+| geometry_collection
+
+geometry_collection:
+	GEOMETRYCOLLECTION '(' geometry_list ')'
+	{
+		newCollection := makeGeomCollection(wktlex, $3, geom.NoLayout)
+		if newCollection == nil {
+			return 1
+		}
+		$$ = newCollection
+	}
+|	GEOMETRYCOLLECTIONM '(' geometry_list ')'
+	{
+		newCollection := makeGeomCollection(wktlex, $3, geom.XYM)
+		if newCollection == nil {
+			return 1
+		}
+		$$ = newCollection
+	}
+|	GEOMETRYCOLLECTIONZ '(' geometry_list ')'
+	{
+		newCollection := makeGeomCollection(wktlex, $3, geom.XYZ)
+		if newCollection == nil {
+			return 1
+		}
+		$$ = newCollection
+	}
+|	GEOMETRYCOLLECTIONZM '(' geometry_list ')'
+	{
+		newCollection := makeGeomCollection(wktlex, $3, geom.XYZM)
+		if newCollection == nil {
+			return 1
+		}
+		$$ = newCollection
+	}
+| geometry_collection_keyword EMPTY
+	{
+		$$ = geom.NewGeometryCollection()
+	}
+
+geometry_collection_keyword:
+	GEOMETRYCOLLECTION
+|	GEOMETRYCOLLECTIONM
+|	GEOMETRYCOLLECTIONZ
+|	GEOMETRYCOLLECTIONZM
+
+geometry_list:
+	geometry_list ',' geometry
+	{
+		$$ = append($1, $3)
+	}
+| geometry
+	{
+		$$ = []geom.T{$1}
+	}
 
 point:
 	POINT two_coords_point_with_parens
