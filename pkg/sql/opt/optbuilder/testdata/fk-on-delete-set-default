@@ -46,15 +46,15 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child(p) -> parent(p)
                      └── anti-join (hash)
-                          ├── columns: p_new:13!null
+                          ├── columns: p:13!null
                           ├── with-scan &2
-                          │    ├── columns: p_new:13!null
+                          │    ├── columns: p:13!null
                           │    └── mapping:
-                          │         └──  p_new:12 => p_new:13
+                          │         └──  p_new:12 => p:13
                           ├── scan parent
                           │    └── columns: parent.p:14!null
                           └── filters
-                               └── p_new:13 = parent.p:14
+                               └── p:13 = parent.p:14
 
 exec-ddl
 DROP TABLE child
@@ -141,24 +141,24 @@ root
  └── cascade
       └── update child_multicol
            ├── columns: <none>
-           ├── fetch columns: child_multicol.c:15 child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+           ├── fetch columns: c:15 child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            ├── update-mapping:
-           │    ├── child_multicol.c:15 => child_multicol.p:10
+           │    ├── c:15 => child_multicol.p:10
            │    ├── q_new:24 => child_multicol.q:11
            │    ├── r_new:25 => child_multicol.r:12
            │    └── column26:26 => x:13
            ├── check columns: check1:27
            ├── input binding: &2
            ├── project
-           │    ├── columns: check1:27!null child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 column26:26
+           │    ├── columns: check1:27!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 column26:26
            │    ├── project
-           │    │    ├── columns: column26:26 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
+           │    │    ├── columns: column26:26 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
            │    │    ├── project
-           │    │    │    ├── columns: q_new:24 r_new:25 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+           │    │    │    ├── columns: q_new:24 r_new:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    ├── semi-join (hash)
-           │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+           │    │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    │    ├── scan child_multicol
-           │    │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+           │    │    │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    │    │    └── computed column expressions
            │    │    │    │    │         └── x:19
            │    │    │    │    │              └── (child_multicol.p:16 + child_multicol.q:17) + child_multicol.r:18
@@ -176,30 +176,30 @@ root
            │    │    │         ├── child_multicol.p:16 + 1 [as=q_new:24]
            │    │    │         └── child_multicol.p:16 + child_multicol.q:17 [as=r_new:25]
            │    │    └── projections
-           │    │         └── (child_multicol.c:15 + q_new:24) + r_new:25 [as=column26:26]
+           │    │         └── (c:15 + q_new:24) + r_new:25 [as=column26:26]
            │    └── projections
-           │         └── (child_multicol.c:15 > 100) OR (child_multicol.c:15 > child_multicol.c:15) [as=check1:27]
+           │         └── (c:15 > 100) OR (c:15 > c:15) [as=check1:27]
            └── f-k-checks
                 └── f-k-checks-item: child_multicol(p,q,r) -> parent_multicol(p,q,r)
                      └── anti-join (hash)
-                          ├── columns: c:28!null q_new:29!null r_new:30!null
+                          ├── columns: p:28!null q:29!null r:30!null
                           ├── select
-                          │    ├── columns: c:28!null q_new:29!null r_new:30!null
+                          │    ├── columns: p:28!null q:29!null r:30!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: c:28!null q_new:29 r_new:30
+                          │    │    ├── columns: p:28!null q:29 r:30
                           │    │    └── mapping:
-                          │    │         ├──  child_multicol.c:15 => c:28
-                          │    │         ├──  q_new:24 => q_new:29
-                          │    │         └──  r_new:25 => r_new:30
+                          │    │         ├──  c:15 => p:28
+                          │    │         ├──  q_new:24 => q:29
+                          │    │         └──  r_new:25 => r:30
                           │    └── filters
-                          │         ├── q_new:29 IS NOT NULL
-                          │         └── r_new:30 IS NOT NULL
+                          │         ├── q:29 IS NOT NULL
+                          │         └── r:30 IS NOT NULL
                           ├── scan parent_multicol
                           │    └── columns: parent_multicol.p:31!null parent_multicol.q:32!null parent_multicol.r:33!null
                           └── filters
-                               ├── c:28 = parent_multicol.p:31
-                               ├── q_new:29 = parent_multicol.q:32
-                               └── r_new:30 = parent_multicol.r:33
+                               ├── p:28 = parent_multicol.p:31
+                               ├── q:29 = parent_multicol.q:32
+                               └── r:30 = parent_multicol.r:33
 
 # Test a cascade to a child with a partial index.
 exec-ddl
@@ -269,12 +269,12 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_partial(p) -> parent_partial(p)
                      └── anti-join (hash)
-                          ├── columns: p_new:18!null
+                          ├── columns: p:18!null
                           ├── with-scan &2
-                          │    ├── columns: p_new:18!null
+                          │    ├── columns: p:18!null
                           │    └── mapping:
-                          │         └──  p_new:14 => p_new:18
+                          │         └──  p_new:14 => p:18
                           ├── scan parent_partial
                           │    └── columns: parent_partial.p:19!null
                           └── filters
-                               └── p_new:18 = parent_partial.p:19
+                               └── p:18 = parent_partial.p:19
