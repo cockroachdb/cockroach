@@ -1045,9 +1045,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		if shouldAssert {
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.r.mu.Lock()
-			sm.r.assertStateLocked(ctx, sm.r.store.Engine())
-			sm.r.mu.Unlock()
+			sm.r.mu.RLock()
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.Engine())
+			sm.r.mu.RUnlock()
 			sm.stats.stateAssertions++
 		}
 	} else if res := cmd.replicatedResult(); !res.IsZero() {
