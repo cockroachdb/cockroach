@@ -40,6 +40,8 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = false`)
+		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -67,7 +69,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		descID    = 53
 		tableName = "foo"
 	)
-	// This test will inject the table an demonstrate
+	// This test will inject the table and demonstrate
 	// that there are problems. It will then repair it by just dropping the
 	// descriptor and namespace entry. This would normally be unsafe because
 	// it would leave table data around.
@@ -86,10 +88,14 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
+		// Now that we've finished setting up the test, we can restore validations.
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
+		require.NoError(t, err)
+
 		// Ideally we should be able to query `crdb_internal.invalid_object` but it
 		// does not do enough validation. Instead we'll just observe the issue that
 		// the parent descriptor cannot be found.
-		_, err := db.Exec(
+		_, err = db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
 		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
@@ -135,10 +141,14 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
+		// Now that we've finished setting up the test, we can restore validations.
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
+		require.NoError(t, err)
+
 		// Ideally we should be able to query `crdb_internal.invalid_objects` but it
 		// does not do enough validation. Instead we'll just observe the issue that
 		// the parent descriptor cannot be found.
-		_, err := db.Exec(
+		_, err = db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
 		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
@@ -242,6 +252,8 @@ func TestDescriptorRepair(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = false`)
+		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -258,6 +270,9 @@ func TestDescriptorRepair(t *testing.T) {
 		after              []string
 	}{
 		{
+			before: []string{
+				`CREATE DATABASE test`,
+			},
 			op: upsertRepair,
 			expEventLogEntries: []eventLogPattern{
 				{
@@ -276,10 +291,19 @@ func TestDescriptorRepair(t *testing.T) {
 					typ:  "change_table_privilege",
 					info: `"DescriptorID":59,"Grantee":"admin","GrantedPrivileges":\["ALL"\]`,
 				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
+				},
+				{
+					typ:  "change_table_privilege",
+					info: `"DescriptorID":59,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
+				},
 			},
 		},
 		{
 			before: []string{
+				`CREATE DATABASE test`,
 				upsertRepair,
 			},
 			op: upsertUpdatePrivileges,
@@ -290,15 +314,11 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":59,"Grantee":"root","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":59,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":59,"Grantee":"newuser","GrantedPrivileges":\["CREATE"\]`,
-				},
-				{
-					typ:  "change_table_privilege",
-					info: `"DescriptorID":59,"Grantee":"admin","RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":59,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -423,7 +443,9 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			for _, op := range tc.before {
 				tdb.Exec(t, op)
 			}
-			_, err := db.Exec(tc.op)
+			_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
+			require.NoError(t, err)
+			_, err = db.Exec(tc.op)
 			if tc.expErrRE == "" {
 				require.NoError(t, err)
 			} else {
@@ -586,7 +608,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor, true)
 SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
 '{
   "table": {
-    "columns": [ { "id": 1, "name": "i" } ],
+    "columns": [ { "id": 1, "name": "i", "type": { "family": "IntFamily", "oid": 20, "width": 64 } } ],
     "families": [
       {
         "columnIds": [ 1 ],
@@ -616,7 +638,12 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     },
     "privileges": {
       "owner_proto": "root",
-      "users": [ { "privileges": 2, "user_proto": "admin" }, { "privileges": 2, "user_proto": "root" } ],
+      "users": [
+        { "privileges": 2, "user_proto": "admin" },
+        { "privileges": 2, "user_proto": "root" },
+        { "privileges": 2, "user_proto": "newuser1" },
+        { "privileges": 2, "user_proto": "newuser2" }
+      ],
       "version": 1
     },
     "state": "PUBLIC",
@@ -634,7 +661,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
 SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
 '{
   "table": {
-    "columns": [ { "id": 1, "name": "i" } ],
+    "columns": [ { "id": 1, "name": "i", "type": { "family": "IntFamily", "oid": 20, "width": 64 } } ],
     "families": [
       {
         "columnIds": [ 1 ],
@@ -664,7 +691,11 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     },
     "privileges": {
       "owner_proto": "admin",
-      "users": [ { "privileges": 5, "user_proto": "newuser" }, { "privileges": 8, "user_proto": "root" } ],
+      "users": [
+        { "privileges": 2, "user_proto": "admin" },
+        { "privileges": 2, "user_proto": "root" },
+        { "privileges": 8, "user_proto": "newuser1" }
+      ],
       "version": 1
     },
     "state": "PUBLIC",
