@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -1341,13 +1342,25 @@ func (tc *Collection) addUncommittedDescriptor(
 	return ud, nil
 }
 
+// validateOnWriteEnabled is the cluster setting used to enable or disable
+// validating descriptors prior to writing.
+var validateOnWriteEnabled = settings.RegisterBoolSetting(
+	"sql.catalog.descs.validate_on_write.enabled",
+	"set to true to validate descriptors prior to writing, false to disable; default is true",
+	true, /* defaultValue */
+)
+
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	// TODO(ajwerner): Add validation here.
+	if validateOnWriteEnabled.Get(&tc.settings.SV) {
+		if err := desc.Validate(ctx, nil /* descGetter */); err != nil {
+			return err
+		}
+	}
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}

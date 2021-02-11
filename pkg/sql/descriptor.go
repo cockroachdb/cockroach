@@ -186,14 +186,14 @@ func (p *planner) createDescriptorWithID(
 		}
 	case *tabledesc.Mutable:
 		isTable = true
-		if err := desc.ValidateTable(ctx); err != nil {
+		if err := desc.Validate(ctx, nil /* descGetter */); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
 	case *dbdesc.Mutable:
-		if err := desc.Validate(); err != nil {
+		if err := desc.Validate(ctx, nil /* descGetter */); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {

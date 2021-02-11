@@ -285,7 +285,7 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 	case catalog.TableDescriptor:
 		return desc.Validate(ctx, dg)
 	case catalog.DatabaseDescriptor:
-		return desc.Validate()
+		return desc.Validate(ctx, dg)
 	case catalog.TypeDescriptor:
 		return desc.Validate(ctx, dg)
 	case catalog.SchemaDescriptor:
@@ -356,7 +356,7 @@ func unwrapDescriptorMutable(
 		return mutTable, nil
 	case database != nil:
 		dbDesc := dbdesc.NewExistingMutable(*database)
-		if err := dbDesc.Validate(); err != nil {
+		if err := dbDesc.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
 		return dbDesc, nil

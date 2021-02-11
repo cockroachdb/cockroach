@@ -242,6 +242,8 @@ func TestDescriptorRepair(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = false`)
+		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}

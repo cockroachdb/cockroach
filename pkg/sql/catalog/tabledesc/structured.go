@@ -1260,15 +1260,15 @@ var PerformTestingDescriptorValidation testingDescriptorValidation = true
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *wrapper) Validate(ctx context.Context, dg catalog.DescGetter) error {
+func (desc *wrapper) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
 	err := desc.ValidateTable(ctx)
 	if err != nil {
 		return err
 	}
-	if desc.Dropped() {
+	if desc.Dropped() || descGetter == nil {
 		return nil
 	}
-	return errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID())
+	return errors.Wrapf(desc.validateCrossReferences(ctx, descGetter), "desc %d", desc.GetID())
 }
 
 // validateTableIfTesting is similar to validateTable, except it is only invoked

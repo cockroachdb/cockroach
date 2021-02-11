@@ -435,7 +435,7 @@ func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
 }
 
 // Validate performs validation on the TypeDescriptor.
-func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
+func (desc *Immutable) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
 	// Validate local properties of the descriptor.
 	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
 		return err
@@ -670,7 +670,10 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		}
 	}
 
-	descs, err := dg.GetDescs(ctx, reqs)
+	if descGetter == nil {
+		return nil
+	}
+	descs, err := descGetter.GetDescs(ctx, reqs)
 	if err != nil {
 		return err
 	}
