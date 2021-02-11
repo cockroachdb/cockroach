@@ -685,6 +685,7 @@ func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp.IsEmpty() {
@@ -696,7 +697,7 @@ func (r *Replica) evaluateProposal(
 	// important since evaluating a proposal is expensive.
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, latchSpans)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -815,9 +816,10 @@ func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, latchSpans)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{

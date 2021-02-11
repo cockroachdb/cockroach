@@ -33,7 +33,7 @@ func declareKeysTransferLease(
 	// and so it uses latches to wait for all in-flight requests to complete.
 	//
 	// Because of this, it declares a non-MVCC write over every addressable key
-	// in the range, even through the only key the TransferLease actually writes
+	// in the range, even though the only key the TransferLease actually writes
 	// to is the RangeLeaseKey. This guarantees that it conflicts with any other
 	// request because every request must declare at least one addressable key.
 	//

@@ -2,6 +2,7 @@
 #
 # k1: value  @ ts 20
 # k1: value  @ ts 10
+#
 # k2: intent @ ts 20
 # k2: value  @ ts 10
 #
@@ -22,7 +23,7 @@ with k=k2
   put t=A v=v4
 ----
 >> at end:
-txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v
 meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=7
@@ -32,18 +33,18 @@ data: "k2"/10.000000000,0 -> /BYTES/v3
 # Test cases:
 # 
 # for ts in (5, 10, 15, 20, 25):
-#   for maxTs in (5, 10, 15, 20, 25):
-#     if maxTs < ts: continue
+#   for globalUncertaintyLimit in (5, 10, 15, 20, 25):
+#     if globalUncertaintyLimit < ts: continue
 #     for k in (k1, k2):
 #       for op in (get, scan):
 #         testCase()
 #
 
 run ok
-txn_begin t=txn1 ts=5,0 maxTs=5,0
+txn_begin t=txn1 ts=5,0 globalUncertaintyLimit=5,0
 ----
 >> at end:
-txn: "txn1" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false max=5.000000000,0
+txn: "txn1" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=5.000000000,0
 
 run ok
 get t=txn1 k=k1
@@ -67,134 +68,134 @@ scan: "k2"-"k2\x00" -> <no data>
 
 
 run ok
-txn_begin t=txn2 ts=5,0 maxTs=10,0
+txn_begin t=txn2 ts=5,0 globalUncertaintyLimit=10,0
 ----
 >> at end:
-txn: "txn2" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false max=10.000000000,0
+txn: "txn2" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=10.000000000,0
 
 run error
 get t=txn2 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 10.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 10.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn2 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 10.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 10.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=10.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn3 ts=5,0 maxTs=15,0
+txn_begin t=txn3 ts=5,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn3" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false max=15.000000000,0
+txn: "txn3" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=15.000000000,0
 
 run error
 get t=txn3 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 15.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 15.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 15.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= 15.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0 within uncertainty interval `t <= (local=0,0, global=15.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn4 ts=5,0 maxTs=20,0
+txn_begin t=txn4 ts=5,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn4" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false max=20.000000000,0
+txn: "txn4" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=20.000000000,0
 
 run error
 get t=txn4 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn5 ts=5,0 maxTs=25,0
+txn_begin t=txn5 ts=5,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn5" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false max=25.000000000,0
+txn: "txn5" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=25.000000000,0
 
 run error
 get t=txn5 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn5 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn6 ts=10,0 maxTs=10,0
+txn_begin t=txn6 ts=10,0 globalUncertaintyLimit=10,0
 ----
 >> at end:
-txn: "txn6" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false max=10.000000000,0
+txn: "txn6" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=10.000000000,0
 
 run ok
 get t=txn6 k=k1
@@ -218,10 +219,10 @@ scan: "k2" -> /BYTES/v3 @10.000000000,0
 
 
 run ok
-txn_begin t=txn7 ts=10,0 maxTs=15,0
+txn_begin t=txn7 ts=10,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn7" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false max=15.000000000,0
+txn: "txn7" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=15.000000000,0
 
 run ok
 get t=txn7 k=k1
@@ -245,72 +246,72 @@ scan: "k2" -> /BYTES/v3 @10.000000000,0
 
 
 run ok
-txn_begin t=txn8 ts=10,0 maxTs=20,0
+txn_begin t=txn8 ts=10,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn8" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false max=20.000000000,0
+txn: "txn8" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=20.000000000,0
 
 run error
 get t=txn8 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn9 ts=10,0 maxTs=25,0
+txn_begin t=txn9 ts=10,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn9" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false max=25.000000000,0
+txn: "txn9" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=25.000000000,0
 
 run error
 get t=txn9 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn10 ts=15,0 maxTs=15,0
+txn_begin t=txn10 ts=15,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn10" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false max=15.000000000,0
+txn: "txn10" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=15.000000000,0
 
 run ok
 get t=txn10 k=k1
@@ -334,72 +335,72 @@ scan: "k2" -> /BYTES/v3 @10.000000000,0
 
 
 run ok
-txn_begin t=txn11 ts=15,0 maxTs=20,0
+txn_begin t=txn11 ts=15,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn11" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false max=20.000000000,0
+txn: "txn11" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=20.000000000,0
 
 run error
 get t=txn11 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn11 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn11 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn11 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 20.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn12 ts=15,0 maxTs=25,0
+txn_begin t=txn12 ts=15,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn12" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false max=25.000000000,0
+txn: "txn12" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=25.000000000,0
 
 run error
 get t=txn12 k=k1
 ----
 get: "k1" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k1
 ----
 scan: "k1"-"k1\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn12 k=k2
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= 25.000000000,0`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (local=0,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
-txn_begin t=txn13 ts=20,0 maxTs=20,0
+txn_begin t=txn13 ts=20,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn13" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false max=20.000000000,0
+txn: "txn13" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=20.000000000,0
 
 run ok
 get t=txn13 k=k1
@@ -425,10 +426,10 @@ error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 
 run ok
-txn_begin t=txn14 ts=20,0 maxTs=25,0
+txn_begin t=txn14 ts=20,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn14" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false max=25.000000000,0
+txn: "txn14" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=25.000000000,0
 
 run ok
 get t=txn14 k=k1
@@ -454,10 +455,10 @@ error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 
 run ok
-txn_begin t=txn15 ts=25,0 maxTs=25,0
+txn_begin t=txn15 ts=25,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn15" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=25.000000000,0 wto=false max=25.000000000,0
+txn: "txn15" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=25.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=25.000000000,0 wto=false gul=25.000000000,0
 
 run ok
 get t=txn15 k=k1

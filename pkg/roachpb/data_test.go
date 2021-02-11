@@ -478,11 +478,11 @@ var nonZeroTxn = Transaction{
 		Priority:       957356782,
 		Sequence:       123,
 	},
-	Name:          "name",
-	Status:        COMMITTED,
-	LastHeartbeat: makeSynTS(1, 2),
-	ReadTimestamp: makeSynTS(20, 22),
-	MaxTimestamp:  makeSynTS(40, 41),
+	Name:                   "name",
+	Status:                 COMMITTED,
+	LastHeartbeat:          makeSynTS(1, 2),
+	ReadTimestamp:          makeSynTS(20, 22),
+	GlobalUncertaintyLimit: makeSynTS(40, 41),
 	ObservedTimestamps: []ObservedTimestamp{{
 		NodeID: 1,
 		Timestamp: hlc.ClockTimestamp{

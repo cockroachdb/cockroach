@@ -8,7 +8,7 @@
 new-txn name=txn1 ts=10,1 epoch=0
 ----
 
-new-txn name=txn2 ts=12,1 epoch=0 maxts=15,1
+new-txn name=txn2 ts=12,1 epoch=0 uncertainty-limit=15,1
 ----
 
 new-request name=req1 txn=txn2 ts=12,1
@@ -63,7 +63,7 @@ reset namespace
 # Same situation as above, only here, the read-only transaction
 # has an uncertainty interval that extends past present time.
 # The transaction only pushes to present time, not all the way
-# to its max timestamp. See lockTableWaiterImpl.pushHeader.
+# to its uncertainty limit. See lockTableWaiterImpl.pushHeader.
 # -------------------------------------------------------------
 
 debug-set-clock ts=135
@@ -72,7 +72,7 @@ debug-set-clock ts=135
 new-txn name=txn1 ts=100,1 epoch=0
 ----
 
-new-txn name=txn2 ts=120,1 epoch=0 maxts=150,1
+new-txn name=txn2 ts=120,1 epoch=0 uncertainty-limit=150,1
 ----
 
 new-request name=req1 txn=txn2 ts=120,1
@@ -145,7 +145,7 @@ new-txn name=txn1 ts=14,1 epoch=0
 new-txn name=txn2 ts=15,1 epoch=0
 ----
 
-new-txn name=txn3 ts=12,1 epoch=0 maxts=15,1
+new-txn name=txn3 ts=12,1 epoch=0 uncertainty-limit=15,1
 ----
 
 new-request name=req1 txn=txn2 ts=15,1

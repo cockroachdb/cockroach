@@ -98,14 +98,14 @@ func TestErrorTxn(t *testing.T) {
 func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	{
 		rwueNew := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 2, Logical: 2},
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
+				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
+				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			})
 		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
-			"`t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]"
+			"`t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]"
 		if a := rwueNew.Error(); a != expNew {
 			t.Fatalf("expected: %s\ngot: %s", a, expNew)
 		}
@@ -113,11 +113,11 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 
 	{
 		rwueOld := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, nil)
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{}, nil)
 
 		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
-			"`t <= <nil>`; observed timestamps: []"
+			"`t <= (local=0,0, global=0,0)`; observed timestamps: []"
 		if a := rwueOld.Error(); a != expOld {
 			t.Fatalf("expected: %s\ngot: %s", a, expOld)
 		}
@@ -136,10 +136,10 @@ func TestErrorRedaction(t *testing.T) {
 	t.Run("uncertainty-restart", func(t *testing.T) {
 		// NB: most other errors don't redact properly. More elbow grease is needed.
 		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 2, Logical: 2},
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
+				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
+				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			}))
 		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
 		txn.ID = uuid.Nil
@@ -151,7 +151,7 @@ func TestErrorRedaction(t *testing.T) {
 		var s redact.StringBuilder
 		s.Print(r)
 		act := s.RedactableString()
-		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000002,0"
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
 		require.Equal(t, exp, string(act))
 	})
 }
@@ -177,7 +177,12 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		// For extra spice, wrap the structured error. This ensures
 		// that we populate the deprecated fields even when
 		// the error detail is not the head of the error chain.
-		err := NewReadWithinUncertaintyIntervalError(hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, &txn)
+		err := NewReadWithinUncertaintyIntervalError(
+			hlc.Timestamp{WallTime: 1},
+			hlc.Timestamp{WallTime: 2},
+			hlc.Timestamp{WallTime: 2, Logical: 2},
+			&txn,
+		)
 
 		pErr := NewError(errors.Wrap(err, "foo"))
 		// Quick check that the detail round-trips when EncodedError is still there.

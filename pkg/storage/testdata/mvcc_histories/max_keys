@@ -121,7 +121,7 @@ scan: "m" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
 scan: resume span ["k","k\x00")
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a
 data: "aa"/2.000000000,0 -> /<empty>
 data: "aa"/1.000000000,0 -> /BYTES/val-aa
@@ -145,7 +145,7 @@ with t=A ts=11,0 max=3
   resolve_intent k=n status=COMMITTED
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a
 data: "aa"/2.000000000,0 -> /<empty>
 data: "aa"/1.000000000,0 -> /BYTES/val-aa
@@ -181,7 +181,7 @@ scan: "l" -> /BYTES/b @12.000000000,0
 scan: "m" -> /BYTES/b @12.000000000,0
 scan: resume span ["n","o")
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 wto=false max=0,0
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a
 data: "aa"/2.000000000,0 -> /<empty>
 data: "aa"/1.000000000,0 -> /BYTES/val-aa

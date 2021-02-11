@@ -11,17 +11,18 @@
 package observedts
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// LimitTxnMaxTimestamp limits the transaction's max timestamp so that it
-// respects any timestamp already observed on the leaseholder's node. This
-// prevents unnecessary uncertainty interval restarts caused by reading a value
-// written at a timestamp between txn.Timestamp and txn.MaxTimestamp.
+// ComputeLocalUncertaintyLimit returns a limited version of the the
+// transaction's global uncertainty limit so that it respects any timestamp
+// already observed on the leaseholder's node. This prevents unnecessary
+// uncertainty interval restarts caused by reading a value written at a
+// timestamp between txn.ReadTimestamp and txn.GlobalUncertaintyLimit. The
+// returned local uncertainty limit will either be empty (if observed
+// timestamps could not be used) or will be a clock timestamp.
 //
 // The lease's start time is also taken into consideration to ensure that a
 // lease transfer does not result in the observed timestamp for this node being
@@ -38,44 +39,37 @@ import (
 //     guaranteed to be greater than any write which occurred under
 //     the previous leaseholder.
 //
-func LimitTxnMaxTimestamp(
-	ctx context.Context, txn *roachpb.Transaction, status kvserverpb.LeaseStatus,
-) *roachpb.Transaction {
-	if txn == nil || status.State != kvserverpb.LeaseState_VALID {
-		return txn
+func ComputeLocalUncertaintyLimit(
+	txn *roachpb.Transaction, status kvserverpb.LeaseStatus,
+) hlc.Timestamp {
+	if txn == nil {
+		return hlc.Timestamp{}
 	}
+	if status.State != kvserverpb.LeaseState_VALID {
+		return hlc.Timestamp{}
+	}
+
 	// For calls that read data within a txn, we keep track of timestamps
 	// observed from the various participating nodes' HLC clocks. If we have a
 	// timestamp on file for the leaseholder's node which is smaller than
-	// MaxTimestamp, we can lower MaxTimestamp accordingly. If MaxTimestamp
-	// drops below ReadTimestamp, we effectively can't see uncertainty restarts
-	// anymore.
+	// GlobalUncertaintyLimit, we can lower localUncertaintyLimit accordingly.
+	// If GlobalUncertaintyLimit drops below ReadTimestamp, we effectively can't
+	// see uncertainty restarts anymore.
 	//
 	// Note that we care about an observed timestamp from the leaseholder's
 	// node, even if this is a follower read on a different node. See the
 	// comment in doc.go about "Follower Reads" for more.
-	obsClockTS, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
+	obsTs, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
 	if !ok {
-		return txn
+		return hlc.Timestamp{}
 	}
 	// If the lease is valid, we use the greater of the observed timestamp and
-	// the lease start time, up to the max timestamp. This ensures we avoid
-	// incorrect assumptions about when data was written, in absolute time on a
-	// different node, which held the lease before this replica acquired it.
-	obsClockTS.Forward(status.Lease.Start)
-	obsTS := obsClockTS.ToTimestamp()
-	// If the observed timestamp reduces the transaction's uncertainty interval,
-	// update the transacion proto.
-	if obsTS.Less(txn.MaxTimestamp) {
-		// Copy-on-write to protect others we might be sharing the Txn with.
-		txnClone := txn.Clone()
-		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
-		// is empty, there won't be any uncertainty restarts.
-		if obsTS.LessEq(txn.ReadTimestamp) {
-			log.Event(ctx, "read has no clock uncertainty")
-		}
-		txnClone.MaxTimestamp.Backward(obsTS)
-		txn = txnClone
-	}
-	return txn
+	// the lease start time. This ensures we avoid incorrect assumptions about
+	// when data was written, in absolute time on a different node, which held
+	// the lease before this replica acquired it.
+	obsTs.Forward(status.Lease.Start)
+
+	localUncertaintyLimit := txn.GlobalUncertaintyLimit
+	localUncertaintyLimit.Backward(obsTs.ToTimestamp())
+	return localUncertaintyLimit
 }

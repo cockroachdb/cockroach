@@ -67,23 +67,23 @@ func (r *Replica) canServeFollowerReadRLocked(
 
 	ts := ba.Timestamp
 	if ba.Txn != nil {
-		ts.Forward(ba.Txn.MaxTimestamp)
+		ts.Forward(ba.Txn.GlobalUncertaintyLimit)
 	}
 
 	maxClosed, _ := r.maxClosedRLocked(ctx)
 	canServeFollowerRead := ts.LessEq(maxClosed)
 	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
-		maxTsStr := "n/a"
+		uncertaintyLimitStr := "n/a"
 		if ba.Txn != nil {
-			maxTsStr = ba.Txn.MaxTimestamp.String()
+			uncertaintyLimitStr = ba.Txn.GlobalUncertaintyLimit.String()
 		}
 
 		// We can't actually serve the read based on the closed timestamp.
 		// Signal the clients that we want an update so that future requests can succeed.
 		r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
-		log.Eventf(ctx, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s maxTS: %s",
-			tsDiff, maxClosed, ba.Timestamp, maxTsStr)
+		log.Eventf(ctx, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s uncertaintyLimit: %s",
+			tsDiff, maxClosed, ba.Timestamp, uncertaintyLimitStr)
 
 		if false {
 			// NB: this can't go behind V(x) because the log message created by the

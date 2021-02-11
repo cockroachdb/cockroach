@@ -556,9 +556,9 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // On the surface, it might seem like we could easily abandon the lease stasis
 // concept in favor of consulting a request's uncertainty interval. We would
 // then define a request's timestamp as the maximum of its read_timestamp and
-// its max_timestamp, and simply check whether this timestamp falls below a
-// lease's expiration. This could allow certain transactional requests to
-// operate more closely to a lease's expiration. But not all requests that
+// its global_uncertainty_limit, and simply check whether this timestamp falls
+// below a lease's expiration. This could allow certain transactional requests
+// to operate more closely to a lease's expiration. But not all requests that
 // expect linearizability use an uncertainty interval (e.g. non-transactional
 // requests), and so the lease stasis period serves as a kind of catch-all
 // uncertainty interval for non-transactional and admin requests.

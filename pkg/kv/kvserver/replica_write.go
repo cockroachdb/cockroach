@@ -81,11 +81,9 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(err)
 	}
 
-	// Limit the transaction's maximum timestamp using observed timestamps.
-	// TODO(nvanbenschoten): now that we've pushed this down here, consider
-	// keeping the "local max timestamp" on the stack and never modifying the
-	// batch.
-	ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, st)
+	// Compute the transaction's local uncertainty limit using observed
+	// timestamps, which can help avoid uncertainty restarts.
+	localUncertaintyLimit := observedts.ComputeLocalUncertaintyLimit(ba.Txn, st)
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
@@ -122,7 +120,7 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, &st.Lease)
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, &st.Lease, localUncertaintyLimit)
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
@@ -386,6 +384,7 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	log.Event(ctx, "executing read-write batch")
@@ -418,7 +417,7 @@ func (r *Replica) evaluateWriteBatch(
 	ms := new(enginepb.MVCCStats)
 	rec := NewReplicaEvalContext(r, latchSpans)
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, latchSpans, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, lul, latchSpans, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -477,6 +476,9 @@ func (r *Replica) evaluate1PC(
 	strippedBa.Txn = nil
 	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
+	// The request is non-transactional, so there's no uncertainty.
+	localUncertaintyLimit := hlc.Timestamp{}
+
 	rec := NewReplicaEvalContext(r, latchSpans)
 	var br *roachpb.BatchResponse
 	var res result.Result
@@ -489,10 +491,10 @@ func (r *Replica) evaluate1PC(
 	ms := new(enginepb.MVCCStats)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, latchSpans, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, localUncertaintyLimit, latchSpans, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, latchSpans)
+			ctx, idKey, rec, ms, &strippedBa, localUncertaintyLimit, latchSpans)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -584,6 +586,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
@@ -598,7 +601,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, latchSpans)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, lul, latchSpans)
 
 		var success bool
 		if pErr == nil {
@@ -626,10 +629,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	batch, opLogger := r.newBatchedEngine(latchSpans)
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, lul, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
 			res.LogicalOpLog = &kvserverpb.LogicalOpLog{

@@ -38,7 +38,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
+// txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
 // txn_restart    t=<name>
 // txn_update     t=<name> t2=<name>
@@ -52,10 +52,10 @@ import (
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent]
+// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -422,12 +422,12 @@ func cmdTxnBegin(e *evalCtx) error {
 	var txnName string
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
-	maxTs := e.getTsWithName(nil, "maxTs")
+	globalUncertaintyLimit := e.getTsWithName(nil, "globalUncertaintyLimit")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
 	}
-	txn, err := e.newTxn(txnName, ts, maxTs, key)
+	txn, err := e.newTxn(txnName, ts, globalUncertaintyLimit, key)
 	e.results.txn = txn
 	return err
 }
@@ -678,6 +678,9 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	if e.hasArg("localUncertaintyLimit") {
+		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
+	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intent when an error
@@ -773,6 +776,9 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
+	}
+	if e.hasArg("localUncertaintyLimit") {
+		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
 	}
 	if e.hasArg("max") {
 		var n int
@@ -986,7 +992,7 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 }
 
 func (e *evalCtx) newTxn(
-	txnName string, ts, maxTs hlc.Timestamp, key roachpb.Key,
+	txnName string, ts, globalUncertaintyLimit hlc.Timestamp, key roachpb.Key,
 ) (*roachpb.Transaction, error) {
 	if _, ok := e.txns[txnName]; ok {
 		e.Fatalf("txn %s already open", txnName)
@@ -998,10 +1004,10 @@ func (e *evalCtx) newTxn(
 			WriteTimestamp: ts,
 			Sequence:       0,
 		},
-		Name:          txnName,
-		ReadTimestamp: ts,
-		MaxTimestamp:  maxTs,
-		Status:        roachpb.PENDING,
+		Name:                   txnName,
+		ReadTimestamp:          ts,
+		GlobalUncertaintyLimit: globalUncertaintyLimit,
+		Status:                 roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn

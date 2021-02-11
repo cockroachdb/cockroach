@@ -884,10 +884,10 @@ func MakeTransaction(
 	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
 ) Transaction {
 	u := uuid.FastMakeV4()
-	// TODO(nvanbenschoten): technically, maxTS should be a synthetic timestamp.
+	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
 	// Make this change in v21.2 when all nodes in a cluster are guaranteed to
 	// be aware of synthetic timestamps by addressing the TODO in Timestamp.Add.
-	maxTS := now.Add(maxOffsetNs, 0)
+	gul := now.Add(maxOffsetNs, 0)
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
@@ -898,10 +898,10 @@ func MakeTransaction(
 			Priority:       MakePriority(userPriority),
 			Sequence:       0, // 1-indexed, incremented before each Request
 		},
-		Name:          name,
-		LastHeartbeat: now,
-		ReadTimestamp: now,
-		MaxTimestamp:  maxTS,
+		Name:                   name,
+		LastHeartbeat:          now,
+		ReadTimestamp:          now,
+		GlobalUncertaintyLimit: gul,
 	}
 }
 
@@ -1151,7 +1151,7 @@ func (t *Transaction) Update(o *Transaction) {
 	// Forward each of the transaction timestamps.
 	t.WriteTimestamp.Forward(o.WriteTimestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
-	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	t.GlobalUncertaintyLimit.Forward(o.GlobalUncertaintyLimit)
 	t.ReadTimestamp.Forward(o.ReadTimestamp)
 
 	// On update, set lower bound timestamps to the minimum seen by either txn.
@@ -1205,8 +1205,8 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
+	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1228,8 +1228,8 @@ func (t Transaction) SafeMessage() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
+	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
+		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1251,26 +1251,27 @@ func (t *Transaction) ResetObservedTimestamps() {
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
-func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.ClockTimestamp) {
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, timestamp hlc.ClockTimestamp) {
 	// Fast path optimization for either no observed timestamps or
 	// exactly one, for the same nodeID as we're updating.
 	if l := len(t.ObservedTimestamps); l == 0 {
-		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: timestamp}}
 		return
 	} else if l == 1 && t.ObservedTimestamps[0].NodeID == nodeID {
-		if maxTS.Less(t.ObservedTimestamps[0].Timestamp) {
-			t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		if timestamp.Less(t.ObservedTimestamps[0].Timestamp) {
+			t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: timestamp}}
 		}
 		return
 	}
 	s := observedTimestampSlice(t.ObservedTimestamps)
-	t.ObservedTimestamps = s.update(nodeID, maxTS)
+	t.ObservedTimestamps = s.update(nodeID, timestamp)
 }
 
-// GetObservedTimestamp returns the lowest HLC timestamp recorded from the
-// given node's clock during the transaction. The returned boolean is false if
-// no observation about the requested node was found. Otherwise, MaxTimestamp
-// can be lowered to the returned timestamp when reading from nodeID.
+// GetObservedTimestamp returns the lowest HLC timestamp recorded from the given
+// node's clock during the transaction. The returned boolean is false if no
+// observation about the requested node was found. Otherwise, the transaction's
+// uncertainty limit can be lowered to the returned timestamp when reading from
+// nodeID.
 func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, bool) {
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	return s.get(nodeID)
@@ -1478,6 +1479,10 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	// If the reader encountered a newer write within the uncertainty
 	// interval, we advance the txn's timestamp just past the last observed
 	// timestamp from the node.
+	//
+	// TODO(nvanbenschoten): how is this supposed to work for follower reads?
+	// This is tracked in #57685. We can now use the LocalUncertaintyLimit in
+	// place of clockTS, which handles follower reads correctly.
 	clockTS, ok := txn.GetObservedTimestamp(origin)
 	if !ok {
 		log.Fatalf(ctx,

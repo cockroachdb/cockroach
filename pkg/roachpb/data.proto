@@ -340,17 +340,35 @@ message Transaction {
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
   util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
-  // Initial Timestamp + clock skew. Reads which encounter values with
-  // timestamps between timestamp and max_timestamp trigger a txn
-  // retry error, unless the node being read is listed in observed_timestamps
-  // (in which case no more read uncertainty can occur).
-  // The case max_timestamp < timestamp is possible for transactions which have
-  // been pushed; in this case, max_timestamp should be ignored.
-  util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  // The transaction's global uncertainty limit is its initial timestamp +
+  // maximum cluster-wide clock skew. This value defines the inclusive upper
+  // bound of the transaction's uncertainty interval.
+  //
+  // Reads which encounter values with timestamps between read_timestamp and
+  // global_uncertainty_limit ("within the uncertainty interval") trigger a
+  // retry error (ReadWithinUncertaintyIntervalError). This forces the
+  // transaction to increase its read timestamp, either through a refresh or a
+  // retry, in order to ensure that the transaction observes the "uncertain"
+  // value.
+  //
+  // However, the uncertainty limit applied to values can be reduced when
+  // evaluating a request on a node from which the transaction has acquired an
+  // observed timestamp. This reduced uncertainty limit is reflected in the
+  // local_uncertainty_limit variable at the time of request evaluation.
+  //
+  // See pkg/kv/kvserver/observedts for more details.
+  //
+  // The case global_uncertainty_limit < read_timestamp is possible for
+  // transactions which have been pushed or have refreshed; in this case,
+  // global_uncertainty_limit should be ignored.
+  util.hlc.Timestamp global_uncertainty_limit = 7 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
-  // as observed from their local clock during this transaction. The purpose of
-  // this list is to avoid uncertainty related restarts which normally occur
-  // when reading a value in the near future as per the max_timestamp field.
+  // as observed from their local clock during this transaction. The purpose
+  // of this list is to allow a transaction to avoid uncertainty related
+  // restarts which occur when reading a value in the near future, per the
+  // global_uncertainty_limit field. The list helps avoid these restarts by
+  // establishing a lower local_uncertainty_limit when evaluating a request on
+  // a node in the list.
   //
   // See pkg/kv/kvserver/observedts for more details.
   //

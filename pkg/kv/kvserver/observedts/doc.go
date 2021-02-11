@@ -18,15 +18,15 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // D1 ————————————————————————————————————————————————
 //
-// Transaction.MaxTimestamp
+// Transaction.GlobalUncertaintyLimit
 //
-// A transaction's "max timestamp" is the upper bound of its uncertainty
-// interval. The value is set to the transaction's initial timestamp + the
-// cluster's maximum clock skew. Assuming maximum clock skew bounds are
+// A transaction's global uncertainty limit is the inclusive upper bound of its
+// uncertainty interval. The value is set to the transaction's initial timestamp
+// + the cluster's maximum clock skew. Assuming maximum clock skew bounds are
 // respected, this maximum timestamp places an upper bound on the commit
 // timestamp of any other transaction that committed causally before the new
 // transaction.
-var D1 = roachpb.Transaction{}.MaxTimestamp
+var D1 = roachpb.Transaction{}.GlobalUncertaintyLimit
 
 // D2 ————————————————————————————————————————————————
 //
@@ -39,7 +39,7 @@ var D1 = roachpb.Transaction{}.MaxTimestamp
 // This error forces the transaction to increase its read timestamp, either
 // through a refresh or a retry, in order to ensure that the transaction
 // observes the "uncertain" value. In doing so, the reading transaction is
-// guaranteed to observe any value written by an other transaction with a
+// guaranteed to observe any value written by any other transaction with a
 // happened-before relation to it, which is paramount to ensure single-key
 // linearizability and avoid stale reads.
 var D2 = roachpb.ReadWithinUncertaintyIntervalError{}
@@ -71,8 +71,10 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // Transaction.ObservedTimestamps
 //
 // The observed timestamps are collected in a list on the transaction proto. The
-// purpose of this list is to avoid uncertainty related restarts which normally
-// occur when reading a value in the near future as per the max_timestamp field.
+// purpose of this list is to avoid uncertainty related restarts which occur
+// when reading a value in the near future, per the global_uncertainty_limit
+// field. The list helps avoid these restarts by establishing a lower
+// local_uncertainty_limit when evaluating a request on a node in the list.
 //
 // Meaning
 //
@@ -80,9 +82,9 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // node has been visited before, and that no more uncertainty restarts are
 // expected for operations served from it. However, this is not entirely
 // accurate. For example, say a txn starts with read_timestamp=1 (and some large
-// max_timestamp). It then reads key "a" from node A, registering an entry `A ->
-// 5` in the process (`5` happens to be a timestamp taken off that node's clock
-// at the start of the read).
+// global_uncertainty_limit). It then reads key "a" from node A, registering an
+// entry `A -> 5` in the process (`5` happens to be a timestamp taken off that
+// node's clock at the start of the read).
 //
 // Now assume that some other transaction writes and commits a value at key "b"
 // and timestamp 4 (again, served by node A), and our transaction attempts to
@@ -134,15 +136,16 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // node who owns the lease that the current request is executing under, we can
 // run the request with the list's timestamp as the upper bound for its
 // uncertainty interval, limiting (and often avoiding) uncertainty restarts. We
-// do this by lowering the request's max_timestamp down to the timestamp in the
-// observed timestamp entry, which is done in Replica.limitTxnMaxTimestamp.
+// do this by establishing a separate local_uncertainty_limit, which is set to
+// the minimum of the global_uncertainty_limit and the node's observed timestamp
+// entry in ComputeLocalUncertaintyLimit.
 //
 // However, as stated, the correctness property only holds for values at higher
 // timestamps than the observed timestamp written *by leaseholders on this
 // node*. This is critical, as the property tells us nothing about values
 // written by leaseholders on different nodes, even if a lease for one of those
 // Ranges has since moved to a node that we have an observed timestamp entry
-// for. To accommodate this limitation, Replica.limitTxnMaxTimestamp first
+// for. To accommodate this limitation, ComputeLocalUncertaintyLimit first
 // forwards the timestamp in the observed timestamp entry by the start timestamp
 // of the lease that the request is executing under before using it to limit the
 // request's uncertainty interval.
@@ -172,15 +175,15 @@ var D5 = roachpb.Transaction{}.ObservedTimestamps
 
 // D6 ————————————————————————————————————————————————
 //
-// LimitTxnMaxTimestamp
+// ComputeLocalUncertaintyLimit
 //
 // Observed timestamps allow transactions to avoid uncertainty related restarts
-// because they allow transactions to bound their "effective max timestamp" when
-// reading on a node which they have previously collected an observed timestamp
-// from. Similarly, observed timestamps can also assist a transaction even on
-// its first visit to a node in cases where it gets stuck waiting on locks for
-// long periods of time.
-var D6 = LimitTxnMaxTimestamp
+// because they allow transactions to bound their uncertainty limit when reading
+// on a node which they have previously collected an observed timestamp from.
+// Similarly, observed timestamps can also assist a transaction even on its
+// first visit to a node in cases where it gets stuck waiting on locks for long
+// periods of time.
+var D6 = ComputeLocalUncertaintyLimit
 
 // Ignore unused warnings.
 var _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6
