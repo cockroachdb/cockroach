@@ -707,14 +707,14 @@ func (p *Pebble) MVCCIterate(
 func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
+			return wrapInUnsafeIter(r.NewMVCCIterator(iterKind, opts))
 		}
 	}
 	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
-	return iter
+	return wrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Engine interface.
@@ -1315,13 +1315,13 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
+			return wrapInUnsafeIter(r.NewMVCCIterator(iterKind, opts))
 		}
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.parent.db, nil, opts)
+		return wrapInUnsafeIter(newPebbleIterator(p.parent.db, nil, opts))
 	}
 
 	iter := &p.normalIter
@@ -1346,7 +1346,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter.inuse = true
-	return iter
+	return wrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Engine interface.
@@ -1546,10 +1546,10 @@ func (p *pebbleSnapshot) MVCCIterate(
 func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
+			return wrapInUnsafeIter(r.NewMVCCIterator(iterKind, opts))
 		}
 	}
-	return newPebbleIterator(p.snapshot, nil, opts)
+	return wrapInUnsafeIter(newPebbleIterator(p.snapshot, nil, opts))
 }
 
 // NewEngineIterator implements the Reader interface.

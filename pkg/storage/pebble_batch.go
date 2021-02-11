@@ -197,13 +197,13 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
+			return wrapInUnsafeIter(r.NewMVCCIterator(iterKind, opts))
 		}
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.batch, nil, opts)
+		return wrapInUnsafeIter(newPebbleIterator(p.batch, nil, opts))
 	}
 
 	iter := &p.normalIter
@@ -231,7 +231,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 
 	iter.inuse = true
-	return iter
+	return wrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Batch interface.
