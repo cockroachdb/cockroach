@@ -1217,7 +1217,7 @@ vectorized: true
             │     label: buffer 1
             │
             └── • scan
-                  estimated row count: 1
+                  estimated row count: 1 (100% of the table)
                   table: p@primary
                   spans: FULL SCAN
 
@@ -1239,7 +1239,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • scan
-│                 estimated row count: 1
+│                 estimated row count: 1 (100% of the table)
 │                 table: c@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1259,7 +1259,7 @@ vectorized: true
             │         label: buffer 1
             │
             └── • scan
-                  estimated row count: 1
+                  estimated row count: 1 (100% of the table)
                   table: p@primary
                   spans: FULL SCAN
 
@@ -1281,7 +1281,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • scan
-│                 estimated row count: 1
+│                 estimated row count: 1 (100% of the table)
 │                 table: p@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1303,7 +1303,7 @@ vectorized: true
             │         label: buffer 1
             │
             └── • scan
-                  estimated row count: 1
+                  estimated row count: 1 (100% of the table)
                   table: c@primary
                   spans: FULL SCAN
 
@@ -1322,7 +1322,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             estimated row count: 1
+│             estimated row count: 1 (100% of the table)
 │             table: p@primary
 │             spans: [/1 - ]
 │
@@ -1338,7 +1338,7 @@ vectorized: true
             │     label: buffer 1
             │
             └── • scan
-                  estimated row count: 1
+                  estimated row count: 1 (100% of the table)
                   table: c@primary
                   spans: FULL SCAN
 
@@ -1376,7 +1376,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • scan
-│                 estimated row count: 1
+│                 estimated row count: 1 (100% of the table)
 │                 table: c@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1414,7 +1414,7 @@ vectorized: true
 │       └── • render
 │           │
 │           └── • scan
-│                 estimated row count: 1
+│                 estimated row count: 1 (100% of the table)
 │                 table: p@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1450,7 +1450,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             estimated row count: 1
+│             estimated row count: 1 (100% of the table)
 │             table: p@primary
 │             spans: [/1 - ]
 │
@@ -1517,7 +1517,7 @@ vectorized: true
             │     label: buffer 1
             │
             └── • scan
-                  estimated row count: 10
+                  estimated row count: 10 (100% of the table)
                   table: small_parent@primary
                   spans: FULL SCAN
 

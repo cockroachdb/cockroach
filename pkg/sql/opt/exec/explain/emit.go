@@ -352,7 +352,28 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if n.op != valuesOp && (e.ob.flags.Verbose || n.op == scanOp) {
 			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
-				e.ob.AddField("estimated row count", humanizeutil.Count(count))
+				if n.op == scanOp && s.TableRowCount != 0 {
+					percentage := s.RowCount / s.TableRowCount * 100
+					// We want to print the percentage in a user-friendly way; we include
+					// decimals depending on how small the value is.
+					var percentageStr string
+					switch {
+					case percentage >= 10.0:
+						percentageStr = fmt.Sprintf("%.0f", percentage)
+					case percentage >= 1.0:
+						percentageStr = fmt.Sprintf("%.1f", percentage)
+					case percentage >= 0.01:
+						percentageStr = fmt.Sprintf("%.2f", percentage)
+					default:
+						percentageStr = "<0.01"
+					}
+
+					e.ob.AddField("estimated row count", fmt.Sprintf(
+						"%s (%s%% of the table)", humanizeutil.Count(count), percentageStr,
+					))
+				} else {
+					e.ob.AddField("estimated row count", humanizeutil.Count(count))
+				}
 			} else {
 				// No stats available.
 				if e.ob.flags.Verbose {
