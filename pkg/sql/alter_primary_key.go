@@ -311,6 +311,8 @@ func (p *planner) AlterPrimaryKey(
 			*newPrimaryIndexDesc,
 			partitionAllBy,
 			allowedNewColumnNames,
+			// PARTITION ALL BY is only enabled if the experimental flag was previously set.
+			true, // allowImplicitPartitioning
 		)
 		if err != nil {
 			return err
@@ -425,6 +427,8 @@ func (p *planner) AlterPrimaryKey(
 				*newIndex,
 				partitionAllBy,
 				allowedNewColumnNames,
+				// PARTITION ALL BY is only enabled if the experimental flag was previously set.
+				true, // allowImplicitPartitioning
 			); err != nil {
 				return err
 			}

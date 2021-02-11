@@ -86,6 +86,8 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				*n.indexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
+				params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+					n.tableDesc.IsLocalityRegionalByRow(),
 			)
 			if err != nil {
 				return err

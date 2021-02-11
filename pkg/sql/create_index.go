@@ -549,6 +549,8 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 				indexDesc,
 				partitionBy,
 				nil, /* allowedNewColumnNames */
+				p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+					tableDesc.IsLocalityRegionalByRow(),
 			); err != nil {
 				return indexDesc, err
 			}
