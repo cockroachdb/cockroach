@@ -1134,10 +1134,12 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 	return ri
 }
 
-// assertStateLocked can be called from the Raft goroutine to check that the
-// in-memory and on-disk states of the Replica are congruent.
-// Requires that both r.raftMu and r.mu are held.
-func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) {
+// assertStateRaftMuLockedReplicaMuRLocked can be called from the Raft goroutine
+// to check that the in-memory and on-disk states of the Replica are congruent.
+// Requires that r.raftMu is locked and r.mu is read locked.
+func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
+	ctx context.Context, reader storage.Reader,
+) {
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)

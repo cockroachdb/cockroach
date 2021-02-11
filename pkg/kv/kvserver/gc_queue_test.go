@@ -907,9 +907,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
 	tc.repl.raftMu.Lock()
-	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
-	tc.repl.mu.Unlock()
+	tc.repl.mu.RLock()
+	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, batch) // check that in-mem and on-disk state were updated
+	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
 }
 
