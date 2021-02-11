@@ -1,0 +1,22 @@
+feature-allowlist
+sql.schema.get_virtual_table.*
+----
+
+feature-usage
+SELECT * FROM pg_catalog.pg_cast
+----
+sql.schema.get_virtual_table.pg_catalog.pg_cast
+
+feature-usage
+SELECT * FROM information_schema.schema_privileges LIMIT 1
+----
+sql.schema.get_virtual_table.information_schema.schema_privileges
+
+feature-usage
+SELECT * FROM crdb_internal.databases LIMIT 1
+----
+
+feature-usage
+SELECT * FROM pg_catalog.pg_xxx
+----
+error: pq: relation "pg_catalog.pg_xxx" does not exist
