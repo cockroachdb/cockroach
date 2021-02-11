@@ -278,6 +278,62 @@ func TestUnmarshal(t *testing.T) {
 			equivInputs: []string{"MULTILINESTRING ZM EMPTY", "MULTILINESTRINGZM EMPTY"},
 			expected:    geom.NewMultiLineString(geom.XYZM),
 		},
+		// MULTIPOLYGON tests
+		{
+			desc:        "parse 2D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XY, []float64{1, 0, 2, 5, -2, 5, 1, 0}, [][]int{{8}}),
+		},
+		{
+			desc:        "parse 2D multipolygon with EMPTY at rear",
+			equivInputs: []string{"MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), EMPTY)"},
+			expected:    geom.NewMultiPolygonFlat(geom.XY, []float64{1, 0, 2, 5, -2, 5, 1, 0}, [][]int{{8}, []int(nil)}),
+		},
+		{
+			desc:        "parse 2D multipolygon with EMPTY at front",
+			equivInputs: []string{"MULTIPOLYGON(EMPTY, ((1 0, 2 5, -2 5, 1 0)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XY, []float64{1, 0, 2, 5, -2, 5, 1, 0}, [][]int{[]int(nil), {8}}),
+		},
+		{
+			desc:        "parse 2D multipolygon with multiple polygons",
+			equivInputs: []string{"MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), EMPTY, ((-1 -1, 2 7, 3 0, -1 -1)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XY, []float64{1, 0, 2, 5, -2, 5, 1, 0, -1, -1, 2, 7, 3, 0, -1, -1}, [][]int{{8}, []int(nil), {16}}),
+		},
+		{
+			desc:        "parse 2D+M multipolygon",
+			equivInputs: []string{"MULTIPOLYGON M (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XYM, []float64{0, 0, 0, 1, 1, 1, 2, 3, 1, 0, 0, 0}, [][]int{{12}}),
+		},
+		{
+			desc:        "parse 3D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON(((0 0 0, 1 1 1, 2 3 1, 0 0 0)))", "MULTIPOLYGON Z (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XYZ, []float64{0, 0, 0, 1, 1, 1, 2, 3, 1, 0, 0, 0}, [][]int{{12}}),
+		},
+		{
+			desc:        "parse 4D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON(((0 0 0 0, 1 1 1 -1, 2 3 1 -2, 0 0 0 0)))", "MULTIPOLYGON ZM (((0 0 0 0, 1 1 1 -1, 2 3 1 -2, 0 0 0 0)))"},
+			expected:    geom.NewMultiPolygonFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, -1, 2, 3, 1, -2, 0, 0, 0, 0}, [][]int{{16}}),
+		},
+		{
+			desc:        "parse empty 2D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON EMPTY"},
+			expected:    geom.NewMultiPolygon(geom.XY),
+		},
+		{
+			desc:        "parse empty 2D+M multipolygon",
+			equivInputs: []string{"MULTIPOLYGON M EMPTY", "MULTIPOLYGONM EMPTY"},
+			expected:    geom.NewMultiPolygon(geom.XYM),
+		},
+		{
+			desc:        "parse empty 3D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON Z EMPTY", "MULTIPOLYGONZ EMPTY"},
+			expected:    geom.NewMultiPolygon(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 4D multipolygon",
+			equivInputs: []string{"MULTIPOLYGON ZM EMPTY", "MULTIPOLYGONZM EMPTY"},
+			expected:    geom.NewMultiPolygon(geom.XYZM),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -453,6 +509,69 @@ MULTILINESTRING((0 0))
 			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 28
 MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))
                             ^`,
+		},
+		{
+			desc:  "2D multipolygon with no polygons",
+			input: "MULTIPOLYGON()",
+			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or '(' at pos 13
+MULTIPOLYGON()
+             ^`,
+		},
+		{
+			desc:  "2D multipolygon with one polygon missing outer parentheses",
+			input: "MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))",
+			expectedErrStr: `syntax error: unexpected NUM, expecting '(' at pos 14
+MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))
+              ^`,
+		},
+		{
+			desc:  "multipolygon with mixed dimensionality",
+			input: "MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))",
+			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 44
+MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))
+                                            ^`,
+		},
+		{
+			desc:  "2D multipolygon with polygon that doesn't have enough points",
+			input: "MULTIPOLYGON(((0 0, 1 1, 2 0)))",
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 28
+MULTIPOLYGON(((0 0, 1 1, 2 0)))
+                            ^`,
+		},
+		{
+			desc:  "2D multipolygon with polygon with ring that isn't closed",
+			input: "MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))",
+			expectedErrStr: `syntax error: polygon ring not closed at pos 34
+MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))
+                                  ^`,
+		},
+		{
+			desc:  "2D multipolygon with polygon with empty second ring",
+			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), ()))",
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 38
+MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), ()))
+                                      ^`,
+		},
+		{
+			desc:  "2D multipolygon with polygon with EMPTY as second ring",
+			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))",
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at pos 37
+MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))
+                                     ^`,
+		},
+		{
+			desc:  "2D multipolygon with polygon with invalid second ring",
+			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))",
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 46
+MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))
+                                              ^`,
+		},
+		{
+			desc:  "3D multipolygon using EMPTY without using Z in its type",
+			input: "MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))",
+			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 26
+MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
+                          ^`,
 		},
 	}
 
