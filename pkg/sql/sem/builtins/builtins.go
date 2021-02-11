@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/knz/strtime"
 )
 
@@ -3594,6 +3595,49 @@ may increase either contention or retry errors, or both.`,
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
 			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.payloads_for_span": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"span ID", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				builder := json.NewArrayBuilder(len(args))
+				var payloads []string
+				spanID := uint64(*(args[0].(*tree.DInt)))
+
+				var payload json.JSON
+				var err error
+				// Search all spans of the current trace for the span that matches the builtin's argument.
+				ctx.Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+					// TODO(angelapwen): Once a trace's activeSpans map is keyed on span ID, we can skip the iteration.
+					for _, rec := range span.GetRecording() {
+						if spanID == rec.SpanID {
+							rec.Structured(func(item *pbtypes.Any) {
+								payload, err = protoreflect.MessageToJSON(item, true /* emitDefaults */)
+								if err != nil {
+									return
+								}
+								if payload != nil {
+									builder.Add(payload)
+									payloads = append(payloads, payload.String())
+								}
+							})
+							// Return as soon as we found the correct span.
+							return nil
+						}
+					}
+					return nil
+				})
+				if builder == nil {
+					return tree.NewDJSON(nil), nil
+				}
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info:       "Returns the payload(s) of the span whose ID is passed in the argument.",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
