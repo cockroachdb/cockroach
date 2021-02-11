@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -247,6 +248,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		return err
 	}
 
+	var newColumnID *descpb.ColumnID
+	var newColumnDefaultExpr *string
 	if !createDefaultRegionCol {
 		// If the column is not public, we cannot use it yet.
 		if !partCol.Public() {
@@ -280,8 +283,22 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	} else {
 		// No crdb_region column is found so we are implicitly creating it.
 		// We insert the column definition before altering the primary key.
+
+		primaryRegion, err := n.dbDesc.PrimaryRegionName()
+		if err != nil {
+			return err
+		}
+		// No crdb_region column is found so we are implicitly creating it.
+		// We insert the column definition before altering the primary key.
+		//
+		// Note we initially set the default expression to be primary_region,
+		// so that it is backfilled this way. When the backfill is complete,
+		// we will change this to use gateway_region.
 		defaultColDef := &tree.AlterTableAddColumn{
-			ColumnDef: regionalByRowDefaultColDef(enumOID),
+			ColumnDef: regionalByRowDefaultColDef(
+				enumOID,
+				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
 		if err != nil {
@@ -311,12 +328,33 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 			return err
 		}
+
+		// On the AlterPrimaryKeyMutation, sanitize and form the correct default
+		// expression to replace the crdb_region column with when the mutation
+		// is finalized.
+		col := n.tableDesc.GetMutations()[mutationIdx].GetColumn()
+		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
+			params.ctx,
+			regionalByRowGatewayRegionDefaultExpr(enumOID),
+			col.Type,
+			"REGIONAL BY ROW DEFAULT",
+			params.p.SemaCtx(),
+			tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(finalDefaultExpr)
+		newColumnDefaultExpr = &s
+		newColumnID = &col.ID
 	}
 	return n.alterTableLocalityFromOrToRegionalByRow(
 		params,
 		tabledesc.LocalityConfigRegionalByRow(newLocality.RegionalByRowColumn),
 		mutationIdxAllowedInSameTxn,
 		newColumnName,
+		newColumnID,
+		newColumnDefaultExpr,
 		n.tableDesc.PrimaryIndex.ColumnNames,
 		n.tableDesc.PrimaryIndex.ColumnDirections,
 	)
@@ -329,6 +367,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	newLocalityConfig descpb.TableDescriptor_LocalityConfig,
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
+	newColumnID *descpb.ColumnID,
+	newColumnDefaultExpr *string,
 	pkColumnNames []string,
 	pkColumnDirections []descpb.IndexDescriptor_Direction,
 ) error {
@@ -366,8 +406,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 		},
 		&alterPrimaryKeyLocalitySwap{
 			localityConfigSwap: descpb.PrimaryKeySwap_LocalityConfigSwap{
-				OldLocalityConfig: *n.tableDesc.LocalityConfig,
-				NewLocalityConfig: newLocalityConfig,
+				OldLocalityConfig:                 *n.tableDesc.LocalityConfig,
+				NewLocalityConfig:                 newLocalityConfig,
+				NewRegionalByRowColumnID:          newColumnID,
+				NewRegionalByRowColumnDefaultExpr: newColumnDefaultExpr,
 			},
 			mutationIdxAllowedInSameTxn: mutationIdxAllowedInSameTxn,
 			newColumnName:               newColumnName,
@@ -438,6 +480,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				tabledesc.LocalityConfigGlobal(),
 				nil, /* mutationIdxAllowedInSameTxn */
 				nil, /* newColumnName */
+				nil, /*	newColumnID */
+				nil, /*	newColumnDefaultExpr */
 				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
 				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
 			)
@@ -449,6 +493,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				tabledesc.LocalityConfigRegionalByTable(n.n.Locality.TableRegion),
 				nil, /* mutationIdxAllowedInSameTxn */
 				nil, /* newColumnName */
+				nil, /*	newColumnID */
+				nil, /*	newColumnDefaultExpr */
 				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
 				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
 			)

@@ -1303,6 +1303,16 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 								lcSwap.OldLocalityConfig,
 							)
 						}
+
+						// If we are adding a new REGIONAL BY ROW column, after backfilling, the
+						// default expression should be switched to utilize to gateway_region.
+						if colID := lcSwap.NewRegionalByRowColumnID; colID != nil {
+							col, err := scTable.FindColumnWithID(*colID)
+							if err != nil {
+								return err
+							}
+							col.ColumnDesc().DefaultExpr = lcSwap.NewRegionalByRowColumnDefaultExpr
+						}
 					} else {
 						// DROP is hit on cancellation, in which case we must roll back.
 						localityConfigToSwapTo = lcSwap.OldLocalityConfig
