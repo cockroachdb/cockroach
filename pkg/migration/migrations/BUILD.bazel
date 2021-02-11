@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "migrations",
     srcs = [
+        "foreign_key_representation_upgrade.go",
         "migrations.go",
         "migrations_table.go",
         "truncated_state.go",
@@ -12,18 +13,26 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/migration",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
         "//pkg/sqlmigrations",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "migrations_test",
     srcs = [
+        "foreign_key_representation_upgrade_external_test.go",
         "main_test.go",
         "truncated_state_external_test.go",
     ],
@@ -36,9 +45,11 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],
 )

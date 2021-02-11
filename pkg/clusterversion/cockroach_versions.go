@@ -235,6 +235,9 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
+	// ForeignKeyRepresentationMigration is used to ensure that all no table
+	// descriptors use the pre-19.2 foreign key migration.
+	ForeignKeyRepresentationMigration
 
 	// Step (1): Add new versions here.
 )
@@ -388,6 +391,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     PostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
+	},
+	{
+		Key:     ForeignKeyRepresentationMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 26},
 	},
 	// Step (2): Add new versions here.
 })

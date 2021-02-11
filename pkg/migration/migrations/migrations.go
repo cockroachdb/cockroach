@@ -47,6 +47,10 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
 		postTruncatedStateMigration,
 	),
+	migration.NewSQLMigration(
+		"upgrade old foreign key representation",
+		toCV(clusterversion.ForeignKeyRepresentationMigration),
+		foreignKeyRepresentationUpgrade),
 }
 
 func init() {
