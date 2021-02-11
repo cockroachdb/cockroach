@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "changefeeddist",
+    srcs = ["distflow.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/physicalplan",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+    ],
+)
