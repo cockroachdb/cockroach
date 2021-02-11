@@ -11,11 +11,14 @@
 package sequence
 
 import (
+	"go/constant"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SeqIdentifier wraps together different ways of identifying a sequence.
@@ -116,4 +119,43 @@ func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
 		return nil, err
 	}
 	return seqIdentifiers, nil
+}
+
+// ReplaceSequenceNamesWithIDs walks the given expression, and replaces
+// any sequence names in the expression by their IDs instead.
+// e.g. nextval('foo') => nextval(123::regclass)
+func ReplaceSequenceNamesWithIDs(
+	defaultExpr tree.Expr, nameToID map[string]int64,
+) (tree.Expr, error) {
+	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch t := expr.(type) {
+		case *tree.FuncExpr:
+			identifier, err := GetSequenceFromFunc(t)
+			if err != nil {
+				return false, nil, err
+			}
+			if identifier == nil || identifier.IsByID() {
+				return true, expr, nil
+			}
+
+			id, ok := nameToID[identifier.SeqName]
+			if !ok {
+				return true, expr, nil
+			}
+			return false, &tree.FuncExpr{
+				Func: tree.WrapFunction("nextval"),
+				Exprs: tree.Exprs{
+					&tree.AnnotateTypeExpr{
+						Type:       types.RegClass,
+						SyntaxMode: tree.AnnotateShort,
+						Expr:       tree.NewNumVal(constant.MakeInt64(id), "", false),
+					},
+				},
+			}, nil
+		}
+		return true, expr, nil
+	}
+
+	newExpr, err := tree.SimpleVisit(defaultExpr, replaceFn)
+	return newExpr, err
 }

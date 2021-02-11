@@ -416,8 +416,9 @@ func (b *Builder) maybeAddSequenceReferenceDependencies(
 	if err != nil {
 		return err
 	}
+	var tn tree.TableName
+	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
-		var tn tree.TableName
 		if seqIdentifier.IsByID() {
 			name, err := b.semaCtx.TableNameResolver.GetQualifiedTableNameByID(
 				ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
@@ -438,15 +439,26 @@ func (b *Builder) maybeAddSequenceReferenceDependencies(
 		if err != nil {
 			return err
 		}
+		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.GetID())
 
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.GetID())
 		b.addNode(scpb.Target_ADD, &scpb.SequenceDependency{
 			SequenceID: seqDesc.GetID(),
 			TableID:    tableID,
 			ColumnID:   col.ID,
-			ByID:       seqIdentifier.IsByID(),
+			ByID:       true, // All new sequences are by ID.
 		})
 	}
+
+	if len(seqIdentifiers) > 0 {
+		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newExpr)
+		col.DefaultExpr = &s
+	}
+
 	return nil
 }
 
