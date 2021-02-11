@@ -352,7 +352,14 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if n.op != valuesOp && (e.ob.flags.Verbose || n.op == scanOp) {
 			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
-				e.ob.AddField("estimated row count", humanizeutil.Count(count))
+				if n.op == scanOp && s.TableRowCount != 0 {
+					e.ob.AddField("estimated row count", fmt.Sprintf(
+						"%s (%d%% of the table)", humanizeutil.Count(count),
+						int(math.Round(s.RowCount/s.TableRowCount)),
+					))
+				} else {
+					e.ob.AddField("estimated row count", humanizeutil.Count(count))
+				}
 			} else {
 				// No stats available.
 				if e.ob.flags.Verbose {
