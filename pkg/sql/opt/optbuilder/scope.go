@@ -526,6 +526,16 @@ func (s *scope) colSetWithExtraCols() opt.ColSet {
 	return colSet
 }
 
+// colList returns a ColList of all the columns in this scope,
+// excluding orderByCols.
+func (s *scope) colList() opt.ColList {
+	colList := make(opt.ColList, len(s.cols))
+	for i := range s.cols {
+		colList[i] = s.cols[i].id
+	}
+	return colList
+}
+
 // hasSameColumns returns true if this scope has the same columns
 // as the other scope.
 //

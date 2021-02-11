@@ -1281,25 +1281,28 @@ const (
 	checkInputScanFetchedVals
 )
 
-// makeCheckInputScan constructs a WithScan that iterates over the input to the
+// buildCheckInputScan constructs a WithScan that iterates over the input to the
 // mutation operator. Used in expressions that generate rows for checking for FK
 // and uniqueness violations.
 //
 // The WithScan expression will scan either the new values or the fetched values
 // for the given table ordinals (which correspond to FK or unique columns).
 //
-// Returns the output columns from the WithScan, which map 1-to-1 to
-// tabOrdinals. Also returns the subset of these columns that can be assumed
-// to be not null (either because they are not null in the mutation input or
-// because they are non-nullable table columns).
+// Returns a scope containing the WithScan expression and the output columns
+// from the WithScan. The output columns map 1-to-1 to tabOrdinals. Also returns
+// the subset of these columns that can be assumed to be not null (either
+// because they are not null in the mutation input or because they are
+// non-nullable table columns).
 //
-func (mb *mutationBuilder) makeCheckInputScan(
+func (mb *mutationBuilder) buildCheckInputScan(
 	typ checkInputScanType, tabOrdinals []int,
-) (scan memo.RelExpr, outCols opt.ColList, notNullOutCols opt.ColSet) {
+) (withScanScope *scope, notNullOutCols opt.ColSet) {
 	// inputCols are the column IDs from the mutation input that we are scanning.
 	inputCols := make(opt.ColList, len(tabOrdinals))
-	// outCols will store the newly synthesized output columns for WithScan.
-	outCols = make(opt.ColList, len(inputCols))
+
+	withScanScope = mb.b.allocScope()
+	withScanScope.cols = make([]scopeColumn, len(inputCols))
+
 	for i, tabOrd := range tabOrdinals {
 		if typ == checkInputScanNewVals {
 			inputCols[i] = mb.mapToReturnColID(tabOrd)
@@ -1311,23 +1314,29 @@ func (mb *mutationBuilder) makeCheckInputScan(
 		}
 
 		// Synthesize new column.
-		c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
-		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
+		inputCol := mb.b.factory.Metadata().Table(mb.tabID).Column(tabOrd)
+		inputColMeta := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
+		outCol := mb.md.AddColumn(inputColMeta.Alias, inputColMeta.Type)
+		withScanScope.cols[i] = scopeColumn{
+			id:   outCol,
+			name: inputCol.ColName(),
+			typ:  inputCol.DatumType(),
+		}
 
 		// If a table column is not nullable, NULLs cannot be inserted (the
 		// mutation will fail). So for the purposes of checks, we can treat
 		// these columns as not null.
 		if mb.outScope.expr.Relational().NotNullCols.Contains(inputCols[i]) ||
 			!mb.tab.Column(tabOrd).IsNullable() {
-			notNullOutCols.Add(outCols[i])
+			notNullOutCols.Add(outCol)
 		}
 	}
 
-	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+	withScanScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
 		With:    mb.withID,
 		InCols:  inputCols,
-		OutCols: outCols,
+		OutCols: withScanScope.colList(),
 		ID:      mb.b.factory.Metadata().NextUniqueID(),
 	})
-	return scan, outCols, notNullOutCols
+	return withScanScope, notNullOutCols
 }
