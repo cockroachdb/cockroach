@@ -880,6 +880,7 @@ func mvccGet(
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
 		keyBuf:           mvccScanner.keyBuf,
+		// savedBuf: mvccScanner.savedBuf,
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
@@ -2336,6 +2337,7 @@ func mvccScanToBytes(
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
 		keyBuf:           mvccScanner.keyBuf,
+		// savedBuf: mvccScanner.savedBuf,
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
