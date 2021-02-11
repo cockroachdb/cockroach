@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -231,7 +232,12 @@ func (ih *instrumentationHelper) Finish(
 		}
 		queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
 		if err != nil {
-			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, err)
+			msg := "error getting query level stats for statement: %s: %+v"
+			if util.CrdbTestBuild {
+				// A panic is much more visible in tests than an error.
+				panic(fmt.Sprintf(msg, ast, err))
+			}
+			log.VInfof(ctx, 1, msg, ast, err)
 		} else {
 			stmtStats.mu.Lock()
 			stmtStats.mu.data.ExecStatCollectionCount++
