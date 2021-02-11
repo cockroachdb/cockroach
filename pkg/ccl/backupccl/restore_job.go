@@ -713,7 +713,7 @@ type restoreResumer struct {
 		// duringSystemTableRestoration is called once for every system table we
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
-		duringSystemTableRestoration func() error
+		duringSystemTableRestoration func(systemTableName string) error
 		// afterOfflineTableCreation is called after creating the OFFLINE table
 		// descriptors we're ingesting. If an error is returned, we fail the
 		// restore.
@@ -1409,6 +1409,8 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 			return err
 		}
 	}
+	// Reload the details as we may have updated the job.
+	details = r.job.Details().(jobspb.RestoreDetails)
 
 	r.restoreStats = res
 
@@ -2008,6 +2010,10 @@ func (r *restoreResumer) restoreSystemTables(
 	tables []catalog.TableDescriptor,
 ) error {
 	tempSystemDBID := getTempSystemDBID(restoreDetails)
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if details.SystemTablesRestored == nil {
+		details.SystemTablesRestored = make(map[string]bool)
+	}
 
 	executor := r.execCfg.InternalExecutor
 	var err error
@@ -2020,6 +2026,10 @@ func (r *restoreResumer) restoreSystemTables(
 			continue
 		}
 		systemTableName := table.GetName()
+		if details.SystemTablesRestored[systemTableName] {
+			// We've already restored this table.
+			continue
+		}
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
@@ -2041,13 +2051,16 @@ func (r *restoreResumer) restoreSystemTables(
 				return errors.Wrapf(err, "restoring system table %s", systemTableName)
 			}
 
-			return nil
+			// System table restoration may not be idempotent, so we need to keep
+			// track of what we've restored.
+			details.SystemTablesRestored[systemTableName] = true
+			return r.job.SetDetails(ctx, txn, details)
 		}); err != nil {
 			return err
 		}
 
 		if fn := r.testingKnobs.duringSystemTableRestoration; fn != nil {
-			if err := fn(); err != nil {
+			if err := fn(systemTableName); err != nil {
 				return err
 			}
 		}
