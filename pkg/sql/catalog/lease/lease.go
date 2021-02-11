@@ -229,7 +229,7 @@ func (s storage) acquire(
 		}
 
 		// TODO (lucy): Previously this called getTableDescFromID followed by a call
-		// to ValidateTable() instead of Validate(), to avoid the cross-table
+		// to ValidateSelf() instead of Validate(), to avoid the cross-table
 		// checks. Does this actually matter? We already potentially do cross-table
 		// checks when populating pre-19.2 foreign keys.
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id, catalogkv.Immutable,

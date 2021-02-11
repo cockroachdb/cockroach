@@ -87,9 +87,6 @@ func (p *planner) writeNonDropDatabaseChange(
 func (p *planner) writeDatabaseChangeToBatch(
 	ctx context.Context, desc *dbdesc.Mutable, b *kv.Batch,
 ) error {
-	if err := desc.Validate(); err != nil {
-		return err
-	}
 	return p.Descriptors().WriteDescToBatch(
 		ctx,
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),

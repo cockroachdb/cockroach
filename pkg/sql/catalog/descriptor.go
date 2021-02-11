@@ -72,6 +72,12 @@ type Descriptor interface {
 
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *descpb.Descriptor
+
+	// Validate validates the descriptor.
+	// Cross-reference checks are skipped when dg is nil.
+	ValidateSelf(ctx context.Context) error
+	Validate(ctx context.Context, descGetter DescGetter) error
+	ValidateTxnCommit(ctx context.Context, descGetter DescGetter) error
 }
 
 // DatabaseDescriptor will eventually be called dbdesc.Descriptor.
@@ -90,7 +96,6 @@ type DatabaseDescriptor interface {
 	RegionNames() (descpb.RegionNames, error)
 	IsMultiRegion() bool
 	PrimaryRegionName() (descpb.RegionName, error)
-	Validate() error
 	MultiRegionEnumID() (descpb.ID, error)
 }
 
@@ -244,8 +249,6 @@ type TableDescriptor interface {
 	GetAllReferencedTypeIDs(
 		databaseDesc DatabaseDescriptor, getType func(descpb.ID) (TypeDescriptor, error),
 	) (descpb.IDs, error)
-
-	Validate(ctx context.Context, txn DescGetter) error
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID
@@ -492,7 +495,6 @@ type TypeDescriptor interface {
 
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
-	Validate(ctx context.Context, dg DescGetter) error
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

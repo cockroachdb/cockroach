@@ -204,7 +204,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
 		}
-		require.NoError(t, gen.ValidateTable(ctx))
+		require.NoError(t, gen.ValidateSelf(ctx))
 
 		if !test.pkg.TableDesc().Equal(gen.TableDesc()) {
 			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
