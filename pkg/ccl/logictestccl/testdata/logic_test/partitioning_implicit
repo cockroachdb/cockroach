@@ -346,11 +346,12 @@ CREATE TABLE public.t (
   c int NOT NULL,
   d int NOT NULL,
   j JSON,
+  u STRING UNIQUE,
   INDEX (a),
   UNIQUE (b),
   INDEX (partition_by, c),
   INVERTED INDEX (j),
-  FAMILY (pk, pk2, partition_by, a, b, c, d)
+  FAMILY (pk, pk2, partition_by, a, b, c, d, j, u)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN (1),
   PARTITION two VALUES IN (2)
@@ -381,14 +382,16 @@ CREATE TABLE public.t (
   c INT8 NOT NULL,
   d INT8 NOT NULL,
   j JSONB NULL,
+  u STRING NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j (pk, pk2, partition_by, a, b, c, d, j)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -413,6 +416,8 @@ t_j_idx               j             false
 t_j_idx               partition_by  true
 t_partition_by_c_idx  c             false
 t_partition_by_c_idx  partition_by  false
+t_u_key               partition_by  true
+t_u_key               u             false
 unique_c_d            c             false
 unique_c_d            d             false
 unique_c_d            partition_by  true
@@ -432,15 +437,17 @@ CREATE TABLE public.t (
   c INT8 NOT NULL,
   d INT8 NOT NULL,
   j JSONB NULL,
+  u STRING NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
   UNIQUE INDEX t_pk_key (pk ASC),
+  UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j (pk, pk2, partition_by, a, b, c, d, j)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -467,6 +474,8 @@ t_partition_by_c_idx  c             false
 t_partition_by_c_idx  partition_by  false
 t_pk_key              partition_by  true
 t_pk_key              pk            false
+t_u_key               partition_by  true
+t_u_key               u             false
 unique_c_d            c             false
 unique_c_d            d             false
 unique_c_d            partition_by  true
