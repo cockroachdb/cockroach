@@ -227,23 +227,24 @@ func (ih *instrumentationHelper) Finish(
 		ih.traceMetadata.annotateExplain(ih.explainPlan, trace, cfg.TestingKnobs.DeterministicExplainAnalyze)
 	}
 
-	// TODO(radu): this should be unified with other stmt stats accesses.
-	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
-	if stmtStats != nil {
-		var flowsMetadata []*execstats.FlowsMetadata
-		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
+	// Get the query-level stats.
+	var flowsMetadata []*execstats.FlowsMetadata
+	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
+		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
+	}
+	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
+	if err != nil {
+		const msg = "error getting query level stats for statement: %s: %+v"
+		if util.CrdbTestBuild && ih.startedExplicitTrace {
+			// A panic is much more visible in tests than an error.
+			// TODO(asubiotto): Remove ih.startedExplicitTrace. See #60609.
+			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
-		queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
-		if err != nil {
-			const msg = "error getting query level stats for statement: %s: %+v"
-			if util.CrdbTestBuild && ih.startedExplicitTrace {
-				// A panic is much more visible in tests than an error.
-				// TODO(asubiotto): Remove ih.startedExplicitTrace. See #60609.
-				panic(fmt.Sprintf(msg, ih.fingerprint, err))
-			}
-			log.VInfof(ctx, 1, msg, ih.fingerprint, err)
-		} else {
+		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+	} else {
+		// TODO(radu): this should be unified with other stmt stats accesses.
+		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
+		if stmtStats != nil {
 			stmtStats.mu.Lock()
 			stmtStats.mu.data.ExecStatCollectionCount++
 			// Record trace-related statistics.
@@ -257,17 +258,21 @@ func (ih *instrumentationHelper) Finish(
 				stmtStats.mu.data.ExecStatCollectionCount, queryLevelStats.ContentionTime.Seconds(),
 			)
 			stmtStats.mu.Unlock()
+			txnStats.Accumulate(queryLevelStats)
 		}
-		txnStats.Accumulate(queryLevelStats)
 	}
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 		placeholders := p.extendedEvalCtx.Placeholders
-		planStr := ih.planStringForBundle(&statsCollector.phaseTimes)
+		ob := ih.buildExplainAnalyzePlan(
+			explain.Flags{Verbose: true, ShowTypes: true},
+			&statsCollector.phaseTimes,
+			&queryLevelStats,
+		)
 		bundle = buildStatementBundle(
-			ih.origCtx, cfg.DB, ie, &p.curPlan, planStr, trace, placeholders,
+			ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 		if ih.finishCollectionDiagnostics != nil {
@@ -292,7 +297,7 @@ func (ih *instrumentationHelper) Finish(
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
 		}
-		return ih.setExplainAnalyzeResult(ctx, res, phaseTimes, flows, trace)
+		return ih.setExplainAnalyzeResult(ctx, res, phaseTimes, &queryLevelStats, flows, trace)
 
 	default:
 		return nil
@@ -371,41 +376,39 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	return ob.BuildProtoTree()
 }
 
-// planStringForBundle generates the plan tree as a string; used internally for bundles.
-func (ih *instrumentationHelper) planStringForBundle(phaseTimes *phaseTimes) string {
+// buildExplainAnalyzePlan creates an explain.OutputBuilder and populates it
+// with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can be used on the
+// result.
+func (ih *instrumentationHelper) buildExplainAnalyzePlan(
+	flags explain.Flags, phaseTimes *phaseTimes, queryStats *execstats.QueryLevelStats,
+) *explain.OutputBuilder {
+	ob := explain.NewOutputBuilder(flags)
 	if ih.explainPlan == nil {
-		return ""
+		// Return an empty builder if there is no plan.
+		return ob
 	}
-	ob := explain.NewOutputBuilder(explain.Flags{
-		Verbose:   true,
-		ShowTypes: true,
-	})
 	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
 	ob.AddExecutionTime(phaseTimes.getRunLatency())
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
-		return fmt.Sprintf("error emitting plan: %v", err)
-	}
-	return ob.BuildString()
-}
 
-// planRowsForExplainAnalyze generates the plan tree as a list of strings (one
-// for each line).
-// Used in explainAnalyzePlanOutput and explainAnalyzeDistSQLOutput modes.
-func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTimes) []string {
-	if ih.explainPlan == nil {
-		return nil
+	if queryStats.KVRowsRead != 0 {
+		ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead)
 	}
-	ob := explain.NewOutputBuilder(ih.explainFlags)
-	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
-	ob.AddExecutionTime(phaseTimes.getRunLatency())
-	ob.AddDistribution(ih.distribution.String())
-	ob.AddVectorized(ih.vectorized)
+	if queryStats.KVTime != 0 {
+		ob.AddKVTime(queryStats.KVTime)
+	}
+	if queryStats.ContentionTime != 0 {
+		ob.AddContentionTime(queryStats.ContentionTime)
+	}
+
+	ob.AddMaxMemUsage(queryStats.MaxMemUsage)
+	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
-		return []string{fmt.Sprintf("error emitting plan: %v", err)}
+		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
 	}
-	return ob.BuildStringRows()
+	return ob
 }
 
 // setExplainAnalyzeResult sets the result for an EXPLAIN ANALYZE or EXPLAIN
@@ -416,6 +419,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	ctx context.Context,
 	res RestrictedCommandResult,
 	phaseTimes *phaseTimes,
+	queryLevelStats *execstats.QueryLevelStats,
 	distSQLFlowInfos []flowInfo,
 	trace tracing.Recording,
 ) (commErr error) {
@@ -427,7 +431,8 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 		return nil //nolint:returnerrcheck
 	}
 
-	rows := ih.planRowsForExplainAnalyze(phaseTimes)
+	ob := ih.buildExplainAnalyzePlan(ih.explainFlags, phaseTimes, queryLevelStats)
+	rows := ob.BuildStringRows()
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
 		for i, d := range distSQLFlowInfos {

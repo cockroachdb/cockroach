@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
@@ -157,7 +158,9 @@ func emitExplain(
 			// having to add error checks everywhere throughout the code. This is only
 			// possible because the code does not update shared state and does not
 			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
+			// Note that we don't catch anything in debug builds, so that failures are
+			// more visible.
+			if ok, e := errorutil.ShouldCatch(r); ok && !util.CrdbTestBuild {
 				err = e
 			} else {
 				// Other panic objects can't be considered "safe" and thus are
@@ -166,6 +169,11 @@ func emitExplain(
 			}
 		}
 	}()
+
+	if explainPlan == nil {
+		return errors.AssertionFailedf("no plan")
+	}
+
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 		if table.IsVirtualTable() {
 			return "<virtual table spans>"
