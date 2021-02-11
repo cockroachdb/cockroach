@@ -1585,7 +1585,10 @@ func NewTableDesc(
 				)
 			}
 			oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
-			n.Defs = append(n.Defs, regionalByRowDefaultColDef(oid))
+			n.Defs = append(
+				n.Defs,
+				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
+			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		} else if !regionalByRowColExists {
 			return nil, pgerror.Newf(
@@ -2674,19 +2677,31 @@ func CreateInheritedPrivilegesFromDBDesc(
 	return privs
 }
 
-func regionalByRowDefaultColDef(oid oid.Oid) *tree.ColumnTableDef {
-	c := &tree.ColumnTableDef{
-		Name:   tree.RegionalByRowRegionDefaultColName,
-		Type:   &tree.OIDTypeReference{OID: oid},
-		Hidden: true,
+func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
+	return &tree.CastExpr{
+		Expr:       tree.NewDString(string(region)),
+		Type:       &tree.OIDTypeReference{OID: oid},
+		SyntaxMode: tree.CastShort,
 	}
-	c.Nullable.Nullability = tree.NotNull
-	c.DefaultExpr.Expr = &tree.CastExpr{
+}
+
+func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
+	return &tree.CastExpr{
 		Expr: &tree.FuncExpr{
 			Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
 		},
 		Type:       &tree.OIDTypeReference{OID: oid},
 		SyntaxMode: tree.CastShort,
 	}
+}
+
+func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.ColumnTableDef {
+	c := &tree.ColumnTableDef{
+		Name:   tree.RegionalByRowRegionDefaultColName,
+		Type:   &tree.OIDTypeReference{OID: oid},
+		Hidden: true,
+	}
+	c.Nullable.Nullability = tree.NotNull
+	c.DefaultExpr.Expr = defaultExpr
 	return c
 }
