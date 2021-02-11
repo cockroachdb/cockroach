@@ -128,7 +128,7 @@ func doCreateSequence(
 	}
 
 	// makeSequenceTableDesc already validates the table. No call to
-	// desc.ValidateTable() needed here.
+	// desc.ValidateSelf() needed here.
 
 	key := catalogkv.MakeObjectNameKey(
 		params.ctx,
@@ -231,7 +231,7 @@ func NewSequenceTableDesc(
 	// immediately.
 	desc.State = descpb.DescriptorState_PUBLIC
 
-	if err := desc.ValidateTable(ctx); err != nil {
+	if err := desc.ValidateSelf(ctx); err != nil {
 		return nil, err
 	}
 	return &desc, nil

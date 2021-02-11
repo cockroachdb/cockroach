@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -749,7 +748,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 		}
 	}
 
-	if err := validatePrimaryKeys(&ex.extraTxnState.descCollection); err != nil {
+	if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
 		return err
 	}
 
@@ -766,22 +765,6 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 	// we don't block the client.
 	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
 		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
-	}
-	return nil
-}
-
-// validatePrimaryKeys verifies that all tables modified in the transaction have
-// an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
-// is required to be followed by ADD PRIMARY KEY.
-func validatePrimaryKeys(tc *descs.Collection) error {
-	tables := tc.GetUncommittedTables()
-	for _, table := range tables {
-		if !table.HasPrimaryKey() {
-			return unimplemented.NewWithIssuef(48026,
-				"primary key of table %s dropped without subsequent addition of new primary key",
-				table.GetName(),
-			)
-		}
 	}
 	return nil
 }

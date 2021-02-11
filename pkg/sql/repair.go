@@ -49,15 +49,14 @@ import (
 // write to different descriptors. It will also validate the structure of the
 // descriptor but not its references.
 //
-// TODO(ajwerner): It is critical that we not validate all of the relevant
-// descriptors during statement execution as it may be the case that more than
-// one descriptor is corrupt. Instead, we should validate all of the relevant
-// descriptors just prior to committing the transaction. This would bring the
-// requirement that if a descriptor is upserted, that it leave the database in
-// a valid state, at least in terms of that descriptor and its references.
-// Perhaps transactions which do end up using this should also end up validating
-// all descriptors at the end of the transaction to ensure that this operation
-// didn't break a reference to this descriptor.
+// It is critical that we not validate all of the relevant descriptors during
+// statement execution as it may be the case that more than one descriptor is
+// corrupt. Instead, we rely on ValidateTxnCommit which runs just prior to
+// committing any transaction. This brings the requirement that if a descriptor
+// is to be upserted, it must leave the database in a valid state, at least in
+// terms of that descriptor and its references. This validation can be disabled
+// via the `sql.catalog.descs.validate_on_write.enabled` cluster setting if need
+// be, even though such a need is rather not obvious to foresee.
 func (p *planner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDesc []byte, force bool,
 ) error {
@@ -242,7 +241,9 @@ func comparePrivileges(
 		cur := curUserMap[username]
 		granted, revoked := computePrivilegeChanges(prev, cur)
 		delete(curUserMap, username)
-
+		if granted == nil && revoked == nil {
+			continue
+		}
 		// Log events.
 		if err := logPrivilegeEvents(
 			ctx, p, existing, granted, revoked, username,
@@ -256,6 +257,9 @@ func comparePrivileges(
 		username := curUserPrivileges[i].User().Normalized()
 		if _, ok := curUserMap[username]; ok {
 			granted := privilege.ListFromBitField(curUserPrivileges[i].Privileges, objectType).SortedNames()
+			if granted == nil {
+				continue
+			}
 			if err := logPrivilegeEvents(
 				ctx, p, existing, granted, nil, username,
 			); err != nil {
@@ -552,6 +556,8 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 // This method will perform very minimal validation. An error will be returned
 // if no such descriptor exists. This method can very easily introduce
 // corruption, beware.
+//
+// See UnsafeUpsertDescriptor for additional details, and warnings.
 func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error {
 	const method = "crdb_internal.unsafe_delete_descriptor()"
 	if err := checkPlannerStateForRepairFunctions(ctx, p, method); err != nil {
