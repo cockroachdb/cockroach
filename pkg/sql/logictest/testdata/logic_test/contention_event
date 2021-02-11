@@ -52,7 +52,23 @@ user root
 #
 # NB: this needs the 5node-pretend59315 config because otherwise the span is not
 # tracked.
+#
+# TODO(angelapwen): Remove this test along with num_payloads column
 query B
 SELECT count(num_payloads) > 0 FROM crdb_internal.node_inflight_trace_spans WHERE trace_id = crdb_internal.trace_id();
+----
+true
+
+# For all spans, make sure there is 1 payload that is a contention event.
+query B
+WITH Spans AS (
+SELECT span_id FROM crdb_internal.node_inflight_trace_spans
+WHERE trace_id = crdb_internal.trace_id()
+), PayloadTypes AS (
+SELECT jsonb_array_elements(crdb_internal.payloads_for_span(span_id))->>'@type' AS type, crdb_internal.payloads_for_span(span_id)
+FROM Spans
+) SELECT COUNT(*) = 1
+FROM PayloadTypes
+WHERE type = 'type.googleapis.com/cockroach.roachpb.ContentionEvent';
 ----
 true
