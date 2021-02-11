@@ -23,6 +23,7 @@ go_library(
         "session.go",
         "show.go",
         "user_defined_schema.go",
+        "virtual_schema.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry",
     visibility = ["//visibility:public"],
