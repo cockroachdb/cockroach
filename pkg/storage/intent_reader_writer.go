@@ -43,11 +43,11 @@ import (
 // happen yet).
 
 // DisallowSeparatedIntents is true when separated intents have never been allowed.
-const DisallowSeparatedIntents = true
+const DisallowSeparatedIntents = false
 
 // EnabledSeparatedIntents is true for enabling separated intents. It also
 // requires that DisallowSeparatedIntents is false.
-const EnabledSeparatedIntents = false
+const EnabledSeparatedIntents = true
 
 // This file defines wrappers for Reader and Writer, and functions to do the
 // wrapping, which depend on the configuration settings above.
