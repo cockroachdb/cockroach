@@ -905,6 +905,7 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 
 func TestStatementTimeoutRetryableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1
