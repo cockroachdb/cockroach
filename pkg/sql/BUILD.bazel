@@ -462,6 +462,7 @@ go_test(
         "scrub_test.go",
         "sequence_test.go",
         "set_zone_config_test.go",
+        "show_create_all_tables_builtin_test.go",
         "show_fingerprints_test.go",
         "show_ranges_test.go",
         "show_stats_test.go",

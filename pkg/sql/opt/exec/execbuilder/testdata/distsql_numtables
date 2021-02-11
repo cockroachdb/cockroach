@@ -51,17 +51,17 @@ EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 distribution: full
 vectorized: true
 ·
-• sort
-│ order: +str
+• render
 │
-└── • render
+└── • sort
+    │ order: +str
     │
     └── • scan
           missing stats
           table: numtostr@primary
           spans: [ - /10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkFFL60AQhd_vrxjmvtxrR5KNFmRBiNqIgdrWJKCieYjJUAJpNu5uwFLy36UJYitU9PGcyfnysRs0rxVKDB4W04twBv8mYZzEd9P_EAfT4CqBMYEHI1gTHMF1NL-Ful1ZZayG-5sgCmANz63rnuTnIFyYR5MggstHMFYjYa0KnmUrNiifUGBK2GiVszFKb6tN_0FYvKF0Ccu6ae22TglzpRnlBm1pK0aJSfZSccRZwdpxkbBgm5VVj_3Q8RtdrjK9RsK4yWoj4dgRrvMXCSOuC9YSxlLKcJacEfhi5O0EAt_DtCNUrf2UMDZbMkrR0c9FY6Uta0fsO_qno4N47zf4iE2jasN7-ENkt0sJuVjy8NZGtTrnhVZ5_5shzvtdXxRs7HAVQwjr4bQV3B2Lb8fel3Ha_XkPAAD___kwwOA=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkFFL-0AQxN__n2LZ_4valeQiBTkQojZioLY1CahoHmKylECai3cXsJR8d2mC2AoVfZzZm5kft0HzVqHE4HExvQxncDQJ4yS-nx5DHEyD6wTGBB6MYE1wAjfR_A7qdmWVsRoeboMogDW8tK57ll-AcGEeTYIIrp7AWI2EtSp4lq3YoHxGgSlho1XOxii9tTb9g7B4R-kSlnXT2q2dEuZKM8oN2tJWjBKT7LXiiLOCteMiYcE2K6u-9hPHb3S5yvQaCeMmq42EU0e4zn9MO0LV2q9yY7MloxQd_R4gVtqydsT-tu-NkDDiumAtYSylDGfJOYEvRt6OIPC9gxjeXzAiNo2qDe9hHGp2u5SQiyUPf21Uq3NeaJX3M4Oc97neKNjY4SoGEdbDaQu4GxY_hr1v4bT79xEAAP__JNjA3g==
 
 # Query which requires a full table scan.
 query T
@@ -70,10 +70,10 @@ EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY s
 distribution: full
 vectorized: true
 ·
-• sort
-│ order: +str
+• render
 │
-└── • render
+└── • sort
+    │ order: +str
     │
     └── • filter
         │ filter: (y % 1000) = 0
@@ -83,7 +83,7 @@ vectorized: true
               table: numtostr@primary
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV-LGjEUxd_7KcKFwm43MpP54-pAwbY7SwWr21FoS_Fh6lwWQSfTJEJF_O5lZtRdRZNUC76ZTM49x_wOZAXy9wwiiL8_9T50--TmoTscDb_2bskw7sWfRiSkxCN3ZEnJO_KYDL6QfDFXXCpBvn2Ok5jcLMlbwlzXvSXviUsGyUOckI8_iFQCKOQ8w346RwnRT2BAwQMKPlAIgEIIYwqF4BOUkovyyKoSdLM_ELkUpnmxUOX2mMKEC4RoBWqqZggRjNJfM0wwzVA4LlDIUKXTWWWzDdgpxHSeiiVQGBZpLiPScDzXdWG8psAX6mW4VOkzQsTW1D7A43SmUKBwwn33ej8iNx22uZgoirr9Uau6n81voJBgnpXnws0WJR12571aUNLxTkb1_iXqkAuFwmEH99QJ7k7O90_OfxnLRYYCs2NDj4To8wYvHLZ_W6fsgz17Zl8FZluFqgkNJ7DvgyHFrg_N6_fBEHXbB3ZuHzx7IJ41kKAC0rQHYkixA3J_fSCGqFsg3rlAfHsgvjWQZgWkZQ_EkGIHpHV9IIaoWyD-uUACeyCBNZASRcOShSHAjkX7-iwMUbcsgv_xeh2Zn6AseC7R6mFyy6cNs2esn0LJF2KCT4JPKpt6Oah01UaGUtVfWb3o5vWnMuBrMdOKPb3Y04r9PTE7FPv62E29daBVh3pxqBUbnJuX_Ol7rbild25pxW29uH1JbGbomKlk-pYxQ83YRT1jhqIFBnN905ihakzftcPs4_WbvwEAAP__8vsheA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lWGL2jAcxt_vU4Q_DO5mpE3aehoYuO16THB6q8I2hi86Gw5Bmy6JMBG_-2ir3ilnkiHdu2t7j8-v_T2QLajfS2AQf38cfhiM0M39YDKdfB3eokk8jD9NUYQRRS20wegdekjGX1C-XmmhtETfPsdJjG426C0ivu_fovfIR-PkPk7Qxx9IaQkYcpHxUbriCthPIICBAoYAMISAIYIZhkKKOVdKyPJftlVgkP0B5mNY5MVal7dnGOZCcmBb0Au95MBgmv5a8oSnGZeeDxgyrtPFsqo5APYLuVilcgMYJkWaK4baHvV9H2Y7DGKtn39c6fSJAyM77A7wsFhqLrn0otP2-j5DN32y_zCMscFo2q2-z_7viwj0XxAmQmouPXL2_n3aAgwJz7OSI9pXYtQnLfriAqM-vcgRXOR4rhcy45JnZ-VhC2a7V2BHoi0Kj5x-rUv14Uk9cZ8CcZ1CtYS2F7rvwUJx3EOnuT1YEA57IE3vgboLoc5CwkpIx12IheIo5K45IRaEgxDatJDAXUjgLKRTCem6C7FQHIV0mxNiQTgICZoWEroLCZ2FlCraji4sAEcXveZcWBAOLsL_eXq9wpFwVYhccaeDyS-PNp498fooVGIt5_xRinlVU1-Oq1x1I-NK109JfTHI60cl4MswMYapOUyN4eAkTM7DgRm7Y64OjenIHI6MYUtz55qXvjOGu-bmrjHcM4d712ATy8ZsIzOvjFhmRq7aGbEMLbSUm5dGLFMj5q2ds892b_4GAAD__4SNIW4=
 
 # Query with a restricted span + filter.
 query T

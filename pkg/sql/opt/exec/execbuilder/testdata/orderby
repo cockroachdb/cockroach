@@ -858,18 +858,19 @@ vectorized: true
 • project
 │ columns: (b, a)
 │
-└── • sort
+└── • render
     │ columns: (column6, a, b)
     │ ordering: +a
     │ estimated row count: 1,000 (missing stats)
-    │ order: +a
+    │ render column6: a
+    │ render a: a
+    │ render b: b
     │
-    └── • render
-        │ columns: (column6, a, b)
+    └── • sort
+        │ columns: (a, b)
+        │ ordering: +a
         │ estimated row count: 1,000 (missing stats)
-        │ render column6: a
-        │ render a: a
-        │ render b: b
+        │ order: +a
         │
         └── • scan
               columns: (a, b)
@@ -886,18 +887,19 @@ vectorized: true
 • project
 │ columns: (b, a)
 │
-└── • sort
+└── • render
     │ columns: (column6, a, b)
     │ ordering: +b
     │ estimated row count: 1,000 (missing stats)
-    │ order: +b
+    │ render column6: b
+    │ render a: a
+    │ render b: b
     │
-    └── • render
-        │ columns: (column6, a, b)
+    └── • sort
+        │ columns: (a, b)
+        │ ordering: +b
         │ estimated row count: 1,000 (missing stats)
-        │ render column6: b
-        │ render a: a
-        │ render b: b
+        │ order: +b
         │
         └── • scan
               columns: (a, b)

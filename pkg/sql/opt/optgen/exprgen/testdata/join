@@ -80,12 +80,12 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +6
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2704.71137
+ ├── cost: 2764.71137
  ├── fd: (1)==(6), (6)==(1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1293.34569
+ │    ├── cost: 1323.34569
  │    ├── ordering: +1
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
@@ -98,7 +98,7 @@ inner-join (merge)
  ├── sort
  │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
- │    ├── cost: 1293.34569
+ │    ├── cost: 1323.34569
  │    ├── ordering: +6
  │    ├── prune: (6-8)
  │    └── scan t.public.def
@@ -123,13 +123,13 @@ inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  ├── immutable
  ├── stats: [rows=333333.333]
- ├── cost: 5619.40451
+ ├── cost: 5649.40451
  ├── prune: (8)
  ├── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1183.68784
+ │    ├── cost: 1213.68784
  │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)

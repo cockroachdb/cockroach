@@ -1097,7 +1097,7 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 76.5943856
+ ├── cost: 76.7943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
@@ -1123,7 +1123,7 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 76.5943856
+ ├── cost: 76.7943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
@@ -1228,7 +1228,7 @@ sort
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1183.26548
+ ├── cost: 1193.26548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1265,7 +1265,7 @@ sort
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1183.26548
+ ├── cost: 1193.26548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)

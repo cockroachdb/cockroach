@@ -298,31 +298,32 @@ project
       ├── key: (17,21)
       ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (21)-->(22), (19)==(21), (21)==(19), (1)==(17), (17)==(1)
       ├── ordering: -18 opt(9) [actual: -18]
-      ├── sort
+      ├── inner-join (lookup status_type)
       │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:17!null th_dts:18!null th_st_id:19!null st_id:21!null st_name:22!null
+      │    ├── key columns: [19] = [21]
+      │    ├── lookup columns are key
       │    ├── key: (17,21)
       │    ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (21)-->(22), (19)==(21), (21)==(19), (1)==(17), (17)==(1)
       │    ├── ordering: -18 opt(9) [actual: -18]
       │    ├── limit hint: 30.00
-      │    └── inner-join (lookup status_type)
-      │         ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:17!null th_dts:18!null th_st_id:19!null st_id:21!null st_name:22!null
-      │         ├── key columns: [19] = [21]
-      │         ├── lookup columns are key
-      │         ├── key: (17,21)
-      │         ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (21)-->(22), (19)==(21), (21)==(19), (1)==(17), (17)==(1)
-      │         ├── inner-join (lookup trade_history)
-      │         │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:17!null th_dts:18!null th_st_id:19!null
-      │         │    ├── key columns: [1] = [17]
-      │         │    ├── key: (17,19)
-      │         │    ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (1)==(17), (17)==(1)
-      │         │    ├── scan trade@secondary
-      │         │    │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null
-      │         │    │    ├── constraint: /9/-2/1: [/0 - /0]
-      │         │    │    ├── limit: 10
-      │         │    │    ├── key: (1)
-      │         │    │    └── fd: ()-->(9), (1)-->(2,6,7)
-      │         │    └── filters (true)
-      │         └── filters (true)
+      │    ├── sort
+      │    │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:17!null th_dts:18!null th_st_id:19!null
+      │    │    ├── key: (17,19)
+      │    │    ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (1)==(17), (17)==(1)
+      │    │    ├── ordering: -18 opt(9) [actual: -18]
+      │    │    └── inner-join (lookup trade_history)
+      │    │         ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:17!null th_dts:18!null th_st_id:19!null
+      │    │         ├── key columns: [1] = [17]
+      │    │         ├── key: (17,19)
+      │    │         ├── fd: ()-->(9), (1)-->(2,6,7), (17,19)-->(18), (1)==(17), (17)==(1)
+      │    │         ├── scan trade@secondary
+      │    │         │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null
+      │    │         │    ├── constraint: /9/-2/1: [/0 - /0]
+      │    │         │    ├── limit: 10
+      │    │         │    ├── key: (1)
+      │    │         │    └── fd: ()-->(9), (1)-->(2,6,7)
+      │    │         └── filters (true)
+      │    └── filters (true)
       └── 30
 
 # --------------------------------------------------
