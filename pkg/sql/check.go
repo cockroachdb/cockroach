@@ -321,9 +321,9 @@ func validateForeignKey(
 // LIMIT 1  -- if limitResults is set
 //
 func duplicateRowQuery(
-	srcTbl catalog.TableDescriptor, uc *descpb.UniqueWithoutIndexConstraint, limitResults bool,
+	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, limitResults bool,
 ) (sql string, colNames []string, _ error) {
-	colNames, err := srcTbl.NamesForColumnIDs(uc.ColumnIDs)
+	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -333,7 +333,7 @@ func duplicateRowQuery(
 		srcCols[i] = tree.NameString(n)
 	}
 
-	srcWhere := make([]string, len(uc.ColumnIDs))
+	srcWhere := make([]string, len(columnIDs))
 	for i := range srcWhere {
 		srcWhere[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
 	}
@@ -352,27 +352,29 @@ func duplicateRowQuery(
 }
 
 // validateUniqueConstraint verifies that all the rows in the srcTable
-// have unique values for the given unique constraint.
+// have unique values for the given columns.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func validateUniqueConstraint(
 	ctx context.Context,
-	srcTable *tabledesc.Mutable,
-	uc *descpb.UniqueWithoutIndexConstraint,
+	srcTable catalog.TableDescriptor,
+	constraintName string,
+	columnIDs []descpb.ColumnID,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
 	query, colNames, err := duplicateRowQuery(
-		srcTable, uc, true, /* limitResults */
+		srcTable, columnIDs, true, /* limitResults */
 	)
 	if err != nil {
 		return err
 	}
 
 	log.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
-		uc.Name,
-		srcTable.Name, colNames,
+		constraintName,
+		srcTable.GetName(),
+		colNames,
 		query,
 	)
 
@@ -389,8 +391,10 @@ func validateUniqueConstraint(
 		// when it fails to add a unique index due to duplicated keys.
 		return errors.WithDetail(
 			pgerror.WithConstraintName(
-				pgerror.Newf(pgcode.UniqueViolation, "could not create unique constraint %q", uc.Name),
-				uc.Name,
+				pgerror.Newf(
+					pgcode.UniqueViolation, "could not create unique constraint %q", constraintName,
+				),
+				constraintName,
 			),
 			fmt.Sprintf(
 				"Key (%s)=(%s) is duplicated.", strings.Join(colNames, ","), strings.Join(valuesStr, ","),

@@ -78,7 +78,6 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
-
 statement ok
 CREATE TABLE regional_by_row_table (
   pk int PRIMARY KEY,
@@ -186,6 +185,37 @@ RETURNING crdb_region, pk
 ----
 ap-southeast-2  1
 ap-southeast-2  4
+
+# Insert duplicate row for column a.
+statement ok
+INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('ca-central-1', 5, 5, 5, 5)
+
+statement error could not create unique constraint "uniq_idx"\nDETAIL: Key \(a\)=\(5\) is duplicated
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a)
+
+statement ok
+DELETE FROM regional_by_row_table WHERE pk = 5;
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a)
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 'regional_by_row_table' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name                   column_name  implicit
+primary                      crdb_region  true
+primary                      pk           false
+regional_by_row_table_a_idx  a            false
+regional_by_row_table_a_idx  crdb_region  true
+regional_by_row_table_b_key  b            false
+regional_by_row_table_b_key  crdb_region  true
+regional_by_row_table_j_idx  crdb_region  true
+regional_by_row_table_j_idx  j            false
+uniq_idx                     a            false
+uniq_idx                     crdb_region  true
+
+statement ok
+DROP INDEX uniq_idx
 
 query TI
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
