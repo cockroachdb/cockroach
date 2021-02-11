@@ -538,6 +538,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 // for following schema changes in the same transaction.
 func TestJobsCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	foundInCache := false
