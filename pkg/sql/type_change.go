@@ -162,6 +162,9 @@ type TypeSchemaChangerTestingKnobs struct {
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
 	RunBeforeEnumMemberPromotion func()
+	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
+	// OnFailOrCancel is triggered.
+	RunAfterOnFailOrCancel func() error
 }
 
 // ModuleTestingKnobs implements the ModuleTestingKnobs interface.
@@ -612,14 +615,41 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 		execCfg:              execCtx.(JobExecContext).ExecCfg(),
 	}
 
-	if err := tc.cleanupEnumValues(ctx); err != nil {
-		return err
+	if rollbackErr := func() error {
+		if err := tc.cleanupEnumValues(ctx); err != nil {
+			return err
+		}
+
+		if err := drainNamesForDescriptor(
+			ctx, tc.execCfg.Settings, tc.typeID, tc.execCfg.DB,
+			tc.execCfg.InternalExecutor, tc.execCfg.LeaseManager, tc.execCfg.Codec, nil,
+		); err != nil {
+			return err
+		}
+
+		if fn := tc.execCfg.TypeSchemaChangerTestingKnobs.RunAfterOnFailOrCancel; fn != nil {
+			return fn()
+		}
+
+		return nil
+	}(); rollbackErr != nil {
+		switch {
+		case errors.Is(rollbackErr, catalog.ErrDescriptorNotFound):
+			// If the descriptor for the ID can't be found, we assume that another
+			// job executed already and dropped the type.
+			log.Infof(
+				ctx,
+				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
+				tc.typeID,
+			)
+		case !isPermanentSchemaChangeError(rollbackErr):
+			return jobs.NewRetryJobError(rollbackErr.Error())
+		default:
+			return rollbackErr
+		}
 	}
 
-	return drainNamesForDescriptor(
-		ctx, tc.execCfg.Settings, tc.typeID, tc.execCfg.DB,
-		tc.execCfg.InternalExecutor, tc.execCfg.LeaseManager, tc.execCfg.Codec, nil,
-	)
+	return nil
 }
 
 func init() {
