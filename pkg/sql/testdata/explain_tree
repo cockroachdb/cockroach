@@ -11,6 +11,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • scan
   columns: (oid int)
@@ -41,6 +43,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • scan
   columns: (cid int, date date, value decimal)
@@ -71,6 +75,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • project
 │ columns: (cid int, sum decimal)
@@ -149,6 +155,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • scan
   columns: (value decimal)
@@ -179,6 +187,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • project
 │ columns: (cid int, date date, value decimal)
@@ -267,6 +277,8 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+maximum memory usage: 0 B
+network usage: 0 B (0 messages)
 
 • root
 │ columns: (movie_id int, title string, name string)

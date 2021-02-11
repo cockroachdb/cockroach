@@ -32,6 +32,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 6 (48 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • sort
 │ actual row count: 2
@@ -102,6 +105,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 4 (32 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • sort
 │ actual row count: 2
@@ -148,6 +154,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 4 (32 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • sort
 │ actual row count: 2
