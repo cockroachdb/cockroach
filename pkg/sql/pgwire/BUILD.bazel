@@ -62,6 +62,7 @@ go_library(
 
 go_test(
     name = "pgwire_test",
+    size = "small",
     srcs = [
         "auth_test.go",
         "conn_test.go",
@@ -74,6 +75,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/security",

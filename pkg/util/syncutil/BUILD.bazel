@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "syncutil_test",
+    size = "small",
     srcs = [
         "atomic_test.go",
         "int_map_bench_test.go",

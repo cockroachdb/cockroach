@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "pgdate_test",
+    size = "small",
     srcs = [
         "field_extract_test.go",
         "fields_test.go",

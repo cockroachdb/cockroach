@@ -14,6 +14,7 @@ go_library(
 
 go_test(
     name = "retry_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "retry_test.go",

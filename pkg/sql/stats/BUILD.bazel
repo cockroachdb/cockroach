@@ -50,6 +50,7 @@ go_library(
 
 go_test(
     name = "stats_test",
+    size = "medium",
     srcs = [
         "automatic_stats_manual_test.go",
         "automatic_stats_test.go",

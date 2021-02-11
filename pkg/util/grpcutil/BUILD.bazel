@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "grpcutil_test",
+    size = "small",
     srcs = [
         "grpc_log_test.go",
         "grpc_util_test.go",

@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "ring_test",
+    size = "small",
     srcs = ["ring_buffer_test.go"],
     embed = [":ring"],
     deps = ["@com_github_stretchr_testify//require"],

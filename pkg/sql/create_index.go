@@ -568,11 +568,11 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
 	if tableDesc.IsLocalityRegionalByRow() {
-		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
 			ctx,
 			p.txn,
 			tableDesc.ParentID,
-			tree.DatabaseLookupFlags{},
+			tree.DatabaseLookupFlags{Required: true},
 		)
 		if err != nil {
 			return err

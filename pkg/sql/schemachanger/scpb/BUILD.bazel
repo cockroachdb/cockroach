@@ -29,6 +29,7 @@ go_proto_library(
 
 go_test(
     name = "scpb_test",
+    size = "small",
     srcs = ["elements_test.go"],
     embed = [":scpb"],
 )

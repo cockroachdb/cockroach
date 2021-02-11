@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "tracker_test",
+    size = "small",
     srcs = ["tracker_test.go"],
     embed = [":tracker"],
     deps = [

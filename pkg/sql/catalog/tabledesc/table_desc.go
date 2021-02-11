@@ -295,6 +295,7 @@ func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {
 //   desc.TableDesc().Columns slice;
 // - all column mutations in the same order as in the underlying
 //   desc.TableDesc().Mutations slice.
+// - all system columns defined in colinfo.AllSystemColumnDescs.
 func (desc *wrapper) AllColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().all
 }
@@ -310,6 +311,12 @@ func (desc *wrapper) PublicColumns() []catalog.Column {
 // order.
 func (desc *wrapper) WritableColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().writable
+}
+
+// DeletableColumns returns a slice of Column interfaces containing the
+// table's public columns and mutations, in the canonical order.
+func (desc *wrapper) DeletableColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().deletable
 }
 
 // NonDropColumns returns a slice of Column interfaces containing the
@@ -337,6 +344,13 @@ func (desc *wrapper) UserDefinedTypeColumns() []catalog.Column {
 // progress, as mutation columns may have NULL values.
 func (desc *wrapper) ReadableColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().readable
+}
+
+// SystemColumns returns a slice of Column interfaces
+// containing the table's system columns, as defined in
+// colinfo.AllSystemColumnDescs.
+func (desc *wrapper) SystemColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().system
 }
 
 // FindColumnWithID returns the first column found whose ID matches the

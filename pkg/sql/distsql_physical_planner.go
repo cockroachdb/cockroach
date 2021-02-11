@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -992,8 +993,11 @@ func initTableReaderSpec(
 		Spans:            s.Spans[:0],
 		HasSystemColumns: n.containsSystemColumns,
 		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
-		VirtualColumn:    getVirtualColumn(n.colCfg.virtualColumn, n.cols),
 	}
+	if vc := getVirtualColumn(n.colCfg.virtualColumn, n.cols); vc != nil {
+		s.VirtualColumn = vc.ColumnDesc()
+	}
+
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
@@ -1022,15 +1026,14 @@ func getVirtualColumn(
 	virtualColumn *struct {
 		colID tree.ColumnID
 		typ   *types.T
-	},
-	cols []*descpb.ColumnDescriptor,
-) *descpb.ColumnDescriptor {
+	}, cols []catalog.Column,
+) catalog.Column {
 	if virtualColumn == nil {
 		return nil
 	}
 
 	for i := range cols {
-		if tree.ColumnID(cols[i].ID) == virtualColumn.colID {
+		if tree.ColumnID(cols[i].GetID()) == virtualColumn.colID {
 			return cols[i]
 		}
 	}
@@ -1041,20 +1044,9 @@ func getVirtualColumn(
 func tableOrdinal(
 	desc catalog.TableDescriptor, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
-	for _, col := range desc.AllColumns() {
-		if col.Public() || visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-			if col.GetID() == colID {
-				return col.Ordinal()
-			}
-		}
-	}
-
-	// The column is an implicit system column, so give it an ordinal based
-	// on its ID that is larger than physical columns. These ordinals are
-	// different for each system column kind. MVCCTimestampColumnID is the
-	// largest column ID, and all system columns are decreasing from it.
-	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.AllColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
+	col, _ := desc.FindColumnWithID(colID)
+	if col != nil && (col.IsSystemColumn() || visibility == execinfra.ScanVisibilityPublicAndNotPublic || col.Public()) {
+		return col.Ordinal()
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
@@ -1063,7 +1055,7 @@ func tableOrdinal(
 func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility) int {
 	highest := len(desc.PublicColumns()) - 1
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.AllColumns()) - 1
+		highest = len(desc.DeletableColumns()) - 1
 	}
 	return highest
 }
@@ -1071,13 +1063,11 @@ func highestTableOrdinal(desc catalog.TableDescriptor, visibility execinfrapb.Sc
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
 func toTableOrdinals(
-	cols []*descpb.ColumnDescriptor,
-	desc catalog.TableDescriptor,
-	visibility execinfrapb.ScanVisibility,
+	cols []catalog.Column, desc catalog.TableDescriptor, visibility execinfrapb.ScanVisibility,
 ) []int {
 	res := make([]int, len(cols))
 	for i := range res {
-		res[i] = tableOrdinal(desc, cols[i].ID, visibility)
+		res[i] = tableOrdinal(desc, cols[i].GetID(), visibility)
 	}
 	return res
 }
@@ -1085,7 +1075,7 @@ func toTableOrdinals(
 // getOutputColumnsFromColsForScan returns the indices of the columns that are
 // returned by a scanNode or a tableReader.
 // If remap is not nil, the column ordinals are remapped accordingly.
-func getOutputColumnsFromColsForScan(cols []*descpb.ColumnDescriptor, remap []int) []uint32 {
+func getOutputColumnsFromColsForScan(cols []catalog.Column, remap []int) []uint32 {
 	outputColumns := make([]uint32, len(cols))
 	// TODO(radu): if we have a scan with a filter, cols will include the
 	// columns needed for the filter, even if they aren't needed for the next
@@ -1236,7 +1226,7 @@ type tableReaderPlanningInfo struct {
 	parallelize           bool
 	estimatedRowCount     uint64
 	reqOrdering           ReqOrdering
-	cols                  []*descpb.ColumnDescriptor
+	cols                  []catalog.Column
 	colsToTableOrdinalMap []int
 	containsSystemColumns bool
 }
@@ -1300,15 +1290,16 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
+	virtualColumn := tabledesc.FindVirtualColumn(info.desc, info.spec.VirtualColumn)
 	cols := info.desc.PublicColumns()
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 	if returnMutations {
-		cols = info.desc.AllColumns()
+		cols = info.desc.DeletableColumns()
 	}
-	typs := catalog.ColumnTypesWithVirtualCol(cols, info.spec.VirtualColumn)
+	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
 	if info.containsSystemColumns {
-		for i := range colinfo.AllSystemColumnDescs {
-			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)
+		for _, col := range info.desc.SystemColumns() {
+			typs = append(typs, col.GetType())
 		}
 	}
 
@@ -1321,14 +1312,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	var descColumnIDs util.FastIntMap
 	colID := 0
 	for _, col := range info.desc.AllColumns() {
-		if col.Public() || returnMutations {
+		if col.Public() || returnMutations || (col.IsSystemColumn() && info.containsSystemColumns) {
 			descColumnIDs.Set(colID, int(col.GetID()))
-			colID++
-		}
-	}
-	if info.containsSystemColumns {
-		for i := range colinfo.AllSystemColumnDescs {
-			descColumnIDs.Set(colID, int(colinfo.AllSystemColumnDescs[i].ID))
 			colID++
 		}
 	}
@@ -1336,7 +1321,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
-			if descColumnIDs.GetDefault(int(c)) == int(info.cols[i].ID) {
+			if descColumnIDs.GetDefault(int(c)) == int(info.cols[i].GetID()) {
 				planToStreamColMap[i] = j
 				break
 			}
@@ -2125,8 +2110,8 @@ func mappingHelperForLookupJoins(
 		post.OutputColumns[i] = uint32(i)
 	}
 	for i := range table.cols {
-		outTypes[numLeftCols+i] = table.cols[i].Type
-		ord := tableOrdinal(table.desc, table.cols[i].ID, table.colCfg.visibility)
+		outTypes[numLeftCols+i] = table.cols[i].GetType()
+		ord := tableOrdinal(table.desc, table.cols[i].GetID(), table.colCfg.visibility)
 		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
 	}
 	if addContinuationCol {
@@ -2309,10 +2294,10 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		// index that are also in n.columns. This is because we generated
 		// colCfg.wantedColumns for only the necessary columns in
 		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
-		for colIdx := range side.scan.cols {
-			ord := tableOrdinal(side.scan.desc, side.scan.cols[colIdx].ID, side.scan.colCfg.visibility)
+		for _, col := range side.scan.cols {
+			ord := tableOrdinal(side.scan.desc, col.GetID(), side.scan.colCfg.visibility)
 			post.OutputColumns[i] = uint32(colOffset + ord)
-			types[i] = side.scan.cols[colIdx].Type
+			types[i] = col.GetType()
 			planToStreamColMap[i] = i
 
 			i++

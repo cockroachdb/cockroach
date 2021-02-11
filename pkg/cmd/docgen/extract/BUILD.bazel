@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "extract_test",
+    size = "small",
     srcs = ["extract_test.go"],
     embed = [":extract"],
 )

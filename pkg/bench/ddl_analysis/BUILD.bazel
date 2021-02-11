@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "ddl_analysis_test",
+    size = "small",
     srcs = [
         "alter_table_bench_test.go",
         "bench_test.go",

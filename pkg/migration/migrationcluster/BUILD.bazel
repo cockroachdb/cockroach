@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "migrationcluster_test",
+    size = "small",
     srcs = [
         "client_test.go",
         "helper_test.go",

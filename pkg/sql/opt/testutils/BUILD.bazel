@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "testutils_test",
+    size = "small",
     srcs = ["scalar_vars_test.go"],
     embed = [":testutils"],
     deps = [

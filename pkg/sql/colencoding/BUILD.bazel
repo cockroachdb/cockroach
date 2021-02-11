@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "colencoding_test",
+    size = "small",
     srcs = ["value_encoding_test.go"],
     embed = [":colencoding"],
     deps = [

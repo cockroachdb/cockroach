@@ -13,6 +13,7 @@ go_library(
 
 go_test(
     name = "csv_test",
+    size = "small",
     srcs = [
         "example_test.go",
         "reader_test.go",

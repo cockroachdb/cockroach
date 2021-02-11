@@ -49,6 +49,7 @@ go_library(
 
 go_test(
     name = "tracing_test",
+    size = "small",
     srcs = [
         "alloc_test.go",
         "helpers_test.go",

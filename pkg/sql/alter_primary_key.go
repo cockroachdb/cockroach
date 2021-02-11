@@ -265,7 +265,7 @@ func (p *planner) AlterPrimaryKey(
 				if as := to.RegionalByRow.As; as != nil {
 					colName = tree.Name(*as)
 				}
-				dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+				_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
 					ctx,
 					p.txn,
 					tableDesc.GetParentID(),

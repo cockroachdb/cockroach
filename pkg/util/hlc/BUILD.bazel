@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "hlc_test",
+    size = "small",
     srcs = [
         "hlc_test.go",
         "timestamp_test.go",

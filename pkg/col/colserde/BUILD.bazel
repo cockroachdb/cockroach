@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "colserde_test",
+    size = "small",
     srcs = [
         "arrowbatchconverter_test.go",
         "file_test.go",

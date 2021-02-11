@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "partialidx_test",
+    size = "small",
     srcs = ["implicator_test.go"],
     data = glob(["testdata/**"]),
     deps = [

@@ -9,12 +9,14 @@ go_library(
 
 go_test(
     name = "logictestccl_test",
+    size = "small",
     srcs = [
         "logic_test.go",
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":logictestccl"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/utilccl",

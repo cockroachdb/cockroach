@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,6 +43,18 @@ func (w column) ColumnDescDeepCopy() descpb.ColumnDescriptor {
 	return *protoutil.Clone(w.desc).(*descpb.ColumnDescriptor)
 }
 
+// DeepCopy returns a deep copy of the receiver.
+func (w column) DeepCopy() catalog.Column {
+	desc := w.ColumnDescDeepCopy()
+	return &column{
+		desc:              &desc,
+		ordinal:           w.ordinal,
+		mutationID:        w.mutationID,
+		mutationDirection: w.mutationDirection,
+		mutationState:     w.mutationState,
+	}
+}
+
 // Ordinal returns the ordinal of the column in its parent TableDescriptor.
 // The ordinal is defined as follows:
 // - [:len(desc.Columns)] is the range of public columns,
@@ -52,7 +65,7 @@ func (w column) Ordinal() int {
 
 // Public returns true iff the column is active, i.e. readable.
 func (w column) Public() bool {
-	return w.mutationState == descpb.DescriptorMutation_UNKNOWN
+	return w.mutationState == descpb.DescriptorMutation_UNKNOWN && !w.IsSystemColumn()
 }
 
 // Adding returns true iff the column is an add mutation in the table
@@ -186,15 +199,22 @@ func (w column) GetPGAttributeNum() uint32 {
 	return w.desc.GetPGAttributeNum()
 }
 
+// IsSystemColumn returns true iff the column is a system column.
+func (w column) IsSystemColumn() bool {
+	return w.desc.SystemColumnKind != descpb.SystemColumnKind_NONE
+}
+
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
-	all      []catalog.Column
-	public   []catalog.Column
-	writable []catalog.Column
-	nonDrop  []catalog.Column
-	visible  []catalog.Column
-	readable []catalog.Column
-	withUDTs []catalog.Column
+	all       []catalog.Column
+	public    []catalog.Column
+	writable  []catalog.Column
+	deletable []catalog.Column
+	nonDrop   []catalog.Column
+	visible   []catalog.Column
+	readable  []catalog.Column
+	withUDTs  []catalog.Column
+	system    []catalog.Column
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -203,7 +223,7 @@ func newColumnCache(desc *descpb.TableDescriptor) *columnCache {
 	c := columnCache{}
 	// Build a slice of structs to back the interfaces in c.all.
 	// This is better than allocating memory once per struct.
-	backingStructs := make([]column, len(desc.Columns), len(desc.Columns)+len(desc.Mutations))
+	backingStructs := make([]column, len(desc.Columns), len(desc.Columns)+len(desc.Mutations)+len(colinfo.AllSystemColumnDescs))
 	for i := range desc.Columns {
 		backingStructs[i] = column{desc: &desc.Columns[i], ordinal: i}
 	}
@@ -219,6 +239,14 @@ func newColumnCache(desc *descpb.TableDescriptor) *columnCache {
 			backingStructs = append(backingStructs, col)
 		}
 	}
+	numDeletable := len(backingStructs)
+	for i := range colinfo.AllSystemColumnDescs {
+		col := column{
+			desc:    &colinfo.AllSystemColumnDescs[i],
+			ordinal: len(backingStructs),
+		}
+		backingStructs = append(backingStructs, col)
+	}
 
 	// Populate the c.all slice with column interfaces.
 	c.all = make([]catalog.Column, len(backingStructs))
@@ -226,20 +254,22 @@ func newColumnCache(desc *descpb.TableDescriptor) *columnCache {
 		c.all[i] = &backingStructs[i]
 	}
 	// Populate the remaining fields.
+	c.deletable = c.all[:numDeletable]
+	c.system = c.all[numDeletable:]
 	c.public = c.all[:len(desc.Columns)]
-	if len(c.public) == len(c.all) {
+	if len(c.public) == len(c.deletable) {
 		c.readable = c.public
 		c.writable = c.public
 		c.nonDrop = c.public
 	} else {
-		readableDescs := make([]descpb.ColumnDescriptor, 0, len(c.all)-len(c.public))
+		readableDescs := make([]descpb.ColumnDescriptor, 0, len(c.deletable)-len(c.public))
 		readableBackingStructs := make([]column, 0, cap(readableDescs))
-		for i, col := range c.all {
+		for i, col := range c.deletable {
 			if !col.DeleteOnly() {
-				lazyAllocAppendColumn(&c.writable, col, len(c.all))
+				lazyAllocAppendColumn(&c.writable, col, len(c.deletable))
 			}
 			if !col.Dropped() {
-				lazyAllocAppendColumn(&c.nonDrop, col, len(c.all))
+				lazyAllocAppendColumn(&c.nonDrop, col, len(c.deletable))
 			}
 			if !col.Public() && !col.IsNullable() {
 				j := len(readableDescs)
@@ -249,15 +279,15 @@ func newColumnCache(desc *descpb.TableDescriptor) *columnCache {
 				readableBackingStructs[j].desc = &readableDescs[j]
 				col = &readableBackingStructs[j]
 			}
-			lazyAllocAppendColumn(&c.readable, col, len(c.all))
+			lazyAllocAppendColumn(&c.readable, col, len(c.deletable))
 		}
 	}
-	for _, col := range c.all {
+	for _, col := range c.deletable {
 		if col.Public() && !col.IsHidden() {
 			lazyAllocAppendColumn(&c.visible, col, len(c.public))
 		}
 		if col.HasType() && col.GetType().UserDefined() {
-			lazyAllocAppendColumn(&c.withUDTs, col, len(c.all))
+			lazyAllocAppendColumn(&c.withUDTs, col, len(c.deletable))
 		}
 	}
 	return &c

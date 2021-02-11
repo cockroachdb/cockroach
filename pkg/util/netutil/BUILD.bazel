@@ -22,6 +22,7 @@ go_library(
 
 go_test(
     name = "netutil_test",
+    size = "small",
     srcs = ["addr_test.go"],
     deps = [
         ":netutil",

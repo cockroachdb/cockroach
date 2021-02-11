@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "colmem_test",
+    size = "small",
     srcs = ["allocator_test.go"],
     deps = [
         ":colmem",

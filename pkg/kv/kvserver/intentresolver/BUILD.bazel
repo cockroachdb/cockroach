@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "intentresolver_test",
+    size = "small",
     srcs = ["intent_resolver_test.go"],
     embed = [":intentresolver"],
     deps = [

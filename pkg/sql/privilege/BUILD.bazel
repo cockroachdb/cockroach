@@ -18,6 +18,7 @@ go_library(
 
 go_test(
     name = "privilege_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "privilege_test.go",

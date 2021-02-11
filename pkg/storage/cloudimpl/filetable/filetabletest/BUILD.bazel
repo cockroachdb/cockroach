@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "filetabletest_test",
+    size = "medium",
     srcs = [
         "file_table_read_writer_test.go",
         "main_test.go",

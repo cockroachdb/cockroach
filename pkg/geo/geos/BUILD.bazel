@@ -65,8 +65,10 @@ go_library(
 
 go_test(
     name = "geos_test",
+    size = "small",
     srcs = ["geos_test.go"],
     embed = [":geos"],
+    tags = ["broken_in_bazel"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

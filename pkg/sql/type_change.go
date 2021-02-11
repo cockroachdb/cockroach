@@ -369,8 +369,8 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 				member.Direction = descpb.TypeDescriptor_EnumMember_NONE
 
 				if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-					dbDesc, err := descsCol.GetMutableDatabaseByID(
-						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+					_, dbDesc, err := descsCol.GetMutableDatabaseByID(
+						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
 					if err != nil {
 						return err
 					}
@@ -473,8 +473,8 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// be unset by default) when executing the query constructed above. This is
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
-			dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)

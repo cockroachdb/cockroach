@@ -39,6 +39,7 @@ go_library(
 
 go_test(
     name = "concurrency_test",
+    size = "large",
     srcs = [
         "concurrency_manager_test.go",
         "datadriven_util_test.go",

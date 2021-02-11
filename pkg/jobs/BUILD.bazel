@@ -65,6 +65,7 @@ go_library(
 
 go_test(
     name = "jobs_test",
+    size = "medium",
     srcs = [
         "executor_impl_test.go",
         "helpers_test.go",

@@ -15,7 +15,9 @@ go_library(
 
 go_test(
     name = "unconvert_test",
+    size = "small",
     srcs = ["unconvert_test.go"],
+    tags = ["broken_in_bazel"],
     deps = [
         ":unconvert",
         "//pkg/testutils/skip",

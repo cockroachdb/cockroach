@@ -10,6 +10,7 @@ go_library(
 
 go_test(
     name = "singleflight_test",
+    size = "small",
     srcs = ["singleflight_test.go"],
     embed = [":singleflight"],
     deps = ["@com_github_cockroachdb_errors//:errors"],

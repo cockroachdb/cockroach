@@ -46,6 +46,7 @@ go_library(
 
 go_test(
     name = "lang_test",
+    size = "small",
     srcs = [
         "compiler_test.go",
         "parser_test.go",

@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "sessiondata_test",
+    size = "small",
     srcs = ["search_path_test.go"],
     embed = [":sessiondata"],
     deps = ["@com_github_stretchr_testify//assert"],

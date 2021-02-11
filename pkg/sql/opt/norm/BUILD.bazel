@@ -57,6 +57,7 @@ go_library(
 
 go_test(
     name = "norm_test",
+    size = "small",
     srcs = [
         "decorrelate_funcs_test.go",
         "factory_test.go",
@@ -65,6 +66,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":norm"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

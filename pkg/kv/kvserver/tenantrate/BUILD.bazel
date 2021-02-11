@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "tenantrate_test",
+    size = "small",
     srcs = [
         "helpers_test.go",
         "limiter_test.go",

@@ -2799,7 +2799,7 @@ func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, new
 // same transaction that is currently running.
 func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column, error) {
 	currentMutationID := desc.ClusterVersion.NextMutationID
-	for _, col := range desc.AllColumns() {
+	for _, col := range desc.DeletableColumns() {
 		if (col.Public() && col.ColName() == name) ||
 			(col.Adding() && col.(*column).mutationID == currentMutationID) {
 			return col, nil

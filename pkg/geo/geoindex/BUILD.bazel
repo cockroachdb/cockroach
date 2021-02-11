@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "geoindex_test",
+    size = "small",
     srcs = [
         "s2_geography_index_test.go",
         "s2_geometry_index_test.go",
@@ -36,6 +37,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":geoindex"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogfn",

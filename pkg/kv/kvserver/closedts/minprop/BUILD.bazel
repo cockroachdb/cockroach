@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "minprop_test",
+    size = "small",
     srcs = [
         "doc_test.go",
         "tracker_test.go",

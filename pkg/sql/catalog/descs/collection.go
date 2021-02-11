@@ -669,7 +669,9 @@ func (tc *Collection) getUserDefinedSchemaByName(
 
 		// Look up whether the schema is on the database descriptor and return early
 		// if it's not.
-		dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{})
+		_, dbDesc, err := tc.GetImmutableDatabaseByID(
+			ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true},
+		)
 		if err != nil {
 			return false, nil, err
 		}
@@ -848,49 +850,48 @@ func (tc *Collection) getSchemaByName(
 
 // GetMutableDatabaseByID returns a mutable database descriptor with
 // properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
 func (tc *Collection) GetMutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (*dbdesc.Mutable, error) {
-	desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, true /* mutable */)
-	if err != nil {
-		return nil, err
+) (bool, *dbdesc.Mutable, error) {
+	found, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, true /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
 	}
-	return desc.(*dbdesc.Mutable), nil
+	return true, desc.(*dbdesc.Mutable), nil
 }
 
 var _ = (*Collection)(nil).GetMutableDatabaseByID
 
 // GetImmutableDatabaseByID returns an immutable database descriptor with
 // properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
 func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (*dbdesc.Immutable, error) {
-	desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
-	if err != nil {
-		return nil, err
+) (bool, *dbdesc.Immutable, error) {
+	found, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
 	}
-	return desc.(*dbdesc.Immutable), nil
+	return true, desc.(*dbdesc.Immutable), nil
 }
 
 func (tc *Collection) getDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags, mutable bool,
-) (catalog.DatabaseDescriptor, error) {
+) (bool, catalog.DatabaseDescriptor, error) {
 	desc, err := tc.getDescriptorByID(ctx, txn, dbID, flags, mutable)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+			if flags.Required {
+				return false, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+			}
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
 	db, ok := desc.(catalog.DatabaseDescriptor)
 	if !ok {
-		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+		return false, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
-	return db, nil
+	return true, db, nil
 }
 
 // GetMutableTableByID returns a mutable table descriptor with
@@ -1197,8 +1198,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
-				tree.DatabaseLookupFlags{})
+			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
+				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}

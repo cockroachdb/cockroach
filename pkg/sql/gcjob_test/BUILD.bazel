@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "gcjob_test_test",
+    size = "medium",
     srcs = [
         "gc_job_test.go",
         "main_test.go",

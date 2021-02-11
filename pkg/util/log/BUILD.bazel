@@ -122,6 +122,7 @@ go_library(
 
 go_test(
     name = "log_test",
+    size = "small",
     srcs = [
         "ambient_context_test.go",
         "clog_test.go",
@@ -138,6 +139,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/util/leaktest",

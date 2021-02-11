@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "ycsb_test",
+    size = "medium",
     srcs = [
         "main_test.go",
         "zipfgenerator_test.go",

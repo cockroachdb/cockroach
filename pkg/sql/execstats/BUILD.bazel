@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "execstats_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "traceanalyzer_test.go",

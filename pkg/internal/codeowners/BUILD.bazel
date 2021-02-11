@@ -15,6 +15,7 @@ go_library(
 
 go_test(
     name = "codeowners_test",
+    size = "small",
     srcs = ["codeowners_test.go"],
     embed = [":codeowners"],
     deps = [

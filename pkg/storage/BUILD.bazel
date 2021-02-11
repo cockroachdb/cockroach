@@ -112,6 +112,7 @@ go_library(
 
 go_test(
     name = "storage_test",
+    size = "medium",
     srcs = [
         "batch_test.go",
         "bench_pebble_test.go",

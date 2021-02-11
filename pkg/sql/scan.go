@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -61,7 +60,7 @@ type scanNode struct {
 	// be gained (e.g. for tables with wide rows) by reading only certain
 	// columns from KV using point lookups instead of a single range lookup for
 	// the entire row.
-	cols []*descpb.ColumnDescriptor
+	cols []catalog.Column
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns colinfo.ResultColumns
 
@@ -248,63 +247,36 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	return nil
 }
 
-// findReadableColumnByID finds the readable column with specified ID. The
-// column may be undergoing a schema change and is marked nullable regardless
-// of its configuration. It returns true if the column is undergoing a
-// schema change.
-func findReadableColumnByID(
-	desc catalog.TableDescriptor, id descpb.ColumnID,
-) (catalog.Column, error) {
-	for _, c := range desc.ReadableColumns() {
-		if c.GetID() == id {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-}
-
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
 	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
-) (cols []*descpb.ColumnDescriptor, err error) {
+) (cols []catalog.Column, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.AllColumns()))
+	cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
 	for _, wc := range colCfg.wantedColumns {
-		var c *descpb.ColumnDescriptor
-		var err error
-		if colinfo.IsColIDSystemColumn(descpb.ColumnID(wc)) {
-			// If the requested column is a system column, then retrieve the
-			// corresponding descriptor.
-			c, err = colinfo.GetSystemColumnDescriptorFromID(descpb.ColumnID(wc))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// Otherwise, collect the descriptors from the table's columns.
-			var col catalog.Column
-			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-				col, err = tabledesc.FindPublicColumnWithID(desc, id)
-			} else {
-				col, err = findReadableColumnByID(desc, id)
-			}
-			if err != nil {
-				return cols, err
-			}
-			c = col.ColumnDesc()
-
-			// If this is a virtual column, create a new descriptor with the correct
-			// type.
-			if vc := colCfg.virtualColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(c.Type) {
-				virtualDesc := *c
-				virtualDesc.Type = vc.typ
-				c = &virtualDesc
+		id := descpb.ColumnID(wc)
+		col, err := desc.FindColumnWithID(id)
+		if err != nil {
+			return cols, err
+		}
+		if !col.IsSystemColumn() {
+			if colCfg.visibility != execinfra.ScanVisibilityPublic {
+				col = desc.ReadableColumns()[col.Ordinal()]
+			} else if !col.Public() {
+				return cols, fmt.Errorf("column-id \"%d\" does not exist", id)
 			}
 		}
 
-		cols = append(cols, c)
+		// If this is a virtual column, create a new descriptor with the correct
+		// type.
+		if vc := colCfg.virtualColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
+			col = col.DeepCopy()
+			col.ColumnDesc().Type = vc.typ
+		}
+		cols = append(cols, col)
 	}
 
 	if colCfg.addUnwantedAsHidden {
@@ -320,9 +292,9 @@ func initColsForScan(
 				// NB: we could amortize this allocation using a second slice,
 				// but addUnwantedAsHidden is only used by scrub, so doing so
 				// doesn't seem worth it.
-				col := *c.ColumnDesc()
-				col.Hidden = true
-				cols = append(cols, &col)
+				col := c.DeepCopy()
+				col.ColumnDesc().Hidden = true
+				cols = append(cols, col)
 			}
 		}
 	}
@@ -342,6 +314,6 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
+	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
 	return nil
 }

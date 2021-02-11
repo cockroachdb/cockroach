@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -364,11 +365,11 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{},
+			tree.DatabaseLookupFlags{Required: true},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
@@ -2320,7 +2321,7 @@ func newTableDesc(
 	}
 
 	regionEnumID := descpb.InvalidID
-	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
 	)
 	if err != nil {
@@ -2649,8 +2650,9 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	}
 }
 
-// CreateInheritedPrivilegesFromDBDesc creates privileges with the appropriate
-// owner (node for system, the restoring user otherwise.)
+// CreateInheritedPrivilegesFromDBDesc creates privileges for a
+// table (or view/sequence) with the appropriate owner (node for system,
+// the restoring user otherwise.)
 func CreateInheritedPrivilegesFromDBDesc(
 	dbDesc catalog.DatabaseDescriptor, user security.SQLUsername,
 ) *descpb.PrivilegeDescriptor {
@@ -2661,6 +2663,12 @@ func CreateInheritedPrivilegesFromDBDesc(
 	}
 
 	privs := dbDesc.GetPrivileges()
+	tablePrivBits := privilege.GetValidPrivilegesForObject(privilege.Table).ToBitField()
+	for i, u := range privs.Users {
+		// Remove privileges that are valid for databases but not for tables.
+		privs.Users[i].Privileges = u.Privileges & tablePrivBits
+	}
+
 	privs.SetOwner(user)
 
 	return privs

@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "testcat_test",
+    size = "small",
     srcs = ["test_catalog_test.go"],
     data = glob(["testdata/**"]),
     deps = [

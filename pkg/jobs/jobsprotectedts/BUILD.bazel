@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "jobsprotectedts_test",
+    size = "medium",
     srcs = [
         "jobs_protected_ts_test.go",
         "main_test.go",

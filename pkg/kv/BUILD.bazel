@@ -40,6 +40,7 @@ go_library(
 
 go_test(
     name = "kv_test",
+    size = "medium",
     srcs = [
         "client_test.go",
         "db_test.go",

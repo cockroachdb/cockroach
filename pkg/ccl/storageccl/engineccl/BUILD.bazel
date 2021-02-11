@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "engineccl_test",
+    size = "small",
     srcs = [
         "batch_repr_test.go",
         "bench_test.go",

@@ -29,6 +29,7 @@ go_library(
 
 go_test(
     name = "pgerror_test",
+    size = "small",
     srcs = [
         "constraint_name_test.go",
         "errors_test.go",

@@ -70,6 +70,7 @@ go_library(
 
 go_test(
     name = "execinfra_test",
+    size = "small",
     srcs = [
         "base_test.go",
         "dep_test.go",

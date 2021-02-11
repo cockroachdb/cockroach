@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "zonepb_test",
+    size = "small",
     srcs = ["zone_test.go"],
     embed = [":zonepb"],
     deps = [
