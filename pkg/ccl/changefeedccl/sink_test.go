@@ -197,11 +197,11 @@ func TestSQLSink(t *testing.T) {
 	defer cleanup()
 	sinkURL.Path = `d`
 
-	foo_topic := topic(`foo`)
-	bar_topic := topic(`bar`)
+	fooTopic := topic(`foo`)
+	barTopic := topic(`bar`)
 	targets := jobspb.ChangefeedTargets{
-		descpb.ID(foo_topic.ID()): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
-		descpb.ID(bar_topic.ID()): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
+		descpb.ID(fooTopic.ID()): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
+		descpb.ID(barTopic.ID()): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
 	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestSQLSink(t *testing.T) {
 		sink.EmitRow(ctx, topic(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
-	require.NoError(t, sink.EmitRow(ctx, foo_topic, []byte(`k1`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v0`), zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{},
 	)
@@ -229,7 +229,7 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`0`}})
 	for i := 0; i < sqlSinkRowBatchSize+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, foo_topic, []byte(`k1`), []byte(`v`+strconv.Itoa(i)), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v`+strconv.Itoa(i)), zeroTS))
 	}
 	// Should have auto flushed after sqlSinkRowBatchSize
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`3`}})
@@ -238,9 +238,9 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
 	// Two tables interleaved in time
-	require.NoError(t, sink.EmitRow(ctx, foo_topic, []byte(`kfoo`), []byte(`v0`), zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, bar_topic, []byte(`kbar`), []byte(`v0`), zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, foo_topic, []byte(`kfoo`), []byte(`v1`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, barTopic, []byte(`kbar`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`kfoo`), []byte(`v1`), zeroTS))
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT topic, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`bar`, `kbar`, `v0`}, {`foo`, `kfoo`, `v0`}, {`foo`, `kfoo`, `v1`}},
@@ -251,11 +251,11 @@ func TestSQLSink(t *testing.T) {
 	// guarantee that at lease two of them end up in the same partition.
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, foo_topic, []byte(`v`+strconv.Itoa(i)), []byte(`v0`), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v0`), zeroTS))
 	}
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
 		require.NoError(t,
-			sink.EmitRow(ctx, foo_topic, []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS))
+			sink.EmitRow(ctx, fooTopic, []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS))
 	}
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT partition, key, value FROM sink ORDER BY PRIMARY KEY sink`,
@@ -275,7 +275,7 @@ func TestSQLSink(t *testing.T) {
 	// Emit resolved
 	var e testEncoder
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, zeroTS))
-	require.NoError(t, sink.EmitRow(ctx, foo_topic, []byte(`foo0`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`foo0`), []byte(`v0`), zeroTS))
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, hlc.Timestamp{WallTime: 1}))
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t,
