@@ -51,13 +51,43 @@ func (e *ParseError) Error() string {
 // Constant expected by parser when lexer reaches EOF.
 const eof = 0
 
+// Stack object used for parsing the geometry type.
+// layout      is the currently parsed geometry type.
+// baseType    is a bool where true means the current context is the top-level or a base type GEOMETRYCOLLECTION.
+// mustBeEmpty is a bool used to handle the edge case where a base type geometry is allowed in a GEOMETRYCOLLECTIONM
+//             but only if it is EMPTY.
+//
+// The layout of the geometry is determined by the first geometry type keyword if it is a M, Z, or ZM variant.
+// If it is a base type geometry, the layout is determined by the number of coordinates in the first point.
+// If it is a geometrycollection, the type is the type of the first geometry in the collection.
+// Edge cases involving geometrycollections:
+// 1. GEOMETRYCOLLECTION (no type suffix) is allowed to be of type M. Normally a geometry without a type suffix
+//    is only allowed to be XY, XYZ, or XYZM.
+// 2. A base type empty geometry (e.g. POINT EMPTY) in a GEOMETRYCOLLECTIONM, GEOMETRYCOLLECTIONZ, GEOMETRYCOLLECTIONZM
+//    is permitted and takes on the type of the collection. Normally, such a geometry is XY. Note that base type
+//    non-empty geometries are still not permitted in a GEOMETRYCOLLECTIONM (e.g. POINT(0 0 0)).
+type layoutStackObj struct {
+	layout      geom.Layout
+	baseType    bool
+	mustBeEmpty bool
+}
+
 type wktLex struct {
-	line      string
-	pos       int
-	lastPos   int
-	ret       geom.T
-	curLayout geom.Layout
-	lastErr   error
+	line        string
+	pos         int
+	lastPos     int
+	ret         geom.T
+	layoutStack []layoutStackObj
+	lastErr     error
+}
+
+func makeWktLex(line string) *wktLex {
+	newWktLex := &wktLex{line: line}
+	newWktLex.layoutStack = append(newWktLex.layoutStack, layoutStackObj{
+		layout:   geom.NoLayout,
+		baseType: true,
+	})
+	return newWktLex
 }
 
 // Lex lexes a token from the input.
@@ -137,6 +167,14 @@ func getKeywordToken(tokStr string) int {
 		return MULTIPOLYGONZ
 	case "MULTIPOLYGONZM":
 		return MULTIPOLYGONZM
+	case "GEOMETRYCOLLECTION":
+		return GEOMETRYCOLLECTION
+	case "GEOMETRYCOLLECTIONM":
+		return GEOMETRYCOLLECTIONM
+	case "GEOMETRYCOLLECTIONZ":
+		return GEOMETRYCOLLECTIONZ
+	case "GEOMETRYCOLLECTIONZM":
+		return GEOMETRYCOLLECTIONZM
 	default:
 		return eof
 	}
@@ -241,7 +279,7 @@ func getDefaultLayoutForStride(stride int) geom.Layout {
 		return geom.XYZM
 	default:
 		// This should never happen.
-		panic("unsupported stride")
+		panic(fmt.Sprintf("unsupported stride %d", stride))
 	}
 }
 
@@ -262,7 +300,7 @@ func (l *wktLex) validateStride(stride int) bool {
 }
 
 func (l *wktLex) isValidStrideForLayout(stride int) bool {
-	switch l.curLayout {
+	switch curLayout := l.getCurLayout(); curLayout {
 	case geom.NoLayout:
 		return true
 	case geom.XY:
@@ -275,43 +313,164 @@ func (l *wktLex) isValidStrideForLayout(stride int) bool {
 		return stride == 4
 	default:
 		// This should never happen.
-		panic("unknown geom.Layout")
+		panic(fmt.Sprintf("unknown geom.Layout %d", curLayout))
 	}
 }
 
-func (l *wktLex) setLayout(layout geom.Layout) bool {
-	if layout == l.curLayout {
-		return true
-	}
-	if l.curLayout != geom.NoLayout {
-		l.setIncorrectLayoutError(layout, "")
+func (l *wktLex) isNonEmptyAllowedForLayout() bool {
+	if l.getCurLayoutMustBeEmpty() {
+		if l.getCurLayout() != geom.XYM {
+			panic("mustBeEmpty is true but layout is not XYM")
+		}
+		l.setIncorrectLayoutError(geom.NoLayout, "XYM layout must use the M variant of the geometry type")
 		return false
 	}
-	l.setLayoutIfNoLayout(layout)
 	return true
 }
 
-func (l *wktLex) setLayoutEmptyInCollection() bool {
-	if l.curLayout == geom.XY {
+func (l *wktLex) setLayout(layout geom.Layout) bool {
+	switch {
+	case layout == l.getCurLayout():
+		return true
+	case l.getCurLayout() != geom.NoLayout:
+		l.setIncorrectLayoutError(layout, "")
+		return false
+	default:
+		l.setLayoutIfNoLayout(layout)
 		return true
 	}
-	if l.curLayout == geom.NoLayout {
-		l.curLayout = geom.XY
+}
+
+func (l *wktLex) setLayoutBaseType() bool {
+	if !l.getCurLayoutBaseType() {
+		// Handle edge case where a GEOMETRYCOLLECTIONM may have base type EMPTY geometries but not non-EMPTY geometries.
+		if l.getCurLayout() == geom.XYM {
+			l.setCurLayoutMustBeEmpty(true)
+		}
 		return true
 	}
-	l.setIncorrectLayoutError(geom.XY, "EMPTY is XY layout in base geometry type collection")
-	return false
+
+	if l.getCurLayout() == geom.XYM {
+		l.setIncorrectLayoutError(geom.NoLayout, "XYM layout must use the M variant of the geometry type")
+		return false
+	}
+
+	return true
+}
+
+func (l *wktLex) setLayoutBaseTypeEmpty() bool {
+	if !l.getCurLayoutBaseType() {
+		// Handle edge case where a GEOMETRYCOLLECTIONM may have base type EMPTY geometries but not non-EMPTY geometries.
+		if l.getCurLayout() == geom.XYM {
+			l.setCurLayoutMustBeEmpty(false)
+		}
+		return true
+	}
+
+	switch curLayout := l.getCurLayout(); curLayout {
+	case geom.NoLayout:
+		l.setLayout(geom.XY)
+		fallthrough
+	case geom.XY:
+		return true
+	default:
+		l.setIncorrectLayoutError(geom.XY, "EMPTY is XY layout in base geometry type")
+		return false
+	}
 }
 
 func (l *wktLex) setLayoutIfNoLayout(layout geom.Layout) {
-	switch l.curLayout {
+	switch curLayout := l.getCurLayout(); curLayout {
 	case geom.NoLayout:
-		l.curLayout = layout
+		l.setCurLayout(layout)
 	case geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
 		break
 	default:
 		// This should never happen.
-		panic("unknown geom.Layout")
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
+	}
+}
+
+func (l *wktLex) pushLayoutStack(layout geom.Layout) bool {
+	// Check that the new layout is compatible with the previous ones.
+	// baseType inherits from outer context.
+	newStackObj := layoutStackObj{
+		layout:   layout,
+		baseType: l.getCurLayoutBaseType(),
+	}
+
+	switch layout {
+	case geom.NoLayout:
+		newStackObj.layout = l.getCurLayout()
+	case geom.XYM, geom.XYZ, geom.XYZM:
+		if layout != l.getCurLayout() && l.getCurLayout() != geom.NoLayout {
+			l.setIncorrectLayoutError(layout, "")
+			return false
+		}
+		newStackObj.baseType = false
+	case geom.XY:
+		// This should never happen. Base type should be pushing geom.NoLayout.
+		fallthrough
+	default:
+		// This should never happen.
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
+	}
+
+	l.layoutStack = append(l.layoutStack, newStackObj)
+	return true
+}
+
+func (l *wktLex) popLayoutStack() geom.Layout {
+	top := l.getCurLayout()
+	l.layoutStack = l.layoutStack[:len(l.layoutStack)-1]
+	// Update the outer context with the type we parsed in the inner context.
+	ok := l.setLayout(top)
+	if !ok {
+		// This should never happen. Any layout incompatibility should error at the point it's discovered.
+		panic("uncaught layout incompatibility")
+	}
+	return top
+}
+
+func (l *wktLex) topLayoutStack() layoutStackObj {
+	l.checkLayoutStackNotEmpty()
+	return l.layoutStack[len(l.layoutStack)-1]
+}
+
+func (l *wktLex) getCurLayout() geom.Layout {
+	return l.topLayoutStack().layout
+}
+
+func (l *wktLex) getCurLayoutBaseType() bool {
+	return l.topLayoutStack().baseType
+}
+
+func (l *wktLex) getCurLayoutMustBeEmpty() bool {
+	return l.topLayoutStack().mustBeEmpty
+}
+
+func (l *wktLex) setCurLayout(layout geom.Layout) {
+	l.checkLayoutStackNotEmpty()
+	l.layoutStack[len(l.layoutStack)-1].layout = layout
+}
+
+func (l *wktLex) setCurLayoutMustBeEmpty(mustBeEmpty bool) {
+	l.checkLayoutStackNotEmpty()
+	l.layoutStack[len(l.layoutStack)-1].mustBeEmpty = mustBeEmpty
+}
+
+func (l *wktLex) checkLayoutStackNotEmpty() {
+	// Layout stack should never be empty.
+	if len(l.layoutStack) == 0 {
+		panic("layout stack is empty")
+	}
+}
+
+func (l *wktLex) checkLayoutStackHasNoGeometryCollectionFramesLeft() {
+	// The initial stack frame should be the only one remaining at the end.
+	l.checkLayoutStackNotEmpty()
+	if len(l.layoutStack) > 1 {
+		panic("layout stack still has geometrycollection frames")
 	}
 }
 
@@ -321,6 +480,8 @@ func (l *wktLex) setLexError(expectedTokType string) {
 
 func getLayoutName(layout geom.Layout) string {
 	switch layout {
+	case geom.NoLayout:
+		return "XY, XYZ, or XYZM"
 	case geom.XY:
 		return "XY"
 	case geom.XYM:
@@ -331,19 +492,19 @@ func getLayoutName(layout geom.Layout) string {
 		return "XYZM"
 	default:
 		// This should never happen.
-		panic("unknown geom.Layout")
+		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
 	}
 }
 
 func (l *wktLex) setIncorrectStrideError(incorrectStride int, hint string) {
 	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s so expecting %d coords but got %d coords",
-		getLayoutName(l.curLayout), l.curLayout.Stride(), incorrectStride)
+		getLayoutName(l.getCurLayout()), l.getCurLayout().Stride(), incorrectStride)
 	l.setParseError(problem, hint)
 }
 
 func (l *wktLex) setIncorrectLayoutError(incorrectLayout geom.Layout, hint string) {
 	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s but encountered layout of %s",
-		getLayoutName(l.curLayout), getLayoutName(incorrectLayout))
+		getLayoutName(l.getCurLayout()), getLayoutName(incorrectLayout))
 	l.setParseError(problem, hint)
 }
 
@@ -353,17 +514,25 @@ func (l *wktLex) setParseError(problem string, hint string) {
 		return
 	}
 	errProblem := "syntax error: " + problem
-	l.lastErr = &ParseError{
+	l.setError(&ParseError{
 		problem: errProblem,
 		pos:     l.lastPos,
 		str:     l.line,
 		hint:    hint,
-	}
+	})
 }
 
 func (l *wktLex) Error(s string) {
 	// NB: Lex errors are set in the Lex function.
+	l.setError(&ParseError{
+		problem: s,
+		pos:     l.lastPos,
+		str:     l.line,
+	})
+}
+
+func (l *wktLex) setError(err error) {
 	if l.lastErr == nil {
-		l.lastErr = &ParseError{problem: s, pos: l.lastPos, str: l.line}
+		l.lastErr = err
 	}
 }
