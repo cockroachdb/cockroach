@@ -1399,3 +1399,202 @@ SELECT last_value FROM cache_test
 
 statement ok
 DROP SEQUENCE cache_test
+
+subtest cached_sequences_with_bounds_increasing
+
+statement ok
+CREATE SEQUENCE cached_upper_bound_test MAXVALUE 4 START WITH 2 CACHE 5 INCREMENT BY 2;
+
+# Without this MAXVALUE CONSTRAINT, the values 2,4,6,8,10 would be cached
+# and the underlying sequence would be set to 10. Given the constraint, only
+# 2 and 4 are cached, but the underlying sequence is still set to 10.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+2
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+10
+
+# nextval() should return errors while still incrementing the underlying sequence
+# by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
+# currval() and lastval() should not change.
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+query I
+SELECT lastval();
+----
+4
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+30
+
+# Performing a schema change on the sequence to increase the bounds should reset the underlying
+# sequence to its original MAXVALUE.
+
+statement ok
+ALTER SEQUENCE cached_upper_bound_test MAXVALUE 100;
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+4
+
+# Calling nextval() should cache the values 6,8,10,12,14 while incrementing
+# the underlying sequence to 14.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+6
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+14
+
+query I
+SELECT lastval();
+----
+6
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+6
+
+statement ok
+drop sequence cached_upper_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_increasing, except it uses negative values.
+subtest cached_sequences_with_bounds_decreasing
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-2
+
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-30
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-4
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-6
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-14
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_decreasing, except it uses both positive and negative values.
+subtest cached_sequences_with_bounds_middle
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test_2 MINVALUE -2 MAXVALUE 2 START WITH 2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+2
+
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+0
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-2
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-6
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-26
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test_2 MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-2
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-12
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test_2;

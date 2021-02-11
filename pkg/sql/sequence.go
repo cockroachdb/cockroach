@@ -115,7 +115,7 @@ func (p *planner) incrementSequenceUsingCache(
 
 	cacheSize := seqOpts.EffectiveCacheSize()
 
-	fetchNextValues := func() (currentValue int64, incrementAmount int64, sizeOfCache int64, err error) {
+	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
 
 		endValue, err := kv.IncrementValRetryable(
@@ -127,8 +127,29 @@ func (p *planner) incrementSequenceUsingCache(
 			}
 			return 0, 0, 0, err
 		}
+
+		// This sequence has exceeded its bounds after performing this increment.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
-			return 0, 0, 0, boundsExceededError(descriptor)
+			// If the sequence exceeded its bounds prior to the increment, then return an error.
+			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue) ||
+				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue) {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
+			// Otherwise, values between the limit and the value prior to incrementing can be cached.
+			limit := seqOpts.MaxValue
+			if seqOpts.Increment < 0 {
+				limit = seqOpts.MinValue
+			}
+			abs := func(i int64) int64 {
+				if i < 0 {
+					return -i
+				}
+				return i
+			}
+			currentValue = endValue - seqOpts.Increment*(cacheSize-1)
+			incrementAmount = seqOpts.Increment
+			sizeOfCache = abs(limit-(endValue-seqOpts.Increment*cacheSize)) / abs(seqOpts.Increment)
+			return currentValue, incrementAmount, sizeOfCache, nil
 		}
 
 		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
