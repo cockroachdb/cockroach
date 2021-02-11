@@ -755,7 +755,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
-					if err := validateUniqueConstraintInTxn(
+					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
 					); err != nil {
 						return err
