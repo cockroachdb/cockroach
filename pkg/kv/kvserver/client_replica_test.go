@@ -1193,6 +1193,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	node1Before := tc.Servers[0].Clock().Now()
 	testutils.SucceedsSoon(t, func() error {
 		if err := replica1.AdminTransferLease(ctx, replica2Desc.StoreID); err != nil {
 			t.Fatal(err)
@@ -1203,9 +1204,11 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		}
 		return nil
 	})
-	// Verify that after the lease transfer, node2's clock has advanced to at least match node1.
-	if now1, now2 := tc.Servers[0].Clock().Now(), tc.Servers[1].Clock().Now(); now2.WallTime < now1.WallTime {
-		t.Fatalf("expected node2's clock walltime to be >= %d; got %d", now1.WallTime, now2.WallTime)
+	// Verify that after the lease transfer, node2's clock has advanced to at
+	// least match node1's from before the lease transfer.
+	node2After := tc.Servers[1].Clock().Now()
+	if node2After.Less(node1Before) {
+		t.Fatalf("expected node2's clock walltime to be >= %s; got %s", node1Before, node2After)
 	}
 
 	// Send a get request for keyA to node2, which is now the
