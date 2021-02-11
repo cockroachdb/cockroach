@@ -52,6 +52,9 @@ func Txn(
 			if err := f(ctx, txn, descsCol); err != nil {
 				return err
 			}
+			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
+				return err
+			}
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {

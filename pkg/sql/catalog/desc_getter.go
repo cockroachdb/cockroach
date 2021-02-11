@@ -20,7 +20,30 @@ import (
 // is used to look up other descriptors during validation.
 type DescGetter interface {
 	GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error)
+}
+
+// BatchDescGetter is like DescGetter but retrieves batches of descriptors,
+// which for some implementation may make more sense performance-wise.
+type BatchDescGetter interface {
 	GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error)
+}
+
+// GetDescs retrieves multiple descriptors using a DescGetter.
+// If the latter is also a BatchDescGetter, it will delegate to its GetDescs
+// method.
+func GetDescs(ctx context.Context, descGetter DescGetter, reqs []descpb.ID) ([]Descriptor, error) {
+	if bdg, ok := descGetter.(BatchDescGetter); ok {
+		return bdg.GetDescs(ctx, reqs)
+	}
+	ret := make([]Descriptor, len(reqs))
+	for i, id := range reqs {
+		desc, err := descGetter.GetDesc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		ret[i] = desc
+	}
+	return ret, nil
 }
 
 // GetTypeDescFromID retrieves the type descriptor for the type ID passed
@@ -61,13 +84,4 @@ type MapDescGetter map[descpb.ID]Descriptor
 func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error) {
 	desc := m[id]
 	return desc, nil
-}
-
-// GetDescs implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDescs(ctx context.Context, ids []descpb.ID) ([]Descriptor, error) {
-	ret := make([]Descriptor, len(ids))
-	for i, id := range ids {
-		ret[i], _ = m.GetDesc(ctx, id)
-	}
-	return ret, nil
 }

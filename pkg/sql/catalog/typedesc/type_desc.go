@@ -434,8 +434,8 @@ func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
 		member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE
 }
 
-// Validate performs validation on the TypeDescriptor.
-func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
+// ValidateSelf performs validation on the TypeDescriptor.
+func (desc *Immutable) ValidateSelf(_ context.Context) error {
 	// Validate local properties of the descriptor.
 	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
 		return err
@@ -522,6 +522,16 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		if desc.RegionConfig != nil {
 			return errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String())
 		}
+	}
+
+	return nil
+}
+
+// Validate performs ValidateSelf followed by
+// cross reference checks on the descriptor.
+func (desc *Immutable) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
+	if err := desc.ValidateSelf(ctx); err != nil {
+		return err
 	}
 
 	// Don't validate cross-references for dropped descriptors.
@@ -663,14 +673,13 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		}
 	}
 	if !desc.Dropped() {
-
 		for _, id := range desc.ReferencingDescriptorIDs {
 			reqs = append(reqs, id)
 			checks = append(checks, tableExists(id))
 		}
 	}
 
-	descs, err := dg.GetDescs(ctx, reqs)
+	descs, err := catalog.GetDescs(ctx, descGetter, reqs)
 	if err != nil {
 		return err
 	}
@@ -683,6 +692,11 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	return nil
+}
+
+// ValidateTxnCommit punts to Validate.
+func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
+	return desc.Validate(ctx, descGetter)
 }
 
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.
