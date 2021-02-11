@@ -102,11 +102,11 @@ vectorized: true
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
 │
-└── • sort
-    │ order: +a
+└── • index join
+    │ table: json_tab@primary
     │
-    └── • index join
-        │ table: json_tab@primary
+    └── • sort
+        │ order: +a
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
@@ -146,11 +146,11 @@ vectorized: true
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
 │
-└── • sort
-    │ order: +a
+└── • index join
+    │ table: json_tab@primary
     │
-    └── • index join
-        │ table: json_tab@primary
+    └── • sort
+        │ order: +a
         │
         └── • inverted filter
             │ inverted column: b_inverted_key

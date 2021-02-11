@@ -210,22 +210,21 @@ EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 explain
  ├── columns: info:8
  ├── immutable
- └── sort
+ └── project
       ├── columns: b:2 plus:7 c:3
       ├── immutable
       ├── lax-key: (2,3)
       ├── fd: (2)-->(7)
       ├── ordering: +2,+3
-      └── project
-           ├── columns: plus:7 b:2 c:3
-           ├── immutable
-           ├── lax-key: (2,3)
-           ├── fd: (2)-->(7)
-           ├── scan abcde
-           │    ├── columns: b:2 c:3
-           │    └── lax-key: (2,3)
-           └── projections
-                └── b:2 + 1 [as=plus:7, outer=(2), immutable]
+      ├── sort
+      │    ├── columns: b:2 c:3
+      │    ├── lax-key: (2,3)
+      │    ├── ordering: +2,+3
+      │    └── scan abcde
+      │         ├── columns: b:2 c:3
+      │         └── lax-key: (2,3)
+      └── projections
+           └── b:2 + 1 [as=plus:7, outer=(2), immutable]
 
 # Regression: Explain a statement having constant column, but with no ordering.
 norm
