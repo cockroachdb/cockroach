@@ -64,6 +64,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 10 (80 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • group
 │ actual row count: 5
@@ -104,6 +107,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 10 (80 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • sort
 │ actual row count: 5
@@ -146,6 +152,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 10 (80 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • cross join
 │ actual row count: 25
@@ -204,6 +213,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 5 (40 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • window
 │ actual row count: 5
@@ -229,6 +241,8 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • scan
   actual row count: 0
@@ -255,6 +269,8 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • root
 │
