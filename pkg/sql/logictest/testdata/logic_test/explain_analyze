@@ -21,8 +21,6 @@ vectorized: <hidden>
   missing stats
   table: kv@primary
   spans: [/2 - ]
-·
-WARNING: this statement is experimental!
 
 statement ok
 INSERT INTO kv VALUES (1,10), (2,20), (3,30), (4,40);
@@ -42,8 +40,6 @@ vectorized: <hidden>
   missing stats
   table: kv@primary
   spans: [/2 - ]
-·
-WARNING: this statement is experimental!
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT);
@@ -81,8 +77,6 @@ vectorized: <hidden>
       estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
-·
-WARNING: this statement is experimental!
 
 # Regression tests for weird explain analyze cases.
 
