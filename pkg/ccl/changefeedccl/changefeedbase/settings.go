@@ -25,3 +25,15 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	1*time.Second,
 	settings.NonNegativeDuration,
 )
+
+// DefaultFlushFrequency is the default frequency to flush sink.
+// See comment in newChangeAggregatorProcessor for explanation on the value.
+var DefaultFlushFrequency = 5 * time.Second
+
+// TestingSetDefaultFlushFrequency changes defaultFlushFrequency for tests.
+// Returns function to restore flush frequency to its original value.
+func TestingSetDefaultFlushFrequency(f time.Duration) func() {
+	old := DefaultFlushFrequency
+	DefaultFlushFrequency = f
+	return func() { DefaultFlushFrequency = old }
+}

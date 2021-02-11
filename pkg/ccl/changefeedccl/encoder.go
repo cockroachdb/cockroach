@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -89,6 +90,8 @@ func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encod
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro:
 		return newConfluentAvroEncoder(opts, targets)
+	case changefeedbase.OptFormatNative:
+		return &nativeEncoder{}, nil
 	default:
 		return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
 	}
@@ -548,3 +551,27 @@ func (e *confluentAvroEncoder) register(
 
 	return id, nil
 }
+
+// nativeEncoder only implements EncodeResolvedTimestamp.
+// Unfortunately, the encoder assumes that it operates with encodeRow -- something
+// that's just not the case when emitting raw KVs.
+// In addition, there is a kafka specific concept (topic) that's exposed at the Encoder level.
+// TODO(yevgeniy): Refactor encoder interface so that it operates on kvfeed events.
+// In addition, decouple the concept of topic from the Encoder.
+type nativeEncoder struct{}
+
+func (e *nativeEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
+	panic("EncodeKey should not be called on nativeEncoder")
+}
+
+func (e *nativeEncoder) EncodeValue(ctx context.Context, row encodeRow) ([]byte, error) {
+	panic("EncodeValue should not be called on nativeEncoder")
+}
+
+func (e *nativeEncoder) EncodeResolvedTimestamp(
+	ctx context.Context, s string, ts hlc.Timestamp,
+) ([]byte, error) {
+	return protoutil.Marshal(&ts)
+}
+
+var _ Encoder = &nativeEncoder{}

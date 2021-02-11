@@ -136,12 +136,14 @@ type doNothingSchemaFeed struct{}
 
 var _ schemaFeed = &doNothingSchemaFeed{}
 
+// Peek implements schemaFeed
 func (f *doNothingSchemaFeed) Peek(
 	ctx context.Context, atOrBefore hlc.Timestamp,
 ) (events []schemafeed.TableEvent, err error) {
 	return nil, nil
 }
 
+// Pop implements schemaFeed
 func (f *doNothingSchemaFeed) Pop(
 	ctx context.Context, atOrBefore hlc.Timestamp,
 ) (events []schemafeed.TableEvent, err error) {

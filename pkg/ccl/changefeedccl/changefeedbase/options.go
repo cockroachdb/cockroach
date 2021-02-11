@@ -72,14 +72,17 @@ const (
 	// cursor is specified. This option is useful to create a changefeed which
 	// subscribes only to new messages.
 	OptNoInitialScan = `no_initial_scan`
+	// Sentinel value to indicate that all resolved timestamp events should be emitted.
+	OptEmitAllResolvedTimestamps = ``
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 
-	OptFormatJSON FormatType = `json`
-	OptFormatAvro FormatType = `experimental_avro`
+	OptFormatJSON   FormatType = `json`
+	OptFormatAvro   FormatType = `experimental_avro`
+	OptFormatNative FormatType = `native`
 
 	SinkParamCACert           = `ca_cert`
 	SinkParamClientCert       = `client_cert`
