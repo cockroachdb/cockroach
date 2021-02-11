@@ -88,7 +88,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   pk INT8 NOT NULL,
-  a INT8 NULL,
+  a INT8 NOT NULL,
   b INT8 NULL,
   c INT8 NULL,
   d INT8 NULL,
@@ -122,7 +122,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   pk INT8 NOT NULL,
-  a INT8 NULL,
+  a INT8 NOT NULL,
   b INT8 NULL,
   c INT8 NULL,
   d INT8 NULL,
@@ -375,7 +375,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   pk INT8 NOT NULL,
   pk2 INT8 NOT NULL,
-  partition_by INT8 NULL,
+  partition_by INT8 NOT NULL,
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   c INT8 NOT NULL,
@@ -426,7 +426,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   pk INT8 NOT NULL,
   pk2 INT8 NOT NULL,
-  partition_by INT8 NULL,
+  partition_by INT8 NOT NULL,
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   c INT8 NOT NULL,
@@ -524,7 +524,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   pk INT8 NOT NULL,
   pk2 INT8 NOT NULL,
-  partition_by INT8 NULL,
+  partition_by INT8 NOT NULL,
   a INT8 NULL,
   b INT8 NULL,
   c INT8 NULL,
