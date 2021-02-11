@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
@@ -69,7 +68,7 @@ var userFileDeleteCmd = &cobra.Command{
 Deletes the files stored in the user scoped file storage which match the provided pattern,
 using a SQL connection. If passed pattern '*', all files in the specified
 (or default, if unspecified) user scoped file storage will be deleted. Deletions are not
-atomic, and all deletions prior to the first failure will occur. 
+atomic, and all deletions prior to the first failure will occur.
 `,
 	Args:    cobra.MinimumNArgs(1),
 	RunE:    maybeShoutError(runUserFileDelete),
@@ -281,6 +280,8 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	if err != nil {
 		return nil, err
 	}
+	prefix := userFileTableConf.FileTableConfig.Path
+	userFileTableConf.FileTableConfig.Path = ""
 
 	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
@@ -288,7 +289,7 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 		return nil, err
 	}
 
-	return f.ListFiles(ctx, "")
+	return f.ListFiles(ctx, prefix)
 }
 
 func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
@@ -328,42 +329,18 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
+
 	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	var deletedFiles []string
-	for _, file := range files {
-		var deleteFileBasename string
-		if userfileParsedURL.Path == "" {
-			// ListFiles will return absolute userfile URIs which will require
-			// parsing.
-			parsedFile, err := url.ParseRequestURI(file)
-			if err != nil {
-				return deletedFiles, errors.WithDetailf(err, "deletion failed at %s", file)
-			}
-			deleteFileBasename = parsedFile.Path
-		} else {
-			// ListFiles returns relative filepaths without a leading /. All files are
-			// stored with a prefix / in the underlying user scoped tables.
-			deleteFileBasename = path.Join("/", file)
+	for i := range files {
+		if err = f.Delete(ctx, files[i]); err != nil {
+			return files[:i], errors.WithDetailf(err, "deletion failed at %s", files[i])
 		}
-		err = f.Delete(ctx, deleteFileBasename)
-		if err != nil {
-			return deletedFiles, errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
-		}
-
-		composedTableName := tree.Name(cloudimpl.DefaultQualifiedNamePrefix + connURL.User.Username())
-		resolvedHost := cloudimpl.DefaultQualifiedNamespace +
-			// Escape special identifiers as needed.
-			composedTableName.String()
-		if userfileParsedURL.Host != "" {
-			resolvedHost = userfileParsedURL.Host
-		}
-		deletedFiles = append(deletedFiles, fmt.Sprintf("userfile://%s%s", resolvedHost, deleteFileBasename))
 	}
-	return deletedFiles, nil
+	return files, nil
 }
 
 func renameUserFile(

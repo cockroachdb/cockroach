@@ -174,7 +174,8 @@ func TestUserFileUpload(t *testing.T) {
 }
 
 func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expectedFiles []string) {
-	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "list", uri, args})
+	cmd := []string{"userfile", "list", uri, args}
+	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
 	cliOutput = strings.TrimSpace(cliOutput)
 
@@ -184,11 +185,12 @@ func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expected
 		listedFiles = strings.Split(cliOutput, "\n")
 	}
 
-	require.Equal(t, expectedFiles, listedFiles)
+	require.Equal(t, expectedFiles, listedFiles, "listed files from %v", cmd)
 }
 
 func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles []string) {
-	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "delete", uri, args})
+	cmd := []string{"userfile", "delete", uri, args}
+	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
 	cliOutput = strings.TrimSpace(cliOutput)
 
@@ -201,7 +203,7 @@ func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles 
 		}
 	}
 
-	require.Equal(t, expectedFiles, deletedFiles)
+	require.Equal(t, expectedFiles, deletedFiles, "deleted files when running %v", cmd)
 }
 
 func TestUserFileList(t *testing.T) {
@@ -230,14 +232,6 @@ func TestUserFileList(t *testing.T) {
 		Host:   defaultQualifiedNamePrefix + security.RootUser,
 	}
 
-	abs := func(in []string) []string {
-		out := make([]string, len(in))
-		for i := range in {
-			out[i] = defaultUserfileURLSchemeAndHost.String() + "/" + in[i]
-		}
-		return out
-	}
-
 	t.Run("ListFiles", func(t *testing.T) {
 		// Upload files to default userfile URI.
 		for _, file := range fileNames {
@@ -253,42 +247,42 @@ func TestUserFileList(t *testing.T) {
 			{
 				"list-all-in-default-using-star",
 				"*",
-				abs(fileNames),
+				fileNames,
 			},
 			{
 				"no-uri-list-all-in-default",
 				"",
-				abs(fileNames),
+				fileNames,
 			},
 			{
 				"no-glob-path-list-all-in-default",
 				defaultUserfileURLSchemeAndHost.String(),
-				abs(fileNames),
+				fileNames,
 			},
 			{
 				"no-host-list-all-in-default",
 				"userfile:///*/*/*.csv",
-				abs(fileNames),
+				fileNames,
 			},
 			{
 				"well-formed-userfile-uri",
 				defaultUserfileURLSchemeAndHost.String() + "/file/letters/*.csv",
-				abs(dataLetterFiles),
+				dataLetterFiles,
 			},
 			{
 				"only-glob",
 				"file/letters/*.csv",
-				abs(dataLetterFiles),
+				dataLetterFiles,
 			},
 			{
 				"list-data-num-csv",
 				"file/numbers/data[0-9].csv",
-				abs(dataNumberFiles),
+				dataNumberFiles,
 			},
 			{
 				"wildcard-bucket-and-filename",
 				"*/numbers/*.csv",
-				abs(dataNumberFiles),
+				dataNumberFiles,
 			},
 			{
 				"list-all-csv-skip-dir",
@@ -347,18 +341,6 @@ func TestUserFileDelete(t *testing.T) {
 		Host:   defaultQualifiedNamePrefix + security.RootUser,
 	}
 
-	abs := func(in []string) []string {
-		if in == nil {
-			return nil
-		}
-
-		out := make([]string, len(in))
-		for i := range in {
-			out[i] = defaultUserfileURLSchemeAndHost.String() + "/" + in[i]
-		}
-		return out
-	}
-
 	t.Run("DeleteFiles", func(t *testing.T) {
 		for _, tc := range []struct {
 			name               string
@@ -368,52 +350,73 @@ func TestUserFileDelete(t *testing.T) {
 			postDeleteList     []string
 		}{
 			{
-				"delete-all-in-default",
-				"*",
+				"delete-all",
+				"",
 				fileNames,
-				abs(fileNames),
+				fileNames,
+				nil,
+			},
+			{
+				"delete-all-with-slash",
+				"/",
+				fileNames,
+				fileNames,
+				nil,
+			},
+			{
+				"delete-all-with-slash-prefix",
+				"/file",
+				fileNames,
+				fileNames,
+				nil,
+			},
+			{
+				"delete-all-with-prefix",
+				"file",
+				fileNames,
+				fileNames,
 				nil,
 			},
 			{
 				"no-glob-path-delete-all-in-default",
 				defaultUserfileURLSchemeAndHost.String(),
 				fileNames,
-				abs(fileNames),
+				fileNames,
 				nil,
 			},
 			{
 				"no-host-delete-all-in-default",
 				"userfile:///*/*/*.*",
 				fileNames,
-				abs(fileNames),
+				fileNames,
 				nil,
 			},
 			{
 				"well-formed-userfile-uri",
 				defaultUserfileURLSchemeAndHost.String() + "/file/letters/*.csv",
 				fileNames,
-				abs(dataLetterFiles),
+				dataLetterFiles,
 				append(dataNumberFiles, unicodeFile...),
 			},
 			{
 				"delete-unicode-file",
 				defaultUserfileURLSchemeAndHost.String() + "/file/unicode/á.csv",
 				fileNames,
-				abs(unicodeFile),
+				unicodeFile,
 				append(dataLetterFiles, dataNumberFiles...),
 			},
 			{
 				"delete-data-num-csv",
 				"file/numbers/data[0-9].csv",
 				fileNames,
-				abs(dataNumberFiles),
+				dataNumberFiles,
 				append(dataLetterFiles, unicodeFile...),
 			},
 			{
 				"wildcard-bucket-and-filename",
 				"*/numbers/*.csv",
 				fileNames,
-				abs(dataNumberFiles),
+				dataNumberFiles,
 				append(dataLetterFiles, unicodeFile...),
 			},
 			{
@@ -455,16 +458,16 @@ func TestUserFileDelete(t *testing.T) {
 				}
 
 				// List files prior to deletion.
-				checkListedFiles(t, c, "", "", abs(tc.writeList))
+				checkListedFiles(t, c, "", "", tc.writeList)
 
 				// Delete files.
 				checkDeletedFiles(t, c, tc.URI, "", tc.expectedDeleteList)
 
 				// List files after deletion.
-				checkListedFiles(t, c, "", "", abs(tc.postDeleteList))
+				checkListedFiles(t, c, "", "", tc.postDeleteList)
 
 				// Cleanup all files for next test run.
-				_, err = c.RunWithCaptureArgs([]string{"userfile", "delete", "*"})
+				_, err = c.RunWithCaptureArgs([]string{"userfile", "delete", "/"})
 				require.NoError(t, err)
 			})
 		}
@@ -535,10 +538,10 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			uri := constructUserfileDestinationURI("", tc.name, user)
 			checkUserFileContent(ctx, t, c.ExecutorConfig(), user, uri, fileContent)
 
-			checkListedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()), []string{uri})
+			checkListedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()), []string{tc.name})
 
 			checkDeletedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()),
-				[]string{uri})
+				[]string{tc.name})
 		}
 	})
 }
