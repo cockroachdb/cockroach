@@ -5059,39 +5059,39 @@ func TestDetachedBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
-	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	db := sqlDB.DB.(*gosql.DB)
 
 	// running backup under transaction requires DETACHED.
 	var jobID int64
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	err = tx.QueryRow(`BACKUP DATABASE data TO $1`, LocalFoo).Scan(&jobID)
+	err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(`BACKUP DATABASE data TO $1`, LocalFoo).Scan(&jobID)
+	})
 	require.True(t, testutils.IsError(err,
 		"BACKUP cannot be used inside a transaction without DETACHED option"))
-	require.NoError(t, tx.Rollback())
 
 	// Okay to run DETACHED backup, even w/out explicit transaction.
 	sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo).Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
 
 	// Backup again, under explicit transaction.
-	tx, err = db.Begin()
+	err = crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(`BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo+"/1").Scan(&jobID)
+	})
 	require.NoError(t, err)
-	err = tx.QueryRow(`BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo+"/1").Scan(&jobID)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
 	waitForSuccessfulJob(t, tc, jobID)
 
 	// Backup again under transaction, but this time abort the transaction.
 	// No new jobs should have been created.
 	allJobsQuery := "SELECT job_id FROM [SHOW JOBS]"
 	allJobs := sqlDB.QueryStr(t, allJobsQuery)
-	tx, err = db.Begin()
+	tx, err := db.Begin()
 	require.NoError(t, err)
-	err = tx.QueryRow(`BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo+"/2").Scan(&jobID)
+	err = crdb.Execute(func() error {
+		return tx.QueryRow(`BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo+"/2").Scan(&jobID)
+	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	sqlDB.CheckQueryResults(t, allJobsQuery, allJobs)
@@ -5106,7 +5106,7 @@ func TestDetachedRestore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
-	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	db := sqlDB.DB.(*gosql.DB)
@@ -5119,12 +5119,11 @@ func TestDetachedRestore(t *testing.T) {
 
 	// Running RESTORE under transaction requires DETACHED.
 	var jobID int64
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH INTO_DB=test`, LocalFoo).Scan(&jobID)
+	err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(`RESTORE TABLE t FROM $1 WITH INTO_DB=test`, LocalFoo).Scan(&jobID)
+	})
 	require.True(t, testutils.IsError(err,
 		"RESTORE cannot be used inside a transaction without DETACHED option"))
-	require.NoError(t, tx.Rollback())
 
 	// Okay to run DETACHED RESTORE, even w/out explicit transaction.
 	sqlDB.QueryRow(t, `RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`,
@@ -5133,11 +5132,10 @@ func TestDetachedRestore(t *testing.T) {
 	sqlDB.Exec(t, `DROP TABLE test.t`)
 
 	// RESTORE again, under explicit transaction.
-	tx, err = db.Begin()
+	err = crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
+	})
 	require.NoError(t, err)
-	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
 	waitForSuccessfulJob(t, tc, jobID)
 	sqlDB.Exec(t, `DROP TABLE test.t`)
 
@@ -5145,9 +5143,11 @@ func TestDetachedRestore(t *testing.T) {
 	// No new jobs should have been created.
 	allJobsQuery := "SELECT job_id FROM [SHOW JOBS]"
 	allJobs := sqlDB.QueryStr(t, allJobsQuery)
-	tx, err = db.Begin()
+	tx, err := db.Begin()
 	require.NoError(t, err)
-	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
+	err = crdb.Execute(func() error {
+		return tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
+	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	sqlDB.CheckQueryResults(t, allJobsQuery, allJobs)
@@ -5704,11 +5704,10 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 				backupWithDetachedOption := query + ` WITH DETACHED`
 				db := sqlDB.DB.(*gosql.DB)
 				var jobID int64
-				tx, err := db.Begin()
+				err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+					return tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
+				})
 				require.NoError(t, err)
-				err = tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
-				require.NoError(t, err)
-				require.NoError(t, tx.Commit())
 				waitForSuccessfulJob(t, tc, jobID)
 			},
 		},
