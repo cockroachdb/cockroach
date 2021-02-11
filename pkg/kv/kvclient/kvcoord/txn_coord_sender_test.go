@@ -729,7 +729,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				txn.UpdateObservedTimestamp(nodeID, plus10.UnsafeToClockTimestamp())
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						hlc.Timestamp{}, hlc.Timestamp{}, nil),
+						hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					txn)
 				pErr.OriginNode = nodeID
 				return pErr
@@ -1279,7 +1279,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				// recorded on the origin.
 				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil),
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					&txn)
 			},
 			asyncAbort: false},

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -109,13 +110,16 @@ type pebbleMVCCScanner struct {
 	txnEpoch          enginepb.TxnEpoch
 	txnSequence       enginepb.TxnSeq
 	txnIgnoredSeqNums []enginepb.IgnoredSeqNumRange
+	// Uncertainty related fields.
+	localUncertaintyLimit  hlc.Timestamp
+	globalUncertaintyLimit hlc.Timestamp
+	checkUncertainty       bool
 	// Metadata object for unmarshalling intents.
 	meta enginepb.MVCCMetadata
 	// Bools copied over from MVCC{Scan,Get}Options. See the comment on the
 	// package level MVCCScan for what these mean.
 	inconsistent, tombstones bool
 	failOnMoreRecent         bool
-	checkUncertainty         bool
 	isGet                    bool
 	keyBuf                   []byte
 	savedBuf                 []byte
@@ -148,7 +152,7 @@ var pebbleMVCCScannerPool = sync.Pool{
 
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
-func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction) {
+func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
 
 	if txn != nil {
@@ -156,7 +160,13 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction) {
 		p.txnEpoch = txn.Epoch
 		p.txnSequence = txn.Sequence
 		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
-		p.checkUncertainty = p.ts.Less(txn.MaxTimestamp)
+
+		p.localUncertaintyLimit = localUncertaintyLimit
+		p.globalUncertaintyLimit = txn.GlobalUncertaintyLimit
+		// We must check uncertainty even if p.ts.Less(localUncertaintyLimit)
+		// because the local uncertainty limit cannot be applied to values with
+		// synthetic timestamps.
+		p.checkUncertainty = p.ts.Less(p.globalUncertaintyLimit)
 	}
 }
 
@@ -274,9 +284,18 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	p.intents.Reset()
 }
 
+// Returns whether a value with the specified timestamp is within the
+// transaction's uncertainty interval and is considered uncertain.
+//
+// REQUIRES: p.uncertaintyCheck == true
+// REQUIRES: p.ts < ts
+func (p *pebbleMVCCScanner) isUncertainValue(ts hlc.Timestamp) bool {
+	return observedts.IsUncertain(p.localUncertaintyLimit, p.globalUncertaintyLimit, ts)
+}
+
 // Returns an uncertainty error with the specified timestamp and p.txn.
 func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
-	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.txn)
+	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.localUncertaintyLimit, p.txn)
 	p.results.clear()
 	p.intents.Reset()
 	return false
@@ -327,11 +346,14 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if p.curKey.Timestamp.LessEq(p.txn.MaxTimestamp) {
+			if p.isUncertainValue(p.curKey.Timestamp) {
 				return p.uncertaintyError(p.curKey.Timestamp)
 			}
 
-			return p.seekVersion(p.txn.MaxTimestamp, true)
+			// This value is not within the reader's uncertainty window, but
+			// there could be other uncertain committed values, so seek and
+			// check uncertainty using globalUncertaintyLimit.
+			return p.seekVersion(p.globalUncertaintyLimit, true)
 		}
 
 		// 6. Our txn's read timestamp is greater than or equal to the
@@ -382,15 +404,15 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		//
 		// Note that if we own the intent (i.e. we're reading transactionally)
 		// we want to read the intent regardless of our read timestamp and fall
-		// into case 8 below.
+		// into case 11 below.
 		if p.checkUncertainty {
-			if metaTS.LessEq(p.txn.MaxTimestamp) {
+			if p.isUncertainValue(metaTS) {
 				return p.uncertaintyError(metaTS)
 			}
 			// The intent is not within the uncertainty window, but there could
 			// be an uncertain committed value, so seek and check uncertainty
-			// using MaxTimestamp.
-			return p.seekVersion(p.txn.MaxTimestamp, true)
+			// using globalUncertaintyLimit.
+			return p.seekVersion(p.globalUncertaintyLimit, true)
 		}
 		return p.seekVersion(p.ts, false)
 	}
@@ -629,9 +651,9 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // Seeks to the latest revision of the current key that's still less than or
 // equal to the specified timestamp, adds it to the result set, then moves onto
 // the next user key.
-func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool) bool {
-	key := MVCCKey{Key: p.curKey.Key, Timestamp: ts}
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+func (p *pebbleMVCCScanner) seekVersion(seekTS hlc.Timestamp, uncertaintyCheck bool) bool {
+	seekKey := MVCCKey{Key: p.curKey.Key, Timestamp: seekTS}
+	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curKey.Key)]
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
@@ -642,29 +664,46 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 			p.incrementItersBeforeSeek()
 			return p.advanceKeyAtNewKey(origKey)
 		}
-		if p.curKey.Timestamp.LessEq(ts) {
+		if p.curKey.Timestamp.LessEq(seekTS) {
 			p.incrementItersBeforeSeek()
-			if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
+			if !uncertaintyCheck || p.curKey.Timestamp.LessEq(p.ts) {
+				return p.addAndAdvance(p.curRawKey, p.curValue)
+			}
+			// Iterate through uncertainty interval. Though we found a value in
+			// the interval, it may not be uncertainty. This is because seekTS
+			// is set to the transaction's global uncertainty limit, so we are
+			// seeking based on the worst-case uncertainty, but values with a
+			// time in the range (localUncertaintyLimit, globalUncertaintyLimit]
+			// are only uncertain if their timestamps are synthetic. Meanwhile,
+			// any value with a time in the range (ts, localUncertaintyLimit]
+			// is uncertain.
+			if p.isUncertainValue(p.curKey.Timestamp) {
 				return p.uncertaintyError(p.curKey.Timestamp)
 			}
-			return p.addAndAdvance(p.curRawKey, p.curValue)
 		}
 	}
 
 	p.decrementItersBeforeSeek()
-	if !p.iterSeek(key) {
+	if !p.iterSeek(seekKey) {
 		return p.advanceKeyAtEnd()
 	}
-	if !bytes.Equal(p.curKey.Key, origKey) {
-		return p.advanceKeyAtNewKey(origKey)
-	}
-	if p.curKey.Timestamp.LessEq(ts) {
-		if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
+	for {
+		if !bytes.Equal(p.curKey.Key, origKey) {
+			return p.advanceKeyAtNewKey(origKey)
+		}
+		if !uncertaintyCheck || p.curKey.Timestamp.LessEq(p.ts) {
+			return p.addAndAdvance(p.curRawKey, p.curValue)
+		}
+		// Iterate through uncertainty interval. See the comment above about why
+		// a value in this interval is not necessarily cause for an uncertainty
+		// error.
+		if p.isUncertainValue(p.curKey.Timestamp) {
 			return p.uncertaintyError(p.curKey.Timestamp)
 		}
-		return p.addAndAdvance(p.curRawKey, p.curValue)
+		if !p.iterNext() {
+			return p.advanceKeyAtEnd()
+		}
 	}
-	return p.advanceKey()
 }
 
 // Updates cur{RawKey, Key, TS} to match record the iterator is pointing to.

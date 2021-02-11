@@ -1570,7 +1570,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			case *roachpb.ConditionalPutRequest:
 				if k.Equal(keyB) {
 					if atomic.AddInt32(&numCPuts, 1) == 1 {
-						pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
+						pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil)
 						return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 					}
 				}
@@ -1814,7 +1814,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return nil
 				}
 				err := roachpb.NewReadWithinUncertaintyIntervalError(
-					fArgs.Hdr.Timestamp, s.Clock().Now(), fArgs.Hdr.Txn)
+					fArgs.Hdr.Timestamp, s.Clock().Now(), hlc.Timestamp{}, fArgs.Hdr.Txn)
 				return roachpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
 			}
 			return nil

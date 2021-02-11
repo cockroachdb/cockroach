@@ -1337,7 +1337,7 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 		freezeStart := r.getFreezeStartRLocked()
 		ts := ba.Timestamp
 		if ba.Txn != nil {
-			ts.Forward(ba.Txn.MaxTimestamp)
+			ts.Forward(ba.Txn.GlobalUncertaintyLimit)
 		}
 		if ts.Less(freezeStart) {
 			// When the max timestamp of a read request is less than the subsumption

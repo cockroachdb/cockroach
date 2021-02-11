@@ -913,15 +913,15 @@ var _ transactionRestartError = &WriteTooOldError{}
 // The read and existing timestamps as well as the txn are purely informational
 // and used for formatting the error message.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, existingTS hlc.Timestamp, txn *Transaction,
+	readTS, existingTS, localUncertaintyLimit hlc.Timestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
 	rwue := &ReadWithinUncertaintyIntervalError{
-		ReadTimestamp:     readTS,
-		ExistingTimestamp: existingTS,
+		ReadTimestamp:         readTS,
+		ExistingTimestamp:     existingTS,
+		LocalUncertaintyLimit: localUncertaintyLimit,
 	}
 	if txn != nil {
-		maxTS := txn.MaxTimestamp
-		rwue.MaxTimestamp = &maxTS
+		rwue.GlobalUncertaintyLimit = txn.GlobalUncertaintyLimit
 		rwue.ObservedTimestamps = txn.ObservedTimestamps
 	}
 	return rwue
@@ -930,9 +930,10 @@ func NewReadWithinUncertaintyIntervalError(
 // SafeFormat implements redact.SafeFormatter.
 func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
-		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
+		"previous write with future timestamp %s within uncertainty interval `t <= "+
+		"(local=%v, global=%v)`; "+
 		"observed timestamps: ",
-		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp)
+		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
 	s.SafeRune('[')
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {

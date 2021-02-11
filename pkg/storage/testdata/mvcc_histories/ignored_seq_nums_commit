@@ -23,7 +23,7 @@ with t=A
   resolve_intent k=k/30
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/b
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/20"/11.000000000,0 -> /BYTES/20
@@ -64,7 +64,7 @@ with t=A
   resolve_intent k=k/30
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/c
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/30"/11.000000000,0 -> /BYTES/30

@@ -11,7 +11,6 @@
 package observedts
 
 import (
-	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -21,19 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLimitTxnMaxTimestamp(t *testing.T) {
+func TestComputeLocalUncertaintyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn := &roachpb.Transaction{
-		ReadTimestamp: hlc.Timestamp{WallTime: 10},
-		MaxTimestamp:  hlc.Timestamp{WallTime: 20},
+		ReadTimestamp:          hlc.Timestamp{WallTime: 10},
+		GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 20},
 	}
 	txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 15})
-	txnWithMaxTimestamp := func(ts hlc.Timestamp) *roachpb.Transaction {
-		txnClone := txn.Clone()
-		txnClone.MaxTimestamp = ts
-		return txnClone
-	}
 
 	repl1 := roachpb.ReplicaDescriptor{NodeID: 1}
 	repl2 := roachpb.ReplicaDescriptor{NodeID: 2}
@@ -43,16 +37,16 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name   string
-		txn    *roachpb.Transaction
-		lease  kvserverpb.LeaseStatus
-		expTxn *roachpb.Transaction
+		name     string
+		txn      *roachpb.Transaction
+		lease    kvserverpb.LeaseStatus
+		expLimit hlc.Timestamp
 	}{
 		{
-			name:   "no txn",
-			txn:    nil,
-			lease:  lease,
-			expTxn: nil,
+			name:     "no txn",
+			txn:      nil,
+			lease:    lease,
+			expLimit: hlc.Timestamp{},
 		},
 		{
 			name: "invalid lease",
@@ -62,7 +56,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 				leaseClone.State = kvserverpb.LeaseState_EXPIRED
 				return leaseClone
 			}(),
-			expTxn: txn,
+			expLimit: hlc.Timestamp{},
 		},
 		{
 			name: "no observed timestamp",
@@ -72,13 +66,13 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 				leaseClone.Lease.Replica = repl2
 				return leaseClone
 			}(),
-			expTxn: txn,
+			expLimit: hlc.Timestamp{},
 		},
 		{
-			name:   "valid lease",
-			txn:    txn,
-			lease:  lease,
-			expTxn: txnWithMaxTimestamp(hlc.Timestamp{WallTime: 15}),
+			name:     "valid lease",
+			txn:      txn,
+			lease:    lease,
+			expLimit: hlc.Timestamp{WallTime: 15},
 		},
 		{
 			name: "valid lease with start time above observed timestamp",
@@ -88,7 +82,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 18}
 				return leaseClone
 			}(),
-			expTxn: txnWithMaxTimestamp(hlc.Timestamp{WallTime: 18}),
+			expLimit: hlc.Timestamp{WallTime: 18},
 		},
 		{
 			name: "valid lease with start time above max timestamp",
@@ -98,20 +92,13 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 22}
 				return leaseClone
 			}(),
-			expTxn: txn,
+			expLimit: hlc.Timestamp{WallTime: 20},
 		},
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			// Copy txn to test that the transaction is not mutated.
-			var txnBefore *roachpb.Transaction
-			if test.txn != nil {
-				txnBefore = test.txn.Clone()
-			}
-
-			txnOut := LimitTxnMaxTimestamp(context.Background(), test.txn, test.lease)
-			require.Equal(t, test.expTxn, txnOut)
-			require.Equal(t, txnBefore, test.txn)
+			lul := ComputeLocalUncertaintyLimit(test.txn, test.lease)
+			require.Equal(t, test.expLimit, lul)
 		})
 	}
 }
