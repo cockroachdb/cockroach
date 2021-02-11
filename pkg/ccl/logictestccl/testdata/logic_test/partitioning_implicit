@@ -726,3 +726,38 @@ SELECT * FROM t@new_idx
 ----
 1   2   3   4   5
 11  12  13  14  15
+
+# Tests adding a new UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, v INT);
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+statement ok
+DELETE FROM t WHERE partition_by = 2;
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+# Tests adding a UNIQUE index with PARTITION ALL BY implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, v INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+statement ok
+DELETE FROM t WHERE partition_by = 2;
+CREATE UNIQUE INDEX uniq_on_t ON t(v)

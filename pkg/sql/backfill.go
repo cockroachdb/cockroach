@@ -714,7 +714,7 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-					if err := validateUniqueConstraintInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
 				case descpb.ConstraintToUpdate_NOT_NULL:
@@ -1631,6 +1631,21 @@ func (sc *SchemaChanger) validateForwardIndexes(
 						return errors.New("failed to verify index count")
 					}
 					idxLen = int64(tree.MustBeDInt(row[0]))
+
+					// For implicitly partitioned unique indexes, we need to independently
+					// validate that the non-implicitly partitioned columns are unique.
+					if idx.Unique && idx.Partitioning.NumImplicitColumns > 0 {
+						if err := validateUniqueConstraint(
+							ctx,
+							tableDesc,
+							idx.GetName(),
+							idx.ColumnIDs[idx.Partitioning.NumImplicitColumns:],
+							ie,
+							txn,
+						); err != nil {
+							return err
+						}
+					}
 					return nil
 				})
 			}); err != nil {
@@ -2028,7 +2043,7 @@ func runSchemaChangesInTxn(
 			constraint.ForeignKey.Validity = descpb.ConstraintValidity_Unvalidated
 		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 			if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
-				if err := validateUniqueConstraintInTxn(
+				if err := validateUniqueWithoutIndexConstraintInTxn(
 					ctx, planner.Descriptors().LeaseManager(), planner.EvalContext(), tableDesc, planner.txn, constraint.Name,
 				); err != nil {
 					return err
@@ -2164,10 +2179,10 @@ func validateFkInTxn(
 	})
 }
 
-// validateUniqueConstraintInTxn validates a unique constraint within the
-// provided transaction. If the provided table descriptor version is newer than
-// the cluster version, it will be used in the InternalExecutor that performs
-// the validation query.
+// validateUniqueWithoutIndexConstraintInTxn validates a unique constraint
+// within the provided transaction. If the provided table descriptor version
+// is newer than the cluster version, it will be used in the InternalExecutor
+// that performs the validation query.
 //
 // TODO (lucy): The special case where the table descriptor version is the same
 // as the cluster version only happens because the query in VALIDATE CONSTRAINT
@@ -2176,7 +2191,7 @@ func validateFkInTxn(
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func validateUniqueConstraintInTxn(
+func validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
@@ -2203,7 +2218,7 @@ func validateUniqueConstraintInTxn(
 	}
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateUniqueConstraint(ctx, tableDesc, uc, ie, txn)
+		return validateUniqueConstraint(ctx, tableDesc, uc.Name, uc.ColumnIDs, ie, txn)
 	})
 }
 
