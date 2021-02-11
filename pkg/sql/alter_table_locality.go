@@ -275,10 +275,21 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 			)
 		}
 	} else {
+		pr, err := n.dbDesc.PrimaryRegionName()
+		if err != nil {
+			return err
+		}
 		// No crdb_region column is found so we are implicitly creating it.
 		// We insert the column definition before altering the primary key.
 		defaultColDef := &tree.AlterTableAddColumn{
-			ColumnDef: regionalByRowDefaultColDef(enumOID),
+			ColumnDef: regionalByRowDefaultColDef(
+				enumOID,
+				&tree.CastExpr{
+					Expr:       tree.NewDString(string(pr)),
+					Type:       &tree.OIDTypeReference{OID: enumOID},
+					SyntaxMode: tree.CastShort,
+				},
+			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
 		if err != nil {

@@ -123,6 +123,20 @@ func (w column) GetDefaultExpr() string {
 	return *w.desc.DefaultExpr
 }
 
+// HasBackfillExpr returns true iff the column has a backfill expression set.
+func (w column) HasBackfillExpr() bool {
+	return w.desc.HasBackfillExpr()
+}
+
+// GetBackfillExpr returns the column default expression if it exists,
+// empty string otherwise.
+func (w column) GetBackfillExpr() string {
+	if !w.HasBackfillExpr() {
+		return ""
+	}
+	return *w.desc.BackfillExpr
+}
+
 // IsComputed returns true iff the column is a computed column.
 func (w column) IsComputed() bool {
 	return w.desc.IsComputed()

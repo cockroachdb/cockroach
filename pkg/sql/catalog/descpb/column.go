@@ -30,6 +30,11 @@ func (desc *ColumnDescriptor) HasNullDefault() bool {
 	return defaultExpr == tree.DNull
 }
 
+// HasBackfillExpr returns true if the column has a backfill expression.
+func (desc *ColumnDescriptor) HasBackfillExpr() bool {
+	return desc.BackfillExpr != nil
+}
+
 // HasDefault returns true if the column has a default value.
 func (desc *ColumnDescriptor) HasDefault() bool {
 	return desc.DefaultExpr != nil

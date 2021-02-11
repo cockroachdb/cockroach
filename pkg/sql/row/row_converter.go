@@ -330,7 +330,14 @@ func NewDatumRowConverter(
 	}
 	cols := schemaexpr.ProcessColumnSet(
 		targetColDescriptors, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(
+		ctx,
+		cols,
+		&txCtx,
+		c.EvalCtx,
+		&semaCtx,
+		false,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}

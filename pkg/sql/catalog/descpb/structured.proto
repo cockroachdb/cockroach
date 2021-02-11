@@ -161,6 +161,11 @@ message ColumnDescriptor {
   // SystemColumnKind represents what kind of system column this column
   // descriptor represents, if any.
   optional SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
+
+  // The expression to use when backfilling a given column descriptor
+  // (e.g. when using ALTER TABLE ... ADD COLUMN ...).
+  // See default_expr on appopriate usage.
+  optional string backfill_expr = 17;
 }
 
 // SystemColumnKind is an enum representing the different kind of system

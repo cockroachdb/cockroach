@@ -1584,7 +1584,7 @@ func NewTableDesc(
 				)
 			}
 			oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
-			n.Defs = append(n.Defs, regionalByRowDefaultColDef(oid))
+			n.Defs = append(n.Defs, regionalByRowDefaultColDef(oid, nil /* backfillExpr */))
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		} else if !regionalByRowColExists {
 			return nil, pgerror.Newf(
@@ -2647,7 +2647,7 @@ func CreateInheritedPrivilegesFromDBDesc(
 	return privs
 }
 
-func regionalByRowDefaultColDef(oid oid.Oid) *tree.ColumnTableDef {
+func regionalByRowDefaultColDef(oid oid.Oid, backfillExpr tree.Expr) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{
 		Name:   tree.RegionalByRowRegionDefaultColName,
 		Type:   &tree.OIDTypeReference{OID: oid},
@@ -2661,5 +2661,6 @@ func regionalByRowDefaultColDef(oid oid.Oid) *tree.ColumnTableDef {
 		Type:       &tree.OIDTypeReference{OID: oid},
 		SyntaxMode: tree.CastShort,
 	}
+	c.BackfillExpr = backfillExpr
 	return c
 }

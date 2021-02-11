@@ -2052,6 +2052,34 @@ func (desc *wrapper) validateColumns(
 				column.GetName(), errors.Safe(column.GetID()), errors.Safe(desc.NextColumnID))
 		}
 
+		for _, validateExpr := range []struct {
+			desc string
+			expr string
+		}{
+			{desc: "default expr", expr: column.GetDefaultExpr()},
+			{desc: "backfill expr", expr: column.GetBackfillExpr()},
+		} {
+			if validateExpr.expr != "" {
+				// Verify that the computed column expression is valid.
+				expr, err := parser.ParseExpr(validateExpr.expr)
+				if err != nil {
+					return err
+				}
+				valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+				if err != nil {
+					return err
+				}
+				if !valid {
+					return errors.AssertionFailedf(
+						"%s column %q refers to unknown columns in expression: %s",
+						validateExpr.desc,
+						column.GetName(),
+						validateExpr.expr,
+					)
+				}
+			}
+		}
+
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
 			expr, err := parser.ParseExpr(column.GetComputeExpr())

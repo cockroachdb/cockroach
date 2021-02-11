@@ -402,8 +402,9 @@ type ColumnTableDef struct {
 		Expr           Expr
 		ConstraintName Name
 	}
-	CheckExprs []ColumnTableDefCheckExpr
-	References struct {
+	BackfillExpr Expr
+	CheckExprs   []ColumnTableDefCheckExpr
+	References   struct {
 		Table          *TableName
 		Col            Name
 		ConstraintName Name

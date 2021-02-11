@@ -408,6 +408,19 @@ statement ok
 ROLLBACK;
 ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW
 
+query T
+INSERT INTO created_as_global (pk) VALUES (1) RETURNING crdb_region
+----
+ap-southeast-2
+
+# Commit and check the row was backfilled to the primary region, but the row
+# inserted is now on the gateway_region.
+query TI
+SELECT crdb_region, pk FROM created_as_global ORDER BY pk ASC
+----
+ca-central-1    0
+ap-southeast-2  1
+
 query TT
 SHOW CREATE TABLE created_as_global
 ----

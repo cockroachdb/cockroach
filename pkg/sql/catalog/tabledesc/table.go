@@ -103,6 +103,24 @@ func MakeColumnDefDescs(
 		}
 	}
 
+	if d.BackfillExpr != nil {
+		typedBackfillExpr, err := schemaexpr.SanitizeVarFreeExpr(
+			ctx, d.BackfillExpr, resType, "BACKFILL", semaCtx, tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		// Keep the type checked expression so that the type annotation gets
+		// properly stored, only if the default expression is not NULL.
+		// Otherwise we want to keep the default expression nil.
+		if typedExpr != tree.DNull {
+			d.BackfillExpr = typedBackfillExpr
+			s := tree.Serialize(d.BackfillExpr)
+			col.BackfillExpr = &s
+		}
+	}
+
 	if d.IsComputed() {
 		s := tree.Serialize(d.Computed.Expr)
 		col.ComputeExpr = &s

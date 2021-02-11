@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,6 +91,20 @@ func (p *planner) addColumnImpl(
 			); err != nil {
 				return err
 			}
+		}
+	}
+
+	if d.BackfillExpr != nil {
+		seqNames, err := sequence.GetUsedSequenceNames(newDef.BackfillExpr.(tree.TypedExpr))
+		if err != nil {
+			return err
+		}
+		if len(seqNames) > 0 {
+			return pgerror.Newf(
+				pgcode.InvalidColumnDefinition,
+				"backfill expression on %s contain sequence references",
+				d.Name,
+			)
 		}
 	}
 

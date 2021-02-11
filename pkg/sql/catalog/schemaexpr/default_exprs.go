@@ -33,13 +33,14 @@ func MakeDefaultExprs(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
+	isBackfill bool,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
 	// defaults map as the defaults are all NULL.
 	haveDefaults := false
 	for i := range cols {
-		if cols[i].DefaultExpr != nil {
+		if (isBackfill && cols[i].BackfillExpr != nil) || cols[i].DefaultExpr != nil {
 			haveDefaults = true
 			break
 		}
@@ -53,7 +54,9 @@ func MakeDefaultExprs(
 	exprStrings := make([]string, 0, len(cols))
 	for i := range cols {
 		col := &cols[i]
-		if col.DefaultExpr != nil {
+		if isBackfill && col.BackfillExpr != nil {
+			exprStrings = append(exprStrings, *col.BackfillExpr)
+		} else if col.DefaultExpr != nil {
 			exprStrings = append(exprStrings, *col.DefaultExpr)
 		}
 	}
@@ -65,7 +68,7 @@ func MakeDefaultExprs(
 	defExprIdx := 0
 	for i := range cols {
 		col := &cols[i]
-		if col.DefaultExpr == nil {
+		if col.DefaultExpr == nil && !(isBackfill && col.BackfillExpr != nil) {
 			defaultExprs = append(defaultExprs, tree.DNull)
 			continue
 		}

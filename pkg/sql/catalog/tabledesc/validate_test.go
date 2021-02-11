@@ -155,14 +155,13 @@ var validationMap = []struct {
 	{
 		obj: descpb.ColumnDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":     {status: thisFieldReferencesNoObjects},
-			"ID":       {status: thisFieldReferencesNoObjects},
-			"Type":     {status: iSolemnlySwearThisFieldIsValidated},
-			"Nullable": {status: thisFieldReferencesNoObjects},
-			"DefaultExpr": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"Hidden": {status: thisFieldReferencesNoObjects},
+			"Name":         {status: thisFieldReferencesNoObjects},
+			"ID":           {status: thisFieldReferencesNoObjects},
+			"Type":         {status: iSolemnlySwearThisFieldIsValidated},
+			"Nullable":     {status: thisFieldReferencesNoObjects},
+			"DefaultExpr":  {status: iSolemnlySwearThisFieldIsValidated},
+			"BackfillExpr": {status: iSolemnlySwearThisFieldIsValidated},
+			"Hidden":       {status: thisFieldReferencesNoObjects},
 			"UsesSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

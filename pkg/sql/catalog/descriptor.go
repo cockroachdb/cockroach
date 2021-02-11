@@ -433,6 +433,10 @@ type Column interface {
 	// empty string otherwise.
 	GetDefaultExpr() string
 
+	// GetBackfillExpr returns the column backfill expression if it exists,
+	// empty string otherwise.
+	GetBackfillExpr() string
+
 	// IsComputed returns true iff the column is a computed column.
 	IsComputed() bool
 

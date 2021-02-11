@@ -163,7 +163,12 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
-		ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, semaCtx,
+		ctx,
+		cb.added,
+		&transform.ExprTransformContext{},
+		evalCtx,
+		semaCtx,
+		true, // isBackfill
 	)
 	if err != nil {
 		return err
@@ -218,7 +223,12 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		semaCtx.TypeResolver = resolver
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
-			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
+			ctx,
+			cb.added,
+			&transform.ExprTransformContext{},
+			evalCtx,
+			&semaCtx,
+			true, // isBackfill
 		)
 		if err != nil {
 			return err
@@ -527,7 +537,12 @@ func constructExprs(
 
 	// Determine the exprs for newly added, non-computed columns.
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
-		ctx, addedCols, &transform.ExprTransformContext{}, evalCtx, semaCtx,
+		ctx,
+		addedCols,
+		&transform.ExprTransformContext{},
+		evalCtx,
+		semaCtx,
+		true, // isBackfill
 	)
 	if err != nil {
 		return nil, nil, catalog.TableColSet{}, err
