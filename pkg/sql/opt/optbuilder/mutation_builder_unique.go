@@ -189,11 +189,11 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 // table. The input to the insertion check will be produced from the input to
 // the mutation operator.
 func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
-	checkInput, withScanCols, _ := h.mb.makeCheckInputScan(
+	withScanScope, _ := h.mb.buildCheckInputScan(
 		checkInputScanNewVals, h.uniqueAndPrimaryKeyOrdinals,
 	)
 
-	numCols := len(withScanCols)
+	numCols := len(withScanScope.cols)
 	f := h.mb.b.factory
 
 	// Build a self semi-join, with the new values on the left and the
@@ -211,7 +211,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	for i := 0; i < len(h.uniqueOrdinals); i++ {
 		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(
 			f.ConstructEq(
-				f.ConstructVariable(withScanCols[i]),
+				f.ConstructVariable(withScanScope.cols[i].id),
 				f.ConstructVariable(scanScope.cols[i].id),
 			),
 		))
@@ -224,7 +224,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	var pkFilter opt.ScalarExpr
 	for i := len(h.uniqueOrdinals); i < numCols; i++ {
 		pkFilterLocal := f.ConstructNe(
-			f.ConstructVariable(withScanCols[i]),
+			f.ConstructVariable(withScanScope.cols[i].id),
 			f.ConstructVariable(scanScope.cols[i].id),
 		)
 		if pkFilter == nil {
@@ -235,15 +235,16 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	}
 	semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(pkFilter))
 
-	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
+	semiJoin := f.ConstructSemiJoin(withScanScope.expr, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
 
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
-		// uniqueOrdinals is always a prefix of uniqueAndPrimaryKeyOrdinals, which
-		// maps 1-to-1 to the columns in withScanCols. The remaining columns are
-		// primary key columns and should not be included in the KeyCols.
-		KeyCols: withScanCols[:len(h.uniqueOrdinals)],
+		// uniqueOrdinals is always a prefix of uniqueAndPrimaryKeyOrdinals,
+		// which maps 1-to-1 to the columns in withScanScope.cols. The remaining
+		// columns are primary key columns and should not be included in the
+		// KeyCols.
+		KeyCols: withScanScope.colList()[:len(h.uniqueOrdinals)],
 		OpName:  h.mb.opName,
 	})
 }
