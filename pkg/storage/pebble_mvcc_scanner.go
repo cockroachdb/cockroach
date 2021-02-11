@@ -122,11 +122,11 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curKey    MVCCKey
-	curRawKey []byte
-	curValue  []byte
-	results   pebbleResults
-	intents   pebble.Batch
+	curUnsafeKey MVCCKey
+	curRawKey    []byte
+	curValue     []byte
+	results      pebbleResults
+	intents      pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -198,7 +198,7 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 			// NB: this is equivalent to:
 			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
 			// but with half the allocations.
-			curKey := p.curKey.Key
+			curKey := p.curUnsafeKey.Key
 			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
 			copy(curKeyCopy, curKey)
 			resume = &roachpb.Span{
@@ -207,7 +207,7 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 			}
 		} else {
 			resume = &roachpb.Span{
-				Key:    append(roachpb.Key(nil), p.curKey.Key...),
+				Key:    append(roachpb.Key(nil), p.curUnsafeKey.Key...),
 				EndKey: p.end,
 			}
 		}
@@ -285,16 +285,16 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // Emit a tuple and return true if we have reason to believe iteration can
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance() bool {
-	if !p.curKey.Timestamp.IsEmpty() {
+	if !p.curUnsafeKey.Timestamp.IsEmpty() {
 		// ts < read_ts
-		if p.curKey.Timestamp.Less(p.ts) {
+		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
 			return p.addAndAdvance(p.curRawKey, p.curValue)
 		}
 
 		// ts == read_ts
-		if p.curKey.Timestamp.EqOrdering(p.ts) {
+		if p.curUnsafeKey.Timestamp.EqOrdering(p.ts) {
 			if p.failOnMoreRecent {
 				// 2. Our txn's read timestamp is equal to the most recent
 				// version's timestamp and the scanner has been configured to
@@ -302,7 +302,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 				// Merge the current timestamp with the maximum timestamp we've
 				// seen so we know to return an error, but then keep scanning so
 				// that we can return the largest possible time.
-				p.mostRecentTS.Forward(p.curKey.Timestamp)
+				p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
 				return p.advanceKey()
 			}
 
@@ -319,7 +319,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// Merge the current timestamp with the maximum timestamp we've
 			// seen so we know to return an error, but then keep scanning so
 			// that we can return the largest possible time.
-			p.mostRecentTS.Forward(p.curKey.Timestamp)
+			p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
 			return p.advanceKey()
 		}
 
@@ -327,8 +327,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if p.curKey.Timestamp.LessEq(p.txn.MaxTimestamp) {
-				return p.uncertaintyError(p.curKey.Timestamp)
+			if p.curUnsafeKey.Timestamp.LessEq(p.txn.MaxTimestamp) {
+				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 
 			return p.seekVersion(p.txn.MaxTimestamp, true)
@@ -462,8 +462,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// Note: this assumes that it is safe to corrupt curKey here because we're
 			// about to advance. If this proves to be a problem later, we can extend
 			// addAndAdvance to take an MVCCKey explicitly.
-			p.curKey.Timestamp = metaTS
-			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curKey)
+			p.curUnsafeKey.Timestamp = metaTS
+			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
 			return p.addAndAdvance(p.keyBuf, value)
 		}
 		// 13. If no value in the intent history has a sequence number equal to
@@ -494,13 +494,13 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 
 // nextKey advances to the next user key.
 func (p *pebbleMVCCScanner) nextKey() bool {
-	p.keyBuf = append(p.keyBuf[:0], p.curKey.Key...)
+	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
 		if !p.iterNext() {
 			return false
 		}
-		if !bytes.Equal(p.curKey.Key, p.keyBuf) {
+		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
 			p.incrementItersBeforeSeek()
 			return true
 		}
@@ -509,6 +509,10 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 	p.decrementItersBeforeSeek()
 	// We're pointed at a different version of the same key. Fall back to
 	// seeking to the next key. We append a NUL to account for the "next-key".
+	// Note that we cannot rely on curUnsafeKey.Key being unchanged even though
+	// we are at a different version of the same key -- the underlying
+	// MVCCIterator is free to mutate the backing for p.curUnsafeKey.Key
+	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
 	p.keyBuf = append(p.keyBuf, 0)
 	return p.iterSeek(MVCCKey{Key: p.keyBuf})
 }
@@ -536,6 +540,11 @@ func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 		}
 	}
 
+	// We're still not pointed to the latest version of the key. Fall back to
+	// seeking to the latest version. Note that we cannot rely on key being
+	// unchanged even though we are at a different version of the same key --
+	// the underlying MVCCIterator is free to mutate the backing for key
+	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
 	p.decrementItersBeforeSeek()
 	return p.iterSeek(MVCCKey{Key: p.keyBuf})
 }
@@ -569,7 +578,7 @@ func (p *pebbleMVCCScanner) advanceKey() bool {
 		return false
 	}
 	if p.reverse {
-		return p.prevKey(p.curKey.Key)
+		return p.prevKey(p.curUnsafeKey.Key)
 	}
 	return p.nextKey()
 }
@@ -630,22 +639,27 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // equal to the specified timestamp, adds it to the result set, then moves onto
 // the next user key.
 func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool) bool {
-	key := MVCCKey{Key: p.curKey.Key, Timestamp: ts}
+	key := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: ts}
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
-	origKey := p.keyBuf[:len(p.curKey.Key)]
+	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
+	// We will need key below to seek, if the next's don't suffice. Even though
+	// the MVCCIterator will be at a different version of the same key, it is
+	// free to mutate the backing for p.curUnsafeKey.Key in an arbitrary manner.
+	// So assign to this copy, to make is stable.
+	key.Key = origKey
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
 		if !p.iterNext() {
 			return p.advanceKeyAtEnd()
 		}
-		if !bytes.Equal(p.curKey.Key, origKey) {
+		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
 			p.incrementItersBeforeSeek()
 			return p.advanceKeyAtNewKey(origKey)
 		}
-		if p.curKey.Timestamp.LessEq(ts) {
+		if p.curUnsafeKey.Timestamp.LessEq(ts) {
 			p.incrementItersBeforeSeek()
-			if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
-				return p.uncertaintyError(p.curKey.Timestamp)
+			if uncertaintyCheck && p.ts.Less(p.curUnsafeKey.Timestamp) {
+				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 			return p.addAndAdvance(p.curRawKey, p.curValue)
 		}
@@ -655,12 +669,12 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 	if !p.iterSeek(key) {
 		return p.advanceKeyAtEnd()
 	}
-	if !bytes.Equal(p.curKey.Key, origKey) {
+	if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
 		return p.advanceKeyAtNewKey(origKey)
 	}
-	if p.curKey.Timestamp.LessEq(ts) {
-		if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
-			return p.uncertaintyError(p.curKey.Timestamp)
+	if p.curUnsafeKey.Timestamp.LessEq(ts) {
+		if uncertaintyCheck && p.ts.Less(p.curUnsafeKey.Timestamp) {
+			return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 		}
 		return p.addAndAdvance(p.curRawKey, p.curValue)
 	}
@@ -676,7 +690,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	p.curRawKey = p.parent.UnsafeRawMVCCKey()
 
 	var err error
-	p.curKey, err = DecodeMVCCKey(p.curRawKey)
+	p.curUnsafeKey, err = DecodeMVCCKey(p.curRawKey)
 	if err != nil {
 		panic(err)
 	}
@@ -686,7 +700,11 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 
 func (p *pebbleMVCCScanner) iterValid() bool {
 	if valid, err := p.parent.Valid(); !valid {
-		p.err = err
+		// Defensive: unclear if p.err can already be nil here, but regardless,
+		// don't overwrite unless we have a non-nil err.
+		if err != nil {
+			p.err = err
+		}
 		return false
 	}
 	return true
@@ -708,13 +726,13 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 		return false
 	}
 
-	if p.curKey.Timestamp.IsEmpty() {
+	if p.curUnsafeKey.Timestamp.IsEmpty() {
 		// We landed on an intent or inline value.
 		return true
 	}
 	// We landed on a versioned value, we need to back up to find the
 	// latest version.
-	return p.backwardLatestVersion(p.curKey.Key, 0)
+	return p.backwardLatestVersion(p.curUnsafeKey.Key, 0)
 }
 
 // iterNext advances to the next MVCC key.
@@ -767,7 +785,7 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 		p.curValue = p.savedBuf[len(p.curRawKey):]
 		// The raw key is always a prefix of the encoded MVCC key. Take advantage of this to
 		// sub-slice the raw key directly, instead of calling SplitMVCCKey.
-		p.curKey.Key = p.curRawKey[:len(p.curKey.Key)]
+		p.curUnsafeKey.Key = p.curRawKey[:len(p.curUnsafeKey.Key)]
 
 		// With the current iterator state saved we can move the iterator to the
 		// previous entry.
