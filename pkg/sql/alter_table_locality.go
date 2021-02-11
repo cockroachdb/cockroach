@@ -270,7 +270,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 					pgcode.InvalidTableDefinition,
 					"cannot use column %s for REGIONAL BY ROW table as it may contain NULL values",
 					partColName,
-					tree.RegionEnum,
 				),
 				"Add the NOT NULL constraint first using ALTER TABLE %s ALTER COLUMN %s SET NOT NULL.",
 				tree.Name(n.tableDesc.Name),
