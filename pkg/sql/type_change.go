@@ -162,6 +162,9 @@ type TypeSchemaChangerTestingKnobs struct {
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
 	RunBeforeEnumMemberPromotion func()
+	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
+	// OnFailOrCancel is triggered.
+	RunAfterAllFailOrCancel func()
 }
 
 // ModuleTestingKnobs implements the ModuleTestingKnobs interface.
@@ -616,10 +619,18 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 		return err
 	}
 
-	return drainNamesForDescriptor(
+	if err := drainNamesForDescriptor(
 		ctx, tc.execCfg.Settings, tc.typeID, tc.execCfg.DB,
 		tc.execCfg.InternalExecutor, tc.execCfg.LeaseManager, tc.execCfg.Codec, nil,
-	)
+	); err != nil {
+		return err
+	}
+
+	if fn := tc.execCfg.TypeSchemaChangerTestingKnobs.RunAfterAllFailOrCancel; fn != nil {
+		fn()
+	}
+
+	return nil
 }
 
 func init() {
