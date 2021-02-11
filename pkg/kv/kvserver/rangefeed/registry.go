@@ -346,6 +346,10 @@ func (r *registration) maybeRunCatchupScan() error {
 				// past the corresponding provisional key-value. To do this,
 				// scan to the timestamp immediately before (i.e. the key
 				// immediately after) the provisional key.
+				//
+				// Make a copy since should not pass an unsafe key from the iterator
+				// that provided it, when asking it to seek.
+				a, unsafeKey.Key = a.Copy(unsafeKey.Key, 0)
 				catchupIter.SeekGE(storage.MVCCKey{
 					Key:       unsafeKey.Key,
 					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
