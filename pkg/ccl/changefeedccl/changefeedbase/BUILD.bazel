@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "changefeedbase",
     srcs = [
+        "distflow.go",
         "options.go",
         "settings.go",
         "validate.go",
@@ -12,10 +13,17 @@ go_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/physicalplan",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
