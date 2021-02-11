@@ -94,6 +94,14 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   roachpb.FileEncryptionOptions encryption = 12;
+  reserved 13, 14, 15, 16;
+  // SystemTablesRestored keeps track of dynamic states that need to happen only
+  // once during the lifetime of a job. Note, that this state may be shared
+  // between cluster versions, so updates to this map must be considered
+  // carefully. It maps system table names to whether or not they have already
+  // been restored.
+  map<string, bool> system_tables_restored = 17;
+  // NEXT ID: 18.
 }
 
 message RestoreProgress {

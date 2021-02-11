@@ -831,6 +831,14 @@ type restoreResumer struct {
 
 	testingKnobs struct {
 		afterPublishingDescriptors func() error
+		// duringSystemTableRestoration is called once for every system table we
+		// restore. It is used to simulate any errors that we may face at this point
+		// of the restore.
+		duringSystemTableRestoration func(systemTableName string) error
+		// afterOfflineTableCreation is called after creating the OFFLINE table
+		// descriptors we're ingesting. If an error is returned, we fail the
+		// restore.
+		afterOfflineTableCreation func() error
 	}
 }
 
@@ -1015,6 +1023,11 @@ func (r *restoreResumer) Resume(
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
 	r.latestStats = remapRelevantStatistics(latestBackupManifest, details.TableRewrites)
+	if fn := r.testingKnobs.afterOfflineTableCreation; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
 
 	if len(r.tables) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
@@ -1065,6 +1078,8 @@ func (r *restoreResumer) Resume(
 			return err
 		}
 	}
+	// Reload the details as we may have updated the job.
+	details = r.job.Details().(jobspb.RestoreDetails)
 
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*r.job.ID())),
@@ -1333,6 +1348,15 @@ func (r *restoreResumer) restoreSystemTables(
 		systemTableName := table.GetName()
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			details := r.job.WithTxn(txn).Details().(jobspb.RestoreDetails)
+			if details.SystemTablesRestored == nil {
+				details.SystemTablesRestored = make(map[string]bool)
+			}
+			if details.SystemTablesRestored[systemTableName] {
+				// We've already restored this table.
+				return nil
+			}
+
 			txn.SetDebugName("system-restore-txn")
 			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
 			if systemTableName == sqlbase.SettingsTable.Name {
@@ -1362,9 +1386,19 @@ func (r *restoreResumer) restoreSystemTables(
 			if _, err := executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery); err != nil {
 				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 			}
-			return nil
+
+			// System table restoration may not be idempotent, so we need to keep
+			// track of what we've restored.
+			details.SystemTablesRestored[systemTableName] = true
+			return r.job.WithTxn(txn).SetDetails(ctx, details)
 		}); err != nil {
 			return err
+		}
+
+		if fn := r.testingKnobs.duringSystemTableRestoration; fn != nil {
+			if err := fn(systemTableName); err != nil {
+				return err
+			}
 		}
 	}
 
