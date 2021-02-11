@@ -28,6 +28,7 @@ ALL_TESTS = [
     "//pkg/ccl/streamingccl/streamclient:streamclient_test",
     "//pkg/ccl/streamingccl/streamingest:streamingest_test",
     "//pkg/ccl/streamingccl/streamingutils:streamingutils_test",
+    "//pkg/ccl/streamingccl/streamproducer:streamproducer_test",
     "//pkg/ccl/utilccl/sampledataccl:sampledataccl_test",
     "//pkg/ccl/utilccl:utilccl_test",
     "//pkg/ccl/workloadccl/allccl:allccl_test",
