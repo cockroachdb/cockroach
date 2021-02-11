@@ -113,21 +113,22 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	goldMS := enginepb.MVCCStats{
-		ContainsEstimates: 1,
-		KeyBytes:          1,
-		KeyCount:          1,
-		ValBytes:          1,
-		ValCount:          1,
-		IntentBytes:       1,
-		IntentCount:       1,
-		IntentAge:         1,
-		GCBytesAge:        1,
-		LiveBytes:         1,
-		LiveCount:         1,
-		SysBytes:          1,
-		SysCount:          1,
-		LastUpdateNanos:   1,
-		AbortSpanBytes:    1,
+		ContainsEstimates:    1,
+		KeyBytes:             1,
+		KeyCount:             1,
+		ValBytes:             1,
+		ValCount:             1,
+		IntentBytes:          1,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentAge:            1,
+		GCBytesAge:           1,
+		LiveBytes:            1,
+		LiveCount:            1,
+		SysBytes:             1,
+		SysCount:             1,
+		LastUpdateNanos:      1,
+		AbortSpanBytes:       1,
 	}
 	if err := zerofields.NoZeroField(&goldMS); err != nil {
 		t.Fatal(err) // prevent rot as fields are added
@@ -4703,7 +4704,7 @@ func TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if DisallowSeparatedIntents || !enabledSeparatedIntents {
+	if DisallowSeparatedIntents || !EnabledSeparatedIntents {
 		return
 	}
 	ctx := context.Background()
