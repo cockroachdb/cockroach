@@ -1719,6 +1719,25 @@ func NewTableDesc(
 
 			if idx != nil {
 				idx.Version = indexEncodingVersion
+
+				// If it a non-primary index that is implicitly created, ensure partitioning
+				// for PARTITION ALL BY.
+				if desc.PartitionAllBy && !d.PrimaryKey.IsPrimaryKey {
+					var err error
+					*idx, err = CreatePartitioning(
+						ctx,
+						st,
+						evalCtx,
+						&desc,
+						*idx,
+						partitionAllBy,
+						nil, /* allowedNewColumnNames */
+					)
+					if err != nil {
+						return nil, err
+					}
+				}
+
 				if err := desc.AddIndex(*idx, d.PrimaryKey.IsPrimaryKey); err != nil {
 					return nil, err
 				}
