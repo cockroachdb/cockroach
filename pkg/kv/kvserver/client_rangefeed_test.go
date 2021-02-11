@@ -125,7 +125,7 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	// Set a short closed timestamp interval so that we don't need to wait long
 	// for resolved events off of the rangefeed later.
 	_, err := tc.ServerConn(0).Exec(
-		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 	require.NoError(t, err)
 
 	// Find the range containing the range event table and then find the range
