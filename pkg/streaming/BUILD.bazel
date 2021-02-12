@@ -8,5 +8,6 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
     ],
 )
