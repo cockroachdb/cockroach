@@ -151,6 +151,8 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
+	sum := cArgs.EvalCtx.GetCurrentReadSummary()
+	reply.ReadSummary = &sum
 
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},

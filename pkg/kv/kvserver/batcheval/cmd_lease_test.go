@@ -16,7 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -171,53 +174,79 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
-		ctx := context.Background()
-		db := storage.NewDefaultInMemForTesting()
-		defer db.Close()
-		batch := db.NewBatch()
-		defer batch.Close()
+		testutils.RunTrueAndFalse(t, "served-future-reads", func(t *testing.T, servedFutureReads bool) {
+			ctx := context.Background()
+			db := storage.NewDefaultInMemForTesting()
+			defer db.Close()
+			batch := db.NewBatch()
+			defer batch.Close()
 
-		replicas := []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-			{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
-		}
-		desc := roachpb.RangeDescriptor{}
-		desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-		manual := hlc.NewManualClock(123)
-		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+			replicas := []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+			}
+			desc := roachpb.RangeDescriptor{}
+			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+			manual := hlc.NewManualClock(123)
+			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
-		nextLease := roachpb.Lease{
-			Replica: replicas[1],
-			Start:   clock.NowAsClockTimestamp(),
-		}
-		if epoch {
-			nextLease.Epoch = 1
-		} else {
-			exp := nextLease.Start.ToTimestamp().Add(9*time.Second.Nanoseconds(), 0)
-			nextLease.Expiration = &exp
-		}
-		cArgs := CommandArgs{
-			EvalCtx: (&MockEvalCtx{
-				StoreID: 1,
-				Desc:    &desc,
-				Clock:   clock,
-			}).EvalContext(),
-			Args: &roachpb.TransferLeaseRequest{
-				Lease: nextLease,
-			},
-		}
+			nextLease := roachpb.Lease{
+				Replica: replicas[1],
+				Start:   clock.NowAsClockTimestamp(),
+			}
+			if epoch {
+				nextLease.Epoch = 1
+			} else {
+				exp := nextLease.Start.ToTimestamp().Add(9*time.Second.Nanoseconds(), 0)
+				nextLease.Expiration = &exp
+			}
 
-		manual.Increment(1000)
-		beforeEval := clock.NowAsClockTimestamp()
+			var maxPriorReadTS hlc.Timestamp
+			if servedFutureReads {
+				maxPriorReadTS = nextLease.Start.ToTimestamp().Add(1*time.Second.Nanoseconds(), 0)
+			} else {
+				maxPriorReadTS = nextLease.Start.ToTimestamp().Add(-2*time.Second.Nanoseconds(), 0)
+			}
+			currentReadSummary := rspb.FromTimestamp(maxPriorReadTS)
 
-		res, err := TransferLease(ctx, batch, cArgs, nil)
-		require.NoError(t, err)
+			cArgs := CommandArgs{
+				EvalCtx: (&MockEvalCtx{
+					ClusterSettings:    cluster.MakeTestingClusterSettings(),
+					StoreID:            1,
+					Desc:               &desc,
+					Clock:              clock,
+					CurrentReadSummary: currentReadSummary,
+				}).EvalContext(),
+				Args: &roachpb.TransferLeaseRequest{
+					Lease: nextLease,
+				},
+			}
 
-		// The proposed lease start time should be assigned at eval time.
-		propLease := res.Replicated.State.Lease
-		require.NotNil(t, propLease)
-		require.True(t, nextLease.Start.Less(propLease.Start))
-		require.True(t, beforeEval.Less(propLease.Start))
+			manual.Increment(1000)
+			beforeEval := clock.NowAsClockTimestamp()
+
+			res, err := TransferLease(ctx, batch, cArgs, nil)
+			require.NoError(t, err)
+
+			// The proposed lease start time should be assigned at eval time.
+			propLease := res.Replicated.State.Lease
+			require.NotNil(t, propLease)
+			require.True(t, nextLease.Start.Less(propLease.Start))
+			require.True(t, beforeEval.Less(propLease.Start))
+
+			// The prior read summary should reflect the maximum read times
+			// served under the current leaseholder.
+			propReadSum, err := readsummary.Load(ctx, batch, desc.RangeID)
+			require.NoError(t, err)
+			require.NotNil(t, propReadSum, "should write prior read summary")
+			if servedFutureReads {
+				require.Equal(t, maxPriorReadTS, propReadSum.Local.LowWater)
+				require.Equal(t, maxPriorReadTS, propReadSum.Global.LowWater)
+			} else {
+				require.Equal(t, propLease.Start.ToTimestamp(), propReadSum.Local.LowWater)
+				require.Equal(t, propLease.Start.ToTimestamp(), propReadSum.Global.LowWater)
+			}
+		})
 	})
 }
 

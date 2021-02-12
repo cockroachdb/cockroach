@@ -121,6 +121,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
+        "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util:util_proto",
         "//pkg/util/hlc:hlc_proto",
@@ -140,6 +141,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/hlc",

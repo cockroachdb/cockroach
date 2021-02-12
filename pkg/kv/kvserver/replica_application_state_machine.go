@@ -1112,12 +1112,13 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
-			sm.r.handleLeaseResult(ctx, newLease)
+			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
 			rResult.State.Lease = nil
+			rResult.PriorReadSummary = nil
 		}
 
-		if rResult.State.TruncatedState != nil {
-			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, rResult.State.TruncatedState)
+		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
+			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, newTruncState)
 			rResult.State.TruncatedState = nil
 		}
 

@@ -51,9 +51,9 @@ type ReplicaState struct {
 	// The latest range lease.
 	//
 	// Note that this message is both sent over the network and used to model
-	// replica state in memory. In memory (storage.Replica.mu.state), the lease
-	// is never nil (and never zero-valued), but it may be nil when sent over
-	// the network as part of ReplicatedEvalResult.
+	// replica state in memory. In memory (Replica.mu.state), the lease is never
+	// nil (and never zero-valued), but it may be nil when sent over the network
+	// as part of ReplicatedEvalResult.
 	Lease *roachpb.Lease `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
 	TruncatedState *roachpb.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState,proto3" json:"truncated_state,omitempty"`
@@ -108,7 +108,7 @@ func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
 func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
 func (*ReplicaState) ProtoMessage()    {}
 func (*ReplicaState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_acd314f0f91777f8, []int{0}
+	return fileDescriptor_state_a50383b8609eb8ee, []int{0}
 }
 func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -180,7 +180,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_acd314f0f91777f8, []int{1}
+	return fileDescriptor_state_a50383b8609eb8ee, []int{1}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -216,7 +216,7 @@ func (m *RangeInfo_CTEntry) Reset()         { *m = RangeInfo_CTEntry{} }
 func (m *RangeInfo_CTEntry) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo_CTEntry) ProtoMessage()    {}
 func (*RangeInfo_CTEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_acd314f0f91777f8, []int{1, 0}
+	return fileDescriptor_state_a50383b8609eb8ee, []int{1, 0}
 }
 func (m *RangeInfo_CTEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -252,7 +252,7 @@ func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
 func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
 func (*LatchManagerInfo) ProtoMessage()    {}
 func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_acd314f0f91777f8, []int{2}
+	return fileDescriptor_state_a50383b8609eb8ee, []int{2}
 }
 func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1952,10 +1952,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_acd314f0f91777f8)
+	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_a50383b8609eb8ee)
 }
 
-var fileDescriptor_state_acd314f0f91777f8 = []byte{
+var fileDescriptor_state_a50383b8609eb8ee = []byte{
 	// 1061 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcd, 0x6e, 0x1b, 0x37,
 	0x10, 0xf6, 0x5a, 0x2b, 0x5b, 0xa2, 0xec, 0x58, 0x61, 0x9d, 0x78, 0xe3, 0xc4, 0x92, 0x21, 0xa0,

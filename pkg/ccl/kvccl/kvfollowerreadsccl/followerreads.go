@@ -53,6 +53,8 @@ var followerReadMultiple = settings.RegisterFloatSetting(
 // the offset from now to request a follower read. The same value less the clock
 // uncertainty, then is used to determine at the kv layer if a query can use a
 // follower read.
+// TODO(nvanbenschoten): don't route to followers if closedts.TargetDuration is
+// 0, as this disables closed timestamps.
 func getFollowerReadDuration(st *cluster.Settings) time.Duration {
 	targetMultiple := followerReadMultiple.Get(&st.SV)
 	targetDuration := closedts.TargetDuration.Get(&st.SV)

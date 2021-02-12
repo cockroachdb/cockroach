@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -208,6 +209,22 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 	rec.GetLease()
 
 	return rec.i.GetRangeInfo(ctx)
+}
+
+// GetCurrentReadSummary is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() rspb.ReadSummary {
+	// To capture a read summary over the range, all keys must be latched for
+	// writing to prevent any concurrent reads or writes.
+	desc := rec.i.Desc()
+	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
+		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
+	})
+	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+		Key:    desc.StartKey.AsRawKey(),
+		EndKey: desc.EndKey.AsRawKey(),
+	})
+	return rec.i.GetCurrentReadSummary()
 }
 
 // GetLimiters returns the per-store limiters.
