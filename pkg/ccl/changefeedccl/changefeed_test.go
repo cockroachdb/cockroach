@@ -2138,6 +2138,47 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
+
+	// GCP Pubsub options and query parameters
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format=experimental_avro,confluent_schema_registry=bar`, `gcppubsub://foo/bar`,
+	)
+	for _, v := range []string{"key_only", "row"} {
+		sqlDB.ExpectErr(
+			t, fmt.Sprintf(`this sink is incompatible with envelope=%s`, v),
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope=$2`, `gcppubsub://foo/bar`, v,
+		)
+	}
+
+	sqlDB.ExpectErr(
+		t, `could not parse project and topic from foo`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/`,
+	)
+	sqlDB.ExpectErr(
+		t, `could not parse project and topic from foo`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/`,
+	)
+	sqlDB.ExpectErr(
+		t, `param enable_ordering must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/bar?enable_ordering=a`,
+	)
+	sqlDB.ExpectErr(
+		t, `gcp_endpoint must be specified if enable_ordering=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/bar?enable_ordering=true`,
+	)
+	sqlDB.ExpectErr(
+		t, `max_ordering_key_count must be a 32-bit unsigned integer`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/bar?max_ordering_key_count=ab`,
+	)
+	sqlDB.ExpectErr(
+		t, `max_ordering_key_count must be a 32-bit unsigned integer`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `gcppubsub://foo/bar?max_ordering_key_count=-10`,
+	)
+	sqlDB.ExpectErr(
+		t, `resolved timestamps require enable_ordering=true and a non-zero max_ordering_key_count`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved`, `gcppubsub://foo/bar`,
+	)
 }
 
 func TestChangefeedDescription(t *testing.T) {

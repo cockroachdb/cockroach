@@ -84,22 +84,25 @@ const (
 	OptFormatAvro   FormatType = `experimental_avro`
 	OptFormatNative FormatType = `native`
 
-	SinkParamCACert           = `ca_cert`
-	SinkParamClientCert       = `client_cert`
-	SinkParamClientKey        = `client_key`
-	SinkParamFileSize         = `file_size`
-	SinkParamSchemaTopic      = `schema_topic`
-	SinkParamTLSEnabled       = `tls_enabled`
-	SinkParamSkipTLSVerify    = `insecure_tls_skip_verify`
-	SinkParamTopicPrefix      = `topic_prefix`
-	SinkSchemeBuffer          = ``
-	SinkSchemeExperimentalSQL = `experimental-sql`
-	SinkSchemeKafka           = `kafka`
-	SinkParamSASLEnabled      = `sasl_enabled`
-	SinkParamSASLHandshake    = `sasl_handshake`
-	SinkParamSASLUser         = `sasl_user`
-	SinkParamSASLPassword     = `sasl_password`
-	SinkParamSASLMechanism    = `sasl_mechanism`
+	SinkParamCACert              = `ca_cert`
+	SinkParamClientCert          = `client_cert`
+	SinkParamClientKey           = `client_key`
+	SinkParamFileSize            = `file_size`
+	SinkParamSchemaTopic         = `schema_topic`
+	SinkParamTLSEnabled          = `tls_enabled`
+	SinkParamSkipTLSVerify       = `insecure_tls_skip_verify`
+	SinkParamTopicPrefix         = `topic_prefix`
+	SinkSchemeBuffer             = ``
+	SinkSchemeExperimentalSQL    = `experimental-sql`
+	SinkSchemeKafka              = `kafka`
+	SinkParamSASLEnabled         = `sasl_enabled`
+	SinkParamSASLHandshake       = `sasl_handshake`
+	SinkParamSASLUser            = `sasl_user`
+	SinkParamSASLPassword        = `sasl_password`
+	SinkParamSASLMechanism       = `sasl_mechanism`
+	SinkParamEnableOrdering      = `enable_ordering`
+	SinkParamMaxOrderingKeyCount = `max_ordering_key_count`
+	SinkParamGCPEndpoint         = `gcp_endpoint`
 )
 
 // ChangefeedOptionExpectValues is used to parse changefeed options using
