@@ -1160,6 +1160,38 @@ func createImportingDescriptors(
 					return err
 				}
 
+				// Now that all of the descriptors have been written to disk, rebuild
+				// the zone configurations for any multi-region tables. We only do this
+				// in cases where this is not a full cluster restore, because in cluster
+				// restore cases, the zone configurations will be restored when the
+				// system tables are restored.
+				if details.DescriptorCoverage != tree.AllDescriptors {
+					for _, table := range tableDescs {
+						if lc := table.GetLocalityConfig(); lc != nil {
+							desc, err := descsCol.GetMutableDescriptorByID(ctx, table.ParentID, txn)
+							if err != nil {
+								return err
+							}
+
+							mutTable, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
+							if err != nil {
+								return err
+							}
+
+							if err := sql.ApplyZoneConfigForMultiRegionTable(
+								ctx,
+								txn,
+								p.ExecCfg(),
+								*desc.(*dbdesc.Mutable).RegionConfig,
+								mutTable,
+								sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+							); err != nil {
+								return err
+							}
+						}
+					}
+				}
+
 				for _, tenant := range details.Tenants {
 					// Mark the tenant info as adding.
 					tenant.State = descpb.TenantInfo_ADD
