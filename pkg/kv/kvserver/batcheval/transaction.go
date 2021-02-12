@@ -26,7 +26,7 @@ import (
 
 // ErrTransactionUnsupported is returned when a non-transactional command is
 // evaluated in the context of a transaction.
-var ErrTransactionUnsupported = errors.New("not supported within a transaction")
+var ErrTransactionUnsupported = errors.AssertionFailedf("not supported within a transaction")
 
 // VerifyTransaction runs sanity checks verifying that the transaction in the
 // header and the request are compatible.
@@ -34,10 +34,10 @@ func VerifyTransaction(
 	h roachpb.Header, args roachpb.Request, permittedStatuses ...roachpb.TransactionStatus,
 ) error {
 	if h.Txn == nil {
-		return errors.Errorf("no transaction specified to %s", args.Method())
+		return errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
-		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+		return errors.AssertionFailedf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
 	}
 	statusPermitted := false
 	for _, s := range permittedStatuses {

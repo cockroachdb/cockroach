@@ -59,11 +59,11 @@ func RecoverTxn(
 		// This condition must hold for the timestamp cache access in
 		// SynthesizeTxnFromMeta and the timestamp cache update in
 		// Replica.updateTimestampCache to be safe.
-		return result.Result{}, errors.Errorf("RecoverTxn request timestamp %s less than txn MinTimestamp %s",
+		return result.Result{}, errors.AssertionFailedf("RecoverTxn request timestamp %s less than txn MinTimestamp %s",
 			h.Timestamp, args.Txn.MinTimestamp)
 	}
 	if !args.Key.Equal(args.Txn.Key) {
-		return result.Result{}, errors.Errorf("RecoverTxn request key %s does not match txn key %s",
+		return result.Result{}, errors.AssertionFailedf("RecoverTxn request key %s does not match txn key %s",
 			args.Key, args.Txn.Key)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)

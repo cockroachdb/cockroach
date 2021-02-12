@@ -65,7 +65,7 @@ func QueryIntent(
 	if h.WriteTimestamp().Less(args.Txn.WriteTimestamp) {
 		// This condition must hold for the timestamp cache update in
 		// Replica.updateTimestampCache to be safe.
-		return result.Result{}, errors.Errorf("QueryIntent request timestamp %s less than txn WriteTimestamp %s",
+		return result.Result{}, errors.AssertionFailedf("QueryIntent request timestamp %s less than txn WriteTimestamp %s",
 			h.Timestamp, args.Txn.WriteTimestamp)
 	}
 
