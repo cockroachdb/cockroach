@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/marusama/semaphore"
@@ -52,10 +51,11 @@ var customQuery = map[string]string{
 }
 
 type debugZipContext struct {
-	z       *zipper
-	timeout time.Duration
-	admin   serverpb.AdminClient
-	status  serverpb.StatusClient
+	z              *zipper
+	clusterPrinter *zipReporter
+	timeout        time.Duration
+	admin          serverpb.AdminClient
+	status         serverpb.StatusClient
 
 	firstNodeSQLConn *sqlConn
 
@@ -63,35 +63,30 @@ type debugZipContext struct {
 }
 
 func (zc *debugZipContext) runZipFn(
-	ctx context.Context, requestName string, fn func(ctx context.Context) error,
+	ctx context.Context, s *zipReporter, fn func(ctx context.Context) error,
 ) error {
-	return zc.runZipFnWithTimeout(ctx, requestName, zc.timeout, fn)
+	return zc.runZipFnWithTimeout(ctx, s, zc.timeout, fn)
 }
 
 func (zc *debugZipContext) runZipFnWithTimeout(
-	ctx context.Context,
-	requestName string,
-	timeout time.Duration,
-	fn func(ctx context.Context) error,
+	ctx context.Context, s *zipReporter, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	fmt.Printf("%s... ", requestName)
-	if zipCtx.concurrency > 1 {
-		// Avoid interleaving outputs.
-		fmt.Println()
-	}
-	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
+	err := contextutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
+	s.progress("received response")
+	return err
 }
 
 // runZipRequest runs a zipRequest and stores its JSON result or error
 // message in the output zip.
-func (zc *debugZipContext) runZipRequest(ctx context.Context, r zipRequest) error {
+func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r zipRequest) error {
+	s := zr.start("requesting data for %s", r.pathName)
 	var data interface{}
-	err := zc.runZipFn(ctx, "requesting data for "+r.pathName, func(ctx context.Context) error {
+	err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 		thisData, err := r.fn(ctx)
 		data = thisData
 		return err
 	})
-	return zc.z.createJSONOrError(r.pathName+".json", data, err)
+	return zc.z.createJSONOrError(s, r.pathName+".json", data, err)
 }
 
 // forAllNodes runs fn on every node, possibly concurrently.
@@ -145,31 +140,37 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fmt.Printf("establishing RPC connection to %s...\n", serverCfg.AdvertiseAddr)
+	zr := newZipReporter("cluster")
+
+	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
 	defer finish()
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
+	s.done()
 
-	fmt.Println("retrieving the node status to get the SQL address...")
+	s = zr.start("retrieving the node status to get the SQL address")
 	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
+	s.done()
+
 	sqlAddr := firstNodeDetails.SQLAddress
 	if sqlAddr.IsEmpty() {
 		// No SQL address: either a pre-19.2 node, or same address for both
 		// SQL and RPC.
 		sqlAddr = firstNodeDetails.Address
 	}
-	fmt.Printf("using SQL address: %s\n", sqlAddr.AddressField)
+	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
+
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
 
 	// We're going to use the SQL code, but in non-interactive mode.
@@ -182,27 +183,28 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
-		log.Warningf(ctx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
-	}
-	defer sqlConn.Close()
-	// Note: we're not printing "connection established" because the driver we're using
-	// does late binding.
-	if sqlConn != nil {
-		fmt.Printf("using SQL connection URL: %s\n", sqlConn.url)
+		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
+	} else {
+		// Note: we're not printing "connection established" because the driver we're using
+		// does late binding.
+		defer sqlConn.Close()
+		s.progress("using SQL connection URL: %s", sqlConn.url)
+		s.done()
 	}
 
 	name := args[0]
+	s = zr.start("creating output file %s", name)
 	out, err := os.Create(name)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
-	fmt.Printf("writing %s\n", name)
 
 	z := newZipper(out)
 	defer func() {
 		cErr := z.close()
 		retErr = errors.CombineErrors(retErr, cErr)
 	}()
+	s.done()
 
 	timeout := 10 * time.Second
 	if cliCtx.cmdTimeout != 0 {
@@ -210,6 +212,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	zc := debugZipContext{
+		clusterPrinter:   zr,
 		z:                z,
 		timeout:          timeout,
 		admin:            admin,
@@ -245,7 +248,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	// Add a little helper script to draw attention to the existence of tags in
 	// the profiles.
 	{
-		if err := z.createRaw(debugBase+"/pprof-summary.sh", []byte(`#!/bin/sh
+		s := zc.clusterPrinter.start("pprof summary script")
+		if err := z.createRaw(s, debugBase+"/pprof-summary.sh", []byte(`#!/bin/sh
 find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 `)); err != nil {
 			return err
@@ -254,7 +258,8 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 
 	// A script to summarize the hottest ranges.
 	{
-		if err := z.createRaw(debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
+		s := zc.clusterPrinter.start("hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
 find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
 			return err
@@ -288,16 +293,19 @@ func maybeAddProfileSuffix(name string) string {
 //
 // An error is returned by this function if it is unable to write to
 // the output file or some other unrecoverable error is encountered.
-func (zc *debugZipContext) dumpTableDataForZip(conn *sqlConn, base, table, query string) error {
+func (zc *debugZipContext) dumpTableDataForZip(
+	zr *zipReporter, conn *sqlConn, base, table, query string,
+) error {
 	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
 	baseName := base + "/" + table
 
-	fmt.Printf("retrieving SQL data for %s... ", table)
+	s := zr.start("retrieving SQL data for %s", table)
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + ".txt"
-		if err := func() error {
+		s.progress("writing output: %s", name)
+		sqlErr := func() error {
 			zc.z.Lock()
 			defer zc.z.Unlock()
 
@@ -308,12 +316,13 @@ func (zc *debugZipContext) dumpTableDataForZip(conn *sqlConn, base, table, query
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
 			return runQueryAndFormatResults(conn, w, makeQuery(fullQuery))
-		}(); err != nil {
-			if cErr := zc.z.createError(name, err); cErr != nil {
+		}()
+		if sqlErr != nil {
+			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
 				return cErr
 			}
 			var pqErr *pq.Error
-			if !errors.As(err, &pqErr) {
+			if !errors.As(sqlErr, &pqErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}
@@ -324,8 +333,10 @@ func (zc *debugZipContext) dumpTableDataForZip(conn *sqlConn, base, table, query
 			}
 			// We've encountered a retry error. Add a suffix then loop.
 			suffix = fmt.Sprintf(".%d", numRetries)
+			s = zr.start("retrying %s", table)
 			continue
 		}
+		s.done()
 		break
 	}
 	return nil
