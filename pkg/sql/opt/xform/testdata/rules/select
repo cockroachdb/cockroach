@@ -122,7 +122,10 @@ CREATE TABLE virtual (
     a INT,
     b INT,
     c INT AS (b + 10) VIRTUAL,
-    INDEX (a) WHERE c IN (10, 20, 30)
+    s STRING,
+    lower_s STRING AS (lower(s)) VIRTUAL,
+    INDEX (a) WHERE c IN (10, 20, 30),
+    INDEX (lower_s)
 )
 ----
 
@@ -362,8 +365,10 @@ project
       ├── scan virtual
       │    ├── columns: k:1!null b:3
       │    ├── computed column expressions
-      │    │    └── c:4
-      │    │         └── b:3 + 10
+      │    │    ├── c:4
+      │    │    │    └── b:3 + 10
+      │    │    └── lower_s:6
+      │    │         └── lower(s:5)
       │    ├── partial index predicates
       │    │    └── secondary: filters
       │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
@@ -1421,6 +1426,20 @@ scan with_time_index@secondary
  ├── key: (1)
  └── fd: (1)-->(2)
 
+# Test that we can constrain an index on a virtual column with a function in the
+# expression.
+opt expect=GenerateConstrainedScans
+SELECT k FROM virtual WHERE lower_s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan virtual@secondary
+      ├── columns: k:1!null
+      ├── constraint: /6/1: [/'foo' - /'foo']
+      └── key: (1)
+
 # Constrained partial index scan.
 
 exec-ddl
@@ -1690,8 +1709,10 @@ project
       ├── scan virtual
       │    ├── columns: k:1!null a:2 b:3
       │    ├── computed column expressions
-      │    │    └── c:4
-      │    │         └── b:3 + 10
+      │    │    ├── c:4
+      │    │    │    └── b:3 + 10
+      │    │    └── lower_s:6
+      │    │         └── lower(s:5)
       │    ├── partial index predicates
       │    │    └── secondary: filters
       │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]

@@ -216,6 +216,174 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 	return false
 }
 
+// IndexedVirtualColumns returns the set of column IDs in the scanPrivate's
+// table that are both virtual computed columns and key columns of a secondary
+// index.
+//
+// TODO(mgartner): Include virtual computed columns that are referenced in
+// partial index predicates.
+func (c *CustomFuncs) IndexedVirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
+	md := c.mem.Metadata()
+	tab := md.Table(scanPrivate.Table)
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	virtualCols := tabMeta.VirtualComputedColumns()
+	if virtualCols.Empty() {
+		// Return early if there are no virtual columns to avoid unnecessarily
+		// calculating the index key columns.
+		return opt.ColSet{}
+	}
+
+	var indexCols opt.ColSet
+	for i, n := 0, tab.IndexCount(); i < n; i++ {
+		indexCols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+	}
+
+	return virtualCols.Intersection(indexCols)
+}
+
+// TryInlineSelectVirtualColumns is used by the InlineSelectVirtualColumns rule
+// to find filters on virtual computed columns that can be pushed below the
+// Project that produces the virtual column. The filter is pushed-down by
+// inlining the virtual column expression. Only the columns in
+// indexedVirtualColumns are eligible for inlining.
+//
+// If successful, a pair of filters is returned; the first containing filters in
+// which virtual columns have been inlined, and the second containing filters
+// that were unaffected by inlining. If unsuccessful, an empty
+// InlinedVirtualColumnFiltersPair is returned, indicating that there is nothing
+// to inline.
+//
+// Two separate filters are returned as a pair so that the
+// InlineSelectVirtualColumns rule can push down eligible filters, but not the
+// rest.
+//
+// For example:
+//
+//   CREATE TABLE t (
+//     a INT,
+//     b INT,
+//     v INT AS (abs(a)),
+//     w INT AS (abs(b)),
+//     INDEX (v)
+//   )
+//
+//   SELECT * FROM t WHERE v = 5 AND w = 10
+//
+// The (v = 5) and (w = 10) filters are returned in separate filters. In the
+// first, v is inlined because it is indexed, so the filter is transformed to
+// (abs(a) = 5). This filter is no longer dependent on the projection of v, so
+// it can be pushed below the Project. The w variable is not indexed, so the
+// (w = 10) filter is unchanged and remains above the Project.
+//
+// See the InlineSelectVirtualColumns rule for more details.
+func (c *CustomFuncs) TryInlineSelectVirtualColumns(
+	filters memo.FiltersExpr, projections memo.ProjectionsExpr, indexedVirtualColumns opt.ColSet,
+) InlinedVirtualColumnFiltersPair {
+	// Collect the projections for the indexed virtual columns.
+	var inlinableCols opt.ColSet
+	var inlinableProjections memo.ProjectionsExpr
+	for i := range projections {
+		col := projections[i].Col
+
+		// If the projected expression is volatile, it cannot be inlined. This
+		// should be impossible (computed column expressions cannot be
+		// volatile), but adds additional safety in case this function is
+		// expanded to inline non-virtual columns in the future.
+		if projections[i].ScalarProps().VolatilitySet.HasVolatile() {
+			continue
+		}
+
+		if indexedVirtualColumns.Contains(col) {
+			// Initialize inlinableProjections lazily.
+			if inlinableProjections == nil {
+				inlinableProjections = make(memo.ProjectionsExpr, 0, len(projections)-i)
+			}
+			inlinableCols.Add(col)
+			inlinableProjections = append(inlinableProjections, projections[i])
+		}
+	}
+
+	if len(inlinableProjections) == 0 {
+		// None of the projections are eligible for inlining in filters.
+		return InlinedVirtualColumnFiltersPair{}
+	}
+
+	// For each filter, determine if there are any virtual columns to inline. If
+	// so, inline the virtual column expressions in the filter. We keep track of
+	// which filters have inlined projections in inlinedFilterIdxs so that we
+	// can build a list of non-inlined filters below.
+	var inlined memo.FiltersExpr
+	var inlinedFilterIdxs util.FastIntSet
+	for i := range filters {
+		item := &filters[i]
+
+		// Do not inline a filter if it has a correlated subquery or it does not
+		// reference an inlinable virtual column.
+		if item.ScalarProps().HasCorrelatedSubquery || !item.ScalarProps().OuterCols.Intersects(inlinableCols) {
+			continue
+		}
+
+		// Initialize inlined lazily.
+		if inlined == nil {
+			inlined = make(memo.FiltersExpr, 0, len(filters)-i)
+		}
+
+		// Inline the virtual column expressions in the filter.
+		filter := c.f.ConstructFiltersItem(
+			c.inlineProjections(item.Condition, inlinableProjections).(opt.ScalarExpr),
+		)
+		inlined = append(inlined, filter)
+		inlinedFilterIdxs.Add(i)
+	}
+
+	if len(inlined) == 0 {
+		// No projections were inlined in filters.
+		return InlinedVirtualColumnFiltersPair{}
+	}
+
+	// Collect the filters which did not have projections inlined.
+	notInlined := make(memo.FiltersExpr, 0, len(filters)-inlinedFilterIdxs.Len())
+	for i := range filters {
+		if !inlinedFilterIdxs.Contains(i) {
+			notInlined = append(notInlined, filters[i])
+		}
+	}
+
+	return InlinedVirtualColumnFiltersPair{
+		inlined:    inlined,
+		notInlined: notInlined,
+	}
+}
+
+// InlinedVirtualColumnFiltersPair is the result of
+// TryInlineSelectVirtualColumns. See that function for more details.
+type InlinedVirtualColumnFiltersPair struct {
+	inlined    memo.FiltersExpr
+	notInlined memo.FiltersExpr
+}
+
+// InlinedFilters returns the filters in the pair where virtual columns were
+// inlined.
+func (c *CustomFuncs) InlinedFilters(pair InlinedVirtualColumnFiltersPair) memo.FiltersExpr {
+	return pair.inlined
+}
+
+// NotInlinedFilters returns the filters in the pair where virtual columns were
+// not inlined.
+func (c *CustomFuncs) NotInlinedFilters(pair InlinedVirtualColumnFiltersPair) memo.FiltersExpr {
+	return pair.notInlined
+}
+
+// InlineSelectVirtualColumnsSucceeded returns true if the pair is not nil,
+// indicating that InlineSelectVirtualColumns successfully inlined virtual
+// columns into some of the filters.
+func (c *CustomFuncs) InlineSelectVirtualColumnsSucceeded(
+	pair InlinedVirtualColumnFiltersPair,
+) bool {
+	return len(pair.inlined) > 0
+}
+
 // InlineSelectProject searches the filter conditions for any variable
 // references to columns from the given projections expression. Each variable is
 // replaced by the corresponding inlined projection expression.
