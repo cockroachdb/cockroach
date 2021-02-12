@@ -131,10 +131,11 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		protoBytes, ok := datum.(*tree.DBytes)
 		require.True(t, ok)
 
-		var resolvedSpan jobspb.ResolvedSpan
-		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpan))
-
-		actualRows[fmt.Sprintf("%s %s", resolvedSpan.Span, resolvedSpan.Timestamp)] = struct{}{}
+		var resolvedSpans jobspb.ResolvedSpans
+		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpans))
+		for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
+			actualRows[fmt.Sprintf("%s %s", resolvedSpan.Span, resolvedSpan.Timestamp)] = struct{}{}
+		}
 	}
 
 	require.Equal(t, expectedRows, actualRows)
@@ -297,23 +298,25 @@ func TestRandomClientGeneration(t *testing.T) {
 		protoBytes, ok := datum.(*tree.DBytes)
 		require.True(t, ok)
 
-		var resolvedSpan jobspb.ResolvedSpan
-		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpan))
+		var resolvedSpans jobspb.ResolvedSpans
+		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpans))
 
-		if _, ok := partitionSpanToTableID[resolvedSpan.Span.String()]; !ok {
-			t.Fatalf("expected resolved span %v to be either in one of the supplied partition"+
-				" addresses %v", resolvedSpan.Span, topo.Partitions)
+		for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
+			if _, ok := partitionSpanToTableID[resolvedSpan.Span.String()]; !ok {
+				t.Fatalf("expected resolved span %v to be either in one of the supplied partition"+
+					" addresses %v", resolvedSpan.Span, topo.Partitions)
+			}
+
+			// All resolved timestamp events should be greater than the start time.
+			require.Greater(t, resolvedSpan.Timestamp.WallTime, startTime.WallTime)
+
+			// Track the max resolved timestamp per partition.
+			if ts, ok := maxResolvedTimestampPerPartition[resolvedSpan.Span.String()]; !ok ||
+				ts.Less(resolvedSpan.Timestamp) {
+				maxResolvedTimestampPerPartition[resolvedSpan.Span.String()] = resolvedSpan.Timestamp
+			}
+			numResolvedEvents++
 		}
-
-		// All resolved timestamp events should be greater than the start time.
-		require.Less(t, startTime.WallTime, resolvedSpan.Timestamp.WallTime)
-
-		// Track the max resolved timestamp per partition.
-		if ts, ok := maxResolvedTimestampPerPartition[resolvedSpan.Span.String()]; !ok ||
-			ts.Less(resolvedSpan.Timestamp) {
-			maxResolvedTimestampPerPartition[resolvedSpan.Span.String()] = resolvedSpan.Timestamp
-		}
-		numResolvedEvents++
 	}
 
 	// Ensure that no errors were reported to the validator.

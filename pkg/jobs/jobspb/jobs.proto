@@ -526,6 +526,10 @@ message ResolvedSpan {
   bool boundary_reached = 3;
 }
 
+message ResolvedSpans {
+  repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
+}
+
 message ChangefeedProgress {
   reserved 1;
   repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
