@@ -38,7 +38,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row  CREATE TABLE public.regional_by_row (
                  pk INT8 NOT NULL,
                  i INT8 NULL,
-                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                  INDEX regional_by_row_i_idx (i ASC),
                  FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -257,7 +257,6 @@ TABLE created_as_global  ALTER TABLE created_as_global CONFIGURE ZONE USING
                          lease_preferences = '[[+region=ca-central-1]]'
 
 # Altering from GLOBAL
-
 statement ok
 ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE
 
@@ -415,7 +414,7 @@ created_as_global  CREATE TABLE public.created_as_global (
                    pk INT8 NOT NULL,
                    i INT8 NULL,
                    b INT8 NULL,
-                   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                    CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                    INDEX created_as_global_b_idx (b ASC),
                    UNIQUE INDEX created_as_global_i_key (i ASC),
@@ -1030,7 +1029,7 @@ regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
                              pk INT8 NOT NULL,
                              i INT8 NULL,
                              b INT8 NULL,
-                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                              CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                              INDEX regional_by_table_no_region_b_idx (b ASC),
                              UNIQUE INDEX regional_by_table_no_region_i_key (i ASC),
@@ -1315,7 +1314,7 @@ regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
                               pk INT8 NOT NULL,
                               i INT8 NULL,
                               b INT8 NULL,
-                              crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                              crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                               CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                               INDEX regional_by_table_in_us_east_b_idx (b ASC),
                               UNIQUE INDEX regional_by_table_in_us_east_i_key (i ASC),
@@ -1462,7 +1461,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row                                 CREATE TABLE public.regional_by_row (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                                                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                                                 INDEX regional_by_row_i_idx (i ASC),
                                                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1498,7 +1497,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row                                   CREATE TABLE public.regional_by_row (
                                                   pk INT8 NOT NULL,
                                                   i INT8 NULL,
-                                                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                                                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                                                   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                                                   INDEX regional_by_row_i_idx (i ASC),
                                                   FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1534,7 +1533,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row                                 CREATE TABLE public.regional_by_row (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                                                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                                                 INDEX regional_by_row_i_idx (i ASC),
                                                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1570,7 +1569,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row    CREATE TABLE public.regional_by_row (
                    pk INT8 NOT NULL,
                    i INT8 NULL,
-                   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                    CONSTRAINT "primary" PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
