@@ -8,11 +8,8 @@ public  a  root
 
 user testuser
 
-query T noticetrace
+statement notice NOTICE: CONNECT privilege will be required to connect to databases in a future release\nHINT: .*59875.*
 use test
-----
-NOTICE: CONNECT privilege will be required to connect to databases in a future release
-HINT: See: https://go.crdb.dev/issue-v/59875/v21.1
 
 query TTT
 SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablename = 'a'
