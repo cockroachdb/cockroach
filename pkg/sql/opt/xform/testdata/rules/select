@@ -2165,8 +2165,8 @@ project
       └── filters
            └── (j:4->0) = '"b"' [outer=(4), immutable]
 
-# Do not generate an inverted scan when right side of the equality is an array.
-opt expect-not=GenerateInvertedIndexScans
+# Generate an inverted scan when right side of the equality is an array.
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a' = '["b"]'
 ----
 project
@@ -2178,15 +2178,20 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan b
+      ├── index-join b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    └── fd: (1)-->(4)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /6/1
+      │         │    └── spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │         └── key: (1)
       └── filters
            └── (j:4->'a') = '["b"]' [outer=(4), immutable]
 
-# Do not generate an inverted scan when right side of the equality is an object.
-opt expect-not=GenerateInvertedIndexScans
+# Generate an inverted scan when right side of the equality is an object.
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a' = '{"b": "c"}'
 ----
 project
@@ -2198,10 +2203,15 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan b
+      ├── index-join b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    └── fd: (1)-->(4)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /6/1
+      │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         └── key: (1)
       └── filters
            └── (j:4->'a') = '{"b": "c"}' [outer=(4), immutable]
 
