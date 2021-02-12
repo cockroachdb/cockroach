@@ -114,13 +114,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		startTime, nil /* interceptEvents */, mockClient)
 	require.NoError(t, err)
 
-	// Compare the set of results since the ordering is not guaranteed.
-	expectedRows := map[string]struct{}{
-		"partition1{-\\x00} 0.000000001,0": {},
-		"partition1{-\\x00} 0.000000004,0": {},
-		"partition2{-\\x00} 0.000000001,0": {},
-		"partition2{-\\x00} 0.000000004,0": {},
-	}
 	actualRows := make(map[string]struct{})
 	for {
 		row := out.NextNoMeta(t)
@@ -138,7 +131,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, expectedRows, actualRows)
+	// Only compare the latest advancement, since not all intermediary resolved
+	// timestamps might be flushed (due to the minimum flush interval setting in
+	// the ingestion processor).
+	require.Contains(t, actualRows, "partition1{-\\x00} 0.000000004,0",
+		"partition 1 should advance to timestamp 4")
+	require.Contains(t, actualRows, "partition2{-\\x00} 0.000000004,0",
+		"partition 2 should advance to timestamp 4")
 }
 
 func getPartitionSpanToTableID(
@@ -238,7 +237,7 @@ func TestRandomClientGeneration(t *testing.T) {
 		kvFrequency time.Duration, dupProbability float64,
 	) string {
 		return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
-			"&KV_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
+			"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
 			"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
 			"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
 			"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32)
