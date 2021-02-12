@@ -2688,7 +2688,12 @@ func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
 func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	return &tree.CastExpr{
 		Expr: &tree.FuncExpr{
-			Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
+			Func: tree.WrapFunction(builtins.DefaultToDatabasePrimaryRegionBuiltinName),
+			Exprs: []tree.Expr{
+				&tree.FuncExpr{
+					Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
+				},
+			},
 		},
 		Type:       &tree.OIDTypeReference{OID: oid},
 		SyntaxMode: tree.CastShort,
