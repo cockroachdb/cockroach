@@ -11,6 +11,8 @@
 package spanset
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -584,6 +586,7 @@ func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 func (s spanSetWriter) PutIntent(
+	ctx context.Context,
 	key roachpb.Key,
 	value []byte,
 	state storage.PrecedingIntentState,
@@ -593,7 +596,7 @@ func (s spanSetWriter) PutIntent(
 	if err := s.checkAllowed(key); err != nil {
 		return 0, err
 	}
-	return s.w.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID)
+	return s.w.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
@@ -604,6 +607,10 @@ func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
 		return err
 	}
 	return s.w.PutEngineKey(key, value)
+}
+
+func (s spanSetWriter) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
+	return s.w.SafeToWriteSeparatedIntents(ctx)
 }
 
 func (s spanSetWriter) LogData(data []byte) error {

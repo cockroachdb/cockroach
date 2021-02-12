@@ -181,7 +181,7 @@ func assertEqualKVs(
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue
 	var err error
-	for it.SeekGE(storage.MVCCKey{}); ; it.Next() {
+	for it.SeekGE(storage.MVCCKey{Key: key}); ; it.Next() {
 		if ok, err := it.Valid(); !ok {
 			if err != nil {
 				t.Fatal(err)

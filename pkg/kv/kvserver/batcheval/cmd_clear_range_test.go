@@ -89,7 +89,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			eng := storage.NewDefaultInMem()
+			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 
 			var stats enginepb.MVCCStats
@@ -155,7 +155,7 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var stats enginepb.MVCCStats

@@ -228,7 +228,7 @@ func createTestStoreWithoutStart(
 	// and merge queues separately to cover event-driven splits and merges.
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -303,7 +303,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
 	seed := randutil.NewPseudoSeed()
@@ -433,7 +433,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -509,7 +509,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
 	// Bootstrap should fail if engine has no cluster version yet.
@@ -2822,7 +2822,7 @@ func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID r
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	e := storage.NewDefaultInMem()
+	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
 
 	ctx := context.Background()

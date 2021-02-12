@@ -3086,14 +3086,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			inSnap.State.Desc.RangeID != rangeIds[string(keyA)] {
 			return nil
 		}
-		// TODO(sumeer): fix this test (and others in this file) when
-		// DisallowSeparatedIntents=false
 
 		// The seven to nine SSTs we are expecting to ingest are in the following order:
 		// - Replicated range-id local keys of the range in the snapshot.
 		// - Range-local keys of the range in the snapshot.
-		// - Optionally, two SSTs for the lock table keys of the range in the
-		//   snapshot
+		// - Two SSTs for the lock table keys of the range in the snapshot.
 		// - User keys of the range in the snapshot.
 		// - Unreplicated range-id local keys of the range in the snapshot.
 		// - SST to clear range-id local keys of the subsumed replica with
@@ -3105,12 +3102,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// NOTE: There are no range-local keys or lock table keys, in [d, /Max) in
 		// the store we're sending a snapshot to, so we aren't expecting SSTs to
 		// clear those keys.
-		expectedSSTCount := 7
-		indexAdjustment := 0
-		if !storage.DisallowSeparatedIntents {
-			expectedSSTCount += 2
-			indexAdjustment = 2
-		}
+		expectedSSTCount := 9
 		if len(sstNames) != expectedSSTCount {
 			return errors.Errorf("expected to ingest %d SSTs, got %d SSTs",
 				expectedSSTCount, len(sstNames))
@@ -3128,9 +3120,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// already been sent.
 		var sstNamesSubset []string
 		// The SST with the user keys in the snapshot.
-		sstNamesSubset = append(sstNamesSubset, sstNames[2+indexAdjustment])
+		sstNamesSubset = append(sstNamesSubset, sstNames[4])
 		// Remaining ones from the predict list above.
-		sstNamesSubset = append(sstNamesSubset, sstNames[4+indexAdjustment:]...)
+		sstNamesSubset = append(sstNamesSubset, sstNames[6:]...)
 
 		// Construct the expected SSTs and ensure that they are byte-by-byte
 		// equal. This verification ensures that the SSTs have the same
@@ -3171,9 +3163,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				}
 			}
 		}
-		if len(expectedSSTs) != 3+indexAdjustment {
+		if len(expectedSSTs) != 5 {
 			return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
-				3+indexAdjustment, len(expectedSSTs))
+				5, len(expectedSSTs))
 		}
 		// Keep the last one which contains the user keys.
 		expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]

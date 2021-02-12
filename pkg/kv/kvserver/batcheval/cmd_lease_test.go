@@ -172,7 +172,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
 		ctx := context.Background()
-		db := storage.NewDefaultInMem()
+		db := storage.NewDefaultInMemForTesting()
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()

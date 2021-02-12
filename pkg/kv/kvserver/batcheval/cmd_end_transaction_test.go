@@ -872,7 +872,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			db := storage.NewDefaultInMem()
+			db := storage.NewDefaultInMemForTesting()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()
@@ -974,7 +974,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	defer TestingSetTxnAutoGC(false)()
 
 	testutils.RunTrueAndFalse(t, "withStoredTxnRecord", func(t *testing.T, storeTxnBeforeEndTxn bool) {
-		db := storage.NewDefaultInMem()
+		db := storage.NewDefaultInMemForTesting()
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()

@@ -1050,6 +1050,7 @@ func (b *putBuffer) putInlineMeta(
 var trueValue = true
 
 func (b *putBuffer) putIntentMeta(
+	ctx context.Context,
 	writer Writer,
 	key MVCCKey,
 	state PrecedingIntentState,
@@ -1062,7 +1063,15 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	if !DisallowSeparatedIntents {
+	safe, err := writer.SafeToWriteSeparatedIntents(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if safe {
+		// All nodes in this cluster understand separated intents, so can fiddle
+		// with TxnDidNotUpdateMeta, which is not understood by older nodes (which
+		// are no longer present, and will never again be present).
+		//
 		// NB: the parameter txnDidNotUpdateMeta is about what happened prior to
 		// this Put, and is passed through to writer below. The field
 		// TxnDidNotUpdateMeta, in the MVCCMetadata we are about to write,
@@ -1082,7 +1091,7 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, 0, err
 	}
 	if separatedIntentCountDelta, err = writer.PutIntent(
-		key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
+		ctx, key.Key, bytes, state, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 		return 0, 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
@@ -1722,7 +1731,7 @@ func mvccPutInternal(
 	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
 		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-			writer, metaKey, precedingIntentState, txnDidNotUpdateMeta, newMeta)
+			ctx, writer, metaKey, precedingIntentState, txnDidNotUpdateMeta, newMeta)
 		if err != nil {
 			return err
 		}
@@ -2853,7 +2862,7 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
-				rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
+				ctx, rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			separatedIntentCountDelta, err =
@@ -3207,10 +3216,6 @@ func MVCCGarbageCollect(
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
 	// collecting.
-	// TODO(sumeer): this can span from local to global keys. Fix in cmd_gc.go
-	// which is already examining all the keys and can separate out the local
-	// keys to call MVCCGarbageCollect separately.
-	// TODO(sumeer): do we even need these coarse bounds?
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),

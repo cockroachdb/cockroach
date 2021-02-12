@@ -697,7 +697,7 @@ func TestClusterIDMismatch(t *testing.T) {
 
 	engines := make([]storage.Engine, 2)
 	for i := range engines {
-		e := storage.NewDefaultInMem()
+		e := storage.NewDefaultInMemForTesting()
 		defer e.Close()
 
 		sIdent := roachpb.StoreIdent{
