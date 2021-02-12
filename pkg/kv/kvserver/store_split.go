@@ -274,7 +274,7 @@ func prepareRightReplicaForSplit(
 	// the txnWaitQueue.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-	rightRepl.leasePostApplyLocked(ctx, rightLease, false /* permitJump */)
+	rightRepl.leasePostApplyLocked(ctx, rightLease, nil /* priorReadSum */, false /* permitJump */)
 	return rightRepl
 }
 

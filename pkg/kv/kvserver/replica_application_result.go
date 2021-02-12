@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -246,7 +247,7 @@ func (r *Replica) handleSplitResult(ctx context.Context, split *kvserverpb.Split
 
 func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge) {
 	if err := r.store.MergeRange(
-		ctx, r, merge.LeftDesc, merge.RightDesc, merge.FreezeStart,
+		ctx, r, merge.LeftDesc, merge.RightDesc, merge.FreezeStart, merge.RightReadSummary,
 	); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.Fatalf(ctx, "failed to update store after merging range: %s", err)
@@ -257,10 +258,12 @@ func (r *Replica) handleDescResult(ctx context.Context, desc *roachpb.RangeDescr
 	r.setDescRaftMuLocked(ctx, desc)
 }
 
-func (r *Replica) handleLeaseResult(ctx context.Context, lease *roachpb.Lease) {
+func (r *Replica) handleLeaseResult(
+	ctx context.Context, lease *roachpb.Lease, priorReadSum *rspb.ReadSummary,
+) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.leasePostApplyLocked(ctx, *lease, false /* permitJump */)
+	r.leasePostApplyLocked(ctx, *lease, priorReadSum, false /* permitJump */)
 }
 
 func (r *Replica) handleTruncatedStateResult(

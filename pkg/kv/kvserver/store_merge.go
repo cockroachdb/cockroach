@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -29,6 +30,7 @@ func (s *Store) MergeRange(
 	leftRepl *Replica,
 	newLeftDesc, rightDesc roachpb.RangeDescriptor,
 	freezeStart hlc.ClockTimestamp,
+	rightReadSum *rspb.ReadSummary,
 ) error {
 	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
@@ -77,17 +79,26 @@ func (s *Store) MergeRange(
 	if leftLease.OwnedBy(s.Ident.StoreID) && !rightLease.OwnedBy(s.Ident.StoreID) {
 		// We hold the lease for the LHS, but do not hold the lease for the RHS.
 		// That means we don't have up-to-date timestamp cache entries for the
-		// keyspace previously owned by the RHS. Bump the low water mark for the RHS
-		// keyspace to freezeStart, the time at which the RHS promised to stop
-		// serving traffic, as freezeStart is guaranteed to be greater than any
-		// entry in the RHS's timestamp cache.
+		// keyspace previously owned by the RHS. Update the timestamp cache for
+		// the RHS keyspace. If the merge trigger included a prior read summary
+		// then we can use that directly to update the timestamp cache.
+		// Otherwise, we pessimistically assume that the right-hand side served
+		// reads all the way up to freezeStart, the time at which the RHS
+		// promised to stop serving traffic.
 		//
-		// Note that we need to update our clock with freezeStart to preserve the
-		// invariant that our clock is always greater than or equal to any
-		// timestamps in the timestamp cache. For a full discussion, see the comment
-		// on TestStoreRangeMergeTimestampCacheCausality.
+		// Note that we need to update our clock with freezeStart to preserve
+		// the invariant that our clock is always greater than or equal to any
+		// timestamps in the timestamp cache. For a full discussion, see the
+		// comment on TestStoreRangeMergeTimestampCacheCausality.
 		s.Clock().Update(freezeStart)
-		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart.ToTimestamp())
+
+		var sum rspb.ReadSummary
+		if rightReadSum != nil {
+			sum = *rightReadSum
+		} else {
+			sum = rspb.FromTimestamp(freezeStart.ToTimestamp())
+		}
+		applyReadSummaryToTimestampCache(s.tsCache, &rightDesc, sum)
 	}
 
 	// Update the subsuming range's descriptor.
