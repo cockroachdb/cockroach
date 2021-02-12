@@ -53,11 +53,11 @@ func QueryTxn(
 	if h.WriteTimestamp().Less(args.Txn.MinTimestamp) {
 		// This condition must hold for the timestamp cache access in
 		// SynthesizeTxnFromMeta to be safe.
-		return result.Result{}, errors.Errorf("QueryTxn request timestamp %s less than txn MinTimestamp %s",
+		return result.Result{}, errors.AssertionFailedf("QueryTxn request timestamp %s less than txn MinTimestamp %s",
 			h.Timestamp, args.Txn.MinTimestamp)
 	}
 	if !args.Key.Equal(args.Txn.Key) {
-		return result.Result{}, errors.Errorf("QueryTxn request key %s does not match txn key %s",
+		return result.Result{}, errors.AssertionFailedf("QueryTxn request key %s does not match txn key %s",
 			args.Key, args.Txn.Key)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)

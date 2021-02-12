@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -68,7 +67,7 @@ func RevertRange(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
-		return result.Result{}, errors.New("cannot execute RevertRange within a transaction")
+		return result.Result{}, ErrTransactionUnsupported
 	}
 	log.VEventf(ctx, 2, "RevertRange %+v", cArgs.Args)
 
