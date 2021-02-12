@@ -332,6 +332,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		// On the AlterPrimaryKeyMutation, sanitize and form the correct default
 		// expression to replace the crdb_region column with when the mutation
 		// is finalized.
+		// NOTE: this is important, as the schema changer is NOT database aware.
+		// The primary_region default helps us also have a material value.
+		// This can be removed when the default_expr can serialize user defined
+		// functions.
 		col := n.tableDesc.GetMutations()[mutationIdx].GetColumn()
 		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			params.ctx,
