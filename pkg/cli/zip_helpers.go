@@ -58,7 +58,6 @@ func (z *zipper) close() error {
 // responsible for locking the zipper beforehand.
 // Unsafe for concurrent use otherwise.
 func (z *zipper) createLocked(name string, mtime time.Time) (io.Writer, error) {
-	fmt.Printf("writing: %s\n", name)
 	if mtime.IsZero() {
 		mtime = timeutil.Now()
 	}
@@ -71,67 +70,72 @@ func (z *zipper) createLocked(name string, mtime time.Time) (io.Writer, error) {
 
 // createRaw creates an entry and writes its contents as a byte slice.
 // Safe for concurrent use.
-func (z *zipper) createRaw(name string, b []byte) error {
+func (z *zipper) createRaw(s *zipReporter, name string, b []byte) error {
 	z.Lock()
 	defer z.Unlock()
 
+	s.progress("writing binary output: %s", name)
 	w, err := z.createLocked(name, time.Time{})
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
 	_, err = w.Write(b)
-	return err
+	return s.result(err)
 }
 
 // createJSON creates an entry and writes its contents from a struct payload, converted to JSON.
 // Safe for concurrent use.
-func (z *zipper) createJSON(name string, m interface{}) error {
+func (z *zipper) createJSON(s *zipReporter, name string, m interface{}) (err error) {
 	if !strings.HasSuffix(name, ".json") {
-		return errors.Errorf("%s does not have .json suffix", name)
+		return s.fail(errors.Errorf("%s does not have .json suffix", name))
 	}
+	s.progress("converting to JSON")
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
-	return z.createRaw(name, b)
+	return z.createRaw(s, name, b)
 }
 
 // createError reports an error payload.
 // Safe for concurrent use.
-func (z *zipper) createError(name string, e error) error {
+func (z *zipper) createError(s *zipReporter, name string, e error) error {
 	z.Lock()
 	defer z.Unlock()
 
-	w, err := z.createLocked(name+".err.txt", time.Time{})
+	s.shout("last request failed: %v", e)
+	out := name + ".err.txt"
+	s.progress("creating error output: %s", out)
+	w, err := z.createLocked(out, time.Time{})
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
-	fmt.Printf("  ^- resulted in %s\n", e)
-	fmt.Fprintf(w, "%s\n", e)
+	fmt.Fprintf(w, "%+v\n", e)
+	s.done()
 	return nil
 }
 
 // createJSONOrError calls either createError() or createJSON()
 // depending on whether the error argument is nil.
 // Safe for concurrent use.
-func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
+func (z *zipper) createJSONOrError(s *zipReporter, name string, m interface{}, e error) error {
 	if e != nil {
-		return z.createError(name, e)
+		return z.createError(s, name, e)
 	}
-	return z.createJSON(name, m)
+	return z.createJSON(s, name, m)
 }
 
 // createJSONOrError calls either createError() or createRaw()
 // depending on whether the error argument is nil.
 // Safe for concurrent use.
-func (z *zipper) createRawOrError(name string, b []byte, e error) error {
+func (z *zipper) createRawOrError(s *zipReporter, name string, b []byte, e error) error {
 	if filepath.Ext(name) == "" {
 		return errors.Errorf("%s has no extension", name)
 	}
 	if e != nil {
-		return z.createError(name, e)
+		return z.createError(s, name, e)
 	}
-	return z.createRaw(name, b)
+	return z.createRaw(s, name, b)
 }
 
 // fileNameEscaper is used to generate file names when the name of the
@@ -256,4 +260,210 @@ func (r *rangeSelection) items() map[int]struct{} {
 		}
 	}
 	return s
+}
+
+// to prevent interleaved output.
+var zipReportingMu syncutil.Mutex
+
+// zipReporter is a helper struct that is responsible for printing
+// progress messages for the zip command.
+type zipReporter struct {
+	// prefix is the string printed at the start of new lines.
+	prefix string
+
+	// flowing when set indicates the reporter should attempt to print
+	// progress about a single item of work on the same line of output.
+	flowing bool
+
+	// newline is true when flowing is true and a newline has just been
+	// printed, so that the next output can avoid emitting an extraneous
+	// newline.
+	newline bool
+
+	// inItem helps asserting that the API is used in the right order:
+	// withPrefix(), start(), info() are only valid while inItem is false,
+	// whereas progress(), done() and fail() are only valid while inItem is true.
+	inItem bool
+}
+
+func newZipReporter(format string, args ...interface{}) *zipReporter {
+	return &zipReporter{
+		flowing: zipCtx.concurrency == 1,
+		prefix:  "[" + fmt.Sprintf(format, args...) + "]",
+		newline: true,
+		inItem:  false,
+	}
+}
+
+// withPrefix creates a reported which adds the provided formatted
+// message as additional prefix at the start of new lines.
+func (z *zipReporter) withPrefix(format string, args ...interface{}) *zipReporter {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	if z.inItem {
+		panic(errors.AssertionFailedf("can't use withPrefix() under start()"))
+	}
+
+	z.completeprevLocked()
+	return &zipReporter{
+		prefix:  z.prefix + " [" + fmt.Sprintf(format, args...) + "]",
+		flowing: z.flowing,
+		newline: z.newline,
+	}
+}
+
+// start begins a new unit of work. The returning reporter is
+// specific to that unit of work. The caller can call .progress()
+// zero or more times, and complete with .done() / .fail() /
+// .result().
+func (z *zipReporter) start(format string, args ...interface{}) *zipReporter {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	if z.inItem {
+		panic(errors.AssertionFailedf("can't use start() under start()"))
+	}
+
+	z.completeprevLocked()
+	msg := z.prefix + " " + fmt.Sprintf(format, args...)
+	nz := &zipReporter{
+		prefix:  msg,
+		flowing: z.flowing,
+		inItem:  true,
+	}
+	fmt.Print(msg + "...")
+	nz.flowLocked()
+	return nz
+}
+
+// flowLocked is used internally by the reporter when progress on a
+// unit of work can be followed with additional output.
+//
+// zipReporterMu is held.
+func (z *zipReporter) flowLocked() {
+	if !z.flowing {
+		// Prevent multi-line output.
+		fmt.Println()
+	} else {
+		z.newline = false
+	}
+}
+
+// resumeLocked is used internally by the reporter when progress
+// on a unit of work is resuming.
+//
+// zipReporterMu is held.
+func (z *zipReporter) resumeLocked() {
+	if !z.flowing || z.newline {
+		fmt.Print(z.prefix + ":")
+	}
+	if z.flowing {
+		z.newline = false
+	}
+}
+
+// completeprevLocked is used internally by the reporter when a
+// message that needs to stand out on its own is about to be printed,
+// to complete any ongoing output and start a new line.
+//
+// zipReporterMu is held.
+func (z *zipReporter) completeprevLocked() {
+	if z.flowing && !z.newline {
+		fmt.Println()
+		z.newline = true
+	}
+}
+
+// endlLocked is used internally by the reported when
+// completing a message that needs to stand out on its own.
+//
+// zipReporterMu is held.
+func (z *zipReporter) endlLocked() {
+	fmt.Println()
+	if z.flowing {
+		z.newline = true
+	}
+}
+
+// info prints a message through the reporter that
+// needs to stand on its own.
+func (z *zipReporter) info(format string, args ...interface{}) {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	z.completeprevLocked()
+	fmt.Print(z.prefix)
+	fmt.Print(" ")
+	fmt.Printf(format, args...)
+	z.endlLocked()
+}
+
+// progress reports a step towards the current unit of work.
+// Only valid for reporters generated via start(), before
+// done/fail/result have been called.
+func (z *zipReporter) progress(format string, args ...interface{}) {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	if !z.inItem {
+		panic(errors.AssertionFailedf("can't use progress() without start()"))
+	}
+
+	z.resumeLocked()
+	fmt.Print(" ")
+	fmt.Printf(format, args...)
+	fmt.Print("...")
+	z.flowLocked()
+}
+
+// shout is a variant of info which prints a colon after the
+// prefix. This is intended for use after start().
+func (z *zipReporter) shout(format string, args ...interface{}) {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	z.completeprevLocked()
+	fmt.Print(z.prefix + ": ")
+	fmt.Printf(format, args...)
+	z.endlLocked()
+}
+
+// done completes a unit of work started with start().
+func (z *zipReporter) done() {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	if !z.inItem {
+		panic(errors.AssertionFailedf("can't use done() without start()"))
+	}
+	z.resumeLocked()
+	fmt.Print(" done")
+	z.endlLocked()
+	z.inItem = false
+}
+
+// done completes a unit of work started with start().
+func (z *zipReporter) fail(err error) error {
+	zipReportingMu.Lock()
+	defer zipReportingMu.Unlock()
+
+	if !z.inItem {
+		panic(errors.AssertionFailedf("can't use fail() without start()"))
+	}
+
+	z.resumeLocked()
+	fmt.Print(" error:", err)
+	z.endlLocked()
+	z.inItem = false
+	return err
+}
+
+// done completes a unit of work started with start().
+func (z *zipReporter) result(err error) error {
+	if err == nil {
+		z.done()
+		return nil
+	}
+	return z.fail(err)
 }
