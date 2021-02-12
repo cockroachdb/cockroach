@@ -63,32 +63,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: column3:19!null upsert_k:20
+      │         ├── columns: upsert_k:25 column2:26!null column3:27!null column4:28!null column5:29!null
       │         ├── with-scan &1
-      │         │    ├── columns: column3:19!null upsert_k:20
+      │         │    ├── columns: upsert_k:25 column2:26!null column3:27!null column4:28!null column5:29!null
       │         │    └── mapping:
-      │         │         ├──  column3:9 => column3:19
-      │         │         └──  upsert_k:18 => upsert_k:20
+      │         │         ├──  upsert_k:18 => upsert_k:25
+      │         │         ├──  column2:8 => column2:26
+      │         │         ├──  column3:9 => column3:27
+      │         │         ├──  column4:10 => column4:28
+      │         │         └──  column5:11 => column5:29
       │         ├── scan uniq
-      │         │    └── columns: k:21!null w:23
+      │         │    └── columns: k:19!null v:20 w:21 x:22 y:23
       │         └── filters
-      │              ├── column3:19 = w:23
-      │              └── upsert_k:20 != k:21
+      │              ├── column3:27 = w:21
+      │              └── upsert_k:25 != k:19
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: column4:27!null column5:28!null upsert_k:29
+                ├── columns: upsert_k:36 column2:37!null column3:38!null column4:39!null column5:40!null
                 ├── with-scan &1
-                │    ├── columns: column4:27!null column5:28!null upsert_k:29
+                │    ├── columns: upsert_k:36 column2:37!null column3:38!null column4:39!null column5:40!null
                 │    └── mapping:
-                │         ├──  column4:10 => column4:27
-                │         ├──  column5:11 => column5:28
-                │         └──  upsert_k:18 => upsert_k:29
+                │         ├──  upsert_k:18 => upsert_k:36
+                │         ├──  column2:8 => column2:37
+                │         ├──  column3:9 => column3:38
+                │         ├──  column4:10 => column4:39
+                │         └──  column5:11 => column5:40
                 ├── scan uniq
-                │    └── columns: k:30!null x:33 y:34
+                │    └── columns: k:30!null v:31 w:32 x:33 y:34
                 └── filters
-                     ├── column4:27 = x:33
-                     ├── column5:28 = y:34
-                     └── upsert_k:29 != k:30
+                     ├── column4:39 = x:33
+                     ├── column5:40 = y:34
+                     └── upsert_k:36 != k:30
 
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
 # x or y. Therefore, we could avoid planning checks for (x,y) (see #58300).
@@ -146,32 +151,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: column3:21!null upsert_k:22
+      │         ├── columns: upsert_k:27 column2:28!null column3:29!null upsert_x:30 upsert_y:31
       │         ├── with-scan &1
-      │         │    ├── columns: column3:21!null upsert_k:22
+      │         │    ├── columns: upsert_k:27 column2:28!null column3:29!null upsert_x:30 upsert_y:31
       │         │    └── mapping:
-      │         │         ├──  column3:9 => column3:21
-      │         │         └──  upsert_k:18 => upsert_k:22
+      │         │         ├──  upsert_k:18 => upsert_k:27
+      │         │         ├──  column2:8 => column2:28
+      │         │         ├──  column3:9 => column3:29
+      │         │         ├──  upsert_x:19 => upsert_x:30
+      │         │         └──  upsert_y:20 => upsert_y:31
       │         ├── scan uniq
-      │         │    └── columns: k:23!null w:25
+      │         │    └── columns: k:21!null v:22 w:23 x:24 y:25
       │         └── filters
-      │              ├── column3:21 = w:25
-      │              └── upsert_k:22 != k:23
+      │              ├── column3:29 = w:23
+      │              └── upsert_k:27 != k:21
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: upsert_x:29 upsert_y:30 upsert_k:31
+                ├── columns: upsert_k:38 column2:39!null column3:40!null upsert_x:41 upsert_y:42
                 ├── with-scan &1
-                │    ├── columns: upsert_x:29 upsert_y:30 upsert_k:31
+                │    ├── columns: upsert_k:38 column2:39!null column3:40!null upsert_x:41 upsert_y:42
                 │    └── mapping:
-                │         ├──  upsert_x:19 => upsert_x:29
-                │         ├──  upsert_y:20 => upsert_y:30
-                │         └──  upsert_k:18 => upsert_k:31
+                │         ├──  upsert_k:18 => upsert_k:38
+                │         ├──  column2:8 => column2:39
+                │         ├──  column3:9 => column3:40
+                │         ├──  upsert_x:19 => upsert_x:41
+                │         └──  upsert_y:20 => upsert_y:42
                 ├── scan uniq
-                │    └── columns: k:32!null x:35 y:36
+                │    └── columns: k:32!null v:33 w:34 x:35 y:36
                 └── filters
-                     ├── upsert_x:29 = x:35
-                     ├── upsert_y:30 = y:36
-                     └── upsert_k:31 != k:32
+                     ├── upsert_x:41 = x:35
+                     ├── upsert_y:42 = y:36
+                     └── upsert_k:38 != k:32
 
 # TODO(rytaft): No need to plan checks for w since it's aways NULL.
 # We currently can't determine that w is always NULL since the function
@@ -230,32 +240,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: column2:21 upsert_k:22
+      │         ├── columns: upsert_k:27 upsert_v:28 column2:29 column3:30 upsert_y:31
       │         ├── with-scan &1
-      │         │    ├── columns: column2:21 upsert_k:22
+      │         │    ├── columns: upsert_k:27 upsert_v:28 column2:29 column3:30 upsert_y:31
       │         │    └── mapping:
-      │         │         ├──  column2:8 => column2:21
-      │         │         └──  upsert_k:18 => upsert_k:22
+      │         │         ├──  upsert_k:18 => upsert_k:27
+      │         │         ├──  upsert_v:19 => upsert_v:28
+      │         │         ├──  column2:8 => column2:29
+      │         │         ├──  column3:9 => column3:30
+      │         │         └──  upsert_y:20 => upsert_y:31
       │         ├── scan uniq
-      │         │    └── columns: k:23!null w:25
+      │         │    └── columns: k:21!null v:22 w:23 x:24 y:25
       │         └── filters
-      │              ├── column2:21 = w:25
-      │              └── upsert_k:22 != k:23
+      │              ├── column2:29 = w:23
+      │              └── upsert_k:27 != k:21
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: column3:29 upsert_y:30 upsert_k:31
+                ├── columns: upsert_k:38 upsert_v:39 column2:40 column3:41 upsert_y:42
                 ├── with-scan &1
-                │    ├── columns: column3:29 upsert_y:30 upsert_k:31
+                │    ├── columns: upsert_k:38 upsert_v:39 column2:40 column3:41 upsert_y:42
                 │    └── mapping:
-                │         ├──  column3:9 => column3:29
-                │         ├──  upsert_y:20 => upsert_y:30
-                │         └──  upsert_k:18 => upsert_k:31
+                │         ├──  upsert_k:18 => upsert_k:38
+                │         ├──  upsert_v:19 => upsert_v:39
+                │         ├──  column2:8 => column2:40
+                │         ├──  column3:9 => column3:41
+                │         └──  upsert_y:20 => upsert_y:42
                 ├── scan uniq
-                │    └── columns: k:32!null x:35 y:36
+                │    └── columns: k:32!null v:33 w:34 x:35 y:36
                 └── filters
-                     ├── column3:29 = x:35
-                     ├── upsert_y:30 = y:36
-                     └── upsert_k:31 != k:32
+                     ├── column3:41 = x:35
+                     ├── upsert_y:42 = y:36
+                     └── upsert_k:38 != k:32
 
 # Upsert with non-constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
@@ -314,32 +329,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: w:23!null upsert_k:24
+      │         ├── columns: upsert_k:29 v:30 w:31!null column14:32 column15:33!null
       │         ├── with-scan &1
-      │         │    ├── columns: w:23!null upsert_k:24
+      │         │    ├── columns: upsert_k:29 v:30 w:31!null column14:32 column15:33!null
       │         │    └── mapping:
-      │         │         ├──  other.w:9 => w:23
-      │         │         └──  upsert_k:22 => upsert_k:24
+      │         │         ├──  upsert_k:22 => upsert_k:29
+      │         │         ├──  other.v:8 => v:30
+      │         │         ├──  other.w:9 => w:31
+      │         │         ├──  column14:14 => column14:32
+      │         │         └──  column15:15 => column15:33
       │         ├── scan uniq
-      │         │    └── columns: uniq.k:25!null uniq.w:27
+      │         │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
       │         └── filters
-      │              ├── w:23 = uniq.w:27
-      │              └── upsert_k:24 != uniq.k:25
+      │              ├── w:31 = uniq.w:25
+      │              └── upsert_k:29 != uniq.k:23
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: column14:31 column15:32!null upsert_k:33
+                ├── columns: upsert_k:40 v:41 w:42!null column14:43 column15:44!null
                 ├── with-scan &1
-                │    ├── columns: column14:31 column15:32!null upsert_k:33
+                │    ├── columns: upsert_k:40 v:41 w:42!null column14:43 column15:44!null
                 │    └── mapping:
-                │         ├──  column14:14 => column14:31
-                │         ├──  column15:15 => column15:32
-                │         └──  upsert_k:22 => upsert_k:33
+                │         ├──  upsert_k:22 => upsert_k:40
+                │         ├──  other.v:8 => v:41
+                │         ├──  other.w:9 => w:42
+                │         ├──  column14:14 => column14:43
+                │         └──  column15:15 => column15:44
                 ├── scan uniq
-                │    └── columns: uniq.k:34!null uniq.x:37 uniq.y:38
+                │    └── columns: uniq.k:34!null uniq.v:35 uniq.w:36 uniq.x:37 uniq.y:38
                 └── filters
-                     ├── column14:31 = uniq.x:37
-                     ├── column15:32 = uniq.y:38
-                     └── upsert_k:33 != uniq.k:34
+                     ├── column14:43 = uniq.x:37
+                     ├── column15:44 = uniq.y:38
+                     └── upsert_k:40 != uniq.k:34
 
 # On conflict do update with constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
@@ -402,32 +422,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_w:23 upsert_k:24
+      │         ├── columns: upsert_k:29 upsert_v:30 upsert_w:31 upsert_x:32 upsert_y:33
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_w:23 upsert_k:24
+      │         │    ├── columns: upsert_k:29 upsert_v:30 upsert_w:31 upsert_x:32 upsert_y:33
       │         │    └── mapping:
-      │         │         ├──  upsert_w:20 => upsert_w:23
-      │         │         └──  upsert_k:18 => upsert_k:24
+      │         │         ├──  upsert_k:18 => upsert_k:29
+      │         │         ├──  upsert_v:19 => upsert_v:30
+      │         │         ├──  upsert_w:20 => upsert_w:31
+      │         │         ├──  upsert_x:21 => upsert_x:32
+      │         │         └──  upsert_y:22 => upsert_y:33
       │         ├── scan uniq
-      │         │    └── columns: k:25!null w:27
+      │         │    └── columns: k:23!null v:24 w:25 x:26 y:27
       │         └── filters
-      │              ├── upsert_w:23 = w:27
-      │              └── upsert_k:24 != k:25
+      │              ├── upsert_w:31 = w:25
+      │              └── upsert_k:29 != k:23
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: upsert_x:31 upsert_y:32 upsert_k:33
+                ├── columns: upsert_k:40 upsert_v:41 upsert_w:42 upsert_x:43 upsert_y:44
                 ├── with-scan &1
-                │    ├── columns: upsert_x:31 upsert_y:32 upsert_k:33
+                │    ├── columns: upsert_k:40 upsert_v:41 upsert_w:42 upsert_x:43 upsert_y:44
                 │    └── mapping:
-                │         ├──  upsert_x:21 => upsert_x:31
-                │         ├──  upsert_y:22 => upsert_y:32
-                │         └──  upsert_k:18 => upsert_k:33
+                │         ├──  upsert_k:18 => upsert_k:40
+                │         ├──  upsert_v:19 => upsert_v:41
+                │         ├──  upsert_w:20 => upsert_w:42
+                │         ├──  upsert_x:21 => upsert_x:43
+                │         └──  upsert_y:22 => upsert_y:44
                 ├── scan uniq
-                │    └── columns: k:34!null x:37 y:38
+                │    └── columns: k:34!null v:35 w:36 x:37 y:38
                 └── filters
-                     ├── upsert_x:31 = x:37
-                     ├── upsert_y:32 = y:38
-                     └── upsert_k:33 != k:34
+                     ├── upsert_x:43 = x:37
+                     ├── upsert_y:44 = y:38
+                     └── upsert_k:40 != k:34
 
 # On conflict do update with non-constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
@@ -489,32 +514,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_w:28 upsert_k:29
+      │         ├── columns: upsert_k:34 upsert_v:35 upsert_w:36 upsert_x:37 upsert_y:38
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_w:28 upsert_k:29
+      │         │    ├── columns: upsert_k:34 upsert_v:35 upsert_w:36 upsert_x:37 upsert_y:38
       │         │    └── mapping:
-      │         │         ├──  upsert_w:25 => upsert_w:28
-      │         │         └──  upsert_k:23 => upsert_k:29
+      │         │         ├──  upsert_k:23 => upsert_k:34
+      │         │         ├──  upsert_v:24 => upsert_v:35
+      │         │         ├──  upsert_w:25 => upsert_w:36
+      │         │         ├──  upsert_x:26 => upsert_x:37
+      │         │         └──  upsert_y:27 => upsert_y:38
       │         ├── scan uniq
-      │         │    └── columns: uniq.k:30!null uniq.w:32
+      │         │    └── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
       │         └── filters
-      │              ├── upsert_w:28 = uniq.w:32
-      │              └── upsert_k:29 != uniq.k:30
+      │              ├── upsert_w:36 = uniq.w:30
+      │              └── upsert_k:34 != uniq.k:28
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: upsert_x:36 upsert_y:37 upsert_k:38
+                ├── columns: upsert_k:45 upsert_v:46 upsert_w:47 upsert_x:48 upsert_y:49
                 ├── with-scan &1
-                │    ├── columns: upsert_x:36 upsert_y:37 upsert_k:38
+                │    ├── columns: upsert_k:45 upsert_v:46 upsert_w:47 upsert_x:48 upsert_y:49
                 │    └── mapping:
-                │         ├──  upsert_x:26 => upsert_x:36
-                │         ├──  upsert_y:27 => upsert_y:37
-                │         └──  upsert_k:23 => upsert_k:38
+                │         ├──  upsert_k:23 => upsert_k:45
+                │         ├──  upsert_v:24 => upsert_v:46
+                │         ├──  upsert_w:25 => upsert_w:47
+                │         ├──  upsert_x:26 => upsert_x:48
+                │         └──  upsert_y:27 => upsert_y:49
                 ├── scan uniq
-                │    └── columns: uniq.k:39!null uniq.x:42 uniq.y:43
+                │    └── columns: uniq.k:39!null uniq.v:40 uniq.w:41 uniq.x:42 uniq.y:43
                 └── filters
-                     ├── upsert_x:36 = uniq.x:42
-                     ├── upsert_y:37 = uniq.y:43
-                     └── upsert_k:38 != uniq.k:39
+                     ├── upsert_x:48 = uniq.x:42
+                     ├── upsert_y:49 = uniq.y:43
+                     └── upsert_k:45 != uniq.k:39
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
@@ -577,32 +607,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_w:24!null upsert_k:25
+      │         ├── columns: upsert_k:30 upsert_v:31 upsert_w:32!null upsert_x:33 upsert_y:34
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_w:24!null upsert_k:25
+      │         │    ├── columns: upsert_k:30 upsert_v:31 upsert_w:32!null upsert_x:33 upsert_y:34
       │         │    └── mapping:
-      │         │         ├──  upsert_w:21 => upsert_w:24
-      │         │         └──  upsert_k:19 => upsert_k:25
+      │         │         ├──  upsert_k:19 => upsert_k:30
+      │         │         ├──  upsert_v:20 => upsert_v:31
+      │         │         ├──  upsert_w:21 => upsert_w:32
+      │         │         ├──  upsert_x:22 => upsert_x:33
+      │         │         └──  upsert_y:23 => upsert_y:34
       │         ├── scan uniq
-      │         │    └── columns: k:26!null w:28
+      │         │    └── columns: k:24!null v:25 w:26 x:27 y:28
       │         └── filters
-      │              ├── upsert_w:24 = w:28
-      │              └── upsert_k:25 != k:26
+      │              ├── upsert_w:32 = w:26
+      │              └── upsert_k:30 != k:24
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                ├── columns: upsert_k:41 upsert_v:42 upsert_w:43!null upsert_x:44 upsert_y:45
                 ├── with-scan &1
-                │    ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                │    ├── columns: upsert_k:41 upsert_v:42 upsert_w:43!null upsert_x:44 upsert_y:45
                 │    └── mapping:
-                │         ├──  upsert_x:22 => upsert_x:32
-                │         ├──  upsert_y:23 => upsert_y:33
-                │         └──  upsert_k:19 => upsert_k:34
+                │         ├──  upsert_k:19 => upsert_k:41
+                │         ├──  upsert_v:20 => upsert_v:42
+                │         ├──  upsert_w:21 => upsert_w:43
+                │         ├──  upsert_x:22 => upsert_x:44
+                │         └──  upsert_y:23 => upsert_y:45
                 ├── scan uniq
-                │    └── columns: k:35!null x:38 y:39
+                │    └── columns: k:35!null v:36 w:37 x:38 y:39
                 └── filters
-                     ├── upsert_x:32 = x:38
-                     ├── upsert_y:33 = y:39
-                     └── upsert_k:34 != k:35
+                     ├── upsert_x:44 = x:38
+                     ├── upsert_y:45 = y:39
+                     └── upsert_k:41 != k:35
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
@@ -658,32 +693,37 @@ upsert uniq
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_w:24 upsert_k:25
+      │         ├── columns: upsert_k:30 upsert_v:31!null upsert_w:32 upsert_x:33 upsert_y:34
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_w:24 upsert_k:25
+      │         │    ├── columns: upsert_k:30 upsert_v:31!null upsert_w:32 upsert_x:33 upsert_y:34
       │         │    └── mapping:
-      │         │         ├──  upsert_w:21 => upsert_w:24
-      │         │         └──  upsert_k:19 => upsert_k:25
+      │         │         ├──  upsert_k:19 => upsert_k:30
+      │         │         ├──  upsert_v:20 => upsert_v:31
+      │         │         ├──  upsert_w:21 => upsert_w:32
+      │         │         ├──  upsert_x:22 => upsert_x:33
+      │         │         └──  upsert_y:23 => upsert_y:34
       │         ├── scan uniq
-      │         │    └── columns: k:26!null w:28
+      │         │    └── columns: k:24!null v:25 w:26 x:27 y:28
       │         └── filters
-      │              ├── upsert_w:24 = w:28
-      │              └── upsert_k:25 != k:26
+      │              ├── upsert_w:32 = w:26
+      │              └── upsert_k:30 != k:24
       └── unique-checks-item: uniq(x,y)
            └── semi-join (hash)
-                ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                ├── columns: upsert_k:41 upsert_v:42!null upsert_w:43 upsert_x:44 upsert_y:45
                 ├── with-scan &1
-                │    ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                │    ├── columns: upsert_k:41 upsert_v:42!null upsert_w:43 upsert_x:44 upsert_y:45
                 │    └── mapping:
-                │         ├──  upsert_x:22 => upsert_x:32
-                │         ├──  upsert_y:23 => upsert_y:33
-                │         └──  upsert_k:19 => upsert_k:34
+                │         ├──  upsert_k:19 => upsert_k:41
+                │         ├──  upsert_v:20 => upsert_v:42
+                │         ├──  upsert_w:21 => upsert_w:43
+                │         ├──  upsert_x:22 => upsert_x:44
+                │         └──  upsert_y:23 => upsert_y:45
                 ├── scan uniq
-                │    └── columns: k:35!null x:38 y:39
+                │    └── columns: k:35!null v:36 w:37 x:38 y:39
                 └── filters
-                     ├── upsert_x:32 = x:38
-                     ├── upsert_y:33 = y:39
-                     └── upsert_k:34 != k:35
+                     ├── upsert_x:44 = x:38
+                     ├── upsert_y:45 = y:39
+                     └── upsert_k:41 != k:35
 
 # Cannot conflict on a subset of columns in a unique constraint.
 build
@@ -732,48 +772,51 @@ upsert uniq_overlaps_pk
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: column2:10!null column3:11!null column1:12!null
+      │         ├── columns: column1:15!null column2:16!null column3:17!null column4:18!null
       │         ├── with-scan &1
-      │         │    ├── columns: column2:10!null column3:11!null column1:12!null
+      │         │    ├── columns: column1:15!null column2:16!null column3:17!null column4:18!null
       │         │    └── mapping:
-      │         │         ├──  column2:7 => column2:10
-      │         │         ├──  column3:8 => column3:11
-      │         │         └──  column1:6 => column1:12
+      │         │         ├──  column1:6 => column1:15
+      │         │         ├──  column2:7 => column2:16
+      │         │         ├──  column3:8 => column3:17
+      │         │         └──  column4:9 => column4:18
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:13!null b:14!null c:15
+      │         │    └── columns: a:10!null b:11!null c:12 d:13
       │         └── filters
-      │              ├── column2:10 = b:14
-      │              ├── column3:11 = c:15
-      │              └── column1:12 != a:13
+      │              ├── column2:16 = b:11
+      │              ├── column3:17 = c:12
+      │              └── column1:15 != a:10
       ├── unique-checks-item: uniq_overlaps_pk(a)
       │    └── semi-join (hash)
-      │         ├── columns: column1:18!null column2:19!null
+      │         ├── columns: column1:24!null column2:25!null column3:26!null column4:27!null
       │         ├── with-scan &1
-      │         │    ├── columns: column1:18!null column2:19!null
+      │         │    ├── columns: column1:24!null column2:25!null column3:26!null column4:27!null
       │         │    └── mapping:
-      │         │         ├──  column1:6 => column1:18
-      │         │         └──  column2:7 => column2:19
+      │         │         ├──  column1:6 => column1:24
+      │         │         ├──  column2:7 => column2:25
+      │         │         ├──  column3:8 => column3:26
+      │         │         └──  column4:9 => column4:27
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:20!null b:21!null
+      │         │    └── columns: a:19!null b:20!null c:21 d:22
       │         └── filters
-      │              ├── column1:18 = a:20
-      │              └── column2:19 != b:21
+      │              ├── column1:24 = a:19
+      │              └── column2:25 != b:20
       └── unique-checks-item: uniq_overlaps_pk(c,d)
            └── semi-join (hash)
-                ├── columns: column3:25!null column4:26!null column1:27!null column2:28!null
+                ├── columns: column1:33!null column2:34!null column3:35!null column4:36!null
                 ├── with-scan &1
-                │    ├── columns: column3:25!null column4:26!null column1:27!null column2:28!null
+                │    ├── columns: column1:33!null column2:34!null column3:35!null column4:36!null
                 │    └── mapping:
-                │         ├──  column3:8 => column3:25
-                │         ├──  column4:9 => column4:26
-                │         ├──  column1:6 => column1:27
-                │         └──  column2:7 => column2:28
+                │         ├──  column1:6 => column1:33
+                │         ├──  column2:7 => column2:34
+                │         ├──  column3:8 => column3:35
+                │         └──  column4:9 => column4:36
                 ├── scan uniq_overlaps_pk
-                │    └── columns: a:29!null b:30!null c:31 d:32
+                │    └── columns: a:28!null b:29!null c:30 d:31
                 └── filters
-                     ├── column3:25 = c:31
-                     ├── column4:26 = d:32
-                     └── (column1:27 != a:29) OR (column2:28 != b:30)
+                     ├── column3:35 = c:30
+                     ├── column4:36 = d:31
+                     └── (column1:33 != a:28) OR (column2:34 != b:29)
 
 # Upsert with non-constant input.
 # Add inequality filters for the primary key columns that are not part of each
@@ -801,32 +844,35 @@ upsert uniq_overlaps_pk
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: v:14 x:15 k:16
+      │         ├── columns: k:19 v:20 x:21 column13:22
       │         ├── with-scan &1
-      │         │    ├── columns: v:14 x:15 k:16
+      │         │    ├── columns: k:19 v:20 x:21 column13:22
       │         │    └── mapping:
-      │         │         ├──  other.v:7 => v:14
-      │         │         ├──  other.x:9 => x:15
-      │         │         └──  other.k:6 => k:16
+      │         │         ├──  other.k:6 => k:19
+      │         │         ├──  other.v:7 => v:20
+      │         │         ├──  other.x:9 => x:21
+      │         │         └──  column13:13 => column13:22
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:17!null b:18!null c:19
+      │         │    └── columns: a:14!null b:15!null c:16 d:17
       │         └── filters
-      │              ├── v:14 = b:18
-      │              ├── x:15 = c:19
-      │              └── k:16 != a:17
+      │              ├── v:20 = b:15
+      │              ├── x:21 = c:16
+      │              └── k:19 != a:14
       └── unique-checks-item: uniq_overlaps_pk(a)
            └── semi-join (hash)
-                ├── columns: k:22 v:23
+                ├── columns: k:28 v:29 x:30 column13:31
                 ├── with-scan &1
-                │    ├── columns: k:22 v:23
+                │    ├── columns: k:28 v:29 x:30 column13:31
                 │    └── mapping:
-                │         ├──  other.k:6 => k:22
-                │         └──  other.v:7 => v:23
+                │         ├──  other.k:6 => k:28
+                │         ├──  other.v:7 => v:29
+                │         ├──  other.x:9 => x:30
+                │         └──  column13:13 => column13:31
                 ├── scan uniq_overlaps_pk
-                │    └── columns: a:24!null b:25!null
+                │    └── columns: a:23!null b:24!null c:25 d:26
                 └── filters
-                     ├── k:22 = a:24
-                     └── v:23 != b:25
+                     ├── k:28 = a:23
+                     └── v:29 != b:24
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
@@ -880,48 +926,51 @@ upsert uniq_overlaps_pk
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_b:20 upsert_c:21 upsert_a:22!null
+      │         ├── columns: upsert_a:25!null upsert_b:26 upsert_c:27 upsert_d:28
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_b:20 upsert_c:21 upsert_a:22!null
+      │         │    ├── columns: upsert_a:25!null upsert_b:26 upsert_c:27 upsert_d:28
       │         │    └── mapping:
-      │         │         ├──  upsert_b:17 => upsert_b:20
-      │         │         ├──  upsert_c:18 => upsert_c:21
-      │         │         └──  upsert_a:16 => upsert_a:22
+      │         │         ├──  upsert_a:16 => upsert_a:25
+      │         │         ├──  upsert_b:17 => upsert_b:26
+      │         │         ├──  upsert_c:18 => upsert_c:27
+      │         │         └──  upsert_d:19 => upsert_d:28
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:23!null b:24!null c:25
+      │         │    └── columns: a:20!null b:21!null c:22 d:23
       │         └── filters
-      │              ├── upsert_b:20 = b:24
-      │              ├── upsert_c:21 = c:25
-      │              └── upsert_a:22 != a:23
+      │              ├── upsert_b:26 = b:21
+      │              ├── upsert_c:27 = c:22
+      │              └── upsert_a:25 != a:20
       ├── unique-checks-item: uniq_overlaps_pk(a)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_a:28!null upsert_b:29
+      │         ├── columns: upsert_a:34!null upsert_b:35 upsert_c:36 upsert_d:37
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_a:28!null upsert_b:29
+      │         │    ├── columns: upsert_a:34!null upsert_b:35 upsert_c:36 upsert_d:37
       │         │    └── mapping:
-      │         │         ├──  upsert_a:16 => upsert_a:28
-      │         │         └──  upsert_b:17 => upsert_b:29
+      │         │         ├──  upsert_a:16 => upsert_a:34
+      │         │         ├──  upsert_b:17 => upsert_b:35
+      │         │         ├──  upsert_c:18 => upsert_c:36
+      │         │         └──  upsert_d:19 => upsert_d:37
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:30!null b:31!null
+      │         │    └── columns: a:29!null b:30!null c:31 d:32
       │         └── filters
-      │              ├── upsert_a:28 = a:30
-      │              └── upsert_b:29 != b:31
+      │              ├── upsert_a:34 = a:29
+      │              └── upsert_b:35 != b:30
       └── unique-checks-item: uniq_overlaps_pk(c,d)
            └── semi-join (hash)
-                ├── columns: upsert_c:35 upsert_d:36 upsert_a:37!null upsert_b:38
+                ├── columns: upsert_a:43!null upsert_b:44 upsert_c:45 upsert_d:46
                 ├── with-scan &1
-                │    ├── columns: upsert_c:35 upsert_d:36 upsert_a:37!null upsert_b:38
+                │    ├── columns: upsert_a:43!null upsert_b:44 upsert_c:45 upsert_d:46
                 │    └── mapping:
-                │         ├──  upsert_c:18 => upsert_c:35
-                │         ├──  upsert_d:19 => upsert_d:36
-                │         ├──  upsert_a:16 => upsert_a:37
-                │         └──  upsert_b:17 => upsert_b:38
+                │         ├──  upsert_a:16 => upsert_a:43
+                │         ├──  upsert_b:17 => upsert_b:44
+                │         ├──  upsert_c:18 => upsert_c:45
+                │         └──  upsert_d:19 => upsert_d:46
                 ├── scan uniq_overlaps_pk
-                │    └── columns: a:39!null b:40!null c:41 d:42
+                │    └── columns: a:38!null b:39!null c:40 d:41
                 └── filters
-                     ├── upsert_c:35 = c:41
-                     ├── upsert_d:36 = d:42
-                     └── (upsert_a:37 != a:39) OR (upsert_b:38 != b:40)
+                     ├── upsert_c:45 = c:40
+                     ├── upsert_d:46 = d:41
+                     └── (upsert_a:43 != a:38) OR (upsert_b:44 != b:39)
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
@@ -973,48 +1022,51 @@ upsert uniq_overlaps_pk
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_b:20!null upsert_c:21 upsert_a:22
+      │         ├── columns: upsert_a:25 upsert_b:26!null upsert_c:27 upsert_d:28
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_b:20!null upsert_c:21 upsert_a:22
+      │         │    ├── columns: upsert_a:25 upsert_b:26!null upsert_c:27 upsert_d:28
       │         │    └── mapping:
-      │         │         ├──  upsert_b:17 => upsert_b:20
-      │         │         ├──  upsert_c:18 => upsert_c:21
-      │         │         └──  upsert_a:16 => upsert_a:22
+      │         │         ├──  upsert_a:16 => upsert_a:25
+      │         │         ├──  upsert_b:17 => upsert_b:26
+      │         │         ├──  upsert_c:18 => upsert_c:27
+      │         │         └──  upsert_d:19 => upsert_d:28
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:23!null b:24!null c:25
+      │         │    └── columns: a:20!null b:21!null c:22 d:23
       │         └── filters
-      │              ├── upsert_b:20 = b:24
-      │              ├── upsert_c:21 = c:25
-      │              └── upsert_a:22 != a:23
+      │              ├── upsert_b:26 = b:21
+      │              ├── upsert_c:27 = c:22
+      │              └── upsert_a:25 != a:20
       ├── unique-checks-item: uniq_overlaps_pk(a)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_a:28 upsert_b:29!null
+      │         ├── columns: upsert_a:34 upsert_b:35!null upsert_c:36 upsert_d:37
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_a:28 upsert_b:29!null
+      │         │    ├── columns: upsert_a:34 upsert_b:35!null upsert_c:36 upsert_d:37
       │         │    └── mapping:
-      │         │         ├──  upsert_a:16 => upsert_a:28
-      │         │         └──  upsert_b:17 => upsert_b:29
+      │         │         ├──  upsert_a:16 => upsert_a:34
+      │         │         ├──  upsert_b:17 => upsert_b:35
+      │         │         ├──  upsert_c:18 => upsert_c:36
+      │         │         └──  upsert_d:19 => upsert_d:37
       │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: a:30!null b:31!null
+      │         │    └── columns: a:29!null b:30!null c:31 d:32
       │         └── filters
-      │              ├── upsert_a:28 = a:30
-      │              └── upsert_b:29 != b:31
+      │              ├── upsert_a:34 = a:29
+      │              └── upsert_b:35 != b:30
       └── unique-checks-item: uniq_overlaps_pk(c,d)
            └── semi-join (hash)
-                ├── columns: upsert_c:35 upsert_d:36 upsert_a:37 upsert_b:38!null
+                ├── columns: upsert_a:43 upsert_b:44!null upsert_c:45 upsert_d:46
                 ├── with-scan &1
-                │    ├── columns: upsert_c:35 upsert_d:36 upsert_a:37 upsert_b:38!null
+                │    ├── columns: upsert_a:43 upsert_b:44!null upsert_c:45 upsert_d:46
                 │    └── mapping:
-                │         ├──  upsert_c:18 => upsert_c:35
-                │         ├──  upsert_d:19 => upsert_d:36
-                │         ├──  upsert_a:16 => upsert_a:37
-                │         └──  upsert_b:17 => upsert_b:38
+                │         ├──  upsert_a:16 => upsert_a:43
+                │         ├──  upsert_b:17 => upsert_b:44
+                │         ├──  upsert_c:18 => upsert_c:45
+                │         └──  upsert_d:19 => upsert_d:46
                 ├── scan uniq_overlaps_pk
-                │    └── columns: a:39!null b:40!null c:41 d:42
+                │    └── columns: a:38!null b:39!null c:40 d:41
                 └── filters
-                     ├── upsert_c:35 = c:41
-                     ├── upsert_d:36 = d:42
-                     └── (upsert_a:37 != a:39) OR (upsert_b:38 != b:40)
+                     ├── upsert_c:45 = c:40
+                     ├── upsert_d:46 = d:41
+                     └── (upsert_a:43 != a:38) OR (upsert_b:44 != b:39)
 
 exec-ddl
 CREATE TABLE uniq_hidden_pk (
@@ -1084,49 +1136,55 @@ upsert uniq_hidden_pk
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: column2:20!null upsert_c:21 upsert_rowid:22
+      │         ├── columns: column1:26!null column2:27!null upsert_c:28 column3:29!null upsert_rowid:30
       │         ├── with-scan &1
-      │         │    ├── columns: column2:20!null upsert_c:21 upsert_rowid:22
+      │         │    ├── columns: column1:26!null column2:27!null upsert_c:28 column3:29!null upsert_rowid:30
       │         │    └── mapping:
-      │         │         ├──  column2:8 => column2:20
-      │         │         ├──  upsert_c:18 => upsert_c:21
-      │         │         └──  upsert_rowid:19 => upsert_rowid:22
+      │         │         ├──  column1:7 => column1:26
+      │         │         ├──  column2:8 => column2:27
+      │         │         ├──  upsert_c:18 => upsert_c:28
+      │         │         ├──  column3:9 => column3:29
+      │         │         └──  upsert_rowid:19 => upsert_rowid:30
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: b:24 c:25 rowid:27!null
+      │         │    └── columns: a:20 b:21 c:22 d:23 rowid:24!null
       │         └── filters
-      │              ├── column2:20 = b:24
-      │              ├── upsert_c:21 = c:25
-      │              └── upsert_rowid:22 != rowid:27
+      │              ├── column2:27 = b:21
+      │              ├── upsert_c:28 = c:22
+      │              └── upsert_rowid:30 != rowid:24
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
       │    └── semi-join (hash)
-      │         ├── columns: column1:29!null column2:30!null column3:31!null upsert_rowid:32
+      │         ├── columns: column1:37!null column2:38!null upsert_c:39 column3:40!null upsert_rowid:41
       │         ├── with-scan &1
-      │         │    ├── columns: column1:29!null column2:30!null column3:31!null upsert_rowid:32
+      │         │    ├── columns: column1:37!null column2:38!null upsert_c:39 column3:40!null upsert_rowid:41
       │         │    └── mapping:
-      │         │         ├──  column1:7 => column1:29
-      │         │         ├──  column2:8 => column2:30
-      │         │         ├──  column3:9 => column3:31
-      │         │         └──  upsert_rowid:19 => upsert_rowid:32
+      │         │         ├──  column1:7 => column1:37
+      │         │         ├──  column2:8 => column2:38
+      │         │         ├──  upsert_c:18 => upsert_c:39
+      │         │         ├──  column3:9 => column3:40
+      │         │         └──  upsert_rowid:19 => upsert_rowid:41
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: a:33 b:34 d:36 rowid:37!null
+      │         │    └── columns: a:31 b:32 c:33 d:34 rowid:35!null
       │         └── filters
-      │              ├── column1:29 = a:33
-      │              ├── column2:30 = b:34
-      │              ├── column3:31 = d:36
-      │              └── upsert_rowid:32 != rowid:37
+      │              ├── column1:37 = a:31
+      │              ├── column2:38 = b:32
+      │              ├── column3:40 = d:34
+      │              └── upsert_rowid:41 != rowid:35
       └── unique-checks-item: uniq_hidden_pk(a)
            └── semi-join (hash)
-                ├── columns: column1:39!null upsert_rowid:40
+                ├── columns: column1:48!null column2:49!null upsert_c:50 column3:51!null upsert_rowid:52
                 ├── with-scan &1
-                │    ├── columns: column1:39!null upsert_rowid:40
+                │    ├── columns: column1:48!null column2:49!null upsert_c:50 column3:51!null upsert_rowid:52
                 │    └── mapping:
-                │         ├──  column1:7 => column1:39
-                │         └──  upsert_rowid:19 => upsert_rowid:40
+                │         ├──  column1:7 => column1:48
+                │         ├──  column2:8 => column2:49
+                │         ├──  upsert_c:18 => upsert_c:50
+                │         ├──  column3:9 => column3:51
+                │         └──  upsert_rowid:19 => upsert_rowid:52
                 ├── scan uniq_hidden_pk
-                │    └── columns: a:41 rowid:45!null
+                │    └── columns: a:42 b:43 c:44 d:45 rowid:46!null
                 └── filters
-                     ├── column1:39 = a:41
-                     └── upsert_rowid:40 != rowid:45
+                     ├── column1:48 = a:42
+                     └── upsert_rowid:52 != rowid:46
 
 # Upsert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -1153,49 +1211,55 @@ upsert uniq_hidden_pk
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: v:15 x:16 column14:17
+      │         ├── columns: k:21 v:22 x:23 y:24 column14:25
       │         ├── with-scan &1
-      │         │    ├── columns: v:15 x:16 column14:17
+      │         │    ├── columns: k:21 v:22 x:23 y:24 column14:25
       │         │    └── mapping:
-      │         │         ├──  other.v:8 => v:15
-      │         │         ├──  other.x:10 => x:16
-      │         │         └──  column14:14 => column14:17
+      │         │         ├──  other.k:7 => k:21
+      │         │         ├──  other.v:8 => v:22
+      │         │         ├──  other.x:10 => x:23
+      │         │         ├──  other.y:11 => y:24
+      │         │         └──  column14:14 => column14:25
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: b:19 c:20 uniq_hidden_pk.rowid:22!null
+      │         │    └── columns: a:15 b:16 c:17 d:18 uniq_hidden_pk.rowid:19!null
       │         └── filters
-      │              ├── v:15 = b:19
-      │              ├── x:16 = c:20
-      │              └── column14:17 != uniq_hidden_pk.rowid:22
+      │              ├── v:22 = b:16
+      │              ├── x:23 = c:17
+      │              └── column14:25 != uniq_hidden_pk.rowid:19
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
       │    └── semi-join (hash)
-      │         ├── columns: k:24 v:25 y:26 column14:27
+      │         ├── columns: k:32 v:33 x:34 y:35 column14:36
       │         ├── with-scan &1
-      │         │    ├── columns: k:24 v:25 y:26 column14:27
+      │         │    ├── columns: k:32 v:33 x:34 y:35 column14:36
       │         │    └── mapping:
-      │         │         ├──  other.k:7 => k:24
-      │         │         ├──  other.v:8 => v:25
-      │         │         ├──  other.y:11 => y:26
-      │         │         └──  column14:14 => column14:27
+      │         │         ├──  other.k:7 => k:32
+      │         │         ├──  other.v:8 => v:33
+      │         │         ├──  other.x:10 => x:34
+      │         │         ├──  other.y:11 => y:35
+      │         │         └──  column14:14 => column14:36
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: a:28 b:29 d:31 uniq_hidden_pk.rowid:32!null
+      │         │    └── columns: a:26 b:27 c:28 d:29 uniq_hidden_pk.rowid:30!null
       │         └── filters
-      │              ├── k:24 = a:28
-      │              ├── v:25 = b:29
-      │              ├── y:26 = d:31
-      │              └── column14:27 != uniq_hidden_pk.rowid:32
+      │              ├── k:32 = a:26
+      │              ├── v:33 = b:27
+      │              ├── y:35 = d:29
+      │              └── column14:36 != uniq_hidden_pk.rowid:30
       └── unique-checks-item: uniq_hidden_pk(a)
            └── semi-join (hash)
-                ├── columns: k:34 column14:35
+                ├── columns: k:43 v:44 x:45 y:46 column14:47
                 ├── with-scan &1
-                │    ├── columns: k:34 column14:35
+                │    ├── columns: k:43 v:44 x:45 y:46 column14:47
                 │    └── mapping:
-                │         ├──  other.k:7 => k:34
-                │         └──  column14:14 => column14:35
+                │         ├──  other.k:7 => k:43
+                │         ├──  other.v:8 => v:44
+                │         ├──  other.x:10 => x:45
+                │         ├──  other.y:11 => y:46
+                │         └──  column14:14 => column14:47
                 ├── scan uniq_hidden_pk
-                │    └── columns: a:36 uniq_hidden_pk.rowid:40!null
+                │    └── columns: a:37 b:38 c:39 d:40 uniq_hidden_pk.rowid:41!null
                 └── filters
-                     ├── k:34 = a:36
-                     └── column14:35 != uniq_hidden_pk.rowid:40
+                     ├── k:43 = a:37
+                     └── column14:47 != uniq_hidden_pk.rowid:41
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
@@ -1254,49 +1318,55 @@ upsert uniq_hidden_pk
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_b:24 upsert_c:25 upsert_rowid:26
+      │         ├── columns: upsert_a:30!null upsert_b:31 upsert_c:32 upsert_d:33 upsert_rowid:34
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_b:24 upsert_c:25 upsert_rowid:26
+      │         │    ├── columns: upsert_a:30!null upsert_b:31 upsert_c:32 upsert_d:33 upsert_rowid:34
       │         │    └── mapping:
-      │         │         ├──  upsert_b:20 => upsert_b:24
-      │         │         ├──  upsert_c:21 => upsert_c:25
-      │         │         └──  upsert_rowid:23 => upsert_rowid:26
+      │         │         ├──  upsert_a:19 => upsert_a:30
+      │         │         ├──  upsert_b:20 => upsert_b:31
+      │         │         ├──  upsert_c:21 => upsert_c:32
+      │         │         ├──  upsert_d:22 => upsert_d:33
+      │         │         └──  upsert_rowid:23 => upsert_rowid:34
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: b:28 c:29 rowid:31!null
+      │         │    └── columns: a:24 b:25 c:26 d:27 rowid:28!null
       │         └── filters
-      │              ├── upsert_b:24 = b:28
-      │              ├── upsert_c:25 = c:29
-      │              └── upsert_rowid:26 != rowid:31
+      │              ├── upsert_b:31 = b:25
+      │              ├── upsert_c:32 = c:26
+      │              └── upsert_rowid:34 != rowid:28
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
       │    └── semi-join (hash)
-      │         ├── columns: upsert_a:33!null upsert_b:34 upsert_d:35 upsert_rowid:36
+      │         ├── columns: upsert_a:41!null upsert_b:42 upsert_c:43 upsert_d:44 upsert_rowid:45
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_a:33!null upsert_b:34 upsert_d:35 upsert_rowid:36
+      │         │    ├── columns: upsert_a:41!null upsert_b:42 upsert_c:43 upsert_d:44 upsert_rowid:45
       │         │    └── mapping:
-      │         │         ├──  upsert_a:19 => upsert_a:33
-      │         │         ├──  upsert_b:20 => upsert_b:34
-      │         │         ├──  upsert_d:22 => upsert_d:35
-      │         │         └──  upsert_rowid:23 => upsert_rowid:36
+      │         │         ├──  upsert_a:19 => upsert_a:41
+      │         │         ├──  upsert_b:20 => upsert_b:42
+      │         │         ├──  upsert_c:21 => upsert_c:43
+      │         │         ├──  upsert_d:22 => upsert_d:44
+      │         │         └──  upsert_rowid:23 => upsert_rowid:45
       │         ├── scan uniq_hidden_pk
-      │         │    └── columns: a:37 b:38 d:40 rowid:41!null
+      │         │    └── columns: a:35 b:36 c:37 d:38 rowid:39!null
       │         └── filters
-      │              ├── upsert_a:33 = a:37
-      │              ├── upsert_b:34 = b:38
-      │              ├── upsert_d:35 = d:40
-      │              └── upsert_rowid:36 != rowid:41
+      │              ├── upsert_a:41 = a:35
+      │              ├── upsert_b:42 = b:36
+      │              ├── upsert_d:44 = d:38
+      │              └── upsert_rowid:45 != rowid:39
       └── unique-checks-item: uniq_hidden_pk(a)
            └── semi-join (hash)
-                ├── columns: upsert_a:43!null upsert_rowid:44
+                ├── columns: upsert_a:52!null upsert_b:53 upsert_c:54 upsert_d:55 upsert_rowid:56
                 ├── with-scan &1
-                │    ├── columns: upsert_a:43!null upsert_rowid:44
+                │    ├── columns: upsert_a:52!null upsert_b:53 upsert_c:54 upsert_d:55 upsert_rowid:56
                 │    └── mapping:
-                │         ├──  upsert_a:19 => upsert_a:43
-                │         └──  upsert_rowid:23 => upsert_rowid:44
+                │         ├──  upsert_a:19 => upsert_a:52
+                │         ├──  upsert_b:20 => upsert_b:53
+                │         ├──  upsert_c:21 => upsert_c:54
+                │         ├──  upsert_d:22 => upsert_d:55
+                │         └──  upsert_rowid:23 => upsert_rowid:56
                 ├── scan uniq_hidden_pk
-                │    └── columns: a:45 rowid:49!null
+                │    └── columns: a:46 b:47 c:48 d:49 rowid:50!null
                 └── filters
-                     ├── upsert_a:43 = a:45
-                     └── upsert_rowid:44 != rowid:49
+                     ├── upsert_a:52 = a:46
+                     └── upsert_rowid:56 != rowid:50
 
 exec-ddl
 CREATE TABLE uniq_fk_parent (
@@ -1358,17 +1428,17 @@ upsert uniq_fk_parent
  ├── unique-checks
  │    └── unique-checks-item: uniq_fk_parent(a)
  │         └── semi-join (hash)
- │              ├── columns: column1:10!null upsert_rowid:11
+ │              ├── columns: column1:13!null upsert_rowid:14
  │              ├── with-scan &1
- │              │    ├── columns: column1:10!null upsert_rowid:11
+ │              │    ├── columns: column1:13!null upsert_rowid:14
  │              │    └── mapping:
- │              │         ├──  column1:4 => column1:10
- │              │         └──  upsert_rowid:9 => upsert_rowid:11
+ │              │         ├──  column1:4 => column1:13
+ │              │         └──  upsert_rowid:9 => upsert_rowid:14
  │              ├── scan uniq_fk_parent
- │              │    └── columns: uniq_fk_parent.a:12 rowid:13!null
+ │              │    └── columns: uniq_fk_parent.a:10 rowid:11!null
  │              └── filters
- │                   ├── column1:10 = uniq_fk_parent.a:12
- │                   └── upsert_rowid:11 != rowid:13
+ │                   ├── column1:13 = uniq_fk_parent.a:10
+ │                   └── upsert_rowid:14 != rowid:11
  └── f-k-checks
       └── f-k-checks-item: uniq_fk_child(a) -> uniq_fk_parent(a)
            └── semi-join (hash)
@@ -1481,17 +1551,17 @@ upsert t
  └── unique-checks
       └── unique-checks-item: t(i)
            └── semi-join (hash)
-                ├── columns: upsert_i:14!null upsert_rowid:15
+                ├── columns: upsert_i:17!null upsert_rowid:18
                 ├── with-scan &1
-                │    ├── columns: upsert_i:14!null upsert_rowid:15
+                │    ├── columns: upsert_i:17!null upsert_rowid:18
                 │    └── mapping:
-                │         ├──  upsert_i:10 => upsert_i:14
-                │         └──  upsert_rowid:11 => upsert_rowid:15
+                │         ├──  upsert_i:10 => upsert_i:17
+                │         └──  upsert_rowid:11 => upsert_rowid:18
                 ├── scan t
-                │    ├── columns: i:16 rowid:17!null
+                │    ├── columns: i:14 rowid:15!null
                 │    └── partial index predicates
                 │         └── i1: filters
-                │              └── i:16 > 0
+                │              └── i:14 > 0
                 └── filters
-                     ├── upsert_i:14 = i:16
-                     └── upsert_rowid:15 != rowid:17
+                     ├── upsert_i:17 = i:14
+                     └── upsert_rowid:18 != rowid:15
