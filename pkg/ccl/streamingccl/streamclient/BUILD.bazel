@@ -36,6 +36,5 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
-        "@com_github_stretchr_testify//require",
     ],
 )

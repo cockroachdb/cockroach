@@ -171,15 +171,21 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
+	errChs := make(map[streamingccl.PartitionAddress]chan error)
 	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
+		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
 			return
 		}
 		eventChs[partitionAddress] = eventCh
+		errChs[partitionAddress] = errCh
 	}
-	sip.eventCh = sip.merge(ctx, eventChs)
+	sip.eventCh, err = sip.merge(ctx, eventChs, errChs)
+	if err != nil {
+		sip.MoveToDraining(err)
+		return
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -234,8 +240,10 @@ func (sip *streamIngestionProcessor) close() {
 // merge takes events from all the streams and merges them into a single
 // channel.
 func (sip *streamIngestionProcessor) merge(
-	ctx context.Context, partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
-) chan partitionEvent {
+	ctx context.Context,
+	partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
+	errorStreams map[streamingccl.PartitionAddress]chan error,
+) (chan partitionEvent, error) {
 	merged := make(chan partitionEvent)
 
 	var g errgroup.Group
@@ -243,6 +251,10 @@ func (sip *streamIngestionProcessor) merge(
 	for partition, eventCh := range partitionStreams {
 		partition := partition
 		eventCh := eventCh
+		errCh, ok := errorStreams[partition]
+		if !ok {
+			return nil, errors.Newf("could not find error channel for partition %q", partition)
+		}
 		g.Go(func() error {
 			ctxDone := ctx.Done()
 			for {
@@ -262,6 +274,8 @@ func (sip *streamIngestionProcessor) merge(
 					case <-ctxDone:
 						return ctx.Err()
 					}
+				case err := <-errCh:
+					return err
 				case <-ctxDone:
 					return ctx.Err()
 				}
@@ -273,7 +287,7 @@ func (sip *streamIngestionProcessor) merge(
 		close(merged)
 	}()
 
-	return merged
+	return merged, nil
 }
 
 // consumeEvents handles processing events on the merged event queue and returns

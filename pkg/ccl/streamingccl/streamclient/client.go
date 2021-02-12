@@ -28,9 +28,7 @@ type Client interface {
 	//
 	// Canceling the context will stop reading the partition and close the event
 	// channel.
-	// TODO: Add an error channel so that the client can report any errors
-	// encountered while reading the stream.
-	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime time.Time) (chan streamingccl.Event, error)
+	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime time.Time) (chan streamingccl.Event, chan error, error)
 }
 
 // NewStreamClient creates a new stream client based on the stream
