@@ -38,8 +38,8 @@ func (sc testStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (sc testStreamClient) ConsumePartition(
-	_ context.Context, pa streamingccl.PartitionAddress, _ time.Time,
-) (chan streamingccl.Event, error) {
+	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+) (chan streamingccl.Event, chan error, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
 		Value: roachpb.Value{
@@ -53,7 +53,7 @@ func (sc testStreamClient) ConsumePartition(
 	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 100})
 	close(events)
 
-	return events, nil
+	return events, nil, nil
 }
 
 // ExampleClientUsage serves as documentation to indicate how a stream
@@ -68,7 +68,7 @@ func ExampleClient() {
 	startTimestamp := timeutil.Now()
 
 	for _, partition := range topology.Partitions {
-		eventCh, err := client.ConsumePartition(context.Background(), partition, startTimestamp)
+		eventCh, _ /* errCh */, err := client.ConsumePartition(context.Background(), partition, startTimestamp)
 		if err != nil {
 			panic(err)
 		}
@@ -112,12 +112,15 @@ func TestImplementationsCloseChannel(t *testing.T) {
 
 	for _, impl := range impls {
 		ctx, cancel := context.WithCancel(context.Background())
-		eventCh, err := impl.ConsumePartition(ctx, "test://53/", timeutil.Now())
+		eventCh, errCh, err := impl.ConsumePartition(ctx, "test://53/", timeutil.Now())
 		require.NoError(t, err)
 
 		// Ensure that the eventCh closes when the context is canceled.
 		cancel()
 		for range eventCh {
+		}
+
+		for range errCh {
 		}
 	}
 }
