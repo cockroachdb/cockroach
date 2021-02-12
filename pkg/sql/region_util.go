@@ -493,10 +493,10 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 	}
 }
 
-// applyZoneConfigForMultiRegionTableOptionTableAndIndexes applies table zone configs
+// ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes applies table zone configs
 // on the entire table as well as its indexes, replacing multi-region related zone
 // configuration fields.
-var applyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
+var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	zc zonepb.ZoneConfig,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
 	table catalog.TableDescriptor,
@@ -534,9 +534,9 @@ var applyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	return hasNewSubzones, zc, nil
 }
 
-// applyZoneConfigForMultiRegionTable applies zone config settings based
+// ApplyZoneConfigForMultiRegionTable applies zone config settings based
 // on the options provided.
-func applyZoneConfigForMultiRegionTable(
+func ApplyZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
@@ -704,13 +704,13 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 		ctx,
 		desc,
 		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
-			return applyZoneConfigForMultiRegionTable(
+			return ApplyZoneConfigForMultiRegionTable(
 				ctx,
 				p.txn,
 				p.ExecCfg(),
 				*desc.RegionConfig,
 				tbDesc,
-				applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 			)
 		},
 	)
