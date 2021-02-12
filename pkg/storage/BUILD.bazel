@@ -130,6 +130,7 @@ go_test(
         "mvcc_stats_test.go",
         "mvcc_test.go",
         "pebble_file_registry_test.go",
+        "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
         "slice_test.go",
         "sst_info_test.go",
