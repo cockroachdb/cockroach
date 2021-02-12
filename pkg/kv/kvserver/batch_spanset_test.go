@@ -30,7 +30,7 @@ import (
 func TestSpanSetBatchBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var ss spanset.SpanSet
@@ -269,7 +269,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 func TestSpanSetBatchTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var ss spanset.SpanSet
@@ -375,7 +375,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 func TestSpanSetIteratorTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var ss spanset.SpanSet
@@ -469,7 +469,7 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 func TestSpanSetNonMVCCBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var ss spanset.SpanSet
@@ -518,7 +518,7 @@ func TestSpanSetNonMVCCBatch(t *testing.T) {
 func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	ctx := context.Background()

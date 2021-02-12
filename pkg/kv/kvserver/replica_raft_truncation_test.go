@@ -46,7 +46,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	datadriven.Walk(t, "testdata/truncated_state_migration", func(t *testing.T, path string) {
 		const rangeID = 12
 		loader := stateloader.Make(rangeID)
-		eng := storage.NewDefaultInMem()
+		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

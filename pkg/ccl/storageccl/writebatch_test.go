@@ -111,7 +111,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	e := storage.NewDefaultInMem()
+	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
 
 	var batch storage.RocksDBBatchBuilder

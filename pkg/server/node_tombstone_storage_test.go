@@ -28,9 +28,9 @@ import (
 func TestNodeTombstoneStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	eng1 := storage.NewDefaultInMem()
+	eng1 := storage.NewDefaultInMemForTesting()
 	defer eng1.Close()
-	eng2 := storage.NewDefaultInMem()
+	eng2 := storage.NewDefaultInMemForTesting()
 	defer eng2.Close()
 
 	engs := []storage.Engine{eng1, eng2}
@@ -98,7 +98,7 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	require.Equal(t, time.Time{}, mustTime(s.IsDecommissioned(ctx, 3)))
 
 	// Throw an uninitialized engine in the mix. It should be skipped over.
-	eng3 := storage.NewDefaultInMem()
+	eng3 := storage.NewDefaultInMemForTesting()
 	defer eng3.Close()
 	s = &nodeTombstoneStorage{engs: []storage.Engine{eng1, eng2, eng3}}
 	// Decommission n100.

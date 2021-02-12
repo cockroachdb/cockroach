@@ -76,6 +76,12 @@ func assertEqLocal(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginep
 	assertEqImpl(t, rw, debug, false /* globalKeys */, ms, expMS)
 }
 
+func accountForTxnDidNotUpdateMeta(t *testing.T, eng Engine) bool {
+	accountFor, err := eng.SafeToWriteSeparatedIntents(context.Background())
+	require.NoError(t, err)
+	return accountFor
+}
+
 // TestMVCCStatsDeleteCommitMovesTimestamp exercises the case in which a value
 // is written, later deleted via an intent and the deletion committed at an even
 // higher timestamp. This exercises subtleties related to the implicit push of
@@ -191,10 +197,10 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -280,10 +286,10 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -314,7 +320,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for removal of TxnDidNotUpdateMeta
 				mValSize -= 2
 			}
@@ -382,10 +388,10 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mVal1Size += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -398,7 +404,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, m1ValSize, 46)
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				m1ValSize += 2
 			}
@@ -512,10 +518,10 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mVal1Size += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -648,10 +654,10 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -804,10 +810,10 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -1031,10 +1037,10 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			var separatedIntentCount int64
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				m1ValSize += 2
-				if EnabledSeparatedIntents {
+				if engine.IsSeparatedIntentsEnabledForTesting() {
 					separatedIntentCount = 1
 				}
 			}
@@ -1227,7 +1233,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
 			}
@@ -1320,7 +1326,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			if !DisallowSeparatedIntents {
+			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
 			}

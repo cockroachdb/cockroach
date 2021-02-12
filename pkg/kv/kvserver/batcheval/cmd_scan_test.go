@@ -58,7 +58,7 @@ func testScanReverseScanInner(
 	k1, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts := hlc.Timestamp{WallTime: 1}
 
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	// Write to k1 and k2.

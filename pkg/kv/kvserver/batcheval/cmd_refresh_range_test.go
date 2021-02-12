@@ -54,7 +54,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	ts3 := hlc.Timestamp{WallTime: 3}
 	ts4 := hlc.Timestamp{WallTime: 4}
 
-	db := storage.NewDefaultInMem()
+	db := storage.NewDefaultInMemForTesting()
 	defer db.Close()
 
 	// Create an sstable containing an unresolved intent.
