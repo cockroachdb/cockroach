@@ -2724,11 +2724,14 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	if planCtx.traceMetadata != nil {
 		processors := make(execComponents, len(plan.ResultRouters))
-		for i := range plan.ResultRouters {
+		for i, resultProcIdx := range plan.ResultRouters {
 			processors[i] = execinfrapb.ProcessorComponentID(
 				execinfrapb.FlowID{UUID: planCtx.infra.FlowID},
-				int32(plan.ResultRouters[i]),
+				int32(resultProcIdx),
 			)
+			// TODO(radu): we should set NodeID in all cases, as part of
+			// ProcessorComponentID.
+			processors[i].NodeID = plan.Processors[resultProcIdx].Node
 		}
 		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -219,7 +220,12 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.traceMetadata.annotateExplain(ih.explainPlan, trace, cfg.TestingKnobs.DeterministicExplainAnalyze)
+		ih.traceMetadata.annotateExplain(
+			ih.explainPlan,
+			p.curPlan.distSQLFlowInfos,
+			trace,
+			cfg.TestingKnobs.DeterministicExplainAnalyze,
+		)
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
@@ -469,7 +475,7 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
 func (m execNodeTraceMetadata) annotateExplain(
-	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool,
+	plan *explain.Plan, flowInfos []flowInfo, spans []tracingpb.RecordedSpan, makeDeterministic bool,
 ) {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
 
@@ -480,8 +486,15 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			for i := range components {
-				stats := statsMap[components[i]]
+			var nodes util.FastIntSet
+			for _, c := range components {
+				if c.Type == execinfrapb.ComponentID_PROCESSOR {
+					nodes.Add(int(c.NodeID))
+					// Clear the NodeID, which is not set for processors.
+					// TODO(radu): remove this hack when execution sets NodeID for all components.
+					c.NodeID = 0
+				}
+				stats := statsMap[c]
 				if stats == nil {
 					incomplete = true
 					break
@@ -494,6 +507,9 @@ func (m execNodeTraceMetadata) annotateExplain(
 			// incomplete results. In the future, we may consider an incomplete flag
 			// if we want to show them with a warning.
 			if !incomplete {
+				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
+					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
+				}
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
