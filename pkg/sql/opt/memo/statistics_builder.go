@@ -646,7 +646,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
 			}
 		}
-		sb.filterRelExpr(pred, scan, notNullCols, relProps, s, &scan.Relational().FuncDeps)
+		sb.filterRelExpr(pred, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.md, scan.Table))
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -780,7 +780,7 @@ func (sb *statisticsBuilder) constrainScan(
 		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilter(pred, scan, relProps)
 		numUnappliedConjuncts += predUnappliedConjucts
 		constrainedCols.UnionWith(predConstrainedCols)
-		constrainedCols = sb.tryReduceCols(constrainedCols, s, &scan.Relational().FuncDeps)
+		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
 		histCols.UnionWith(predHistCols)
 	}
 
