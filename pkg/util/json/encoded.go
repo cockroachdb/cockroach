@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -556,6 +557,18 @@ func (j *jsonEncoded) AsText() (*string, error) {
 		return nil, err
 	}
 	return decoded.AsText()
+}
+
+func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsDecimal()
+	}
+
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, false
+	}
+	return decoded.AsDecimal()
 }
 
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
