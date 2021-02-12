@@ -33,7 +33,7 @@ import (
 )
 
 var streamIngestionResultTypes = []*types.T{
-	types.Bytes, // jobspb.ResolvedSpan
+	types.Bytes, // jobspb.ResolvedSpans
 }
 
 type mvccKeyValues []storage.MVCCKeyValue
@@ -265,7 +265,7 @@ func merge(
 // It should only make a claim that about the resolved timestamp of a partition
 // increasing after it has flushed all KV events previously received by that
 // partition.
-func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpan, error) {
+func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, error) {
 	for event := range sip.eventCh {
 		switch event.Type() {
 		case streamingccl.KVEvent:
@@ -295,12 +295,16 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpan, erro
 				return nil, errors.Wrap(err, "flushing")
 			}
 
-			// Each partition is represented by a span defined by the
-			// partition address.
+			// Each partition is represented by a span defined by the partition
+			// address.
 			spanStartKey := roachpb.Key(event.partition)
-			return &jobspb.ResolvedSpan{
-				Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
-				Timestamp: resolvedTime,
+			return &jobspb.ResolvedSpans{
+				ResolvedSpans: []jobspb.ResolvedSpan{
+					{
+						Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
+						Timestamp: resolvedTime,
+					},
+				},
 			}, nil
 		default:
 			return nil, errors.Newf("unknown streaming event type %v", event.Type())
