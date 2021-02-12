@@ -159,6 +159,11 @@ type mutationBuilder struct {
 	// reuse.
 	parsedIndexExprs []tree.Expr
 
+	// parsedUniqueConstraintExprs is a cached set of parsed partial unique
+	// constraint predicate expressions from the table schema. These are parsed
+	// once and cached for reuse.
+	parsedUniqueConstraintExprs []tree.Expr
+
 	// uniqueChecks contains unique check queries; see buildUnique* methods.
 	uniqueChecks memo.UniqueChecksExpr
 
@@ -1190,6 +1195,35 @@ func (mb *mutationBuilder) parsePartialIndexPredicateExpr(idx cat.IndexOrdinal) 
 	}
 
 	mb.parsedIndexExprs[idx] = expr
+	return expr
+}
+
+// parseUniqueConstraintPredicateExpr parses the predicate of the given partial
+// unique constraint and caches it for reuse. This function panics if the unique
+// constraint at the given ordinal is not partial.
+func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdinal) tree.Expr {
+	uniqueConstraint := mb.tab.Unique(idx)
+
+	predStr, isPartial := uniqueConstraint.Predicate()
+	if !isPartial {
+		panic(errors.AssertionFailedf("unique constraint at ordinal %d is not a partial unique constraint", idx))
+	}
+
+	if mb.parsedUniqueConstraintExprs == nil {
+		mb.parsedUniqueConstraintExprs = make([]tree.Expr, mb.tab.UniqueCount())
+	}
+
+	// Return expression from the cache, if it was already parsed previously.
+	if mb.parsedUniqueConstraintExprs[idx] != nil {
+		return mb.parsedUniqueConstraintExprs[idx]
+	}
+
+	expr, err := parser.ParseExpr(predStr)
+	if err != nil {
+		panic(err)
+	}
+
+	mb.parsedUniqueConstraintExprs[idx] = expr
 	return expr
 }
 
