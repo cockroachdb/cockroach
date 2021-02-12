@@ -407,16 +407,22 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			ok:       false,
 		},
 		{
-			// Arrays on the right side of the equality are not yet supported.
-			filters:  "j->'a' = '[1]'",
-			indexOrd: jsonOrd,
-			ok:       false,
+			// Arrays on the right side of the equality are supported.
+			filters:          "j->'a' = '[1]'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a' = '[1]'",
 		},
 		{
-			// Objects on the right side of the equality are not yet supported.
-			filters:  `j->'a' = '{"b": "c"}'`,
-			indexOrd: jsonOrd,
-			ok:       false,
+			// Objects on the right side of the equality are supported.
+			filters:          `j->'a' = '{"b": "c"}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: `j->'a' = '{"b": "c"}'`,
 		},
 		{
 			// Wrong index ordinal.
