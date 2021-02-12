@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -364,9 +366,84 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 
 }
 
-// Test the error returned by attempts to create a txn record after a lease
-// transfer.
-func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
+// TestStoreLeaseTransferTimestampCacheRead verifies that the timestamp cache on
+// the new leaseholder is properly updated after a lease transfer to prevent new
+// writes from invalidating previously served reads.
+func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "future-read", func(t *testing.T, futureRead bool) {
+		manualClock := hlc.NewHybridManualClock()
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ClockSource: manualClock.UnixNano,
+					},
+				},
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := []byte("a")
+		rangeDesc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+
+		// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
+		// there might be already a lease owned by a random node.
+		require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
+
+		// Pause the cluster's clock. This ensures that if we perform a read at
+		// a future timestamp, the read time remains in the future, regardless
+		// of the passage of real time.
+		manualClock.Pause()
+
+		// Write a key.
+		_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incrementArgs(key, 1))
+		require.Nil(t, pErr)
+
+		// Determine when to read.
+		readTS := tc.Servers[0].Clock().Now()
+		if futureRead {
+			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+		}
+
+		// Read the key at readTS.
+		// NB: don't use SendWrapped because we want access to br.Timestamp.
+		var ba roachpb.BatchRequest
+		ba.Timestamp = readTS
+		ba.Add(getArgs(key))
+		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		require.Equal(t, readTS, br.Timestamp)
+		v, err := br.Responses[0].GetGet().Value.GetInt()
+		require.NoError(t, err)
+		require.Equal(t, int64(1), v)
+
+		// Transfer the lease. This should carry over a summary of the old
+		// leaseholder's timestamp cache to prevent any writes on the new
+		// leaseholder from writing under the previous read.
+		require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
+
+		// Attempt to write under the read on the new leaseholder. The batch
+		// should get forwarded to a timestamp after the read.
+		// NB: don't use SendWrapped because we want access to br.Timestamp.
+		ba = roachpb.BatchRequest{}
+		ba.Timestamp = readTS
+		ba.Add(incrementArgs(key, 1))
+		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotEqual(t, readTS, br.Timestamp)
+		require.True(t, readTS.Less(br.Timestamp))
+		require.Equal(t, readTS.Synthetic, br.Timestamp.Synthetic)
+	})
+}
+
+// TestStoreLeaseTransferTimestampCacheTxnRecord checks the error returned by
+// attempts to create a txn record after a lease transfer.
+func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()

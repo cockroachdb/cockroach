@@ -192,6 +192,7 @@ var _ = [...]interface{}{
 	RaftTruncatedStateLegacyKey, // "rftt"
 	RangeLeaseKey,               // "rll-"
 	LeaseAppliedIndexLegacyKey,  // "rlla"
+	RangePriorReadSummaryKey,    // "rprs"
 	RangeVersionKey,             // "rver"
 	RangeStatsLegacyKey,         // "stat"
 

@@ -14,8 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -52,6 +55,7 @@ func evalNewLease(
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
+	priorReadSum *rspb.ReadSummary,
 	isExtension bool,
 	isTransfer bool,
 ) (result.Result, error) {
@@ -124,6 +128,21 @@ func evalNewLease(
 		Lease: &lease,
 	}
 	pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
+
+	// If we're setting a new prior read summary, store it to disk & in-memory.
+	// We elide this step in mixed-version clusters as old nodes would ignore
+	// the PriorReadSummary field (they don't know about it). It's possible that
+	// in this particular case we could get away with it (as the in-mem field
+	// only ever updates in-mem state) but it's easy to get things wrong (in
+	// which case they could easily take a catastrophic turn) and the benefit is
+	// low.
+	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
+	if priorReadSum != nil && readSumActive {
+		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
+			return newFailedLeaseTrigger(isTransfer), err
+		}
+		pd.Replicated.PriorReadSummary = priorReadSum
+	}
 
 	pd.Local.Metrics = new(result.Metrics)
 	if isTransfer {

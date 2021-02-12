@@ -748,6 +748,7 @@ func (r *Replica) AdminMerge(
 					RightMVCCStats:       rhsSnapshotRes.MVCCStats,
 					FreezeStart:          rhsSnapshotRes.FreezeStart,
 					RightClosedTimestamp: rhsSnapshotRes.ClosedTimestamp,
+					RightReadSummary:     rhsSnapshotRes.ReadSummary,
 				},
 			},
 		})
