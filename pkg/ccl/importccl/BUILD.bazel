@@ -177,6 +177,7 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_go_sql_driver_mysql//:mysql",
