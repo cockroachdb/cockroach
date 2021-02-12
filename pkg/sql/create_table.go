@@ -374,13 +374,13 @@ func (n *createTableNode) startExec(params runParams) error {
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
-		if err := applyZoneConfigForMultiRegionTable(
+		if err := ApplyZoneConfigForMultiRegionTable(
 			params.ctx,
 			params.p.txn,
 			params.p.ExecCfg(),
 			*dbDesc.RegionConfig,
 			desc,
-			applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 		); err != nil {
 			return err
 		}
