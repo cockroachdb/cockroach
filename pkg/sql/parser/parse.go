@@ -458,3 +458,31 @@ func arrayOf(
 	}
 	return &tree.ArrayTypeReference{ElementType: ref}, nil
 }
+
+// GetFullyQualifiedTableName, given a database name and a tableName that either
+// is a unqualified name or a schema-qualified name, returns a maximally
+// qualified name: either database.table if the input wasn't schema qualified,
+// or database.schema.table if it was.
+func GetFullyQualifiedTableName(dbName string, tableName string) (string, error) {
+	name, err := ParseQualifiedTableName(tableName)
+	if err != nil {
+		// If we got a parse error, it could be that the user passed us an unescaped
+		// table name. Quote the whole thing and try again.
+		name, err = ParseQualifiedTableName(tree.NameStringP(&tableName))
+		if err != nil {
+			return "", err
+		}
+	}
+	if !name.ExplicitSchema {
+		// If the schema wasn't explicitly set, craft the qualified table name to be
+		// database.table.
+		name.SchemaName = tree.Name(dbName)
+		name.ExplicitSchema = true
+	} else {
+		// Otherwise, add the database to the beginning of the name:
+		// database.schema.table.
+		name.CatalogName = tree.Name(dbName)
+		name.ExplicitCatalog = true
+	}
+	return name.String(), nil
+}
