@@ -106,7 +106,7 @@ func wrapExamine(
 			cause:    errors.New("validation failed"),
 		}
 	}
-	fmt.Println("No problems found!")
+	fmt.Fprintln(out, "No problems found!")
 	return nil
 }
 

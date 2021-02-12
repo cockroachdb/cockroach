@@ -94,8 +94,7 @@ writing: debug/nodes/1/ranges/33.json
 writing: debug/nodes/1/ranges/34.json
 writing: debug/nodes/1/ranges/35.json
 writing: debug/nodes/1/ranges/36.json
-doctor examining cluster...No problems found!
-writing: debug/reports/doctor.txt
+doctor examining cluster...writing: debug/reports/doctor.txt
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found
