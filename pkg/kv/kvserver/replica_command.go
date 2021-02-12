@@ -1120,6 +1120,27 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	return desc, nil
 }
 
+func validateReplicationChangesMultipleReplicasOnTheSameNode(
+	byStoreID map[roachpb.StoreID]roachpb.ReplicationChange,
+	rDescsForNode []roachpb.ReplicaDescriptor,
+) error {
+	if len(byStoreID) != 1 {
+		return errors.Errorf(
+			"An unexpected number of changes %s for range %s, the only valid operation when there are already multiple replicas on the same node is removal", byStoreID, rDescsForNode)
+	}
+	for _, rDesc := range rDescsForNode {
+		chg, ok := byStoreID[rDesc.StoreID]
+		if ok {
+			if chg.ChangeType != roachpb.REMOVE_REPLICA {
+				return errors.Errorf(
+					"Expected replica to be removed from %v instead got %v.", rDesc, chg)
+			}
+			return nil
+		}
+	}
+	return errors.Errorf("Expected a removal of one of the replicas in %s, instead got %s", rDescsForNode, byStoreID)
+}
+
 func validateReplicationChanges(
 	desc *roachpb.RangeDescriptor, chgs roachpb.ReplicationChanges,
 ) error {
@@ -1150,15 +1171,29 @@ func validateReplicationChanges(
 		byStoreID[chg.Target.StoreID] = chg
 	}
 
+	descriptorsByNodeID := make(map[roachpb.NodeID][]roachpb.ReplicaDescriptor, len(desc.Replicas().All()))
+	for _, rDesc := range desc.Replicas().All() {
+		descriptorsByNodeID[rDesc.NodeID] = append(descriptorsByNodeID[rDesc.NodeID], rDesc)
+	}
+
 	// Then, check that we're not adding a second replica on nodes that already
 	// have one, or "re-add" an existing replica. We delete from byNodeAndStoreID so that
 	// after this loop, it contains only Nodes that we haven't seen in desc.
-	for _, rDesc := range desc.Replicas().All() {
-		byStoreID, ok := byNodeAndStoreID[rDesc.NodeID]
+	for nodeID, rDescsForNode := range descriptorsByNodeID {
+		byStoreID, ok := byNodeAndStoreID[nodeID]
 		if !ok {
 			continue
 		}
-		delete(byNodeAndStoreID, rDesc.NodeID)
+		delete(byNodeAndStoreID, nodeID)
+		// The only valid thing to do when we already have multiple replicas on the
+		// same node is to remove a replica.
+		if len(rDescsForNode) > 1 {
+			if err := validateReplicationChangesMultipleReplicasOnTheSameNode(byStoreID, rDescsForNode); err != nil {
+				return err
+			}
+			continue
+		}
+		rDesc := rDescsForNode[0]
 		if len(byStoreID) == 2 {
 			chg, k := byStoreID[rDesc.StoreID]
 			// We should be removing the replica from the existing store during a
