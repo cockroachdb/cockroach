@@ -272,6 +272,7 @@ func prepareRightReplicaForSplit(
 	rightRepl.leasePostApplyLocked(ctx,
 		rightRepl.mu.state.Lease, /* prevLease */
 		rightRepl.mu.state.Lease, /* newLease - same as prevLease */
+		nil,                      /* priorReadSum */
 		assertNoLeaseJump)
 
 	// We need to explicitly wake up the Raft group on the right-hand range or

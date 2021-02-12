@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -158,6 +159,13 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
 					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
+				})
+				// Merges incorporate the prior read summary from the RHS into
+				// the LHS, which ensures that the current and all future
+				// leaseholders on the joint range respect reads served on the
+				// RHS.
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.RangePriorReadSummaryKey(mt.LeftDesc.RangeID),
 				})
 			}
 		}
@@ -1101,6 +1109,38 @@ func mergeTrigger(
 		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
 	); err != nil {
 		return result.Result{}, err
+	}
+
+	// If we collected a read summary from the right-hand side when freezing it,
+	// merge that summary into the left-hand side's prior read summary. In the
+	// usual case, the RightReadSummary in the MergeTrigger will be used to
+	// update the left-hand side's leaseholder's timestamp cache when applying
+	// the merge trigger's Raft log entry. However, if the left-hand side's
+	// leaseholder hears about the merge through a Raft snapshot, the merge
+	// trigger will not be available, so it will need to use the range's prior
+	// read summary to update its timestamp cache to ensure that it does not
+	// serve any writes that invalidate previous reads served on the right-hand
+	// side range. See TestStoreRangeMergeTimestampCache for an example of where
+	// this behavior is necessary.
+	//
+	// This communication from the RHS to the LHS is handled differently from
+	// how we copy over the abortspan. In this case, the read summary is passed
+	// through the SubsumeResponse and into the MergeTrigger. In the abortspan's
+	// case, we read from local RHS replica (which may not be the leaseholder)
+	// directly in this method. The primary reason why these are different is
+	// because the RHS's persistent read summary may not be up-to-date, as it is
+	// not updated by the SubsumeRequest.
+	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
+	if merge.RightReadSummary != nil && readSumActive {
+		mergedSum := merge.RightReadSummary.Clone()
+		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
+			return result.Result{}, err
+		} else if priorSum != nil {
+			mergedSum.Merge(*priorSum)
+		}
+		if err := readsummary.Set(ctx, batch, rec.GetRangeID(), ms, mergedSum); err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	// The stats for the merged range are the sum of the LHS and RHS stats, less

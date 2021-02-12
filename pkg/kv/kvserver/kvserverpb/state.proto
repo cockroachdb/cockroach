@@ -48,9 +48,9 @@ message ReplicaState {
   // The latest range lease.
   //
   // Note that this message is both sent over the network and used to model
-  // replica state in memory. In memory (storage.Replica.mu.state), the lease
-  // is never nil (and never zero-valued), but it may be nil when sent over
-  // the network as part of ReplicatedEvalResult.
+  // replica state in memory. In memory (Replica.mu.state), the lease is never
+  // nil (and never zero-valued), but it may be nil when sent over the network
+  // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;

@@ -6238,10 +6238,12 @@ func TestRangeStatsComputation(t *testing.T) {
 	tc.Start(t, stopper)
 
 	baseStats := initialStats()
-	// The initial stats contain no lease, but there will be an initial
-	// nontrivial lease requested with the first write below.
+	// The initial stats contain an empty lease and no prior read summary, but
+	// there will be an initial nontrivial lease requested with the first write
+	// below. This lease acquisition will, in turn, create a prior read summary.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 28,
+		SysBytes: 64,
+		SysCount: 1,
 	})
 
 	// Our clock might not be set to zero.

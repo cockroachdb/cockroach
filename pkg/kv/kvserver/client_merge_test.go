@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -379,44 +380,123 @@ func mergeWithData(t *testing.T, retries int64) {
 }
 
 // TestStoreRangeMergeTimestampCache verifies that the timestamp cache on the
-// LHS is properly updated after a merge.
+// LHS is properly updated after a merge. The test contains a subtest for each
+// of the combinations of the following boolean options:
+//
+// - disjointLeaseholders: configures whether or not the leaseholder of the
+//     LHS range is disjoint from the leaseholder of the RHS range. If false,
+//     the leaseholders are collocated before the merge is initiated.
+//
+// - throughSnapshot: configures whether or not the leaseholder of the LHS of
+//     the merge hears about and applies the merge through a Raft snapshot, as
+//     opposed to through normal Raft log application.
+//
+// - futureRead: configures whether or not the reads performed on the RHS range
+//     before the merge is initiated are performed in the future of present
+//     time using synthetic timestamps.
+//
 func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderShort(t)
 
-	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", mergeCheckingTimestampCaches)
+	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", func(t *testing.T, disjointLeaseholders bool) {
+		testutils.RunTrueAndFalse(t, "through-snapshot", func(t *testing.T, throughSnapshot bool) {
+			testutils.RunTrueAndFalse(t, "future-read", func(t *testing.T, futureRead bool) {
+				mergeCheckingTimestampCaches(t, disjointLeaseholders, throughSnapshot, futureRead)
+			})
+		})
+	})
 }
 
-func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
+func mergeCheckingTimestampCaches(
+	t *testing.T, disjointLeaseholders, throughSnapshot, futureRead bool,
+) {
+	// mergeCommitFilter is used to issue a sequence of operations on the LHS of
+	// a range merge immediately before it.
+	var mergeCommitFilter func()
+	// blockHBAndGCs is used to black hole Heartbeat and GC requests for the
+	// duration of the merge on the throughSnapshot path. Neither request type
+	// is needed and both can create issues by holding latches during the split
+	// leader-leaseholder state.
+	var blockHBAndGCs chan struct{}
+	var filterMu syncutil.Mutex
+	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		filterMu.Lock()
+		mergeCommitFilterCopy := mergeCommitFilter
+		blockHBAndGCsCopy := blockHBAndGCs
+		filterMu.Unlock()
+		for _, req := range ba.Requests {
+			switch v := req.GetInner().(type) {
+			case *roachpb.EndTxnRequest:
+				if v.InternalCommitTrigger.GetMergeTrigger() != nil {
+					if mergeCommitFilterCopy != nil {
+						mergeCommitFilterCopy()
+					}
+				}
+			case *roachpb.HeartbeatTxnRequest, *roachpb.GCRequest:
+				if blockHBAndGCsCopy != nil {
+					<-blockHBAndGCsCopy
+				}
+			}
+		}
+		return nil
+	}
+
+	// snapshotFilter is used to listen for the completion of a Raft snapshot.
+	var snapshotFilter func(kvserver.IncomingSnapshot)
+	beforeSnapshotSSTIngestion := func(
+		inSnap kvserver.IncomingSnapshot,
+		snapType kvserver.SnapshotRequest_Type,
+		_ []string,
+	) error {
+		filterMu.Lock()
+		snapshotFilterCopy := snapshotFilter
+		filterMu.Unlock()
+		if snapshotFilterCopy != nil {
+			snapshotFilterCopy(inSnap)
+		}
+		return nil
+	}
+
+	manualClock := hlc.NewHybridManualClock()
 	ctx := context.Background()
-	var tc *testcluster.TestCluster
-	var lhsStore, rhsStore *kvserver.Store
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ClockSource: manualClock.UnixNano,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						TestingRequestFilter:       testingRequestFilter,
+						BeforeSnapshotSSTIngestion: beforeSnapshotSSTIngestion,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	lhsStore := tc.GetFirstStoreFromServer(t, 0)
+	var rhsStore *kvserver.Store
 	if disjointLeaseholders {
-		tc = testcluster.StartTestCluster(t, 2,
-			base.TestClusterArgs{
-				ReplicationMode: base.ReplicationManual,
-			})
-		lhsStore = tc.GetFirstStoreFromServer(t, 0)
 		rhsStore = tc.GetFirstStoreFromServer(t, 1)
 	} else {
-		tc = testcluster.StartTestCluster(t, 1,
-			base.TestClusterArgs{
-				ReplicationMode: base.ReplicationManual,
-			},
-		)
-		lhsStore = tc.GetFirstStoreFromServer(t, 0)
 		rhsStore = tc.GetFirstStoreFromServer(t, 0)
 	}
-	defer tc.Stopper().Stop(context.Background())
+
+	// Disable closed timestamps to ensure that any writes that are bumped to
+	// higher timestamps are bumped by the timestamp cache, as expected.
+	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '24h'`)
+	require.NoError(t, err)
 
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, lhsStore)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
+	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 
 	if disjointLeaseholders {
-		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
-		tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
 		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(1))
 		testutils.SucceedsSoon(t, func() error {
 			rhsRepl, err := rhsStore.GetReplica(rhsDesc.RangeID)
@@ -439,6 +519,9 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	}
 
 	readTS := tc.Servers[0].Clock().Now()
+	if futureRead {
+		readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+	}
 
 	// Simulate a read on the RHS from a node with a newer clock.
 	var ba roachpb.BatchRequest
@@ -461,7 +544,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
 	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
 	ba = roachpb.BatchRequest{}
-	ba.Timestamp = tc.Servers[0].Clock().Now()
+	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, roachpb.PUSH_ABORT))
 	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
@@ -470,10 +553,240 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 		t.Fatalf("expected aborted pushee, but got %v", txn)
 	}
 
-	// Merge the RHS back into the LHS.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := kv.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
-		t.Fatal(pErr)
+	// Pause the cluster's clock. This accomplishes two things:
+	// 1. It ensures that if we force the LHS leaseholder to learn about the
+	//    merge through a snapshot (throughSnapshot), the merge transaction is not
+	//    allowed to expire and be aborted due to delayed txn heartbeats.
+	// 2. it ensures that if we performed a read at a future timestamp, the read
+	//    time remains in the future, regardless of the passage of real time.
+	manualClock.Pause()
+
+	if !throughSnapshot {
+		// The easy case: merge the RHS back into the LHS normally.
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := kv.SendWrapped(ctx, lhsStore.TestSender(), args)
+		require.Nil(t, pErr)
+	} else {
+		// The hard case: merge the RHS back into the LHS, but make sure the LHS
+		// leaseholder finds out about the merge through a Raft snapshot.
+		//
+		// To do this, we partition the leaseholder from the rest of its range.
+		// Once partitioned, we perform another write and truncate the Raft log
+		// on the two connected nodes. We then complete the range merge before
+		// removing the partition. This ensures that that when the leaseholder
+		// reconnects it will require a snapshot from Raft.
+		//
+		// But there's a wrinkle here that makes things more difficult: the
+		// leaseholder needs to play a role in coordinating the range merge and
+		// the log truncation, as it is the only replica that can propose such
+		// changes. To accommodate this, we put the range into a split
+		// leader-leaseholder state and lock down all communication between the
+		// two _except_ for forwarded proposal from the leaseholder to the
+		// leader. This allows the leaseholder to make proposals, even though it
+		// won't be able to hear their result. Because this is such a fragile
+		// state, we enter it as late as possible - after the merge begins and
+		// only upon receiving the merge's EndTxn request.
+
+		lhsKey := roachpb.Key("a")
+		var lhsStores []*kvserver.Store
+		var lhsRepls []*kvserver.Replica
+		for i := range tc.Servers {
+			s := tc.GetFirstStoreFromServer(t, i)
+			r := s.LookupReplica(roachpb.RKey(lhsKey))
+			lhsStores = append(lhsStores, s)
+			lhsRepls = append(lhsRepls, r)
+		}
+
+		// Applied to the leaseholder's raft transport during the partition.
+		partitionedLeaseholderFuncs := noopRaftHandlerFuncs()
+		partitionedLeaseholderFuncs.dropReq = func(*kvserver.RaftMessageRequest) bool {
+			// Ignore everything from new leader.
+			return true
+		}
+
+		// Applied to the leader and other follower's raft transport during the
+		// partition.
+		partitionedLeaderFuncs := noopRaftHandlerFuncs()
+		partitionedLeaderFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			// Ignore everything from leaseholder, except forwarded proposals.
+			return req.FromReplica.StoreID == lhsStore.StoreID() &&
+				req.Message.Type != raftpb.MsgProp
+		}
+		partitionedLeaderFuncs.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			// Ignore heartbeats from leaseholder, results in campaign.
+			return hb.FromReplicaID == roachpb.ReplicaID(lhsRepls[0].RaftStatus().ID)
+		}
+
+		// Applied to leaseholder after the partition heals.
+		var truncIndex uint64
+		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
+		restoredLeaseholderFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			// Make sure that even going forward no MsgApp for what we just
+			// truncated can make it through. The Raft transport is asynchronous
+			// so this is necessary to make the test pass reliably - otherwise
+			// the leaseholder may catch up without needing a snapshot, tripping
+			// up the test.
+			//
+			// NB: the Index on the message is the log index that _precedes_ any of the
+			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
+			return req.Message.Type == raftpb.MsgApp && req.Message.Index < truncIndex
+		}
+
+		// Because we enter a split leader-leaseholder state, none of the
+		// operations we perform on the leaseholder will return. Instead, they
+		// will block for the duration of the partition, even after they have
+		// succeeded on the majority quorum. So we launch async goroutines to
+		// perform the write and the log truncation and only wait for them to
+		// complete after the partition heals.
+		incChan := make(chan *roachpb.Error, 1)
+		truncChan := make(chan *roachpb.Error, 1)
+		snapChan := make(chan kvserver.IncomingSnapshot, 1)
+
+		filterMu.Lock()
+		mergeCommitFilter = func() {
+			// Install leader-leaseholder partition.
+			for i, s := range lhsStores {
+				var funcs unreliableRaftHandlerFuncs
+				if i == 0 {
+					funcs = partitionedLeaseholderFuncs
+				} else {
+					funcs = partitionedLeaderFuncs
+				}
+				tc.Servers[i].RaftTransport().Listen(s.StoreID(), &unreliableRaftHandler{
+					rangeID:                    lhsDesc.GetRangeID(),
+					RaftMessageHandler:         s,
+					unreliableRaftHandlerFuncs: funcs,
+				})
+			}
+
+			// Make sure the LHS range in uniquiesced so that it elects a new
+			// Raft leader after the partition is established.
+			for _, r := range lhsRepls {
+				r.UnquiesceAndWakeLeader()
+			}
+
+			// Issue an increment on the range. The leaseholder should evaluate
+			// the request and forward a proposal to the leader, but it should
+			// be the only replica that does not apply the proposal.
+			go func() {
+				incArgs := incrementArgs(lhsKey, 4)
+				_, pErr := kv.SendWrappedWith(ctx, lhsStore, roachpb.Header{RangeID: lhsDesc.RangeID}, incArgs)
+				incChan <- pErr
+			}()
+			// NB: the operation won't complete, so peek below Raft and wait for
+			// the result to apply on the majority quorum.
+			tc.WaitForValues(t, lhsKey, []int64{0, 4, 4})
+
+			// Truncate the log to eventually force a snapshot. Determining
+			// which log index to truncate is tricky. We need to make sure it is
+			// <= to the largest log index on the leaseholder or it will reject
+			// the request. But we also need to make sure it is <= to the
+			// largest log index on the leader, or it will panic. So we choose
+			// the minimum of these two and just pick the smallest "last index"
+			// in the range, which does the trick.
+			min := func(a, b uint64) uint64 {
+				if a < b {
+					return a
+				}
+				return b
+			}
+			minLastIndex := uint64(math.MaxUint64)
+			for _, r := range lhsRepls {
+				lastIndex, err := r.GetLastIndex()
+				require.NoError(t, err)
+				minLastIndex = min(minLastIndex, lastIndex)
+			}
+			// Truncate the log at index+1 (log entries < N are removed).
+			truncIndex = minLastIndex + 1
+			go func() {
+				truncArgs := truncateLogArgs(truncIndex, lhsDesc.RangeID)
+				truncArgs.Key = lhsKey
+				_, pErr := kv.SendWrappedWith(ctx, lhsStore, roachpb.Header{RangeID: lhsDesc.RangeID}, truncArgs)
+				truncChan <- pErr
+			}()
+			// NB: the operation won't complete, so peek below Raft and wait for
+			// the result to apply on the majority quorum.
+			testutils.SucceedsSoon(t, func() error {
+				for _, r := range lhsRepls[1:] {
+					firstIndex, err := r.GetFirstIndex()
+					require.NoError(t, err)
+					if firstIndex < truncIndex {
+						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
+					}
+				}
+				return nil
+			})
+		}
+
+		// Begin blocking txn heartbeats and GC requests. They cause issues
+		// because they can grab latches and then get stuck once in the split
+		// leader-leaseholder state.
+		blockHBAndGCs = make(chan struct{})
+
+		// Install a filter to capture the Raft snapshot.
+		snapshotFilter = func(inSnap kvserver.IncomingSnapshot) {
+			if inSnap.State.Desc.RangeID == lhsDesc.RangeID {
+				snapChan <- inSnap
+			}
+		}
+		filterMu.Unlock()
+
+		// Merge the RHS back into the LHS.
+		mergeChan := make(chan *roachpb.Error, 1)
+		go func() {
+			args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+			_, pErr := kv.SendWrapped(ctx, lhsStore.TestSender(), args)
+			mergeChan <- pErr
+		}()
+		// NB: the operation won't complete, so peek below Raft and wait for
+		// the result to apply on the majority quorum.
+		testutils.SucceedsSoon(t, func() error {
+			for _, r := range lhsRepls[1:] {
+				desc := r.Desc()
+				if !desc.EndKey.Equal(rhsDesc.EndKey) {
+					return errors.Errorf("merge not applied")
+				}
+			}
+			return nil
+		})
+
+		// Remove the partition. A snapshot to the leaseholder should follow.
+		// This snapshot will inform the leaseholder about the range merge.
+		for i, s := range lhsStores {
+			var h kvserver.RaftMessageHandler
+			if i == 0 {
+				h = &unreliableRaftHandler{
+					rangeID:                    lhsDesc.GetRangeID(),
+					RaftMessageHandler:         s,
+					unreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
+				}
+			} else {
+				h = s
+			}
+			tc.Servers[i].RaftTransport().Listen(s.StoreID(), h)
+		}
+		close(blockHBAndGCs)
+
+		t.Logf("waiting for snapshot to LHS leaseholder")
+		inSnap := <-snapChan
+		inSnapDesc := inSnap.State.Desc
+		require.Equal(t, lhsDesc.StartKey, inSnapDesc.StartKey)
+		require.Equal(t, rhsDesc.EndKey, inSnapDesc.EndKey)
+
+		// Wait for all async ops to complete.
+		for _, asyncRes := range []struct {
+			name string
+			ch   chan *roachpb.Error
+		}{
+			{"increment", incChan},
+			{"truncate", truncChan},
+			{"merge", mergeChan},
+		} {
+			t.Logf("waiting for result of %s", asyncRes.name)
+			err := <-asyncRes.ch
+			require.NotNil(t, err, "%s should fail", asyncRes.name)
+			require.Regexp(t, "result is ambiguous", err, "%s's result should be ambiguous", asyncRes.name)
+		}
 	}
 
 	// After the merge, attempt to write under the read. The batch should get
@@ -492,15 +805,17 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	// was aborted before the merge. This should be rejected with a transaction
 	// aborted error. The reason will depend on whether the leaseholders were
 	// disjoint or not because disjoint leaseholders will lead to a loss of
-	// resolution in the timestamp cache. Either way though, the transaction
-	// should not be allowed to create its record.
+	// resolution in the timestamp cache. Similarly, the reason will depend on
+	// whether the LHS leaseholder learned about the merge through Raft log
+	// application or a Raft snapshot. Either way though, the transaction should
+	// not be allowed to create its record.
 	hb, hbH := heartbeatArgs(&pushee, tc.Servers[0].Clock().Now())
 	ba = roachpb.BatchRequest{}
 	ba.Header = hbH
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(hb)
 	var expReason roachpb.TransactionAbortedReason
-	if disjointLeaseholders {
+	if disjointLeaseholders || throughSnapshot {
 		expReason = roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 	} else {
 		expReason = roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
@@ -3312,8 +3627,6 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Truncate the log at index+1 (log entries < N are removed, so this
-		// includes the merge).
 		truncArgs := &roachpb.TruncateLogRequest{
 			RequestHeader: roachpb.RequestHeader{Key: keyA},
 			Index:         index,

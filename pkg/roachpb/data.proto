@@ -13,6 +13,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "kv/kvserver/concurrency/lock/locking.proto";
+import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
@@ -147,7 +148,8 @@ message MergeTrigger {
   // timestamps at which any requests were serviced by the right-hand side range
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
-  // mark for the keys previously owned by the subsumed range.
+  // mark for the keys previously owned by the subsumed range, though this role
+  // is largely being... subsumed by the RightReadSummary.
   util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
@@ -165,6 +167,35 @@ message MergeTrigger {
   // the two sides are collocated at merge time, we don't need to use the
   // read_summary and simply use this field.
   util.hlc.Timestamp right_closed_timestamp = 6 [(gogoproto.nullable) = false];
+  
+  // RightReadSummary is a summary of the reads that have been performed on the
+  // right-hand side up to the point of the Subsume request, which serializes
+  // with past reads and begins blocking future reads. It is suitable for use to
+  // update the timestamp cache for the keys previously owned by the subsumed
+  // range.
+  //
+  // RightReadSummary can be used in place of FreezeStart, when available. It
+  // has two distinct advantages:
+  // 1. it can transfer a higher-resolution snapshot of the reads on the range
+  //    through a range merge, to make the merge less disruptive to writes on
+  //    the post-merge range because the timestamp cache won't be bumped as
+  //    high.
+  // 2. it can transfer information about reads with synthetic timestamps, which
+  //    are not otherwise captured by the FreezeStart clock timestamp.
+  //
+  // When a RightReadSummary is set in ReplicatedEvalResult.Merge.Trigger, there
+  // is always also a write to the RangePriorReadSummaryKey in the corresponding
+  // RaftCommand.WriteBatch. The persisted summary may be identical to the
+  // summary in this field, but it does not have to be. Notably, we intended for
+  // the summary included in the ReplicatedEvalResult.Merge.Trigger to
+  // eventually be a much higher-resolution version of the ReadSummmary than the
+  // version persisted. This scheme of persisting a compressed ReadSummary
+  // indefinitely and including a higher-resolution ReadSummary on the
+  // RaftCommand allows us to optimize for the common case where the merge is
+  // applied on the LHS's leaseholder through Raft log application while
+  // ensuring correctness in the case where the merge is applied on the LHS's
+  // leaseholder through a Raft snapshot.
+  kv.kvserver.readsummary.ReadSummary right_read_summary = 7;
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

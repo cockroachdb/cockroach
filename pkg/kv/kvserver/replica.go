@@ -293,6 +293,13 @@ type Replica struct {
 		// right-hand range in an ongoing merge. This range will allow read-only
 		// traffic below this timestamp, while blocking everything else, until the
 		// merge completes.
+		// TODO(nvanbenschoten): get rid of this. It seemed like a good idea at
+		// the time (b192bba), but in retrospect, it's a premature optimization
+		// that prevents us from being more optimal about the read summary we
+		// ship to the LHS during a merge. Serving reads below the closed
+		// timestamp seems fine because that can't advance after the range is
+		// frozen, but serving reads above the closed timestamp but below the
+		// freeze start time is dangerous.
 		freezeStart hlc.Timestamp
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState

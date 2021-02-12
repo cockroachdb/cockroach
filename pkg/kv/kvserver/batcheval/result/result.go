@@ -294,6 +294,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PrevLeaseProposal = nil
 
+	if p.Replicated.PriorReadSummary == nil {
+		p.Replicated.PriorReadSummary = q.Replicated.PriorReadSummary
+	} else if q.Replicated.PriorReadSummary != nil {
+		return errors.AssertionFailedf("conflicting prior read summary")
+	}
+	q.Replicated.PriorReadSummary = nil
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {
