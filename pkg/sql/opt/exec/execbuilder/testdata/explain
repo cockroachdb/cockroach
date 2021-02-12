@@ -1451,3 +1451,107 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: pg_attribute@pg_attribute_attrelid_idx
           spans: [/ab - /ab]
+
+
+# Verify the output for the percentage of table that is scanned.
+statement ok
+CREATE TABLE percent (a INT PRIMARY KEY, b INT)
+
+statement ok
+ALTER TABLE percent INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "histo_buckets": []
+  }
+]'
+
+query T
+EXPLAIN SELECT * FROM percent
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1,000,000 (100% of the table)
+  table: percent@primary
+  spans: FULL SCAN
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 150000
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 150,000 (15% of the table)
+  table: percent@primary
+  spans: [/1 - /150000]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 20000
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 20,000 (2.0% of the table)
+  table: percent@primary
+  spans: [/1 - /20000]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 1234
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1,234 (0.12% of the table)
+  table: percent@primary
+  spans: [/1 - /1234]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 980
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 980 (0.10% of the table)
+  table: percent@primary
+  spans: [/1 - /980]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 100
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 100 (0.01% of the table)
+  table: percent@primary
+  spans: [/1 - /100]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 99
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 99 (<0.01% of the table)
+  table: percent@primary
+  spans: [/1 - /99]
+
+query T
+EXPLAIN SELECT * FROM percent WHERE a = 1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (<0.01% of the table)
+  table: percent@primary
+  spans: [/1 - /1]

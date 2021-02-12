@@ -99,6 +99,6 @@ vectorized: true
 │ equality cols are key
 │
 └── • scan
-      estimated row count: 1
+      estimated row count: 1 (100% of the table)
       table: ab@primary
       spans: FULL SCAN

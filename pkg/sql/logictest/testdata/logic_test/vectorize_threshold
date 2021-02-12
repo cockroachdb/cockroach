@@ -68,7 +68,7 @@ vectorized: false
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100
+      estimated row count: 100 (100% of the table)
       table: small@primary
       spans: FULL SCAN
 
@@ -86,7 +86,7 @@ vectorized: true
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100
+      estimated row count: 100 (100% of the table)
       table: small@primary
       spans: FULL SCAN
 
@@ -116,7 +116,7 @@ vectorized: true
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100,000
+      estimated row count: 100,000 (100% of the table)
       table: large@primary
       spans: FULL SCAN
 
@@ -134,7 +134,7 @@ vectorized: false
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100,000
+      estimated row count: 100,000 (100% of the table)
       table: large@primary
       spans: FULL SCAN
 
@@ -155,11 +155,11 @@ vectorized: true
 │ right cols are key
 │
 ├── • scan
-│     estimated row count: 100
+│     estimated row count: 100 (100% of the table)
 │     table: small@primary
 │     spans: FULL SCAN
 │
 └── • scan
-      estimated row count: 100,000
+      estimated row count: 100,000 (100% of the table)
       table: large@primary
       spans: FULL SCAN
