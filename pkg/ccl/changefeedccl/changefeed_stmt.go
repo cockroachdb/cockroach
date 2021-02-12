@@ -262,7 +262,10 @@ func changefeedPlanHook(
 		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
 			return err
 		}
-		if isCloudStorageSink(parsedSink) {
+		// TODO(ssd): For PubSub sinks, we could put the key
+		// in the metadata rather than defaulting this to
+		// enabled.
+		if isCloudStorageSink(parsedSink) || isPubsubSink(parsedSink) {
 			details.Opts[changefeedbase.OptKeyInValue] = ``
 		}
 
