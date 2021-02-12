@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -739,7 +740,12 @@ type ExecutorConfig struct {
 	RPCContext        *rpc.Context
 	LeaseManager      *lease.Manager
 	Clock             *hlc.Clock
+	NodeDialer        *nodedialer.Dialer
 	DistSQLSrv        *distsql.ServerImpl
+	// SQLServer is a pointer to the Server that this config ultimately created.
+	// It's only set to non-nil once we've actually used this configuration to
+	// make a new sql server.
+	SQLServer *Server
 	// NodesStatusServer gives access to the NodesStatus service and is only
 	// available when running as a system tenant.
 	NodesStatusServer serverpb.OptionalNodesStatusServer

@@ -291,7 +291,7 @@ type Metrics struct {
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	return &Server{
+	s := &Server{
 		cfg:             cfg,
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
@@ -300,6 +300,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		reportedStats:   sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reCache:         tree.NewRegexpCache(512),
 	}
+	cfg.SQLServer = s
+	return s
 }
 
 func makeMetrics(internal bool) Metrics {

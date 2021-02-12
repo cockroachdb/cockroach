@@ -479,6 +479,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RPCContext:              cfg.rpcContext,
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
+		NodeDialer:              cfg.nodeDialer,
 		DistSQLSrv:              distSQLServer,
 		NodesStatusServer:       cfg.nodesStatusServer,
 		SQLStatusServer:         cfg.sqlStatusServer,
