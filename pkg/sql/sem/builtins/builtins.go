@@ -128,9 +128,13 @@ func categorizeType(t *types.T) string {
 }
 
 const (
-	// GatewayRegionBuiltinName is the builtin name that returns the gateway
+	// GatewayRegionBuiltinName is the name for the builtin that returns the gateway
 	// region of the current node.
 	GatewayRegionBuiltinName = "gateway_region"
+	// DefaultToDatabasePrimaryRegionBuiltinName is the name for the builtin that
+	// takes in a region and returns it if it is a valid region on the database.
+	// Otherwise, it returns the primary region.
+	DefaultToDatabasePrimaryRegionBuiltinName = "default_to_database_primary_region"
 )
 
 var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
@@ -4855,6 +4859,52 @@ may increase either contention or retry errors, or both.`,
 the locality flag on node startup. Returns an error if no region is set.`,
 			Volatility: tree.VolatilityStable,
 		},
+	),
+	DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				r, err := evalCtx.InternalExecutor.QueryRow(
+					evalCtx.Ctx(),
+					DefaultToDatabasePrimaryRegionBuiltinName,
+					evalCtx.Txn,
+					`SELECT regions @> array[$1::string], primary_region
+				FROM crdb_internal.databases WHERE name = $2`,
+					s,
+					evalCtx.SessionData.Database,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidDatabaseDefinition,
+						"current database %s does not exist",
+						evalCtx.SessionData.Database,
+					)
+				}
+				// If region has been added to the database.
+				if *(r[0].(*tree.DBool)) {
+					return tree.NewDString(s), nil
+				}
+				// Otherwise, return the primary region if it exists.
+				if r[1] != tree.DNull {
+					return r[1], nil
+				}
+
+				// Not seeing any rows means the database is not multi-region enabled.
+				return nil, pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"current database %s is not multi-region enabled",
+					evalCtx.SessionData.Database,
+				)
+			},
+			types.String,
+			`Returns the given region if the region has been added to the current database.
+	Otherwise, this will return the primary region of the current database.
+	This will error if the current database is not a multi-region database.`,
+			tree.VolatilityStable,
+		),
 	),
 
 	"crdb_internal.show_create_all_tables": makeBuiltin(
