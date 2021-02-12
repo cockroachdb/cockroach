@@ -5076,7 +5076,9 @@ show_transaction_stmt:
 
 // %Help: SHOW CREATE - display the CREATE statement for a table, sequence or view
 // %Category: DDL
-// %Text: SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// %Text:
+// SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// SHOW CREATE ALL TABLES
 // %SeeAlso: WEBDOCS/show-create-table.html
 show_create_stmt:
   SHOW CREATE table_name
@@ -5087,6 +5089,10 @@ show_create_stmt:
   {
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
+  }
+| SHOW CREATE ALL TABLES
+  {
+    $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
