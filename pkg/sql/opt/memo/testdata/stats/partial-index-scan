@@ -414,6 +414,35 @@ exec-ddl
 DROP INDEX idx
 ----
 
+# Regression test for #60502. Ensure that a constrained scan is preferred over
+# an unconstrained scan.
+exec-ddl
+CREATE TABLE t (
+   pk1 INT NOT NULL,
+   pk2 INT NOT NULL,
+   b1 BOOL,
+   b2 BOOL,
+   PRIMARY KEY (pk1, pk2),
+   INDEX (pk2) WHERE (b1 = false) AND (b2 = false)
+)
+----
+
+opt
+SELECT * FROM t WHERE pk2 = 1 AND b1 = false AND b2 = false
+----
+index-join t
+ ├── columns: pk1:1(int!null) pk2:2(int!null) b1:3(bool!null) b2:4(bool!null)
+ ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2-4)
+ └── scan t@secondary,partial
+      ├── columns: pk1:1(int!null) pk2:2(int!null)
+      ├── constraint: /2/1: [/1 - /1]
+      ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+
 # ---------------------
 # Tests with Histograms
 # ---------------------
