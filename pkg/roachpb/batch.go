@@ -164,17 +164,17 @@ func (ba *BatchRequest) IsIntentWrite() bool {
 	return ba.hasFlag(isIntentWrite)
 }
 
-// IsUnsplittable returns true iff the BatchRequest an un-splittable request.
-func (ba *BatchRequest) IsUnsplittable() bool {
-	return ba.hasFlag(isUnsplittable)
-}
-
 // ConsultsTimestampCache returns whether the request must consult
 // the timestamp cache to determine whether a mutation is safe at
 // a proposed timestamp or needs to move to a higher timestamp to
 // avoid re-writing history.
 func (ba *BatchRequest) ConsultsTimestampCache() bool {
-	return ba.hasFlag(consultsTSCache)
+	return ba.IsIntentWrite()
+}
+
+// IsUnsplittable returns true iff the BatchRequest an un-splittable request.
+func (ba *BatchRequest) IsUnsplittable() bool {
+	return ba.hasFlag(isUnsplittable)
 }
 
 // IsSingleRequest returns true iff the BatchRequest contains a single request.
