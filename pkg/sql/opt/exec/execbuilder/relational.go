@@ -351,11 +351,18 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// information.
 	if ef, ok := b.factory.(exec.ExplainFactory); ok {
 		stats := &e.Relational().Stats
-		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &exec.EstimatedStats{
+		val := exec.EstimatedStats{
 			TableStatsAvailable: stats.Available,
 			RowCount:            stats.RowCount,
 			Cost:                float64(e.Cost()),
-		})
+		}
+		if scan, ok := e.(*memo.ScanExpr); ok {
+			tableStats, ok := b.mem.GetCachedTableStatistics(scan.Table)
+			if ok {
+				val.TableRowCount = tableStats.RowCount
+			}
+		}
+		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
 	}
 
 	if saveTableName != "" {
