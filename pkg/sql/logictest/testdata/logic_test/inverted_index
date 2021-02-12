@@ -752,7 +752,18 @@ INSERT INTO f VALUES
   (10, '{"a": {"b": {"c": 1}}}'),
   (11, '{"a": {"b": {"c": 1, "d": 2}}}}'),
   (12, '{"a": {"b": {"d": 2}}}}'),
-  (13, '{"a": {"b": {"c": [1, 2]}}}')
+  (13, '{"a": {"b": {"c": [1, 2]}}}'),
+  (14, '{"a": {"b": {"c": [1, 2, 3]}}}'),
+  (15, '{"a": []}'),
+  (16, '{"a": {}}}'),
+  (17, '{"a": {"b": "c"}}'),
+  (18, '{"a": {"b": ["c", "d", "e"]}}'),
+  (19, '{"a": ["b", "c", "d", "e"]}'),
+  (20, '{"a": ["b", "e", "c", "d"]}'),
+  (21, '{"z": {"a": "b", "c": "d"}}'),
+  (22, '{"z": {"a": "b", "c": "d", "e": "f"}}'),
+  (23, '{"a": "b", "x": ["c", "d", "e"]}}'),
+  (24, '{"a": "b", "c": [{"d": 1}, {"e": 2}]}}')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -788,6 +799,88 @@ SELECT j FROM f@i WHERE j->'a'->'b'->'c' = '1' ORDER BY k
 ----
 {"a": {"b": {"c": 1}}}
 {"a": {"b": {"c": 1, "d": 2}}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '[]'
+----
+{"a": []}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{}'
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": {"c": 1}}}
+{"a": {"b": {"c": 1, "d": 2}}}
+{"a": {"b": {"d": 2}}}
+{"a": {}}
+{"a": {"b": "c"}}
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": {"c": [1, 2, 3]}}}
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '["b"]'
+----
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"'
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{"b": "c"}'
+----
+{"a": {"b": "c"}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b'->'c' = '[1, 2]'
+----
+{"a": {"b": {"c": [1, 2]}}}
+
+query T
+SELECT j FROM f@i WHERE j->'z' = '{"a": "b", "c": "d"}'
+----
+{"z": {"a": "b", "c": "d"}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '["b", "c", "d", "e"]'
+----
+{"a": ["b", "c", "d", "e"]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{"b": ["c", "d", "e"]}'
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' = '["c", "d", "e"]'
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'z'->'c' = '"d"'
+----
+{"z": {"a": "b", "c": "d"}}
+{"z": {"a": "b", "c": "d", "e": "f"}}
+
+query T
+SELECT j FROM f@i WHERE j->'z' = '{"c": "d"}'
+----
+{"z": {"a": "b", "c": "d"}}
+{"z": {"a": "b", "c": "d", "e": "f"}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}]'
+----
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}, {"e": 2}]'
+----
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
 
 subtest arrays
 
