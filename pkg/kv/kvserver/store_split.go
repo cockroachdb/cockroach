@@ -214,6 +214,13 @@ func splitPostApply(
 func prepareRightReplicaForSplit(
 	ctx context.Context, split *roachpb.SplitTrigger, r *Replica,
 ) (rightReplicaOrNil *Replica) {
+	// Copy out the minLeaseProposedTS from the LHS so we can assign it to the
+	// RHS. This ensures that if the LHS was not able to use its current lease
+	// because of a restart or lease transfer, the RHS will also not be able to.
+	r.mu.RLock()
+	minLeaseProposedTS := r.mu.minLeaseProposedTS
+	r.mu.RUnlock()
+
 	// The right hand side of the split was already created (and its raftMu
 	// acquired) in Replica.acquireSplitLock. It must be present here.
 	rightRepl, err := r.store.GetReplica(split.RightDesc.RangeID)
@@ -227,31 +234,32 @@ func prepareRightReplicaForSplit(
 	if err != nil {
 		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
+
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
+	defer rightRepl.mu.Unlock()
 
 	// If we know that the RHS has already been removed at this replica ID
 	// then we also know that its data has already been removed by the preApply
 	// so we skip initializing it as the RHS of the split.
 	if rightRepl.isNewerThanSplitRLocked(split) {
-		rightRepl.mu.Unlock()
 		return nil
 	}
 
 	// Finish initialization of the RHS.
 	err = rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
-	rightRepl.mu.Unlock()
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	// Copy the minLeaseProposedTS from the LHS and grab the RHS's lease.
-	r.mu.RLock()
-	rightRepl.mu.Lock()
-	rightRepl.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
-	rightLease := *rightRepl.mu.state.Lease
-	rightRepl.mu.Unlock()
-	r.mu.RUnlock()
+	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked
+	// has already assigned a value for this field; this will be overwrite it.
+	rightRepl.mu.minLeaseProposedTS = minLeaseProposedTS
+
+	// Invoke the leasePostApplyLocked method to ensure we properly initialize
+	// the replica according to whether it holds the lease. This enables the
+	// txnWaitQueue.
+	rightRepl.leasePostApplyLocked(ctx, *rightRepl.mu.state.Lease, false /* permitJump */)
 
 	// We need to explicitly wake up the Raft group on the right-hand range or
 	// else the range could be underreplicated for an indefinite period of time.
@@ -262,19 +270,13 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	err = rightRepl.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+	err = rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
 	})
 	if err != nil {
 		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
 	}
 
-	// Invoke the leasePostApply method to ensure we properly initialize
-	// the replica according to whether it holds the lease. This enables
-	// the txnWaitQueue.
-	rightRepl.mu.Lock()
-	defer rightRepl.mu.Unlock()
-	rightRepl.leasePostApplyLocked(ctx, rightLease, false /* permitJump */)
 	return rightRepl
 }
 
