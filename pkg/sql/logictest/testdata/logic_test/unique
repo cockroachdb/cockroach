@@ -251,6 +251,49 @@ us-west  foo  1  1
 eu-west  bar  2  2
 
 
+# Insert some non-null data into a table with a partial unique without index
+# constraint.
+statement ok
+INSERT INTO uniq_partial VALUES (1, 1), (1, -1), (2, 2)
+
+# Partial unique constraint violation.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO uniq_partial VALUES (1, 3)
+
+# No partial unique constraint violation because b <= 0.
+statement ok
+INSERT INTO uniq_partial VALUES (1, -3)
+
+# Attempt to insert conflicting keys twice in the same statement.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(3\) already exists\.
+INSERT INTO uniq_partial VALUES (3, 3), (3, 4)
+
+# Attempt to insert one conflicting key and one non-conflicting key in the same
+# statement.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO uniq_partial VALUES (1, 3), (3, 3)
+
+# Insert some rows with NULL keys.
+statement ok
+INSERT INTO uniq_partial VALUES (NULL, 5), (5, 5), (NULL, 5)
+
+# Insert with non-constant input.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO uniq_partial SELECT w, x FROM other
+
+query II colnames,rowsort
+SELECT * FROM uniq_partial
+----
+a     b
+1     1
+1     -1
+1     -3
+2     2
+5     5
+NULL  5
+NULL  5
+
+
 # -- Tests with UPDATE --
 subtest Update
 
