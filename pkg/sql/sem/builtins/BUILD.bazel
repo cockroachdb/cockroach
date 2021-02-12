@@ -68,6 +68,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/fuzzystrmatch",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
