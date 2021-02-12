@@ -1,3 +1,4 @@
 *.pb.* -diff
 *.eg.go -diff
 DEPS.bzl -diff
+pkg/BUILD.bazel -diff

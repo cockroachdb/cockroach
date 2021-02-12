@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
+source "$(dirname "${0}")/teamcity-bazel-support.sh"  # For BAZEL_IMAGE
 
 tc_prepare
 
@@ -18,5 +19,5 @@ docker run -i ${tty-} --rm --init \
        --workdir="/go/src/github.com/cockroachdb/cockroach" \
        -v "$root:/go/src/github.com/cockroachdb/cockroach:ro" \
        -v "$TMPDIR:/artifacts" \
-       cockroachdb/bazel:20210201-174432 bazelbuild.sh
+       $BAZEL_IMAGE bazelbuild.sh
 tc_end_block "Run Bazel build"
