@@ -56,6 +56,19 @@ CREATE TABLE uniq_fk_child (
   UNIQUE WITHOUT INDEX (c)
 )
 
+statement error column "b" does not exist
+CREATE TABLE uniq_partial (
+  a INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+
+statement ok
+CREATE TABLE uniq_partial (
+  a INT,
+  b INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+
 statement ok
 CREATE TYPE region AS ENUM ('us-east', 'us-west', 'eu-west')
 
@@ -74,7 +87,7 @@ CREATE TABLE uniq_enum (
 )
 
 statement ok
-CREATE TABLE uniq_partial (
+CREATE TABLE uniq_partial_index (
   i INT,
   UNIQUE WITHOUT INDEX (i),
   UNIQUE INDEX (i) WHERE i > 0
@@ -522,11 +535,11 @@ eu-west  bar  2  2
 # Ensure that we do not choose a partial index as the arbiter when there is a
 # UNIQUE WITHOUT INDEX constraint.
 statement ok
-INSERT INTO uniq_partial VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 1;
-INSERT INTO uniq_partial VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
+INSERT INTO uniq_partial_index VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 1;
+INSERT INTO uniq_partial_index VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
 
 query I colnames
-SELECT * FROM uniq_partial
+SELECT * FROM uniq_partial_index
 ----
 i
 2

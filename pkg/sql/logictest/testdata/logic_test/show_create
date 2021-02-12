@@ -7,6 +7,7 @@ CREATE TABLE c (
   b INT NULL,
   INDEX c_a_b_idx (a ASC, b ASC),
   UNIQUE WITHOUT INDEX (a, b),
+  CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0,
   FAMILY fam_0_a_rowid (a, rowid),
   FAMILY fam_1_b (b)
 )
@@ -35,7 +36,8 @@ c           CREATE TABLE public.c (
             INDEX c_a_b_idx (a ASC, b ASC),
             FAMILY fam_0_a_rowid (a, rowid),
             FAMILY fam_1_b (b),
-            CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b)
+            CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
+            CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8
 );
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
@@ -49,6 +51,7 @@ ALTER TABLE c ADD CONSTRAINT check_b CHECK (b IN (1, 2, 3)) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES d (d) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID;
+ALTER TABLE c ADD CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0 NOT VALID;
 
 query TT
 SHOW CREATE c
@@ -65,7 +68,9 @@ c  CREATE TABLE public.c (
    FAMILY fam_1_b (b),
    CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)) NOT VALID,
    CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID
+   CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
+   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID,
+   CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8 NOT VALID
 );
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
@@ -77,6 +82,7 @@ ALTER TABLE c VALIDATE CONSTRAINT fk_a;
 ALTER TABLE c VALIDATE CONSTRAINT unique_a;
 ALTER TABLE c VALIDATE CONSTRAINT unique_b;
 ALTER TABLE c VALIDATE CONSTRAINT unique_a_b;
+ALTER TABLE c VALIDATE CONSTRAINT unique_b_partial;
 
 query TT
 SHOW CREATE c
@@ -93,7 +99,9 @@ c  CREATE TABLE public.c (
    FAMILY fam_1_b (b),
    CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)),
    CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b)
+   CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
+   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
+   CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 );
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';

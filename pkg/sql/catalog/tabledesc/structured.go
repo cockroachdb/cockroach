@@ -2220,6 +2220,24 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 			}
 			seen.Add(int(colID))
 		}
+
+		if c.IsPartial() {
+			expr, err := parser.ParseExpr(c.Predicate)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf(
+					"partial unique without index constraint %q refers to unknown columns in predicate: %s",
+					c.Name,
+					c.Predicate,
+				)
+			}
+		}
 	}
 
 	return nil
@@ -3458,7 +3476,7 @@ func (desc *Mutable) AddForeignKeyMutation(
 	desc.addMutation(m)
 }
 
-// AddUniqueWithoutIndexMutation adds a unqiue without index constraint mutation
+// AddUniqueWithoutIndexMutation adds a unique without index constraint mutation
 // to desc.Mutations.
 func (desc *Mutable) AddUniqueWithoutIndexMutation(
 	uc *descpb.UniqueWithoutIndexConstraint, direction descpb.DescriptorMutation_Direction,

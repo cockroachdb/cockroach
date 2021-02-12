@@ -1153,6 +1153,7 @@ type UniqueConstraint struct {
 	name           string
 	tabID          cat.StableID
 	columnOrdinals []int
+	predicate      string
 	withoutIndex   bool
 	validated      bool
 }
@@ -1183,6 +1184,11 @@ func (u *UniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 		))
 	}
 	return u.columnOrdinals[i]
+}
+
+// Predicate is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) Predicate() (string, bool) {
+	return u.predicate, u.predicate != ""
 }
 
 // WithoutIndex is part of the cat.UniqueConstraint interface.

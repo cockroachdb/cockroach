@@ -640,7 +640,13 @@ func addUniqueWithoutIndexColumnTableDef(
 	}
 	// Add a unique constraint.
 	if err := ResolveUniqueWithoutIndexConstraint(
-		ctx, desc, string(d.Unique.ConstraintName), []string{string(d.Name)}, ts, validationBehavior,
+		ctx,
+		desc,
+		string(d.Unique.ConstraintName),
+		[]string{string(d.Name)},
+		"", /* predicate */
+		ts,
+		validationBehavior,
 	); err != nil {
 		return err
 	}
@@ -656,8 +662,10 @@ func addUniqueWithoutIndexTableDef(
 	sessionData *sessiondata.SessionData,
 	d *tree.UniqueConstraintTableDef,
 	desc *tabledesc.Mutable,
+	tn tree.TableName,
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
+	semaCtx *tree.SemaContext,
 ) error {
 	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -684,20 +692,26 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
+
+	// If there is a predicate, validate it.
+	var predicate string
 	if d.Predicate != nil {
-		// TODO(rytaft): It may be necessary to support predicates so that partial
-		// unique indexes will work correctly in multi-region deployments.
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"unique constraints with a predicate but without an index are not supported",
+		var err error
+		predicate, err = schemaexpr.ValidateUniqueWithoutIndexPredicate(
+			ctx, tn, desc, d.Predicate, semaCtx,
 		)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Add a unique constraint.
 	colNames := make([]string, len(d.Columns))
 	for i := range colNames {
 		colNames[i] = string(d.Columns[i].Column)
 	}
 	if err := ResolveUniqueWithoutIndexConstraint(
-		ctx, desc, string(d.Name), colNames, ts, validationBehavior,
+		ctx, desc, string(d.Name), colNames, predicate, ts, validationBehavior,
 	); err != nil {
 		return err
 	}
@@ -716,6 +730,7 @@ func ResolveUniqueWithoutIndexConstraint(
 	tbl *tabledesc.Mutable,
 	constraintName string,
 	colNames []string,
+	predicate string,
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
@@ -772,6 +787,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		Name:      constraintName,
 		TableID:   tbl.ID,
 		ColumnIDs: columnIDs,
+		Predicate: predicate,
 		Validity:  validity,
 	}
 
@@ -2156,7 +2172,7 @@ func NewTableDesc(
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
 				if err := addUniqueWithoutIndexTableDef(
-					ctx, evalCtx, sessionData, d, &desc, NewTable, tree.ValidationDefault,
+					ctx, evalCtx, sessionData, d, &desc, n.Table, NewTable, tree.ValidationDefault, semaCtx,
 				); err != nil {
 					return nil, err
 				}

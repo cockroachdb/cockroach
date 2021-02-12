@@ -479,6 +479,14 @@ func showConstraintClause(
 		}
 		f.WriteString(strings.Join(colNames, ", "))
 		f.WriteString(")")
+		if c.IsPartial() {
+			f.WriteString(" WHERE ")
+			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.Predicate, semaCtx, tree.FmtParsable)
+			if err != nil {
+				return err
+			}
+			f.WriteString(pred)
+		}
 		if c.Validity != descpb.ConstraintValidity_Validated {
 			f.WriteString(" NOT VALID")
 		}
