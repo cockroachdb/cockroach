@@ -171,6 +171,21 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 	return d.showTableDetails(n.Table, getConstraintsQuery)
 }
 
+func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateAllTablesQuery = `
+	SELECT crdb_internal.show_create_all_tables(%[1]s) AS create_statement;
+`
+	databaseLiteral := d.evalCtx.SessionData.Database
+
+	query := fmt.Sprintf(showCreateAllTablesQuery,
+		lex.EscapeSQLString(databaseLiteral),
+	)
+
+	return parse(query)
+}
+
 // showTableDetails returns the AST of a query which extracts information about
 // the given table using the given query patterns in SQL. The query pattern must
 // accept the following formatting parameters:
