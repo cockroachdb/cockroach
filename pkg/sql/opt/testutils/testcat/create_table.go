@@ -192,7 +192,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
 			if def.WithoutIndex {
-				tab.addUniqueConstraint(def.Name, def.Columns, def.WithoutIndex)
+				tab.addUniqueConstraint(def.Name, def.Columns, def.Predicate, def.WithoutIndex)
 			} else if !def.PrimaryKey {
 				tab.addIndex(&def.IndexTableDef, uniqueIndex)
 			}
@@ -209,6 +209,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 					tab.addUniqueConstraint(
 						def.Unique.ConstraintName,
 						tree.IndexElemList{{Column: def.Name}},
+						nil, /* predicate */
 						def.Unique.WithoutIndex,
 					)
 				} else {
@@ -484,7 +485,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 }
 
 func (tt *Table) addUniqueConstraint(
-	name tree.Name, columns tree.IndexElemList, withoutIndex bool,
+	name tree.Name, columns tree.IndexElemList, predicate tree.Expr, withoutIndex bool,
 ) {
 	cols := make([]int, len(columns))
 	for i, c := range columns {
@@ -506,6 +507,10 @@ func (tt *Table) addUniqueConstraint(
 		columnOrdinals: cols,
 		withoutIndex:   withoutIndex,
 		validated:      true,
+	}
+	// Add partial unique constraint predicate.
+	if predicate != nil {
+		u.predicate = tree.Serialize(predicate)
 	}
 	tt.uniqueConstraints = append(tt.uniqueConstraints, u)
 }
@@ -580,7 +585,7 @@ func (tt *Table) addIndexWithVersion(
 ) *Index {
 	// Add a unique constraint if this is a primary or unique index.
 	if typ != nonUniqueIndex {
-		tt.addUniqueConstraint(def.Name, def.Columns, false /* withoutIndex */)
+		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
 	}
 
 	idx := &Index{

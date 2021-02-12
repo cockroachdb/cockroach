@@ -859,6 +859,15 @@ func populateTableConstraints(
 				if con.UniqueWithoutIndexConstraint.Validity != descpb.ConstraintValidity_Validated {
 					f.WriteString(" NOT VALID")
 				}
+				if con.UniqueWithoutIndexConstraint.Predicate != "" {
+					pred, err := schemaexpr.FormatExprForDisplay(
+						ctx, table, con.UniqueWithoutIndexConstraint.Predicate, p.SemaCtx(), tree.FmtPGCatalog,
+					)
+					if err != nil {
+						return err
+					}
+					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
+				}
 			} else {
 				return errors.AssertionFailedf(
 					"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",

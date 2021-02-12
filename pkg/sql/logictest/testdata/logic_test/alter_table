@@ -1471,7 +1471,17 @@ ALTER TABLE unique_without_index ADD COLUMN f INT UNIQUE WITHOUT INDEX
 # constraint.
 statement ok
 ALTER TABLE unique_without_index ADD COLUMN f INT;
-ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_f UNIQUE WITHOUT INDEX (f)
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_f UNIQUE WITHOUT INDEX (f);
+ALTER TABLE unique_without_index ADD CONSTRAINT my_partial_unique_f UNIQUE WITHOUT INDEX (f) WHERE f > 0
+
+# The unique constraint predicate must be valid. It cannot reference
+# non-existent columns.
+# TODO(mgartner): If we ever decide to make UNIQUE WITHOUT INDEX available
+# without the experimental setting, we should test that other types of invalid
+# predicates produce errors. There are similar tests in the partial_index
+# logictests that would be a good starting point.
+statement error column "g" does not exist
+ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
@@ -1508,17 +1518,18 @@ ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_without_index_c_key
 query TTTTB colnames
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-table_name            constraint_name             constraint_type  details                             validated
-unique_without_index  my_unique_e                 UNIQUE           UNIQUE WITHOUT INDEX (e)            true
-unique_without_index  my_unique_e2                UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID  false
-unique_without_index  my_unique_f                 UNIQUE           UNIQUE WITHOUT INDEX (f)            true
-unique_without_index  unique_a_b                  UNIQUE           UNIQUE WITHOUT INDEX (a, b)         true
-unique_without_index  unique_b                    UNIQUE           UNIQUE WITHOUT INDEX (b)            true
-unique_without_index  unique_b_1                  UNIQUE           UNIQUE WITHOUT INDEX (b)            true
-unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOUT INDEX (c)            true
-unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)            true
-unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)         true
-unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                      true
+table_name            constraint_name             constraint_type  details                                 validated
+unique_without_index  my_partial_unique_f         UNIQUE           UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE           UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                 UNIQUE           UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE           UNIQUE WITHOUT INDEX (a, b)             true
+unique_without_index  unique_b                    UNIQUE           UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_1                  UNIQUE           UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                          true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1535,16 +1546,17 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)            true
-unique_without_index  my_unique_e2                UNIQUE  UNIQUE WITHOUT INDEX (e) NOT VALID  false
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)            true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)        true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)            true
-unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)            true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)            true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)            true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)         true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                      true
+unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                UNIQUE  UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
@@ -1563,14 +1575,15 @@ ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)      true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)      true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)  true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)      true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)   true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
+unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1579,12 +1592,13 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)     true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)     true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
+unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
@@ -1603,10 +1617,11 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)  true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)  true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)  true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)            true
+unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child

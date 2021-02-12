@@ -362,3 +362,8 @@ func (u *UniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
 func (u *UniqueWithoutIndexConstraint) GetName() string {
 	return u.Name
 }
+
+// IsPartial returns true if the constraint is a partial unique constraint.
+func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
+	return u.Predicate != ""
+}

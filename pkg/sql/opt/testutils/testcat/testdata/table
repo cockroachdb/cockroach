@@ -240,7 +240,8 @@ CREATE TABLE uniq (
   m STRING,
   UNIQUE INDEX (k, j),
   UNIQUE WITHOUT INDEX (l, m),
-  UNIQUE WITHOUT INDEX (m, l)
+  UNIQUE WITHOUT INDEX (m, l),
+  UNIQUE WITHOUT INDEX (l) WHERE l > 0
 )
 ----
 
@@ -269,7 +270,9 @@ TABLE uniq
  ├── UNIQUE (i)
  ├── UNIQUE WITHOUT INDEX (j)
  ├── UNIQUE (j, k)
- └── UNIQUE WITHOUT INDEX (l, m)
+ ├── UNIQUE WITHOUT INDEX (l, m)
+ └── UNIQUE WITHOUT INDEX (l)
+      └── WHERE l > 0
 
 exec-ddl
 CREATE TABLE mutations (
