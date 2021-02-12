@@ -484,6 +484,14 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 }
 
+// ShowCreateAllTables represents a SHOW CREATE ALL TABLES statement.
+type ShowCreateAllTables struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL TABLES")
+}
+
 // ShowSyntax represents a SHOW SYNTAX statement.
 // This the most lightweight thing that can be done on a statement
 // server-side: just report the statement that was entered without
