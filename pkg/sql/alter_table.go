@@ -631,20 +631,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// the drop index codepaths aren't going to remove dependent FKs, so we
 			// need to do that here.
 			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.NoOriginFKIndexes) {
-				// We update the FK's slice in place here.
-				sliceIdx := 0
-				for i := range n.tableDesc.OutboundFKs {
-					n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
-					sliceIdx++
-					fk := &n.tableDesc.OutboundFKs[i]
+				for j := len(n.tableDesc.OutboundFKs) - 1; j >= 0; j-- {
+					if j >= len(n.tableDesc.OutboundFKs) {
+						continue
+					}
+					fk := n.tableDesc.OutboundFKs[j]
 					if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.GetID()) {
-						sliceIdx--
-						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, &fk); err != nil {
 							return err
 						}
 					}
 				}
-				n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:sliceIdx]
 			}
 
 			found := false
@@ -1365,27 +1362,24 @@ func (p *planner) tryRemoveFKBackReferences(
 		return false
 	}
 
-	// Index for updating the FK slices in place when removing FKs.
-	sliceIdx := 0
-	for i := range tableDesc.InboundFKs {
-		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
-		sliceIdx++
-		fk := &tableDesc.InboundFKs[i]
+	for i := len(tableDesc.InboundFKs) - 1; i >= 0; i-- {
+		if i >= len(tableDesc.InboundFKs) {
+			continue
+		}
+		fk := tableDesc.InboundFKs[i]
 		// The constraint being deleted could potentially be the referenced unique
 		// constraint for this fk.
 		if constraint.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) &&
 			!uniqueConstraintHasReplacementCandidate(fk.ReferencedColumnIDs) {
 			// If we found haven't found a replacement, then we check that the drop
 			// behavior is cascade.
-			if err := p.canRemoveFKBackreference(ctx, constraint.GetName(), fk, behavior); err != nil {
+			if err := p.canRemoveFKBackreference(ctx, constraint.GetName(), &fk, behavior); err != nil {
 				return err
 			}
-			sliceIdx--
-			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+			if err := p.removeFKForBackReference(ctx, tableDesc, &fk); err != nil {
 				return err
 			}
 		}
 	}
-	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 	return nil
 }

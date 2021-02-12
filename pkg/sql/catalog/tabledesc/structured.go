@@ -1696,7 +1696,6 @@ func (desc *Mutable) DropConstraint(
 					if err := removeFK(desc, detail.FK); err != nil {
 						return err
 					}
-					desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
 					return nil
 				}
 				ref.Validity = descpb.ConstraintValidity_Dropping

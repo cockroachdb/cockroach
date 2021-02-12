@@ -355,12 +355,11 @@ func (p *planner) dropIndexByName(
 	// If the we aren't at a high enough version to drop indexes on the origin
 	// side then we have to attempt to delete them.
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
-		// Index for updating the FK slices in place when removing FKs.
-		sliceIdx := 0
-		for i := range tableDesc.OutboundFKs {
-			tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
-			sliceIdx++
-			fk := &tableDesc.OutboundFKs[i]
+		for i := len(tableDesc.OutboundFKs) - 1; i >= 0; i-- {
+			if i >= len(tableDesc.OutboundFKs) {
+				continue
+			}
+			fk := tableDesc.OutboundFKs[i]
 			canReplace := func(idx *descpb.IndexDescriptor) bool {
 				return idx.IsValidOriginIndex(fk.OriginColumnIDs)
 			}
@@ -369,13 +368,11 @@ func (p *planner) dropIndexByName(
 				if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
 					return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 				}
-				sliceIdx--
-				if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+				if err := p.removeFKBackReference(ctx, tableDesc, &fk); err != nil {
 					return err
 				}
 			}
 		}
-		tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
 	}
 
 	// If this index is used on the referencing side of any FK constraints, try

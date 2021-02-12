@@ -1599,7 +1599,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 					if err != nil {
 						return err
 					}
-					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable); err != nil {
+					if err := removeFKBackReferenceFromTable(backrefTable, fk, scTable); err != nil {
 						// The function being called will return an assertion error if the
 						// backreference was not found, but it may not have been installed
 						// during the incomplete schema change, so we swallow the error.

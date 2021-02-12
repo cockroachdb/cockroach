@@ -405,7 +405,7 @@ func (sc *SchemaChanger) dropConstraints(
 						return err
 					}
 					if err := removeFKBackReferenceFromTable(
-						backrefTable, def.Name, scTable,
+						backrefTable, def, scTable,
 					); err != nil {
 						return err
 					}
@@ -1923,13 +1923,11 @@ func runSchemaChangesInTxn(
 						}
 					}
 				case descpb.ConstraintToUpdate_FOREIGN_KEY:
-					for i := range tableDesc.OutboundFKs {
-						fk := &tableDesc.OutboundFKs[i]
+					for _, fk := range tableDesc.OutboundFKs {
 						if fk.Name == t.Constraint.Name {
-							if err := planner.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+							if err := planner.removeFKBackReference(ctx, tableDesc, &fk); err != nil {
 								return err
 							}
-							tableDesc.OutboundFKs = append(tableDesc.OutboundFKs[:i], tableDesc.OutboundFKs[i+1:]...)
 							break
 						}
 					}
