@@ -342,12 +342,11 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 // expression in the form [col]->[index0]->[index1]->...->[indexN] where col is
 // a variable or expression referencing the inverted column in the inverted
 // index and each index is a constant string. The right expression must be a
-// constant JSON value that is not an object or an array.
+// constant JSON value.
 func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	evalCtx *tree.EvalContext, left *memo.FetchValExpr, right opt.ScalarExpr,
 ) inverted.Expression {
-	// The right side of the equals expression should be a constant JSON value
-	// that is not an object or array.
+	// The right side of the equals expression should be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
 		return inverted.NonInvertedColExpression{}
 	}
@@ -356,8 +355,12 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 		return inverted.NonInvertedColExpression{}
 	}
 	typ := val.JSON.Type()
-	if typ == json.ObjectJSONType || typ == json.ArrayJSONType {
-		return inverted.NonInvertedColExpression{}
+	tight := true
+
+	// When the right side is an array, the InvertedExpression generated is not
+	// tight. We must indicate it is non-tight so an additional filter is added.
+	if typ == json.ArrayJSONType || typ == json.ObjectJSONType {
+		tight = false
 	}
 
 	// Recursively traverse fetch val expressions and collect keys with which to
@@ -431,5 +434,10 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 		obj = b.Build()
 	}
 
-	return getInvertedExprForJSONOrArrayIndex(evalCtx, tree.NewDJSON(obj))
+	invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, tree.NewDJSON(obj))
+	if !tight {
+		invertedExpr.SetNotTight()
+	}
+
+	return invertedExpr
 }
