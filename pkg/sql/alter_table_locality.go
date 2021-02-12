@@ -545,13 +545,13 @@ func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfi
 	}
 
 	// Update the zone configuration.
-	if err := applyZoneConfigForMultiRegionTable(
+	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
 		*dbDesc.RegionConfig,
 		n.tableDesc,
-		applyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}

@@ -1218,7 +1218,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						)
 					}
 
-					if err := applyZoneConfigForMultiRegionTable(
+					if err := ApplyZoneConfigForMultiRegionTable(
 						ctx,
 						txn,
 						sc.execCfg,
