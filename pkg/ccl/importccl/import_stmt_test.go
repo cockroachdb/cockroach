@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -6339,4 +6340,79 @@ func putUserfile(
 	}
 
 	return tx.Commit()
+}
+
+func waitForJobResult(t *testing.T, tc *testcluster.TestCluster, id int64, expected jobs.Status) {
+	// Force newly created job to be adopted and verify its result.
+	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	testutils.SucceedsSoon(t, func() error {
+		var unused int64
+		return tc.ServerConn(0).QueryRow(
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			id, expected).Scan(&unused)
+	})
+}
+
+func TestDetachedImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	connDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+
+	importQuery := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+	importQueryDetached := importQuery + " WITH DETACHED"
+	importIntoQuery := `IMPORT INTO simple AVRO DATA ($1)`
+	importIntoQueryDetached := importIntoQuery + " WITH DETACHED"
+
+	// DETACHED import w/out transaction is okay.
+	var jobID int64
+	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+
+	sqlDB.Exec(t, "DROP table simple")
+
+	// Running import under transaction requires DETACHED option.
+	importWithoutDetached := func(txn *gosql.Tx) error {
+		return txn.QueryRow(importQuery, simpleOcf).Scan(&jobID)
+	}
+	err := crdb.ExecuteTx(ctx, connDB, nil, importWithoutDetached)
+	require.True(t,
+		testutils.IsError(err, "IMPORT cannot be used inside a transaction without DETACHED option"))
+
+	// We can execute IMPORT under transaction with detached option.
+	importWithDetached := func(txn *gosql.Tx) error {
+		return txn.QueryRow(importQueryDetached, simpleOcf).Scan(&jobID)
+	}
+	err = crdb.ExecuteTx(ctx, connDB, nil, importWithDetached)
+	require.NoError(t, err)
+	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+
+	sqlDB.Exec(t, "DROP table simple")
+
+	// Detached import should fail when the table already exists.
+	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+
+	sqlDB.Exec(t, "DROP table simple")
+
+	// Detached import into should fail when there are key collisions.
+	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
+	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
+	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
 }
