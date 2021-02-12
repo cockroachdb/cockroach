@@ -34,7 +34,7 @@ type streamIngestionFrontier struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionFrontierSpec
-	a       rowenc.DatumAlloc
+	alloc   rowenc.DatumAlloc
 
 	// input returns rows from one or more streamIngestion processors.
 	input execinfra.RowSource
@@ -109,7 +109,7 @@ func (sf *streamIngestionFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.Prod
 
 		var frontierChanged bool
 		var err error
-		if frontierChanged, err = sf.noteResolvedTimestamp(row[0]); err != nil {
+		if frontierChanged, err = sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
@@ -132,9 +132,11 @@ func (sf *streamIngestionFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.Prod
 	return nil, sf.DrainHelper()
 }
 
-func (sf *streamIngestionFrontier) noteResolvedTimestamp(d rowenc.EncDatum) (bool, error) {
+// noteResolvedTimestamps processes a batch of resolved timestamp events, and
+// returns whether the frontier has moved forward after processing the batch.
+func (sf *streamIngestionFrontier) noteResolvedTimestamps(d rowenc.EncDatum) (bool, error) {
 	var frontierChanged bool
-	if err := d.EnsureDecoded(streamIngestionResultTypes[0], &sf.a); err != nil {
+	if err := d.EnsureDecoded(streamIngestionResultTypes[0], &sf.alloc); err != nil {
 		return frontierChanged, err
 	}
 	raw, ok := d.Datum.(*tree.DBytes)
@@ -142,22 +144,28 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamp(d rowenc.EncDatum) (boo
 		return frontierChanged, errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum,
 			d.Datum)
 	}
-	var resolved jobspb.ResolvedSpan
-	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
+	var resolvedSpans jobspb.ResolvedSpans
+	if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
 		return frontierChanged, errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling resolved timestamp: %x`, raw)
 	}
 
-	// Inserting a timestamp less than the one the ingestion flow started at could
-	// potentially regress the job progress. This is not expected and thus we
-	// assert to catch such unexpected behavior.
-	if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(sf.highWaterAtStart) {
-		return frontierChanged, errors.AssertionFailedf(
-			`got a resolved timestamp %s that is less than the frontier processor start time %s`,
-			redact.Safe(resolved.Timestamp), redact.Safe(sf.highWaterAtStart))
+	for _, resolved := range resolvedSpans.ResolvedSpans {
+		// Inserting a timestamp less than the one the ingestion flow started at could
+		// potentially regress the job progress. This is not expected and thus we
+		// assert to catch such unexpected behavior.
+		if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(sf.highWaterAtStart) {
+			return frontierChanged, errors.AssertionFailedf(
+				`got a resolved timestamp %s that is less than the frontier processor start time %s`,
+				redact.Safe(resolved.Timestamp), redact.Safe(sf.highWaterAtStart))
+		}
+
+		if sf.maybeMoveFrontier(resolved.Span, resolved.Timestamp) {
+			frontierChanged = true
+		}
 	}
 
-	return sf.maybeMoveFrontier(resolved.Span, resolved.Timestamp), nil
+	return frontierChanged, nil
 }
 
 // maybeMoveFrontier updates the resolved ts for the provided span, and returns
