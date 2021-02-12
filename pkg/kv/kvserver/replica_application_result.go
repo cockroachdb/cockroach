@@ -205,9 +205,9 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error paths below
-	// The ConsultsTimestampCache condition matches the similar logic for caring
+	// The IsIntentWrite condition matches the similar logic for caring
 	// about the closed timestamp cache in applyTimestampCache().
-	if p.Request.ConsultsTimestampCache() && p.Request.WriteTimestamp().LessEq(minTS) {
+	if p.Request.IsIntentWrite() && p.Request.WriteTimestamp().LessEq(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
