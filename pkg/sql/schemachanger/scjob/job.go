@@ -79,7 +79,7 @@ var _ scexec.JobProgressTracker = (*badJobTracker)(nil)
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
 	execCtx := execCtxI.(sql.JobExecContext)
-	if err := n.job.WithTxn(nil).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := n.job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		return nil
 	}); err != nil {
 		// TODO(ajwerner): Detect transient errors and classify as retriable here or
@@ -115,8 +115,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				return err
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
-			defer n.job.WithTxn(nil)
-			return n.job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
 				pg.States = makeStates(s.After)
 				ju.UpdateProgress(md.Progress)

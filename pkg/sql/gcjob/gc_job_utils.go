@@ -117,7 +117,8 @@ func initializeProgress(
 			if err != nil {
 				return err
 			}
-			return job.SetProgress(ctx, *progress)
+			// TODO: This job update should possibly use the txn (#60690).
+			return job.SetProgress(ctx, nil /* txn */, *progress)
 		}); err != nil {
 			return err
 		}
@@ -260,11 +261,12 @@ func persistProgress(
 		if err != nil {
 			return err
 		}
-		if err := job.SetProgress(ctx, *progress); err != nil {
+		// TODO: This job update should possibly use the txn (#60690).
+		if err := job.SetProgress(ctx, nil /* txn */, *progress); err != nil {
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
-		err = job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		err = job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatus, nil
 		})
 		if err != nil {

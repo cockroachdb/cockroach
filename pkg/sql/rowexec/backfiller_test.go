@@ -136,13 +136,13 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	require.NoError(t, job.Update(ctx,
+	require.NoError(t, job.Update(ctx, nil, /* txn */
 		func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			ju.UpdateStatus(jobs.StatusRunning)
 			return nil
 		}))
 
-	err = job.SetDetails(ctx, details)
+	err = job.SetDetails(ctx, nil /* txn */, details)
 	if err != nil {
 		t.Fatal(err)
 	}
