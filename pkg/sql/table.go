@@ -183,12 +183,12 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 					MutationID: mutationID, JobID: *job.ID()})
 			}
 		}
-		if err := job.WithTxn(p.txn).SetDetails(ctx, newDetails); err != nil {
+		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
 			return err
 		}
 		if jobDesc != "" {
-			if err := job.WithTxn(p.txn).SetDescription(
-				ctx,
+			if err := job.SetDescription(
+				ctx, p.txn,
 				func(ctx context.Context, description string) (string, error) {
 					return strings.Join([]string{description, jobDesc}, ";"), nil
 				},

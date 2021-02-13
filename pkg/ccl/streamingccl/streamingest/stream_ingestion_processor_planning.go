@@ -168,7 +168,7 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 	if err != nil {
 		return err
 	}
-	return job.HighWaterProgressed(s.ctx, func(ctx context.Context, txn *kv.Txn,
+	return job.HighWaterProgressed(s.ctx, nil /* txn */, func(ctx context.Context, txn *kv.Txn,
 		details jobspb.ProgressDetails) (hlc.Timestamp, error) {
 		// Decode the row and write the ts.
 		var ingestedHighWatermark hlc.Timestamp

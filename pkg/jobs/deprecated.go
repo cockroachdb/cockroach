@@ -232,7 +232,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
-			if err := job.paused(ctx, func(context.Context, *kv.Txn) error {
+			if err := job.paused(ctx, nil /* txn */, func(context.Context, *kv.Txn) error {
 				r.unregister(*id)
 				return nil
 			}); err != nil {
@@ -244,7 +244,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 
 		if cancelRequested := status == StatusCancelRequested; cancelRequested {
-			if err := job.reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
+			if err := job.reverted(ctx, nil /* txn */, errJobCanceled, func(context.Context, *kv.Txn) error {
 				// Unregister the job in case it is running on the node.
 				// Unregister is a no-op for jobs that are not running.
 				r.unregister(*id)
@@ -262,7 +262,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 
 		// Check if job status has changed in the meanwhile.
-		currentStatus, err := job.CurrentStatus(ctx)
+		currentStatus, err := job.CurrentStatus(ctx, nil /* txn */)
 		if err != nil {
 			return err
 		}
@@ -270,7 +270,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			continue
 		}
 		// Adopt job and resume/revert it.
-		if err := job.deprecatedAdopt(ctx, payload.Lease); err != nil {
+		if err := job.deprecatedAdopt(ctx, nil /* txn */, payload.Lease); err != nil {
 			r.unregister(*id)
 			return errors.Wrap(err, "unable to acquire lease")
 		}
@@ -350,7 +350,7 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 		defer span.Finish()
 
 		// Run the actual job.
-		status, err := job.CurrentStatus(ctx)
+		status, err := job.CurrentStatus(ctx, nil /* txn */)
 		if err == nil {
 			var finalResumeError error
 			if job.Payload().FinalResumeError != nil {
@@ -360,7 +360,7 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 			if err != nil {
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
-			status, err := job.CurrentStatus(ctx)
+			status, err := job.CurrentStatus(ctx, nil /* txn */)
 			if err != nil {
 				log.Errorf(ctx, "job %d: failed querying status: %v", *job.ID(), err)
 			} else {
@@ -375,7 +375,7 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 }
 
 func (j *Job) deprecatedInsert(
-	ctx context.Context, id int64, lease *jobspb.Lease, session sqlliveness.Session,
+	ctx context.Context, txn *kv.Txn, id int64, lease *jobspb.Lease, session sqlliveness.Session,
 ) error {
 	if j.id != nil {
 		// Already created - do nothing.
@@ -384,7 +384,7 @@ func (j *Job) deprecatedInsert(
 
 	j.mu.payload.Lease = lease
 
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		// Note: although the following uses ReadTimestamp and
 		// ReadTimestamp can diverge from the value of now() throughout a
 		// transaction, this may be OK -- we merely required ModifiedMicro
@@ -452,8 +452,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
 	return nil
 }
 
-func (j *Job) deprecatedAdopt(ctx context.Context, oldLease *jobspb.Lease) error {
-	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) deprecatedAdopt(ctx context.Context, txn *kv.Txn, oldLease *jobspb.Lease) error {
+	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
 				md.Payload.Lease, oldLease)
