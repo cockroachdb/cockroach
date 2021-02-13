@@ -1227,7 +1227,7 @@ func createImportingDescriptors(
 				}
 
 				// Update the job once all descs have been prepared for ingestion.
-				err := r.job.WithTxn(txn).SetDetails(ctx, details)
+				err := r.job.SetDetails(ctx, txn, details)
 
 				return err
 			})
@@ -1464,7 +1464,7 @@ func insertStats(
 			return errors.Wrapf(err, "inserting stats from backup")
 		}
 		details.StatsInserted = true
-		if err := job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+		if err := job.SetDetails(ctx, txn, details); err != nil {
 			return errors.Wrapf(err, "updating job marking stats insertion complete")
 		}
 		return nil
@@ -1626,11 +1626,10 @@ func (r *restoreResumer) publishDescriptors(
 	details.TypeDescs = newTypes
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
-	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+	if err := r.job.SetDetails(ctx, txn, details); err != nil {
 		return newDescriptorChangeJobs, errors.Wrap(err,
 			"updating job details after publishing tables")
 	}
-	r.job.WithTxn(nil)
 
 	return newDescriptorChangeJobs, nil
 }

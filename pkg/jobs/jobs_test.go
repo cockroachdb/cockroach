@@ -222,7 +222,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					case err := <-rts.resumeCh:
 						return err
 					case <-rts.progressCh:
-						err := job.FractionProgressed(rts.ctx, jobs.FractionUpdater(0))
+						err := job.FractionProgressed(rts.ctx, nil /* txn */, jobs.FractionUpdater(0))
 						if err != nil {
 							return err
 						}
@@ -293,7 +293,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 		if expectedStatus == "" {
 			return nil
 		}
-		st, err := rts.job.CurrentStatus(rts.ctx)
+		st, err := rts.job.CurrentStatus(rts.ctx, nil /* txn */)
 		if err != nil {
 			return err
 		}
@@ -916,7 +916,7 @@ func TestJobLifecycle(t *testing.T) {
 			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.4}, {0.8, 0.8}, {1.0, 1.0},
 		}
 		for _, f := range progresses {
-			if err := woodyJob.FractionProgressed(ctx, jobs.FractionUpdater(f.actual)); err != nil {
+			if err := woodyJob.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(f.actual)); err != nil {
 				t.Fatal(err)
 			}
 			woodyExp.FractionCompleted = f.expected
@@ -926,7 +926,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.FractionProgressed(ctx, func(_ context.Context, details jobspb.ProgressDetails) float32 {
+		if err := woodyJob.FractionProgressed(ctx, nil /* txn */, func(_ context.Context, details jobspb.ProgressDetails) float32 {
 			details.(*jobspb.Progress_Restore).Restore.HighWater = roachpb.Key("mariana")
 			return 1.0
 		}); err != nil {
@@ -976,7 +976,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := buzzJob.FractionProgressed(ctx, jobs.FractionUpdater(.42)); err != nil {
+		if err := buzzJob.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(.42)); err != nil {
 			t.Fatal(err)
 		}
 		buzzExp.FractionCompleted = .42
@@ -1235,9 +1235,7 @@ func TestJobLifecycle(t *testing.T) {
 			{WallTime: 2, Logical: 0},
 		}
 		for _, ts := range highWaters {
-			if err := job.HighWaterProgressed(
-				ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) { return ts, nil },
-			); err != nil {
+			if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) { return ts, nil }); err != nil {
 				t.Fatal(err)
 			}
 			p := job.Progress()
@@ -1252,17 +1250,15 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(-0.1)); !testutils.IsError(err, "outside allowable range") {
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(-0.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.HighWaterProgressed(
-			ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
-				return hlc.Timestamp{WallTime: -1}, nil
-			},
-		); !testutils.IsError(err, "outside allowable range") {
+		if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
+			return hlc.Timestamp{WallTime: -1}, nil
+		}); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 	})
@@ -1272,11 +1268,9 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.HighWaterProgressed(
-			ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
-				return hlc.Timestamp{WallTime: 2}, errors.Errorf("boom")
-			},
-		); !testutils.IsError(err, "boom") {
+		if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
+			return hlc.Timestamp{WallTime: 2}, errors.Errorf("boom")
+		}); !testutils.IsError(err, "boom") {
 			t.Fatalf("expected 'boom' error, but got %v", err)
 		}
 	})
@@ -1289,7 +1283,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on succeeded job \(id \d+\)`,
 		) {
 			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
@@ -1301,7 +1295,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on pause-requested job`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -1313,7 +1307,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on cancel-requested job \(id \d+\)`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -1325,7 +1319,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.2)); err != nil {
+		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.2)); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Succeeded(ctx); err != nil {
@@ -1345,14 +1339,14 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
-		require.NoError(t, job.SetDetails(ctx, newDetails))
+		require.NoError(t, job.SetDetails(ctx, nil /* txn */, newDetails))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
-		require.NoError(t, job.SetDetails(ctx, newDetails))
+		require.NoError(t, job.SetDetails(ctx, nil /* txn */, newDetails))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", *job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, newDetails))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, newDetails))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
@@ -1361,7 +1355,7 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusCancelRequested, *job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, jobspb.ImportDetails{URIs: []string{"new"}}))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, jobspb.ImportDetails{URIs: []string{"new"}}))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusCancelRequested))
 	})
 
@@ -1370,13 +1364,13 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newProgress := jobspb.ImportProgress{ResumePos: []int64{42}}
 		exp.Record.Progress = newProgress
-		require.NoError(t, job.SetProgress(ctx, newProgress))
+		require.NoError(t, job.SetProgress(ctx, nil /* txn */, newProgress))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", *job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, newProgress))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, newProgress))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
@@ -1385,7 +1379,7 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusPauseRequested, *job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetProgress(ctx, jobspb.ImportProgress{ResumePos: []int64{42}}))
+		require.Error(t, job.SetProgress(ctx, nil /* txn */, jobspb.ImportProgress{ResumePos: []int64{42}}))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusPauseRequested))
 	})
 
@@ -2230,7 +2224,7 @@ func TestStartableJob(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, txn.Commit(ctx))
 		require.NoError(t, sj.Cancel(ctx))
-		status, err := sj.CurrentStatus(ctx)
+		status, err := sj.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusCancelRequested, status)
 		for _, id := range jr.CurrentlyRunningJobs() {
@@ -2306,7 +2300,7 @@ func TestStartableJob(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, *sj.ID())
 			require.NoError(t, err)
-			st, err := loaded.CurrentStatus(ctx)
+			st, err := loaded.CurrentStatus(ctx, nil /* txn */)
 			require.NoError(t, err)
 			if st != jobs.StatusSucceeded {
 				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
@@ -2664,7 +2658,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 					`UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`,
 					*j.ID())
 				assert.NoError(t, err)
-				err = j.WithTxn(nil).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				err = j.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 					return nil
 				})
 				resumed <- err

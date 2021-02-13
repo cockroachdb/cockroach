@@ -491,8 +491,8 @@ func (p *planner) initiateDropTable(
 			}
 			return err
 		}
-		if err := mutationJob.WithTxn(p.txn).Update(
-			ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := mutationJob.Update(
+			ctx, p.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				status := md.Status
 				switch status {
 				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed:

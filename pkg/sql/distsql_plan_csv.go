@@ -222,7 +222,7 @@ func DistIngest(
 
 	dsp.FinalizePlan(planCtx, p)
 
-	if err := job.FractionProgressed(ctx,
+	if err := job.FractionProgressed(ctx, nil, /* txn */
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
@@ -244,7 +244,7 @@ func DistIngest(
 	fractionProgress := make([]uint32, len(from))
 
 	updateJobProgress := func() error {
-		return job.FractionProgressed(ctx,
+		return job.FractionProgressed(ctx, nil, /* txn */
 			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				var overall float32
 				prog := details.(*jobspb.Progress_Import).Import
