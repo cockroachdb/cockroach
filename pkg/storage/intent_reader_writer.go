@@ -45,7 +45,7 @@ var SeparatedIntentsEnabled = settings.RegisterBoolSetting(
 	"storage.transaction.separated_intents.enabled",
 	"if enabled, intents will be written to a separate lock table, instead of being "+
 		"interleaved with MVCC values",
-	true,
+	false,
 )
 
 // This file defines wrappers for Reader and Writer, and functions to do the
