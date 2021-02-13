@@ -1636,7 +1636,6 @@ func TestLint(t *testing.T) {
 			// sql/colexecbase/colexecerror/error.go file.
 			"sql/col*",
 			":!sql/colexecbase/colexecerror/error.go",
-			":!sql/colflow/vectorized_panic_propagation_test.go",
 			// This exception is because execgen itself uses panics during code
 			// generation - not at execution time. The (glob,exclude) directive
 			// (see git help gitglossary) makes * behave like a normal, single dir

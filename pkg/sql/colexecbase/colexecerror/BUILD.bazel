@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "colexecerror",
@@ -10,5 +10,16 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "colexecerror_test",
+    srcs = ["error_test.go"],
+    deps = [
+        ":colexecerror",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
