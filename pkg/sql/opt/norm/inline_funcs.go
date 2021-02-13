@@ -216,37 +216,21 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 	return false
 }
 
-// IndexedVirtualColumns returns the set of column IDs in the scanPrivate's
-// table that are both virtual computed columns and key columns of a secondary
-// index.
-//
-// TODO(mgartner): Include virtual computed columns that are referenced in
-// partial index predicates.
-func (c *CustomFuncs) IndexedVirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
-	md := c.mem.Metadata()
-	tab := md.Table(scanPrivate.Table)
-	tabMeta := md.TableMeta(scanPrivate.Table)
-
-	virtualCols := tabMeta.VirtualComputedColumns()
-	if virtualCols.Empty() {
-		// Return early if there are no virtual columns to avoid unnecessarily
-		// calculating the index key columns.
-		return opt.ColSet{}
-	}
-
-	var indexCols opt.ColSet
-	for i, n := 0, tab.IndexCount(); i < n; i++ {
-		indexCols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
-	}
-
-	return virtualCols.Intersection(indexCols)
+// VirtualColumns returns the set of columns in the scanPrivate's table that are
+// virtual computed columns.
+func (c *CustomFuncs) VirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
+	tabMeta := c.mem.Metadata().TableMeta(scanPrivate.Table)
+	return tabMeta.VirtualComputedColumns()
 }
 
 // TryInlineSelectVirtualColumns is used by the InlineSelectVirtualColumns rule
 // to find filters on virtual computed columns that can be pushed below the
 // Project that produces the virtual column. The filter is pushed-down by
-// inlining the virtual column expression. Only the columns in
-// indexedVirtualColumns are eligible for inlining.
+// inlining the virtual column expression. Only the columns in virtualColumns
+// are eligible for inlining. It is useful to inline filters with virtual
+// columns in order to generate expressions that utilize indexes on virtual
+// columns during exploration. See the InlineSelectVirtualColumns rule for more
+// details.
 //
 // If successful, a pair of filters is returned; the first containing filters in
 // which virtual columns have been inlined, and the second containing filters
@@ -263,24 +247,23 @@ func (c *CustomFuncs) IndexedVirtualColumns(scanPrivate *memo.ScanPrivate) opt.C
 //   CREATE TABLE t (
 //     a INT,
 //     b INT,
-//     v INT AS (abs(a)),
-//     w INT AS (abs(b)),
-//     INDEX (v)
+//     v INT AS (abs(a))
 //   )
 //
-//   SELECT * FROM t WHERE v = 5 AND w = 10
+//   SELECT v, w FROM (
+//     SELECT v, abs(b) AS w FROM t
+//   ) WHERE v = 5 AND w = 10
 //
 // The (v = 5) and (w = 10) filters are returned in separate filters. In the
-// first, v is inlined because it is indexed, so the filter is transformed to
-// (abs(a) = 5). This filter is no longer dependent on the projection of v, so
-// it can be pushed below the Project. The w variable is not indexed, so the
-// (w = 10) filter is unchanged and remains above the Project.
-//
-// See the InlineSelectVirtualColumns rule for more details.
+// first v is inlined because it is a virtual column, and the filter is
+// transformed to (abs(a) = 5). This filter is no longer dependent on the
+// projection of v, so it can be pushed below the Project. The w variable is not
+// a virtual column, so the (w = 10) filter is unchanged and remains above the
+// Project.
 func (c *CustomFuncs) TryInlineSelectVirtualColumns(
-	filters memo.FiltersExpr, projections memo.ProjectionsExpr, indexedVirtualColumns opt.ColSet,
+	filters memo.FiltersExpr, projections memo.ProjectionsExpr, virtualColumns opt.ColSet,
 ) InlinedVirtualColumnFiltersPair {
-	// Collect the projections for the indexed virtual columns.
+	// Collect the projections for the virtual columns.
 	var inlinableCols opt.ColSet
 	var inlinableProjections memo.ProjectionsExpr
 	for i := range projections {
@@ -294,7 +277,7 @@ func (c *CustomFuncs) TryInlineSelectVirtualColumns(
 			continue
 		}
 
-		if indexedVirtualColumns.Contains(col) {
+		if virtualColumns.Contains(col) {
 			// Initialize inlinableProjections lazily.
 			if inlinableProjections == nil {
 				inlinableProjections = make(memo.ProjectionsExpr, 0, len(projections)-i)
@@ -319,7 +302,7 @@ func (c *CustomFuncs) TryInlineSelectVirtualColumns(
 		item := &filters[i]
 
 		// Do not inline a filter if it has a correlated subquery or it does not
-		// reference an inlinable virtual column.
+		// reference a virtual column.
 		if item.ScalarProps().HasCorrelatedSubquery || !item.ScalarProps().OuterCols.Intersects(inlinableCols) {
 			continue
 		}
@@ -375,9 +358,9 @@ func (c *CustomFuncs) NotInlinedFilters(pair InlinedVirtualColumnFiltersPair) me
 	return pair.notInlined
 }
 
-// InlineSelectVirtualColumnsSucceeded returns true if the pair is not nil,
-// indicating that InlineSelectVirtualColumns successfully inlined virtual
-// columns into some of the filters.
+// InlineSelectVirtualColumnsSucceeded returns true if the inlined filters in
+// the pair are not empty, indicating that InlineSelectVirtualColumns
+// successfully inlined virtual columns into some of the filters.
 func (c *CustomFuncs) InlineSelectVirtualColumnsSucceeded(
 	pair InlinedVirtualColumnFiltersPair,
 ) bool {
