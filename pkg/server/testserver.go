@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -132,11 +131,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings()
-		enabledSeparated := rand.Intn(2) == 0
-		log.Infof(context.Background(),
-			"test Config is randomly setting enabledSeparated: %t",
-			enabledSeparated)
-		storage.SeparatedIntentsEnabled.Override(&st.SV, enabledSeparated)
+		// TODO(sumeer): re-introduce this randomization.
+		// enabledSeparated := rand.Intn(2) == 0
+		// log.Infof(context.Background(),
+		//	"test Config is randomly setting enabledSeparated: %t",
+		//	enabledSeparated)
+		// storage.SeparatedIntentsEnabled.Override(&st.SV, enabledSeparated)
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
