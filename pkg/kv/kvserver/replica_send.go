@@ -695,3 +695,50 @@ func (r *Replica) collectSpans(
 
 	return latchSpans, lockSpans, nil
 }
+
+// endCmds holds necessary information to end a batch after command processing,
+// either after a write request has achieved consensus and been applied to Raft
+// or after a read-only request has finished evaluation.
+type endCmds struct {
+	repl *Replica
+	g    *concurrency.Guard
+	st   kvserverpb.LeaseStatus
+}
+
+// move moves the endCmds into the return value, clearing and making a call to
+// done on the receiver a no-op.
+func (ec *endCmds) move() endCmds {
+	res := *ec
+	*ec = endCmds{}
+	return res
+}
+
+// done releases the latches acquired by the command and updates the timestamp
+// cache using the final timestamp of each command.
+//
+// No-op if the receiver has been zeroed out by a call to move. Idempotent and
+// is safe to call more than once.
+func (ec *endCmds) done(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) {
+	if ec.repl == nil {
+		// The endCmds were cleared.
+		return
+	}
+	defer ec.move() // clear
+
+	// Update the timestamp cache. Each request within the batch is considered
+	// in turn; only those marked as affecting the cache are processed. However,
+	// only do so if the request is consistent and was operating on the
+	// leaseholder under a valid range lease.
+	if ba.ReadConsistency == roachpb.CONSISTENT && ec.st.State == kvserverpb.LeaseState_VALID {
+		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
+	}
+
+	// Release the latches acquired by the request and exit lock wait-queues.
+	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
+	// the Raft proposal has assumed responsibility for the request.
+	if ec.g != nil {
+		ec.repl.concMgr.FinishReq(ec.g)
+	}
+}

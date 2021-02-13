@@ -1229,8 +1229,11 @@ func (r *Replica) checkExecutionCanProceed(
 		}
 	} else {
 		// If the request is a write or a consistent read, it requires the
-		// replica serving it to hold the range lease.
-		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.Timestamp)
+		// replica serving it to hold the range lease. We pass the write
+		// timestamp of the request because this is the maximum timestamp that
+		// the request will operate at, ignoring the uncertainty interval, which
+		// is already accounted for in LeaseStatus's stasis period handling.
+		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
 		if err != nil {
 			// If not, can we serve this request on a follower?
 			// TODO(nvanbenschoten): once we make this check cheaper
@@ -1469,50 +1472,6 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		// written a tombstone but we will have a replica ID that will exceed the
 		// split replica ID.
 		r.mu.replicaID > rightDesc.ReplicaID
-}
-
-// TODO(nvanbenschoten): move endCmds to replica_send.go.
-
-// endCmds holds necessary information to end a batch after Raft
-// command processing.
-type endCmds struct {
-	repl *Replica
-	g    *concurrency.Guard
-}
-
-// move moves the endCmds into the return value, clearing and making
-// a call to done on the receiver a no-op.
-func (ec *endCmds) move() endCmds {
-	res := *ec
-	*ec = endCmds{}
-	return res
-}
-
-// done releases the latches acquired by the command and updates
-// the timestamp cache using the final timestamp of each command.
-//
-// No-op if the receiver has been zeroed out by a call to move.
-// Idempotent and is safe to call more than once.
-func (ec *endCmds) done(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) {
-	if ec.repl == nil {
-		// The endCmds were cleared.
-		return
-	}
-	defer ec.move() // clear
-
-	// Update the timestamp cache if the request is not being re-evaluated. Each
-	// request is considered in turn; only those marked as affecting the cache are
-	// processed.
-	ec.repl.updateTimestampCache(ctx, ba, br, pErr)
-
-	// Release the latches acquired by the request and exit lock wait-queues.
-	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
-	// the Raft proposal has assumed responsibility for the request.
-	if ec.g != nil {
-		ec.repl.concMgr.FinishReq(ec.g)
-	}
 }
 
 // maybeWatchForMerge checks whether a merge of this replica into its left

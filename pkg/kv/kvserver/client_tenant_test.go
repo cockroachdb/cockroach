@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -50,6 +51,7 @@ import (
 // TODO(ajwerner): add a test for 2).
 func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 
@@ -140,6 +142,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 // and report the correct metrics.
 func TestTenantRateLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test utilizes manual time to make the rate-limiting calculations more
 	// obvious. This timesource is not used inside the actual database.

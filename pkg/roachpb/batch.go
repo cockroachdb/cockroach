@@ -25,6 +25,19 @@ import (
 
 //go:generate go run -tags gen-batch gen_batch.go
 
+// WriteTimestamp returns the timestamps at which this request is writing. For
+// non-transactional requests, this is the same as the read timestamp. For
+// transactional requests, the write timestamp can be higher until commit time.
+//
+// This should only be called after SetActiveTimestamp().
+func (h Header) WriteTimestamp() hlc.Timestamp {
+	ts := h.Timestamp
+	if h.Txn != nil {
+		ts.Forward(h.Txn.WriteTimestamp)
+	}
+	return ts
+}
+
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts
@@ -70,19 +83,6 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 		case *RevertRangeRequest:
 			ts.Backward(t.TargetTime)
 		}
-	}
-	return ts
-}
-
-// WriteTimestamp returns the timestamps at which this request is writing. For
-// non-transactional requests, this is the same as the read timestamp. For
-// transactional requests, the write timestamp can be higher until commit time.
-//
-// This should only be called after SetActiveTimestamp().
-func (ba *BatchRequest) WriteTimestamp() hlc.Timestamp {
-	ts := ba.Timestamp
-	if ba.Txn != nil {
-		ts.Forward(ba.Txn.WriteTimestamp)
 	}
 	return ts
 }

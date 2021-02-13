@@ -187,7 +187,7 @@ func EndTxn(
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
 	if args.Commit && args.Poison {
-		return result.Result{}, errors.Errorf("cannot poison during a committing EndTxn request")
+		return result.Result{}, errors.AssertionFailedf("cannot poison during a committing EndTxn request")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -1089,11 +1089,11 @@ func mergeTrigger(
 ) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
-		return result.Result{}, errors.Errorf("LHS range start keys do not match: %s != %s",
+		return result.Result{}, errors.AssertionFailedf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
-		return result.Result{}, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+		return result.Result{}, errors.AssertionFailedf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 

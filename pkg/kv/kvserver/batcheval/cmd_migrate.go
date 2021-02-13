@@ -71,7 +71,7 @@ func Migrate(
 
 	fn, ok := migrationRegistry[migrationVersion]
 	if !ok {
-		return result.Result{}, errors.Newf("migration for %s not found", migrationVersion)
+		return result.Result{}, errors.AssertionFailedf("migration for %s not found", migrationVersion)
 	}
 	pd, err := fn(ctx, readWriter, cArgs)
 	if err != nil {

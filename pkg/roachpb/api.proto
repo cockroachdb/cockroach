@@ -1015,11 +1015,8 @@ message QueryIntentRequest {
   // intent is a match or not is defined as whether an intent exists that could
   // be committed by the provided transaction. If an intent is found at the
   // specified key, the intent is only considered a match if it has the same ID,
-  // the same epoch, and a provisional commit timestamp that is equal to or less
-  // than that in the provided transaction. The TxnMeta's provisional commit
-  // timestamp is forwarded by the provisional commit timestamp of the request
-  // header transaction if the transactions are the same (i.e. a transaction is
-  // querying its own intent after successfully having refreshed).
+  // the same epoch, and a write timestamp that is equal to or less than that in
+  // the provided transaction.
   //
   // Additionally, the intent is only considered a match if its sequence number
   // is equal to or greater than the expected txn's sequence number. The
@@ -1029,6 +1026,17 @@ message QueryIntentRequest {
   // successfully written an intent at a larger sequence number then it must
   // have succeeeded in writing an intent at the smaller sequence number as
   // well.
+  //
+  // QueryIntentRequests may be issued in non-transactional BatchRequests or in
+  // transactional BatchRequests. If issued inside of a transaction, the TxnMeta
+  // must be a reference to the same transaction as the batch's transaction, or
+  // the request will be rejected. In other words, a transaction can only query
+  // its own intents. In these cases where the BatchRequest is transactional,
+  // the TxnMeta's write timestamp is forwarded by the write timestamp of the
+  // request header transaction for purposes of determining whether a matching
+  // intent is found or not (see condition above). This is useful to avoid the
+  // need to update each QueryIntentRequest when a transaction is querying its
+  // own intent after having successfully refreshed.
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 
   // If true, return an IntentMissingError if a matching intent is not found.
