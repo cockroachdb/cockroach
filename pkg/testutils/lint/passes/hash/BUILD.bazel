@@ -15,6 +15,7 @@ go_test(
     name = "hash_test",
     size = "small",
     srcs = ["hash_test.go"],
+    data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
         ":hash",

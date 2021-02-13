@@ -18,6 +18,7 @@ go_test(
     name = "returnerrcheck_test",
     size = "small",
     srcs = ["returnerrcheck_test.go"],
+    data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
         ":returnerrcheck",
