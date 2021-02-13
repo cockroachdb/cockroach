@@ -30,7 +30,6 @@ go_test(
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/testutils",
-        "//pkg/testutils/lint/passes/fmtsafe/testdata/src/github.com/cockroachdb/errors",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/ctxgroup",

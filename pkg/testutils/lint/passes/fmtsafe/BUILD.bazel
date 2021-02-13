@@ -22,6 +22,7 @@ go_test(
     name = "fmtsafe_test",
     size = "small",
     srcs = ["fmtsafe_test.go"],
+    data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
         ":fmtsafe",

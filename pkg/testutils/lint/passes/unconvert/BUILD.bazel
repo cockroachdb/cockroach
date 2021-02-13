@@ -17,6 +17,7 @@ go_test(
     name = "unconvert_test",
     size = "small",
     srcs = ["unconvert_test.go"],
+    data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
         ":unconvert",

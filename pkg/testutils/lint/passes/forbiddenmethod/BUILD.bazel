@@ -20,6 +20,7 @@ go_test(
     name = "descriptormarshal_test",
     size = "small",
     srcs = ["descriptormarshal_test.go"],
+    data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
         ":descriptormarshal",
@@ -31,6 +32,7 @@ go_test(
 go_test(
     name = "forbiddenmethod_test",
     srcs = ["descriptormarshal_test.go"],
+    data = glob(["testdata/**"]),
     deps = [
         ":descriptormarshal",
         "//pkg/testutils/skip",
