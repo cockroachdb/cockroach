@@ -284,11 +284,13 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (
 		buffers := make([]*memory.Buffer, s.numBuffers[fieldIdx])
 		for i := 0; i < s.numBuffers[fieldIdx]; i++ {
 			header.Buffers(&buf, bufferIdx)
-			bufStart := buf.Offset()
-			bufEnd := bufStart + buf.Length()
-			// We need to cap the slice so that bufData's capacity doesn't
-			// extend into the data of the next buffer.
-			bufData := bodyBytes[bufStart:bufEnd:bufEnd]
+			bufData := bodyBytes[buf.Offset() : buf.Offset()+buf.Length()]
+			if i < len(buffers)-1 {
+				// We need to cap the slice so that bufData's capacity doesn't
+				// extend into the data of the next buffer if this buffer is not
+				// the last one (meaning there is that next buffer).
+				bufData = bufData[:buf.Length():buf.Length()]
+			}
 			buffers[i] = memory.NewBufferBytes(bufData)
 			bufferIdx++
 		}
