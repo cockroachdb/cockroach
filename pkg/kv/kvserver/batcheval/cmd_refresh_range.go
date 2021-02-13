@@ -33,7 +33,7 @@ func RefreshRange(
 	h := cArgs.Header
 
 	if h.Txn == nil {
-		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
+		return result.Result{}, errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 
 	// We're going to refresh up to the transaction's read timestamp.

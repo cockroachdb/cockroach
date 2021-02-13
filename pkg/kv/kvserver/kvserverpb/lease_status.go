@@ -10,7 +10,10 @@
 
 package kvserverpb
 
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // IsValid returns whether the lease was valid at the time that the
 // lease status was computed.
@@ -21,4 +24,16 @@ func (st LeaseStatus) IsValid() bool {
 // OwnedBy returns whether the lease is owned by the given store.
 func (st LeaseStatus) OwnedBy(storeID roachpb.StoreID) bool {
 	return st.Lease.OwnedBy(storeID)
+}
+
+// Expiration returns the expiration of the lease.
+func (st LeaseStatus) Expiration() hlc.Timestamp {
+	switch st.Lease.Type() {
+	case roachpb.LeaseExpiration:
+		return st.Lease.GetExpiration()
+	case roachpb.LeaseEpoch:
+		return st.Liveness.Expiration.ToTimestamp()
+	default:
+		panic("unexpected")
+	}
 }

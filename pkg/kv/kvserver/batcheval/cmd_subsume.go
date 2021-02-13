@@ -77,7 +77,7 @@ func Subsume(
 	desc := cArgs.EvalCtx.Desc()
 	if !bytes.Equal(desc.StartKey, args.RightDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, args.RightDesc.EndKey) {
-		return result.Result{}, errors.Errorf("RHS range bounds do not match: %s != %s",
+		return result.Result{}, errors.AssertionFailedf("RHS range bounds do not match: %s != %s",
 			args.RightDesc, desc)
 	}
 
@@ -85,7 +85,7 @@ func Subsume(
 	// of operations in the AdminMerge transaction should make it impossible for
 	// these ranges to be nonadjacent, but double check.
 	if !bytes.Equal(args.LeftDesc.EndKey, desc.StartKey) {
-		return result.Result{}, errors.Errorf("ranges are not adjacent: %s != %s",
+		return result.Result{}, errors.AssertionFailedf("ranges are not adjacent: %s != %s",
 			args.LeftDesc.EndKey, desc.StartKey)
 	}
 
@@ -97,13 +97,13 @@ func Subsume(
 	if err != nil {
 		return result.Result{}, errors.Errorf("fetching local range descriptor: %s", err)
 	} else if intent == nil {
-		return result.Result{}, errors.New("range missing intent on its local descriptor")
+		return result.Result{}, errors.AssertionFailedf("range missing intent on its local descriptor")
 	}
 	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, cArgs.Header.Timestamp, intent.Txn)
 	if err != nil {
 		return result.Result{}, errors.Errorf("fetching local range descriptor as txn: %s", err)
 	} else if val != nil {
-		return result.Result{}, errors.New("non-deletion intent on local range descriptor")
+		return result.Result{}, errors.AssertionFailedf("non-deletion intent on local range descriptor")
 	}
 
 	// We prevent followers of the RHS from being able to serve follower reads on
