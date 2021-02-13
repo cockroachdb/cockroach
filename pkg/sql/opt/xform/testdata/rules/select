@@ -124,8 +124,10 @@ CREATE TABLE virtual (
     c INT AS (b + 10) VIRTUAL,
     s STRING,
     lower_s STRING AS (lower(s)) VIRTUAL,
+    upper_s STRING AS (upper(s)) VIRTUAL,
     INDEX (a) WHERE c IN (10, 20, 30),
-    INDEX (lower_s)
+    INDEX (lower_s),
+    INDEX (a) WHERE upper_s = 'FOO'
 )
 ----
 
@@ -367,11 +369,15 @@ project
       │    ├── computed column expressions
       │    │    ├── c:4
       │    │    │    └── b:3 + 10
-      │    │    └── lower_s:6
-      │    │         └── lower(s:5)
+      │    │    ├── lower_s:6
+      │    │    │    └── lower(s:5)
+      │    │    └── upper_s:7
+      │    │         └── upper(s:5)
       │    ├── partial index predicates
+      │    │    ├── secondary: filters
+      │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
       │    │    └── secondary: filters
-      │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
+      │    │         └── upper(s:5) = 'FOO' [outer=(5), immutable]
       │    ├── key: (1)
       │    └── fd: (1)-->(3)
       └── filters
@@ -1711,16 +1717,35 @@ project
       │    ├── computed column expressions
       │    │    ├── c:4
       │    │    │    └── b:3 + 10
-      │    │    └── lower_s:6
-      │    │         └── lower(s:5)
+      │    │    ├── lower_s:6
+      │    │    │    └── lower(s:5)
+      │    │    └── upper_s:7
+      │    │         └── upper(s:5)
       │    ├── partial index predicates
+      │    │    ├── secondary: filters
+      │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
       │    │    └── secondary: filters
-      │    │         └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
+      │    │         └── upper(s:5) = 'FOO' [outer=(5), immutable]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3)
       └── filters
            ├── (a:2 > 10) AND (a:2 < 20) [outer=(2), constraints=(/2: [/11 - /19]; tight)]
            └── b:3 = 10 [outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+
+# Test that we can constrain a partial index with a virtual column in the
+# predicate.
+opt expect=GenerateConstrainedScans
+SELECT k FROM virtual WHERE a > 1 AND a < 10 AND upper_s = 'FOO'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan virtual@secondary,partial
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/1: [/2 - /9]
+      ├── key: (1)
+      └── fd: (1)-->(2)
 
 # Regression test for #55387. GenerateConstrainedScans should not reduce the
 # input filters when proving partial index implication.
