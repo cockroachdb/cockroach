@@ -377,7 +377,8 @@ type replicaAppBatch struct {
 	// updated in-place.
 	stats enginepb.MVCCStats
 	// maxTS is the maximum clock timestamp that any command that was staged in
-	// this batch was evaluated at.
+	// this batch was evaluated at. Writes at synthetic timestamps are not
+	// registered here.
 	maxTS hlc.ClockTimestamp
 	// migrateToAppliedStateKey tracks whether any command in the batch
 	// triggered a migration to the replica applied state key. If so, this
