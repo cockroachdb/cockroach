@@ -564,12 +564,6 @@ func (r *Replica) AdminMerge(
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
-		// Observe the commit timestamp to force a client-side retry. See the
-		// comment on the retry loop after this closure for details.
-		//
-		// TODO(benesch): expose a proper API for preventing the fast path.
-		_ = txn.CommitTimestamp()
-
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
 		// transaction to deadlock. Just turn pipelining off; the structure of the
@@ -708,6 +702,18 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
+		// Refresh the transaction so that the transaction won't try to refresh
+		// its reads on the RHS after it is frozen.
+		if err := txn.ManualRefresh(ctx); err != nil {
+			return err
+		}
+
+		// Freeze the commit timestamp of the transaction to prevent future pushes
+		// due to high-priority reads from other transactions. Any attempt to
+		// refresh reads on the RHS would result in a stalled merge because the
+		// RHS will be frozen after the Subsume is sent.
+		_ = txn.CommitTimestamp()
+
 		// Intents have been placed, so the merge is now in its critical phase. Get
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
@@ -761,8 +767,10 @@ func (r *Replica) AdminMerge(
 	// we'll unlock the right-hand range, giving the next, fresh transaction a
 	// chance to succeed.
 	//
-	// Note that client.DB.Txn performs retries using the same transaction, so we
-	// have to use our own retry loop.
+	// A second reason to eschew kv.DB.Txn() is that the API to disable	pipelining
+	// is finicky and only allows disabling pipelining before any operations have
+	// been sent, even in prior epochs. Calling DisablePipelining() on a restarted
+	// transaction yields an error.
 	for {
 		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
