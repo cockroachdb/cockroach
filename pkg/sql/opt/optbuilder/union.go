@@ -37,7 +37,7 @@ func (b *Builder) buildUnionClause(
 }
 
 func (b *Builder) buildSetOp(
-	typ tree.UnionType, all bool, inScope, leftScope, rightScope *scope,
+	unionType tree.UnionType, all bool, inScope, leftScope, rightScope *scope,
 ) (outScope *scope) {
 	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()
@@ -45,33 +45,22 @@ func (b *Builder) buildSetOp(
 
 	outScope = inScope.push()
 
-	// propagateTypesLeft/propagateTypesRight indicate whether we need to wrap
-	// the left/right side in a projection to cast some of the columns to the
-	// correct type.
-	// For example:
-	//   SELECT NULL UNION SELECT 1
-	// The type of NULL is unknown, and the type of 1 is int. We need to
-	// wrap the left side in a project operation with a Cast expression so the
-	// output column will have the correct type.
-	propagateTypesLeft, propagateTypesRight := b.checkTypesMatch(
-		leftScope, rightScope,
-		true, /* tolerateUnknownLeft */
-		true, /* tolerateUnknownRight */
-		typ.String(),
+	setOpTypes, leftCastsNeeded, rightCastsNeeded := b.typeCheckSetOp(
+		leftScope, rightScope, unionType.String(),
 	)
 
-	if propagateTypesLeft {
-		leftScope = b.propagateTypes(leftScope /* dst */, rightScope /* src */)
+	if leftCastsNeeded {
+		leftScope = b.addCasts(leftScope /* dst */, setOpTypes)
 	}
-	if propagateTypesRight {
-		rightScope = b.propagateTypes(rightScope /* dst */, leftScope /* src */)
+	if rightCastsNeeded {
+		rightScope = b.addCasts(rightScope /* dst */, setOpTypes)
 	}
 
 	// For UNION, we have to synthesize new output columns (because they contain
 	// values from both the left and right relations). This is not necessary for
 	// INTERSECT or EXCEPT, since these operations are basically filters on the
 	// left relation.
-	if typ == tree.UnionOp {
+	if unionType == tree.UnionOp {
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 		for i := range leftScope.cols {
 			c := &leftScope.cols[i]
@@ -92,7 +81,7 @@ func (b *Builder) buildSetOp(
 	private := memo.SetPrivate{LeftCols: leftCols, RightCols: rightCols, OutCols: newCols}
 
 	if all {
-		switch typ {
+		switch unionType {
 		case tree.UnionOp:
 			outScope.expr = b.factory.ConstructUnionAll(left, right, &private)
 		case tree.IntersectOp:
@@ -101,7 +90,7 @@ func (b *Builder) buildSetOp(
 			outScope.expr = b.factory.ConstructExceptAll(left, right, &private)
 		}
 	} else {
-		switch typ {
+		switch unionType {
 		case tree.UnionOp:
 			outScope.expr = b.factory.ConstructUnion(left, right, &private)
 		case tree.IntersectOp:
@@ -114,25 +103,17 @@ func (b *Builder) buildSetOp(
 	return outScope
 }
 
-// checkTypesMatch is used when the columns must match between two scopes (e.g.
-// for a UNION). Throws an error if the scopes don't have the same number of
-// columns, or when column types don't match 1-1, except:
-//  - if tolerateUnknownLeft is set and the left column has Unknown type while
-//    the right has a known type (in this case it returns propagateToLeft=true).
-//  - if tolerateUnknownRight is set and the right column has Unknown type while
-//    the right has a known type (in this case it returns propagateToRight=true).
+// typeCheckSetOp cross-checks the types between the left and right sides of a
+// set operation and determines the output types. Either side (or both) might
+// need casts (as indicated in the return values).
 //
-// clauseTag is used only in error messages.
+// Throws an error if the scopes don't have the same number of columns, or when
+// column types don't match 1-1 or can't be cast to a single output type. The
+// error messages use clauseTag.
 //
-// TODO(dan): This currently checks whether the types are exactly the same,
-// but Postgres is more lenient:
-// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-func (b *Builder) checkTypesMatch(
-	leftScope, rightScope *scope,
-	tolerateUnknownLeft bool,
-	tolerateUnknownRight bool,
-	clauseTag string,
-) (propagateToLeft, propagateToRight bool) {
+func (b *Builder) typeCheckSetOp(
+	leftScope, rightScope *scope, clauseTag string,
+) (setOpTypes []*types.T, leftCastsNeeded, rightCastsNeeded bool) {
 	if len(leftScope.cols) != len(rightScope.cols) {
 		panic(pgerror.Newf(
 			pgcode.Syntax,
@@ -141,38 +122,79 @@ func (b *Builder) checkTypesMatch(
 		))
 	}
 
+	setOpTypes = make([]*types.T, len(leftScope.cols))
 	for i := range leftScope.cols {
 		l := &leftScope.cols[i]
 		r := &rightScope.cols[i]
 
-		if l.typ.Equivalent(r.typ) {
-			continue
-		}
-
-		// Note that Unknown types are equivalent so at this point at most one of
-		// the types can be Unknown.
-		if l.typ.Family() == types.UnknownFamily && tolerateUnknownLeft {
-			propagateToLeft = true
-			continue
-		}
-		if r.typ.Family() == types.UnknownFamily && tolerateUnknownRight {
-			propagateToRight = true
-			continue
-		}
-
-		panic(pgerror.Newf(
-			pgcode.DatatypeMismatch,
-			"%v types %s and %s cannot be matched", clauseTag, l.typ, r.typ,
-		))
+		typ := determineUnionType(l.typ, r.typ, clauseTag)
+		setOpTypes[i] = typ
+		leftCastsNeeded = leftCastsNeeded || !l.typ.Identical(typ)
+		rightCastsNeeded = rightCastsNeeded || !r.typ.Identical(typ)
 	}
-	return propagateToLeft, propagateToRight
+	return setOpTypes, leftCastsNeeded, rightCastsNeeded
 }
 
-// propagateTypes propagates the types of the source columns to the destination
-// columns by wrapping the destination in a Project operation. The Project
-// operation passes through columns that already have the correct type, and
-// creates cast expressions for those that don't.
-func (b *Builder) propagateTypes(dst, src *scope) *scope {
+// determineUnionType determines the resulting type of a set operation on a
+// column with the given left and right types.
+//
+// We allow implicit up-casts between types of the same numeric family with
+// different widths; between int and float; and between int/float and decimal.
+//
+// Throws an error if we don't support a set operation between the two types.
+func determineUnionType(left, right *types.T, clauseTag string) *types.T {
+	if left.Identical(right) {
+		return left
+	}
+
+	if left.Equivalent(right) {
+		// Do a best-effort attempt to determine which type is "larger".
+		if left.Width() > right.Width() {
+			return left
+		}
+		if left.Width() < right.Width() {
+			return right
+		}
+		// In other cases, use the left type.
+		return left
+	}
+	leftFam, rightFam := left.Family(), right.Family()
+
+	if rightFam == types.UnknownFamily {
+		return left
+	}
+	if leftFam == types.UnknownFamily {
+		return right
+	}
+
+	// Allow implicit upcast from int to float. Converting an int to float can be
+	// lossy (especially INT8 to FLOAT4), but this is what Postgres does.
+	if leftFam == types.FloatFamily && rightFam == types.IntFamily {
+		return left
+	}
+	if leftFam == types.IntFamily && rightFam == types.FloatFamily {
+		return right
+	}
+
+	// Allow implicit upcasts to decimal.
+	if leftFam == types.DecimalFamily && (rightFam == types.IntFamily || rightFam == types.FloatFamily) {
+		return left
+	}
+	if (leftFam == types.IntFamily || leftFam == types.FloatFamily) && rightFam == types.DecimalFamily {
+		return right
+	}
+
+	// TODO(radu): Postgres has more encompassing rules:
+	// http://www.postgresql.org/docs/12/static/typeconv-union-case.html
+	panic(pgerror.Newf(
+		pgcode.DatatypeMismatch,
+		"%v types %s and %s cannot be matched", clauseTag, left, right,
+	))
+}
+
+// addCasts adds a projection to a scope, adding casts as necessary so that the
+// resulting columns have the given types.
+func (b *Builder) addCasts(dst *scope, outTypes []*types.T) *scope {
 	expr := dst.expr.(memo.RelExpr)
 	dstCols := dst.cols
 
@@ -180,12 +202,10 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 	dst.cols = make([]scopeColumn, 0, len(dstCols))
 
 	for i := 0; i < len(dstCols); i++ {
-		dstType := dstCols[i].typ
-		srcType := src.cols[i].typ
-		if dstType.Family() == types.UnknownFamily && srcType.Family() != types.UnknownFamily {
+		if !dstCols[i].typ.Identical(outTypes[i]) {
 			// Create a new column which casts the old column to the correct type.
-			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), srcType)
-			b.synthesizeColumn(dst, string(dstCols[i].name), srcType, nil /* expr */, castExpr)
+			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), outTypes[i])
+			b.synthesizeColumn(dst, string(dstCols[i].name), outTypes[i], nil /* expr */, castExpr)
 		} else {
 			// The column is already the correct type, so add it as a passthrough
 			// column.
