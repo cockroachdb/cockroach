@@ -1298,6 +1298,7 @@ func CreatePartitioning(
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
 ) (descpb.IndexDescriptor, error) {
 	if partBy == nil {
 		if indexDesc.Partitioning.NumImplicitColumns > 0 {
@@ -1312,7 +1313,7 @@ func CreatePartitioning(
 		return indexDesc, nil
 	}
 	return CreatePartitioningCCL(
-		ctx, st, evalCtx, tableDesc, indexDesc, partBy, allowedNewColumnNames,
+		ctx, st, evalCtx, tableDesc, indexDesc, partBy, allowedNewColumnNames, allowImplicitPartitioning,
 	)
 }
 
@@ -1326,6 +1327,7 @@ var CreatePartitioningCCL = func(
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
 ) (descpb.IndexDescriptor, error) {
 	return descpb.IndexDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
 		"creating or manipulating partitions requires a CCL binary"))
@@ -1501,18 +1503,6 @@ func NewTableDesc(
 	var partitionAllBy *tree.PartitionBy
 	primaryIndexColumnSet := make(map[string]struct{})
 	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
-		// TODO(#59629): consider decoupling implicit column partitioning from the
-		// REGIONAL BY ROW experimental flag.
-		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
-			return nil, errors.WithHint(
-				pgerror.New(
-					pgcode.FeatureNotSupported,
-					"REGIONAL BY ROW is currently experimental",
-				),
-				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
-			)
-		}
-
 		// Check the table is multi-region enabled.
 		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
 		if err != nil {
@@ -1648,6 +1638,9 @@ func NewTableDesc(
 		}
 	}
 
+	allowImplicitPartitioning := (sessionData != nil && sessionData.ImplicitColumnPartitioningEnabled) ||
+		(locality != nil && locality.LocalityLevel == tree.LocalityLevelRow)
+
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			// NewTableDesc is called sometimes with a nil SemaCtx (for example
@@ -1752,6 +1745,7 @@ func NewTableDesc(
 						*idx,
 						partitionAllBy,
 						nil, /* allowedNewColumnNames */
+						allowImplicitPartitioning,
 					)
 					if err != nil {
 						return nil, err
@@ -1899,6 +1893,7 @@ func NewTableDesc(
 						idx,
 						partitionBy,
 						nil, /* allowedNewColumnNames */
+						allowImplicitPartitioning,
 					)
 					if err != nil {
 						return nil, err
@@ -1974,6 +1969,7 @@ func NewTableDesc(
 						idx,
 						partitionBy,
 						nil, /* allowedNewColumnNames */
+						allowImplicitPartitioning,
 					)
 					if err != nil {
 						return nil, err
@@ -2091,6 +2087,7 @@ func NewTableDesc(
 				*desc.GetPrimaryIndex().IndexDesc(),
 				partitionBy,
 				nil, /* allowedNewColumnNames */
+				allowImplicitPartitioning,
 			)
 			if err != nil {
 				return nil, err

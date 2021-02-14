@@ -253,6 +253,8 @@ func (p *planner) AlterPrimaryKey(
 	// dropPartitionAllBy is set if we should be dropping the PARTITION ALL BY component.
 	dropPartitionAllBy := false
 
+	allowImplicitPartitioning := false
+
 	if alterPrimaryKeyLocalitySwap != nil {
 		localityConfigSwap := alterPrimaryKeyLocalitySwap.localityConfigSwap
 		switch localityConfigSwap.OldLocalityConfig.Locality.(type) {
@@ -261,6 +263,7 @@ func (p *planner) AlterPrimaryKey(
 			switch to := localityConfigSwap.NewLocalityConfig.Locality.(type) {
 			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 				isNewPartitionAllBy = true
+				allowImplicitPartitioning = true
 				colName := tree.RegionalByRowRegionDefaultColName
 				if as := to.RegionalByRow.As; as != nil {
 					colName = tree.Name(*as)
@@ -306,6 +309,7 @@ func (p *planner) AlterPrimaryKey(
 			)
 		}
 	} else if tableDesc.IsPartitionAllBy() {
+		allowImplicitPartitioning = true
 		partitionAllBy, err = partitionByFromTableDesc(p.ExecCfg().Codec, tableDesc)
 		if err != nil {
 			return err
@@ -321,6 +325,7 @@ func (p *planner) AlterPrimaryKey(
 			*newPrimaryIndexDesc,
 			partitionAllBy,
 			allowedNewColumnNames,
+			allowImplicitPartitioning,
 		)
 		if err != nil {
 			return err
@@ -444,6 +449,7 @@ func (p *planner) AlterPrimaryKey(
 				*newIndex,
 				partitionAllBy,
 				allowedNewColumnNames,
+				allowImplicitPartitioning,
 			); err != nil {
 				return err
 			}

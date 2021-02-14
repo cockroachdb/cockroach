@@ -275,9 +275,6 @@ func detectImplicitPartitionColumns(
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
 ) (descpb.IndexDescriptor, int, error) {
-	if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
-		return indexDesc, 0, nil
-	}
 	seenImplicitColumnNames := map[string]struct{}{}
 	var implicitColumnIDs []descpb.ColumnID
 	var implicitColumns []string
@@ -352,6 +349,7 @@ func createPartitioning(
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
 ) (descpb.IndexDescriptor, error) {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
@@ -360,15 +358,17 @@ func createPartitioning(
 
 	var numImplicitColumns int
 	var err error
-	indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
-		evalCtx,
-		tableDesc,
-		indexDesc,
-		partBy,
-		allowedNewColumnNames,
-	)
-	if err != nil {
-		return indexDesc, err
+	if allowImplicitPartitioning {
+		indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
+			evalCtx,
+			tableDesc,
+			indexDesc,
+			partBy,
+			allowedNewColumnNames,
+		)
+		if err != nil {
+			return indexDesc, err
+		}
 	}
 
 	partitioning, err := createPartitioningImpl(
