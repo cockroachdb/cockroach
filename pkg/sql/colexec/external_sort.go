@@ -116,6 +116,7 @@ type externalSorter struct {
 	closerHelper
 
 	unlimitedAllocator *colmem.Allocator
+	totalMemoryLimit   int64
 	state              externalSorterState
 	inputTypes         []*types.T
 	ordering           execinfrapb.Ordering
@@ -199,19 +200,18 @@ func NewExternalSorter(
 	if maxNumberPartitions < ExternalSorterMinPartitions {
 		maxNumberPartitions = ExternalSorterMinPartitions
 	}
+	estimatedOutputBatchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To
 	// be safe, we also estimate the size of the output batch and subtract that
 	// as well.
-	batchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
-	// Reserve a certain amount of memory for the partition caches.
-	memoryLimit -= int64((maxNumberPartitions * diskQueueCfg.BufferSizeBytes) + batchMemSize)
-	if memoryLimit < 1 {
+	singlePartitionSize := memoryLimit - int64(maxNumberPartitions*diskQueueCfg.BufferSizeBytes+estimatedOutputBatchMemSize)
+	if singlePartitionSize < 1 {
 		// If the memory limit is 0, the input partitioning operator will return
 		// a zero-length batch, so make it at least 1.
-		memoryLimit = 1
+		singlePartitionSize = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, memoryLimit)
+	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, singlePartitionSize)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
@@ -230,14 +230,20 @@ func NewExternalSorter(
 	es := &externalSorter{
 		OneInputNode:       NewOneInputNode(inMemSorter),
 		unlimitedAllocator: unlimitedAllocator,
+		totalMemoryLimit:   memoryLimit,
 		inMemSorter:        inMemSorter,
 		inMemSorterInput:   inputPartitioner.(*inputPartitioningOperator),
 		partitionerCreator: func() colcontainer.PartitionedQueue {
 			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
-		inputTypes:          inputTypes,
-		ordering:            ordering,
-		columnOrdering:      execinfrapb.ConvertToColumnOrdering(ordering),
+		inputTypes:     inputTypes,
+		ordering:       ordering,
+		columnOrdering: execinfrapb.ConvertToColumnOrdering(ordering),
+		// TODO(yuzefovich): maxNumberPartitions should also be semi-dynamically
+		// limited based on the sizes of batches. Consider a scenario when each
+		// input batch is 1 GB in size - if we don't put any limiting in place,
+		// we might try to use 16 partitions at once, which means that during
+		// merging we will be keeping 16 batches (i.e. 16GB of data) in memory.
 		maxNumberPartitions: maxNumberPartitions,
 		numForcedMerges:     numForcedMerges,
 	}
@@ -439,8 +445,11 @@ func (s *externalSorter) createMergerForPartitions(
 		)
 	}
 
+	// TODO(yuzefovich): we should calculate a more precise memory limit taking
+	// into account how many partitions are currently being merged and the
+	// average batch size in each one of them.
 	return NewOrderedSynchronizer(
-		s.unlimitedAllocator, syncInputs, s.inputTypes, s.columnOrdering,
+		s.unlimitedAllocator, s.totalMemoryLimit, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }
 

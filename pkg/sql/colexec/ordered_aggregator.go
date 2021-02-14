@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -262,6 +263,12 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			copy(a.groupCol[:batchLength], zeroBoolColumn)
 
 		case orderedAggregatorReallocating:
+			// The ordered aggregator *cannot* limit the capacities of its
+			// internal batches because it works under the assumption that any
+			// input batch can be handled in a single pass, so we don't use a
+			// memory limit here. It is up to the input to limit the size of
+			// batches based on the memory footprint.
+			const maxBatchMemSize = math.MaxInt64
 			// Twice the batchSize is allocated to avoid having to check for
 			// overflow when outputting.
 			newMinCapacity := 2 * a.lastReadBatch.Length()
@@ -278,7 +285,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.allocator.ReleaseMemory(colmem.GetBatchMemSize(a.scratch.Batch))
 				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
 			} else {
-				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(a.outputTypes, a.scratch.Batch, newMinCapacity)
+				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
+					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
+				)
 			}
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
@@ -287,7 +296,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			if tempBufferCapacity == 0 {
 				tempBufferCapacity = 1
 			}
-			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(a.outputTypes, a.scratch.tempBuffer, tempBufferCapacity)
+			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
+				a.outputTypes, a.scratch.tempBuffer, tempBufferCapacity, maxBatchMemSize,
+			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))
 			}
