@@ -874,3 +874,48 @@ except
       │                   │         └── 1 [as="?column?":6]
       │                   └── 1
       └── (1,)
+
+# Verify that we add casts for equivalent, but not identical types.
+exec-ddl
+CREATE TABLE ab (a INT8, b INT4)
+----
+
+build
+SELECT a FROM ab UNION SELECT b FROM ab
+----
+union
+ ├── columns: a:10
+ ├── left columns: ab.a:1
+ ├── right columns: b:9
+ ├── project
+ │    ├── columns: ab.a:1
+ │    └── scan ab
+ │         └── columns: ab.a:1 ab.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ └── project
+      ├── columns: b:9
+      ├── project
+      │    ├── columns: ab.b:6
+      │    └── scan ab
+      │         └── columns: ab.a:5 ab.b:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+      └── projections
+           └── ab.b:6::INT8 [as=b:9]
+
+build
+SELECT b FROM ab UNION SELECT a FROM ab
+----
+union
+ ├── columns: b:10
+ ├── left columns: ab.b:2
+ ├── right columns: a:9
+ ├── project
+ │    ├── columns: ab.b:2
+ │    └── scan ab
+ │         └── columns: ab.a:1 ab.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ └── project
+      ├── columns: a:9
+      ├── project
+      │    ├── columns: ab.a:5
+      │    └── scan ab
+      │         └── columns: ab.a:5 ab.b:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+      └── projections
+           └── ab.a:5::INT4 [as=a:9]
