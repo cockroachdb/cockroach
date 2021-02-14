@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -219,16 +218,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 	return nil
 }
 
-func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegionalByRow(
+func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	params runParams, newLocality *tree.Locality,
 ) error {
-	enumTypeID, err := n.dbDesc.MultiRegionEnumID()
-
-	if err != nil {
-		return err
-	}
-	enumOID := typedesc.TypeIDToOID(enumTypeID)
-
 	mayNeedImplicitCRDBRegionCol := false
 	var mutationIdxAllowedInSameTxn *int
 	var newColumnName *tree.Name
@@ -237,6 +229,23 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 	// Otherwise, if we have no name was specified, implicitly create the
 	// crdb_region column.
 	partColName := newLocality.RegionalByRowColumn
+
+	primaryIndexColIdxStart := 0
+	if n.tableDesc.IsLocalityRegionalByRow() {
+		as := n.tableDesc.LocalityConfig.GetRegionalByRow().As
+
+		// If the REGIONAL BY ROW (AS <col>) is exactly the same, do nothing.
+		defaultColumnSpecified := as == nil && partColName == tree.RegionalByRowRegionNotSpecifiedName
+		sameAsColumnSpecified := as != nil && *as == string(partColName)
+		if defaultColumnSpecified || sameAsColumnSpecified {
+			return nil
+		}
+
+		// Otherwise, signal that we have to omit the implicit partitioning columns
+		// when modifying the primary key.
+		primaryIndexColIdxStart = int(n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns)
+	}
+
 	if newLocality.RegionalByRowColumn == tree.RegionalByRowRegionNotSpecifiedName {
 		partColName = tree.RegionalByRowRegionDefaultColName
 		mayNeedImplicitCRDBRegionCol = true
@@ -248,8 +257,15 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		return err
 	}
 
+	enumTypeID, err := n.dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	enumOID := typedesc.TypeIDToOID(enumTypeID)
+
 	var newColumnID *descpb.ColumnID
 	var newColumnDefaultExpr *string
+
 	if !createDefaultRegionCol {
 		// If the column is not public, we cannot use it yet.
 		if !partCol.Public() {
@@ -359,8 +375,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 		newColumnName,
 		newColumnID,
 		newColumnDefaultExpr,
-		n.tableDesc.PrimaryIndex.ColumnNames,
-		n.tableDesc.PrimaryIndex.ColumnDirections,
+		n.tableDesc.PrimaryIndex.ColumnNames[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.ColumnDirections[primaryIndexColIdxStart:],
 	)
 }
 
@@ -399,8 +415,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	// add the implicit partitioning to the PK, with all indexes underneath
 	// being re-written to point to the correct PRIMARY KEY and also being
 	// implicitly partitioned. The AlterPrimaryKey will also set the relevant
-	// zone configurations appropriate stages of the newly re-created indexes
-	// on the table itself.
+	// zone configurations on the newly re-created indexes and table itself.
 	if err := params.p.AlterPrimaryKey(
 		params.ctx,
 		n.tableDesc,
@@ -442,7 +457,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		case tree.LocalityLevelGlobal:
 			return nil
 		case tree.LocalityLevelRow:
-			if err := n.alterTableLocalityNonRegionalByRowToRegionalByRow(
+			if err := n.alterTableLocalityToRegionalByRow(
 				params,
 				newLocality,
 			); err != nil {
@@ -462,7 +477,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				return err
 			}
 		case tree.LocalityLevelRow:
-			if err := n.alterTableLocalityNonRegionalByRowToRegionalByRow(
+			if err := n.alterTableLocalityToRegionalByRow(
 				params,
 				newLocality,
 			); err != nil {
@@ -490,7 +505,12 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
 			)
 		case tree.LocalityLevelRow:
-			return unimplemented.NewWithIssue(59632, "implementation pending")
+			if err := n.alterTableLocalityToRegionalByRow(
+				params,
+				newLocality,
+			); err != nil {
+				return err
+			}
 		case tree.LocalityLevelTable:
 			return n.alterTableLocalityFromOrToRegionalByRow(
 				params,
