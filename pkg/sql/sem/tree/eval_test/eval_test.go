@@ -128,10 +128,12 @@ func TestEval(t *testing.T) {
 
 	t.Run("vectorized", func(t *testing.T) {
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
+			st := cluster.MakeTestingClusterSettings()
 			flowCtx := &execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: evalCtx,
 			}
-			memMonitor := execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
 			defer memMonitor.Stop(ctx)
 			acc := memMonitor.MakeBoundAccount()
 			defer acc.Close(ctx)

@@ -11623,7 +11623,9 @@ func (o *mergeJoinRightOuterOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinRightOuterOp) Next(ctx context.Context) coldata.Batch {
-	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(o.outputTypes, o.output, 1 /* minCapacity */)
+	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
+		o.outputTypes, o.output, 1 /* minCapacity */, o.memoryLimit,
+	)
 	o.bufferedGroup.helper.output = o.output
 	for {
 		switch o.state {
