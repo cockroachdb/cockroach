@@ -21,6 +21,17 @@ import (
 	"github.com/marusama/semaphore"
 )
 
+const (
+	// This limit comes from the fallback strategy where we are using an
+	// external sort.
+	ehaNumRequiredActivePartitions = ExternalSorterMinPartitions
+	// ehaNumRequiredFDs is the minimum number of file descriptors that are
+	// needed for the machinery of the external aggregator (plus 1 is needed for
+	// the in-memory hash aggregator in order to track tuples in a spilling
+	// queue).
+	ehaNumRequiredFDs = ehaNumRequiredActivePartitions + 1
+)
+
 // NewExternalHashAggregator returns a new disk-backed hash aggregator. It uses
 // the in-memory hash aggregator as the "main" strategy for the hash-based
 // partitioner and the external sort + ordered aggregator as the "fallback".
@@ -59,7 +70,6 @@ func NewExternalHashAggregator(
 		}
 		return diskBackedFallbackOp
 	}
-	numRequiredActivePartitions := ExternalSorterMinPartitions
 	return newHashBasedPartitioner(
 		newAggArgs.Allocator,
 		flowCtx,
@@ -71,7 +81,7 @@ func NewExternalHashAggregator(
 		inMemMainOpConstructor,
 		diskBackedFallbackOpConstructor,
 		diskAcc,
-		numRequiredActivePartitions,
+		ehaNumRequiredActivePartitions,
 	)
 }
 
