@@ -1327,6 +1327,12 @@ with &3 (cte)
       └── mapping:
            └──  a:5 => a:8
 
+# We don't support upcasting the "initial" query.
+build
+WITH RECURSIVE cte(x) AS (SELECT a FROM x UNION ALL SELECT x::FLOAT FROM cte WHERE x < 10) SELECT * FROM cte;
+----
+error (42804): UNION types int and float cannot be matched for WITH RECURSIVE
+
 # Mutating WITHs not allowed at non-root positions.
 build
 SELECT * FROM (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
