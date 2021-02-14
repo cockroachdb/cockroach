@@ -6588,7 +6588,15 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 				NodeID:  tc.store.Ident.NodeID,
 				StoreID: 9999,
 			})
-			if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+			if _, err := tc.repl.ChangeReplicas(
+				context.Background(),
+				tc.repl.Desc(),
+				SnapshotRequest_REBALANCE,
+				kvserverpb.ReasonRebalance,
+				"",
+				chgs,
+			); err == nil || !strings.Contains(err.Error(),
+				"only valid actions are a removal or a rebalance") {
 				t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 			}
 		})
