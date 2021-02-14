@@ -198,6 +198,11 @@ func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode 
 	return SteppingDisabled
 }
 
+// ManualRefresh is part of the TxnSender interface.
+func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
