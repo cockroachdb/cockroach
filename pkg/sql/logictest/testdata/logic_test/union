@@ -348,3 +348,21 @@ NULL
 statement ok
 CREATE TABLE ab (a INT, b INT);
 SELECT a, b, rowid FROM ab UNION VALUES (1, 2, 3);
+DROP TABLE ab;
+
+# Regression test for #59148.
+statement ok
+CREATE TABLE ab (a INT4, b INT8);
+INSERT INTO ab VALUES (1, 1), (1, 2), (2, 1), (2, 2);
+
+query I rowsort
+SELECT a FROM ab UNION SELECT b FROM ab
+----
+1
+2
+
+query I rowsort
+SELECT b FROM ab UNION SELECT a FROM ab
+----
+1
+2
