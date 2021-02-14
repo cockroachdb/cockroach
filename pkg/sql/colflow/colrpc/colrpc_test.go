@@ -624,7 +624,6 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	nextDone := make(chan struct{})
 	input := &colexecbase.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
 		b := testAllocator.NewMemBatchWithFixedCapacity(typs, 0)
-		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}
 		return b

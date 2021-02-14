@@ -713,7 +713,6 @@ func (ht *hashTable) reset(_ context.Context) {
 	for n := 0; n < len(ht.buildScratch.first); n += copy(ht.buildScratch.first[n:], zeroUint64Column) {
 	}
 	ht.vals.ResetInternalBatch()
-	ht.vals.SetLength(0)
 	// ht.probeScratch.next, ht.same and ht.visited are reset separately before
 	// they are used (these slices are not used in all of the code paths).
 	// ht.probeScratch.headID, ht.probeScratch.differs, and

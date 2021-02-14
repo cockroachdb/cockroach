@@ -347,11 +347,20 @@ func runTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		if c, ok := originalOp.(colexecbase.Closer); ok {
-			require.NoError(t, c.Close(ctx))
-		}
-		if c, ok := opWithNulls.(colexecbase.Closer); ok {
-			require.NoError(t, c.Close(ctx))
+		closeIfCloser(ctx, t, originalOp)
+		closeIfCloser(ctx, t, opWithNulls)
+	}
+}
+
+// closeIfCloser is a testing utility function that checks whether op is a
+// colexecbase.Closer and closes it if so.
+//
+// runTests harness needs to do that once it is done with op. In non-test
+// setting, the closing happens at the end of the query execution.
+func closeIfCloser(ctx context.Context, t *testing.T, op colexecbase.Operator) {
+	if c, ok := op.(colexecbase.Closer); ok {
+		if err := c.Close(ctx); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -395,6 +404,7 @@ func runTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 		}
+		closeIfCloser(ctx, t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -465,11 +475,7 @@ func runTestsWithoutAllNullsInjection(
 					assert.False(t, maybeHasNulls(b))
 				}
 			}
-			if c, ok := op.(colexecbase.Closer); ok {
-				// Some operators need an explicit Close if not drained completely of
-				// input.
-				assert.NoError(t, c.Close(ctx))
-			}
+			closeIfCloser(ctx, t, op)
 		}
 	}
 
@@ -494,6 +500,7 @@ func runTestsWithoutAllNullsInjection(
 		op.Init()
 		for b := op.Next(ctx); b.Length() > 0; b = op.Next(ctx) {
 		}
+		closeIfCloser(ctx, t, op)
 	}
 }
 
@@ -742,10 +749,10 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
-	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
 		return coldata.ZeroBatch
 	}
+	s.batch.ResetInternalBatch()
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
 		batchSize = len(s.tuples)
