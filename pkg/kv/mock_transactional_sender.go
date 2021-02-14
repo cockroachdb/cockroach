@@ -198,6 +198,11 @@ func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode 
 	return SteppingDisabled
 }
 
+// ForceRefreshTransaction is part of the TxnSender interface.
+func (m *MockTransactionalSender) ForceRefreshTransaction(ctx context.Context) error {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (

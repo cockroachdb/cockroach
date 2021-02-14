@@ -193,7 +193,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	}
 
 	// Attempt a refresh before sending the batch.
-	ba, pErr := sr.maybeRefreshPreemptively(ctx, ba)
+	ba, pErr := sr.maybeRefreshPreemptivelyLocked(ctx, ba, false)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -406,13 +406,15 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	return br, nil
 }
 
-// maybeRefreshPreemptively attempts to refresh a transaction's read timestamp
+// maybeRefreshPreemptivelyLocked attempts to refresh a transaction's read timestamp
 // eagerly. Doing so can take advantage of opportunities where the refresh is
 // free or can avoid wasting work issuing a batch containing an EndTxn that will
 // necessarily throw a serializable error. The method returns a batch with an
 // updated transaction if the refresh is successful, or a retry error if not.
-func (sr *txnSpanRefresher) maybeRefreshPreemptively(
-	ctx context.Context, ba roachpb.BatchRequest,
+// If the force flag is true, the refresh will be attempted even if a refresh
+// is not inevitable.
+func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
+	ctx context.Context, ba roachpb.BatchRequest, force bool,
 ) (roachpb.BatchRequest, *roachpb.Error) {
 	// If we know that the transaction will need a refresh at some point because
 	// its write timestamp has diverged from its read timestamp, consider doing
@@ -466,7 +468,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 	refreshInevitable := hasET && args.(*roachpb.EndTxnRequest).Commit
 
 	// If neither condition is true, defer the refresh.
-	if !refreshFree && !refreshInevitable {
+	if !refreshFree && !refreshInevitable && !force {
 		return ba, nil
 	}
 
