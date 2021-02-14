@@ -447,3 +447,122 @@ func TestPGIntervalSyntax(t *testing.T) {
 		})
 	}
 }
+
+func TestISO8601IntervalSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		input  string
+		itm    types.IntervalTypeMetadata
+		output string
+		error  string
+	}{
+		{`P123`, types.IntervalTypeMetadata{}, ``, `interval: missing unit at position 4: "P123"`},
+		{`P123foo`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit foo in ISO-8601 duration P123foo`},
+		{`P 1Y`, types.IntervalTypeMetadata{}, ``, `interval: missing number at position 1: "P 1Y"`},
+		{`P1Y `, types.IntervalTypeMetadata{}, ``, `interval: unknown unit Y in ISO-8601 duration P1Y`},
+		{`P1H`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit H in ISO-8601 duration P1H`},
+
+		{`P`, types.IntervalTypeMetadata{}, `00:00:00`, ``},
+
+		{`PT1.2S`, types.IntervalTypeMetadata{}, `00:00:01.2`, ``},
+		{`PT0.2304506708S`, types.IntervalTypeMetadata{}, `00:00:00.230451`, ``},
+		{`PT0.0002304506708S`, types.IntervalTypeMetadata{}, `00:00:00.00023`, ``},
+		{`PT0.0000002304506S`, types.IntervalTypeMetadata{}, `00:00:00`, ``},
+		{`PT75.5S`, types.IntervalTypeMetadata{}, `00:01:15.5`, ``},
+		{`PT3675.5S`, types.IntervalTypeMetadata{}, `01:01:15.5`, ``},
+		{`PT86475.5S`, types.IntervalTypeMetadata{}, `24:01:15.5`, ``},
+
+		{`PT1.2M`, types.IntervalTypeMetadata{}, `00:01:12`, ``},
+		{`PT1.2M8S`, types.IntervalTypeMetadata{}, `00:01:20`, ``},
+		{`PT0.5M`, types.IntervalTypeMetadata{}, `00:00:30`, ``},
+		{`PT120.5M`, types.IntervalTypeMetadata{}, `02:00:30`, ``},
+		{`PT0.23045067089M`, types.IntervalTypeMetadata{}, `00:00:13.82704`, ``},
+
+		{`PT1.2H`, types.IntervalTypeMetadata{}, `01:12:00`, ``},
+		{`PT1.2H8M`, types.IntervalTypeMetadata{}, `01:20:00`, ``},
+		{`PT0.5H`, types.IntervalTypeMetadata{}, `00:30:00`, ``},
+		{`PT25.5H`, types.IntervalTypeMetadata{}, `25:30:00`, ``},
+		{`PT0.23045067089H`, types.IntervalTypeMetadata{}, `00:13:49.622415`, ``},
+
+		{`P1D`, types.IntervalTypeMetadata{}, `1 day`, ``},
+		{`P1.1D`, types.IntervalTypeMetadata{}, `1 day 02:24:00`, ``},
+		{`P1.2D`, types.IntervalTypeMetadata{}, `1 day 04:48:00`, ``},
+		{`P1.11D`, types.IntervalTypeMetadata{}, `1 day 02:38:24`, ``},
+		{`P1.111D`, types.IntervalTypeMetadata{}, `1 day 02:39:50.4`, ``},
+		{`P1.1111D`, types.IntervalTypeMetadata{}, `1 day 02:39:59.04`, ``},
+		{`P60DT25H`, types.IntervalTypeMetadata{}, `60 days 25:00:00`, ``},
+		{`P9223372036854775807D`, types.IntervalTypeMetadata{}, `9223372036854775807 days`, ``},
+
+		{`P1W`, types.IntervalTypeMetadata{}, `7 days`, ``},
+		{`P1.1W`, types.IntervalTypeMetadata{}, `7 days 16:48:00`, ``},
+		{`P1.5W`, types.IntervalTypeMetadata{}, `10 days 12:00:00`, ``},
+		{`P1W1D`, types.IntervalTypeMetadata{}, `8 days`, ``},
+
+		{`P1M`, types.IntervalTypeMetadata{}, `1 mon`, ``},
+		{`P1.5M`, types.IntervalTypeMetadata{}, `1 mon 15 days`, ``},
+		{`P1M2W`, types.IntervalTypeMetadata{}, `1 mon 14 days`, ``},
+		{`P1.1M`, types.IntervalTypeMetadata{}, `1 mon 3 days`, ``},
+		{`P1.2M`, types.IntervalTypeMetadata{}, `1 mon 6 days`, ``},
+		{`P1.11M`, types.IntervalTypeMetadata{}, `1 mon 3 days 07:12:00`, ``},
+		{`P9223372036854775807M`, types.IntervalTypeMetadata{}, `768614336404564650 years 7 mons`, ``},
+
+		{`P1Y`, types.IntervalTypeMetadata{}, `1 year`, ``},
+		{`P1.5Y`, types.IntervalTypeMetadata{}, `1 year 6 mons`, ``},
+		{`P1.1Y`, types.IntervalTypeMetadata{}, `1 year 1 mon`, ``},
+		{`P1.19Y`, types.IntervalTypeMetadata{}, `1 year 2 mons`, ``},
+		{`P1.11Y`, types.IntervalTypeMetadata{}, `1 year 1 mon`, ``},
+
+		// Mixed formats
+		{`P1Y2M3D`, minuteToSecondITM, `1 year 2 mons 3 days`, ``},
+		{`P1.3Y2.2M3.1D`, minuteToSecondITM, `1 year 5 mons 9 days 02:24:00`, ``},
+		{`PT4H5M6S`, minuteToSecondITM, `04:05:06`, ``},
+		{`PT4.6H5.5M6.4S`, minuteToSecondITM, `04:41:36.4`, ``},
+		{`P1Y2M3DT4H5M6S`, minuteToSecondITM, `1 year 2 mons 3 days 04:05:06`, ``},
+		{`P1.6Y2.5M3.4DT4.3H5.2M6.1S`, minuteToSecondITM, `1 year 9 mons 18 days 13:59:18.1`, ``},
+
+		// This was 1ns off due to float rounding.
+		{`P50Y6M75DT1572897H25M58.535696141S`, types.IntervalTypeMetadata{}, `50 years 6 mons 75 days 1572897:25:58.535696`, ``},
+	}
+	for _, test := range testData {
+		t.Run(test.input, func(t *testing.T) {
+			dur, err := iso8601ToDuration(test.input)
+			if err != nil {
+				if test.error != "" {
+					if err.Error() != test.error {
+						t.Fatalf(`%q: got error "%v", expected "%s"`, test.input, err, test.error)
+					}
+				} else {
+					t.Fatalf("%q: %v", test.input, err)
+				}
+				return
+			}
+			if test.error != "" {
+				t.Fatalf(`%q: expected error "%q"`, test.input, test.error)
+			}
+			s := dur.String()
+			if s != test.output {
+				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
+			}
+
+			dur2, err := parseDuration(s, test.itm)
+			if err != nil {
+				t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
+			}
+			s2 := dur2.String()
+			if s2 != s {
+				t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
+			}
+
+			// Test that a Datum recognizes the format.
+			di, err := parseDInterval(test.input, test.itm)
+			if err != nil {
+				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
+			}
+			s3 := di.Duration.String()
+			if s3 != test.output {
+				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+			}
+		})
+	}
+}

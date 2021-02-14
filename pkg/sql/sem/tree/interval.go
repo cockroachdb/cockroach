@@ -429,7 +429,7 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 			l.offset++
 		}
 
-		v := l.consumeInt()
+		v, hasDecimal, vp := l.consumeNum()
 		u := l.consumeUnit('T')
 		if l.err != nil {
 			return d, l.err
@@ -437,6 +437,13 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 
 		if unit, ok := unitMap[u]; ok {
 			d = d.Add(unit.Mul(v))
+			if hasDecimal {
+				var err error
+				d, err = addFrac(d, unit, vp)
+				if err != nil {
+					return d, err
+				}
+			}
 		} else {
 			return d, pgerror.Newf(
 				pgcode.InvalidDatetimeFormat,
