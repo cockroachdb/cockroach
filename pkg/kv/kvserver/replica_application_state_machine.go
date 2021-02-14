@@ -167,7 +167,7 @@ var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
 //     using the proposal's MaxLeaseIndex.
 //  3. verify that the command isn't in violation of the Range's current
 //     garbage collection threshold. This is determined using the proposal's
-//     Timestamp.
+//     WriteTimestamp.
 //
 // TODO(nvanbenschoten): Unit test this function now that it is stateless.
 func checkForcedErr(
@@ -314,13 +314,13 @@ func checkForcedErr(
 		)
 	}
 
-	// Verify that the batch timestamp is after the GC threshold. This is
+	// Verify that the command is writing above the GC threshold. This is
 	// necessary because not all commands declare read access on the GC
 	// threshold key, even though they implicitly depend on it. This means
 	// that access to this state will not be serialized by latching,
 	// so we must perform this check upstream and downstream of raft.
 	// See #14833.
-	ts := raftCmd.ReplicatedEvalResult.Timestamp
+	ts := raftCmd.ReplicatedEvalResult.WriteTimestamp
 	if ts.LessEq(*replicaState.GCThreshold) {
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
 			Timestamp: ts,
@@ -464,7 +464,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	}
 
 	// Update the batch's max timestamp.
-	if clockTS, ok := cmd.replicatedResult().Timestamp.TryToClockTimestamp(); ok {
+	if clockTS, ok := cmd.replicatedResult().WriteTimestamp.TryToClockTimestamp(); ok {
 		b.maxTS.Forward(clockTS)
 	}
 
