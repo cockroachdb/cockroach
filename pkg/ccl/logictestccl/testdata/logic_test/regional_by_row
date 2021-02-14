@@ -3,12 +3,6 @@
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
 
-statement error REGIONAL BY ROW is currently experimental
-CREATE TABLE regional_by_row_table (pk int) LOCALITY REGIONAL BY ROW
-
-statement ok
-SET experimental_enable_implicit_column_partitioning = true
-
 statement error cannot set LOCALITY on a database that is not multi-region enabled
 CREATE TABLE regional_by_row_table (pk int) LOCALITY REGIONAL BY ROW
 

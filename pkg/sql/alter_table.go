@@ -811,6 +811,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				*n.tableDesc.GetPrimaryIndex().IndexDesc(),
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
+				params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+					n.tableDesc.IsLocalityRegionalByRow(),
 			)
 			if err != nil {
 				return err

@@ -220,7 +220,6 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 							if _, err := sqlDB.Exec(fmt.Sprintf(`
-SET experimental_enable_implicit_column_partitioning = true;
 CREATE DATABASE t PRIMARY REGION "ajstorm-1";
 USE t;
 %s;
