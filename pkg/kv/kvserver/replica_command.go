@@ -987,7 +987,7 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	if err := validateReplicationChanges(desc, chgs); err != nil {
-		return nil, err
+		return nil, errors.Mark(err, errMarkInvalidReplicationChange)
 	}
 	targets := synthesizeTargetsByChangeType(chgs)
 
@@ -1210,8 +1210,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
-			changeReplicasTxnArgs{
-				db:                                   store.DB(),
+			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
 				logChange:                            store.logChange,
 				testForceJointConfig:                 store.TestingKnobs().ReplicationAlwaysUseJointConfig,
@@ -1225,131 +1224,333 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	return desc, nil
 }
 
-func validateReplicationChanges(
-	desc *roachpb.RangeDescriptor, chgs roachpb.ReplicationChanges,
-) error {
-	// First make sure that the changes don't self-overlap (i.e. we're not adding
-	// a replica twice, or removing and immediately re-adding it).
-	byNodeAndStoreID := make(map[roachpb.NodeID]map[roachpb.StoreID]roachpb.ReplicationChange, len(chgs))
-	for _, chg := range chgs {
-		byStoreID, ok := byNodeAndStoreID[chg.Target.NodeID]
-		if !ok {
-			byStoreID = make(map[roachpb.StoreID]roachpb.ReplicationChange)
-			byNodeAndStoreID[chg.Target.NodeID] = byStoreID
-		} else {
-			// The only operation that is allowed within a node is an Add/Remove.
-			for _, prevChg := range byStoreID {
-				if prevChg.ChangeType == chg.ChangeType {
-					return fmt.Errorf("changes %+v refer to n%d twice for change %v",
-						chgs, chg.Target.NodeID, chg.ChangeType)
-				}
-				if addition := prevChg.ChangeType.IsAddition(); !addition {
-					return fmt.Errorf("can only add-remove a replica within a node, but got %+v", chgs)
-				}
+// validateAddThenRemove ensures that, within a store, the only permissible
+// order of operations is an addition then a removal, not the other way around.
+func validateAddThenRemove(chgsByStoreID changesByStoreID) error {
+	for _, chgs := range chgsByStoreID {
+		if len(chgs) == 2 {
+			c1, c2 := chgs[0], chgs[1]
+			if !(c1.ChangeType.IsAddition() && c2.ChangeType.IsRemoval()) {
+				return errors.AssertionFailedf("only permissible order of operations within a"+
+					" store is an add-remove: %+v", chgs)
 			}
-		}
-		if prevChg, ok := byStoreID[chg.Target.StoreID]; ok {
-			isVoterDemotion := prevChg.ChangeType == roachpb.ADD_NON_VOTER &&
-				chg.ChangeType == roachpb.REMOVE_VOTER
-			isNonVoterPromotion := prevChg.ChangeType == roachpb.ADD_VOTER &&
-				chg.ChangeType == roachpb.REMOVE_NON_VOTER
-
-			if !isNonVoterPromotion && !isVoterDemotion {
-				return fmt.Errorf("changes %+v refer to n%d and s%d twice", chgs,
-					chg.Target.NodeID, chg.Target.StoreID)
-			}
-		}
-		// NB: In case we have an add-remove on the same store, the line below makes
-		// it such that the `ChangeType` in this map is the one that corresponds to
-		// the removal. This is subtle but important since the loop below ignores
-		// removals, and will consequently ignore add-remove pairs as well (which is
-		// intentional).
-		byStoreID[chg.Target.StoreID] = chg
-	}
-
-	// Then, check that we're not adding a second replica on nodes that already
-	// have one, or "re-add" an existing replica. We delete from byNodeAndStoreID so that
-	// after this loop, it contains only Nodes that we haven't seen in desc.
-	for _, rDesc := range desc.Replicas().Descriptors() {
-		byStoreID, ok := byNodeAndStoreID[rDesc.NodeID]
-		if !ok {
-			continue
-		}
-		delete(byNodeAndStoreID, rDesc.NodeID)
-		if len(byStoreID) == 2 {
-			chg, k := byStoreID[rDesc.StoreID]
-			// We should be removing the replica from the existing store during a
-			// rebalance within the node.
-			removal := chg.ChangeType.IsRemoval()
-			if !k || !removal {
-				return errors.Errorf(
-					"Expected replica to be removed from %v during a lateral rebalance %v within the node.", rDesc, chgs)
-			}
-			continue
-		}
-		chg, ok := byStoreID[rDesc.StoreID]
-		// There are two valid conditions here:
-		// (1) removal of an existing store.
-		// (2) add on the node, when we only have one replica.
-		// See https://github.com/cockroachdb/cockroach/issues/40333.
-		if ok {
-			if chg.ChangeType.IsRemoval() {
-				continue
-			}
-			// Looks like we found a replica with the same store and node id. If the
-			// replica is a learner, then one of the following is true:
-			// 1. some previous leaseholder was trying to add it with the
-			// learner+snapshot+voter cycle and got interrupted.
-			// 2. we hit a race between the replicate queue and AdminChangeReplicas.
-			// 3. We're trying to swap a voting replica with a non-voting replica
-			// before the voting replica has been upreplicated and switched from
-			// LEARNER to VOTER_FULL.
-			switch t := rDesc.GetType(); t {
-			case roachpb.LEARNER:
-				return errors.Mark(errors.Errorf(
-					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc),
-					errMarkInvalidReplicationChange)
-			case roachpb.NON_VOTER:
-				return errors.Mark(errors.Errorf(
-					"unable to add replica %v which is already present as a non-voter in %s", chg.Target, desc),
-					errMarkInvalidReplicationChange)
-			case roachpb.VOTER_FULL, roachpb.VOTER_DEMOTING_NON_VOTER, roachpb.VOTER_INCOMING,
-				roachpb.VOTER_DEMOTING_LEARNER:
-				return errors.Mark(errors.Errorf(
-					"unable to add replica %v which is already present as a voter in %s", chg.Target, desc),
-					errMarkInvalidReplicationChange)
-			default:
-				panic(fmt.Sprintf("unknown replica type %v", t))
-			}
-		}
-
-		for _, chg := range byStoreID {
-			// We're adding a replica that's already there. This isn't allowed, even
-			// when the newly added one would be on a different store.
-			if chg.ChangeType.IsAddition() {
-				if len(desc.Replicas().Descriptors()) > 1 {
-					return errors.Mark(
-						errors.Errorf("unable to add replica %v; node already has a replica in %s", chg.Target.StoreID, desc),
-						errMarkInvalidReplicationChange)
-				}
-			} else {
-				return errors.Mark(
-					errors.Errorf("removing %v which is not in %s", chg.Target, desc),
-					errMarkInvalidReplicationChange)
-			}
-		}
-	}
-
-	// Any removals left in the map now refer to nonexisting replicas, and we refuse them.
-	for _, byStoreID := range byNodeAndStoreID {
-		for _, chg := range byStoreID {
-			if !chg.ChangeType.IsRemoval() {
-				continue
-			}
-			return errors.Mark(errors.Errorf("removing %v which is not in %s", chg.Target, desc), errMarkInvalidReplicationChange)
 		}
 	}
 	return nil
+}
+
+// validateNoDuplicates ensures that we're not trying to execute the same
+// change twice.
+func validateNoDuplicates(chgsByStoreID changesByStoreID) error {
+	for _, chgs := range chgsByStoreID {
+		if len(chgs) > 2 {
+			return errors.AssertionFailedf("more than 2 changes referring to the same store: %+v", chgs)
+		}
+		if len(chgs) != 2 {
+			// Cannot have any duplicates.
+			continue
+		}
+		c1, c2 := chgs[0], chgs[1]
+		if c1.ChangeType.IsAddition() && c2.ChangeType.IsAddition() {
+			return errors.AssertionFailedf("adding twice to the same store: %+v", chgs)
+		}
+		if c1.ChangeType.IsRemoval() && c2.ChangeType.IsRemoval() {
+			return errors.AssertionFailedf("removing twice from the same store: %+v", chgs)
+		}
+	}
+	return nil
+}
+
+// validateAdditionsPerStore ensures that we're not trying to add the same type
+// of replica to a store that already has one or that we're not trying to add
+// any type of replica to a store that has a LEARNER.
+func validateAdditionsPerStore(
+	desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID,
+) error {
+	for storeID, chgs := range chgsByStoreID {
+		for _, chg := range chgs {
+			if chg.ChangeType.IsRemoval() {
+				continue
+			}
+			// If the replica already exists, check that we're not trying to add the
+			// same type of replica again.
+			//
+			// NB: Trying to add a different type of replica, for instance, a
+			// NON_VOTER to a store that already has a VOTER is fine when we're trying
+			// to swap a VOTER with a NON_VOTER. Ensuring that this is indeed the case
+			// is outside the scope of this particular helper method. See
+			// validatePromotionsAndDemotions for how that is checked.
+			replDesc, found := desc.GetReplicaDescriptor(storeID)
+			if !found {
+				// The store we're trying to add to doesn't already have a replica, all
+				// good.
+				continue
+			}
+			switch t := replDesc.GetType(); t {
+			case roachpb.LEARNER:
+				// Looks like we found a learner with the same store and node id. One of
+				// the following is true:
+				// 1. some previous leaseholder was trying to add it with the
+				// learner+snapshot+voter cycle and got interrupted.
+				// 2. we hit a race between the replicate queue and AdminChangeReplicas.
+				// 3. We're trying to swap a voting replica with a non-voting replica
+				// before the voting replica has been upreplicated and switched from
+				// LEARNER to VOTER_FULL.
+				return errors.AssertionFailedf(
+					"trying to add(%+v) to a store that already has a LEARNER", chg)
+			case roachpb.VOTER_FULL:
+				if chg.ChangeType == roachpb.ADD_VOTER {
+					return errors.AssertionFailedf(
+						"trying to add a voter to a store that already has a %s", t)
+				}
+			case roachpb.NON_VOTER:
+				if chg.ChangeType == roachpb.ADD_NON_VOTER {
+					return errors.AssertionFailedf(
+						"trying to add a non-voter to a store that already has one")
+				}
+			default:
+				return errors.AssertionFailedf("store(%d) being added to already contains a"+
+					" replica of an unexpected type: %s", storeID, t)
+			}
+
+			if replDesc.GetType() == roachpb.NON_VOTER && chg.ChangeType == roachpb.ADD_NON_VOTER {
+				return errors.AssertionFailedf(
+					"trying to add a non-voter to a store that already has one: %+v", chgs)
+			}
+		}
+	}
+	return nil
+}
+
+// validateRemovals ensures that replicas being removed actually exist and that
+// the type of replica being removed matches the type of the removal.
+func validateRemovals(desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID) error {
+	for storeID, chgs := range chgsByStoreID {
+		for _, chg := range chgs {
+			if chg.ChangeType.IsAddition() {
+				continue
+			}
+			replDesc, found := desc.GetReplicaDescriptor(storeID)
+			if !found {
+				return errors.AssertionFailedf("trying to remove a replica that doesn't exist: %+v", chg)
+			}
+			// Ensure that the type of replica being removed is the same as the type
+			// of replica present in the range descriptor.
+			switch t := replDesc.GetType(); t {
+			case roachpb.VOTER_FULL, roachpb.LEARNER:
+				if chg.ChangeType != roachpb.REMOVE_VOTER {
+					return errors.AssertionFailedf("type of replica being removed (%s) does not match"+
+						" expectation for change: %+v", t, chg)
+				}
+			case roachpb.NON_VOTER:
+				if chg.ChangeType != roachpb.REMOVE_NON_VOTER {
+					return errors.AssertionFailedf("type of replica being removed (%s) does not match"+
+						" expectation for change: %+v", t, chg)
+				}
+			default:
+				return errors.AssertionFailedf("unexpected replica type for removal %+v: %s", chg, t)
+			}
+		}
+	}
+	return nil
+}
+
+// validatePromotionsAndDemotions ensures the following:
+// 1. All additions of voters to stores that already have a non-voter are
+// accompanied by a removal of that non-voter (which is interpreted as a
+// promotion of a non-voter to a voter).
+// 2. All additions of non-voters to stores that already have a voter are
+// accompanied by a removal of that voter (which is interpreted as a demotion of
+// a voter to a non-voter)
+func validatePromotionsAndDemotions(
+	desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID,
+) error {
+	for storeID, chgs := range chgsByStoreID {
+		if len(chgs) > 2 {
+			return errors.AssertionFailedf("more than 2 changes referring to the same store: %+v", chgs)
+		}
+		replDesc, found := desc.GetReplicaDescriptor(roachpb.StoreID(storeID))
+		if len(chgs) == 1 && chgs[0].ChangeType.IsAddition() {
+			// If there's only one addition on this store, without an accompanying
+			// removal, then the change cannot correspond to a promotion/demotion.
+			// Thus, the store must not already have a replica.
+			if found {
+				return errors.AssertionFailedf("trying to add(%+v) to a store(%s) that already"+
+					" has a replica(%s)", chgs[0], storeID, replDesc.GetType())
+			}
+		}
+		if len(chgs) == 2 {
+			c1, c2 := chgs[0], chgs[1]
+			if !found {
+				return errors.AssertionFailedf("store %d unexpectedly missing a replica", storeID)
+			}
+			// We know that c1 must be an addition and c2 must be a removal because of
+			// the checks inside validateAddThenRemove, but we don't make that
+			// assumption here.
+			if c1.ChangeType.IsAddition() && c2.ChangeType.IsRemoval() {
+				// There's only two legal possibilities here:
+				// 1. Promotion: ADD_VOTER, REMOVE_NON_VOTER
+				// 2. Demotion: ADD_NON_VOTER, REMOVE_VOTER
+				//
+				// We reject everything else.
+				isPromotion := c1.ChangeType == roachpb.ADD_VOTER && c2.ChangeType == roachpb.REMOVE_NON_VOTER
+				isDemotion := c1.ChangeType == roachpb.ADD_NON_VOTER && c2.ChangeType == roachpb.REMOVE_VOTER
+				if !(isPromotion || isDemotion) {
+					return errors.AssertionFailedf("trying to add-remove the same replica(%s):"+
+						" %+v", replDesc.GetType(), chgs)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validateOneReplicaPerNode ensures that there are no more than 2 changes for
+// any given node and if a node already has a replica, then adding a second
+// replica is prohibited unless the existing replica is being removed with it.
+func validateOneReplicaPerNode(desc *roachpb.RangeDescriptor, chgsByNodeID changesByNodeID) error {
+	for nodeID, chgs := range chgsByNodeID {
+		if len(chgs) > 2 {
+			return errors.AssertionFailedf("more than 2 changes for the same node(%d): %+v",
+				nodeID, chgs)
+		}
+		numReplsOnNode := 0
+		for _, replDesc := range desc.Replicas().Descriptors() {
+			if replDesc.NodeID == nodeID {
+				numReplsOnNode += 1
+			}
+		}
+		switch numReplsOnNode {
+		case 0:
+			// If there are no existing replicas on the node, a rebalance is not
+			// possible and there must not be more than 1 change for it.
+			//
+			// NB: We don't care _what_ kind of change it is. If it's a removal, it
+			// will be invalidated by `validateRemovals`.
+			if len(chgs) > 1 {
+				errors.AssertionFailedf("unexpected set of changes(%+v) for node %d, which has"+
+					" no existing replicas for the range", chgs, nodeID)
+			}
+		case 1:
+			// If the node has exactly one replica, then the only changes allowed on
+			// the node are:
+			// 1. An addition and a removal (constituting a rebalance within the node)
+			// 2. Removal
+			switch n := len(chgs); n {
+			case 0:
+				continue
+			case 1:
+				// Must be a removal unless the range only has a single replica. Ranges
+				// with only one replica cannot be atomically rebalanced, and must go
+				// through addition and then removal separately. See #40333.
+				if !chgs[0].ChangeType.IsRemoval() && len(desc.Replicas().Descriptors()) > 1 {
+					return errors.AssertionFailedf("node %d already has a replica; only valid actions"+
+						" are a removal or a rebalance(add/remove); got %+v", nodeID, chgs)
+				}
+			case 2:
+				// Must be an addition then removal
+				c1, c2 := chgs[0], chgs[1]
+				if !(c1.ChangeType.IsAddition() && c2.ChangeType.IsRemoval()) {
+					return errors.AssertionFailedf("node %d already has a replica; only valid actions"+
+						" are a removal or a rebalance(add/remove); got %+v", nodeID, chgs)
+				}
+			default:
+				panic(fmt.Sprintf("unexpected number of changes for node %d: %+v", nodeID, chgs))
+			}
+		case 2:
+			// If there are 2 replicas on any given node, any changes we make to the
+			// replica(s) on that node must involve removing at least one of them.
+			found := false
+			for _, chg := range chgs {
+				if chg.Target.NodeID == nodeID && chg.ChangeType.IsRemoval() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.AssertionFailedf("node %d has 2 replicas, expected one of them"+
+					" to be removed; got %+v", nodeID, chgs)
+			}
+		default:
+			return errors.AssertionFailedf("node %d unexpectedly has more than 2 replicas: %s",
+				nodeID, desc.Replicas().Descriptors())
+		}
+	}
+	return nil
+}
+
+// validateReplicationChanges runs a series of validation checks against the
+// given range descriptor and the proposed set of replication changes on the
+// range.
+//
+// It ensures the following:
+// 1. There are no duplicate changes: we shouldn't be adding or removing a
+// replica twice.
+// 2. We're not adding a replica on a store that already has one, unless it's
+// for a promotion or demotion.
+// 3. If there are two changes for a single store, the first one must be an
+// addition and the second one must be a removal.
+// 4. We're not adding a replica on a node that already has one, unless the
+// range only has one replica.
+// 5. We're not removing a replica that doesn't exist.
+// 6. Additions to stores that already contain a replica are strictly the ones
+// that correspond to a voter demotion and/or a non-voter promotion
+func validateReplicationChanges(
+	desc *roachpb.RangeDescriptor, chgs roachpb.ReplicationChanges,
+) error {
+	chgsByStoreID := getChangesByStoreID(chgs)
+	chgsByNodeID := getChangesByNodeID(chgs)
+
+	if err := validateNoDuplicates(chgsByStoreID); err != nil {
+		return err
+	}
+	if err := validateAdditionsPerStore(desc, chgsByStoreID); err != nil {
+		return err
+	}
+	if err := validateRemovals(desc, chgsByStoreID); err != nil {
+		return err
+	}
+	if err := validateAddThenRemove(chgsByStoreID); err != nil {
+		return err
+	}
+	if err := validateOneReplicaPerNode(desc, chgsByNodeID); err != nil {
+		return err
+	}
+	if err := validatePromotionsAndDemotions(desc, chgsByStoreID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// changesByStoreID represents a map from StoreID to a slice of replication
+// changes on that store.
+type changesByStoreID map[roachpb.StoreID][]roachpb.ReplicationChange
+
+// changesByNodeID represents a map from NodeID to a slice of replication
+// changes on that node.
+type changesByNodeID map[roachpb.NodeID][]roachpb.ReplicationChange
+
+func getChangesByStoreID(chgs roachpb.ReplicationChanges) changesByStoreID {
+	chgsByStoreID := make(map[roachpb.StoreID][]roachpb.ReplicationChange, len(chgs))
+	for _, chg := range chgs {
+		if _, ok := chgsByStoreID[chg.Target.StoreID]; !ok {
+			chgsByStoreID[chg.Target.StoreID] = make([]roachpb.ReplicationChange, 0, 2)
+		}
+		chgsByStoreID[chg.Target.StoreID] = append(chgsByStoreID[chg.Target.StoreID], chg)
+	}
+	return chgsByStoreID
+}
+
+func getChangesByNodeID(chgs roachpb.ReplicationChanges) changesByNodeID {
+	chgsByNodeID := make(map[roachpb.NodeID][]roachpb.ReplicationChange, len(chgs))
+	for _, chg := range chgs {
+		if _, ok := chgsByNodeID[chg.Target.NodeID]; !ok {
+			chgsByNodeID[chg.Target.NodeID] = make([]roachpb.ReplicationChange, 0, 2)
+		}
+		chgsByNodeID[chg.Target.NodeID] = append(chgsByNodeID[chg.Target.NodeID], chg)
+	}
+	return chgsByNodeID
 }
 
 // addRaftLearners adds etcd/raft learners to the given replication targets.
