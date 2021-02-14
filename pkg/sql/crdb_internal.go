@@ -2773,7 +2773,7 @@ CREATE TABLE crdb_internal.zones (
 	full_config_sql STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) (retErr error) {
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			// Don't try to populate crdb_internal.zones if running in a multitenant
 			// configuration.
@@ -2800,13 +2800,23 @@ CREATE TABLE crdb_internal.zones (
 			return kv.Value, nil
 		}
 
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
 		if err != nil {
 			return err
 		}
+		// We have to make sure to close the iterator since we might return from
+		// the for loop early (before Next() returns false).
+		defer func() {
+			closeErr := it.Close()
+			if retErr == nil {
+				retErr = closeErr
+			}
+		}()
 		values := make(tree.Datums, len(showZoneConfigColumns))
-		for _, r := range rows {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			r := it.Cur()
 			id := uint32(tree.MustBeDInt(r[0]))
 
 			var zoneSpecifier *tree.ZoneSpecifier
@@ -2940,7 +2950,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 			}
 		}
-		return nil
+		return err
 	},
 }
 
