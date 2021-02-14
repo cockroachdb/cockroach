@@ -186,13 +186,21 @@ func (b *Builder) buildCTE(
 
 	// We allow propagation of types from the initial query to the recursive
 	// query.
-	_, propagateToRight := b.checkTypesMatch(initialScope, recursiveScope,
-		false, /* tolerateUnknownLeft */
-		true,  /* tolerateUnknownRight */
-		"UNION",
-	)
-	if propagateToRight {
-		recursiveScope = b.propagateTypes(recursiveScope /* dst */, initialScope /* src */)
+	outTypes, leftCastsNeeded, rightCastsNeeded := b.typeCheckSetOp(initialScope, recursiveScope, "UNION")
+	if leftCastsNeeded {
+		// We don't support casts on the initial expression; error out.
+		for i := range outTypes {
+			if !outTypes[i].Identical(initialScope.cols[i].typ) {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"UNION types %s and %s cannot be matched for WITH RECURSIVE",
+					initialScope.cols[i].typ, recursiveScope.cols[i].typ,
+				))
+			}
+		}
+	}
+	if rightCastsNeeded {
+		recursiveScope = b.addCasts(recursiveScope, outTypes)
 	}
 
 	private := memo.RecursiveCTEPrivate{
