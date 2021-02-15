@@ -73,48 +73,60 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 
 		canonicalTypeFamily := expectedVec.CanonicalTypeFamily()
 		if canonicalTypeFamily == types.BytesFamily {
-			// Cannot use require.Equal for this type.
-			// TODO(asubiotto): Again, why not?
 			expectedBytes := expectedVec.Bytes().Window(0, expected.Length())
 			resultBytes := actualVec.Bytes().Window(0, actual.Length())
 			require.Equal(t, expectedBytes.Len(), resultBytes.Len())
 			for i := 0; i < expectedBytes.Len(); i++ {
-				if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
-					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
+				if !expectedNulls.NullAt(i) {
+					if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
+						t.Fatalf("bytes mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedBytes, resultBytes)
+					}
+				}
+			}
+		} else if canonicalTypeFamily == types.DecimalFamily {
+			expectedDecimal := expectedVec.Decimal()[0:expected.Length()]
+			resultDecimal := actualVec.Decimal()[0:actual.Length()]
+			require.Equal(t, len(expectedDecimal), len(resultDecimal))
+			for i := range expectedDecimal {
+				if !expectedNulls.NullAt(i) {
+					if expectedDecimal[i].Cmp(&resultDecimal[i]) != 0 {
+						t.Fatalf("Decimal mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, &expectedDecimal[i], &resultDecimal[i])
+					}
 				}
 			}
 		} else if canonicalTypeFamily == types.TimestampTZFamily {
-			// Cannot use require.Equal for this type.
-			// TODO(yuzefovich): Again, why not?
 			expectedTimestamp := expectedVec.Timestamp()[0:expected.Length()]
 			resultTimestamp := actualVec.Timestamp()[0:actual.Length()]
 			require.Equal(t, len(expectedTimestamp), len(resultTimestamp))
 			for i := range expectedTimestamp {
-				if !expectedTimestamp[i].Equal(resultTimestamp[i]) {
-					t.Fatalf("Timestamp mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedTimestamp[i], resultTimestamp[i])
+				if !expectedNulls.NullAt(i) {
+					if !expectedTimestamp[i].Equal(resultTimestamp[i]) {
+						t.Fatalf("Timestamp mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedTimestamp[i], resultTimestamp[i])
+					}
 				}
 			}
 		} else if canonicalTypeFamily == types.IntervalFamily {
-			// Cannot use require.Equal for this type.
-			// TODO(yuzefovich): Again, why not?
 			expectedInterval := expectedVec.Interval()[0:expected.Length()]
 			resultInterval := actualVec.Interval()[0:actual.Length()]
 			require.Equal(t, len(expectedInterval), len(resultInterval))
 			for i := range expectedInterval {
-				if expectedInterval[i].Compare(resultInterval[i]) != 0 {
-					t.Fatalf("Interval mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedInterval[i], resultInterval[i])
+				if !expectedNulls.NullAt(i) {
+					if expectedInterval[i].Compare(resultInterval[i]) != 0 {
+						t.Fatalf("Interval mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedInterval[i], resultInterval[i])
+					}
 				}
 			}
 		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
-			// Cannot use require.Equal for this type.
 			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
 			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())
 			require.Equal(t, expectedDatum.Len(), resultDatum.Len())
 			for i := 0; i < expectedDatum.Len(); i++ {
-				expected := expectedDatum.Get(i).(fmt.Stringer).String()
-				actual := resultDatum.Get(i).(fmt.Stringer).String()
-				if expected != actual {
-					t.Fatalf("Datum mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedDatum.Get(i), resultDatum.Get(i))
+				if !expectedNulls.NullAt(i) {
+					expected := expectedDatum.Get(i).(fmt.Stringer).String()
+					actual := resultDatum.Get(i).(fmt.Stringer).String()
+					if expected != actual {
+						t.Fatalf("Datum mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedDatum.Get(i), resultDatum.Get(i))
+					}
 				}
 			}
 		} else {

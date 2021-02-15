@@ -86,76 +86,22 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		return nil, errors.AssertionFailedf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
 	}
 	n := batch.Length()
-	for i, typ := range c.typs {
-		vec := batch.ColVec(i)
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family())
+	for vecIdx, typ := range c.typs {
+		vec := batch.ColVec(vecIdx)
 
-		var arrowBitmap []byte
+		var nulls *coldata.Nulls
 		if vec.MaybeHasNulls() {
-			n := vec.Nulls()
+			nulls = vec.Nulls()
 			// To conform to the Arrow spec, zero out all trailing null values.
-			n.Truncate(batch.Length())
-			arrowBitmap = n.NullBitmap()
+			nulls.Truncate(batch.Length())
 		}
 
-		var data *array.Data
-		switch canonicalTypeFamily {
-		case types.BoolFamily:
-			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
-			data = c.builders.boolBuilder.NewBooleanArray().Data()
-		case types.DecimalFamily:
-			decimals := vec.Decimal()[:n]
-			for _, d := range decimals {
-				marshaled, err := d.MarshalText()
-				if err != nil {
-					return nil, err
-				}
-				c.builders.binaryBuilder.Append(marshaled)
-			}
-			data = c.builders.binaryBuilder.NewBinaryArray().Data()
-		case types.TimestampTZFamily:
-			timestamps := vec.Timestamp()[:n]
-			for _, ts := range timestamps {
-				marshaled, err := ts.MarshalBinary()
-				if err != nil {
-					return nil, err
-				}
-				c.builders.binaryBuilder.Append(marshaled)
-			}
-			data = c.builders.binaryBuilder.NewBinaryArray().Data()
-		case types.IntervalFamily:
-			intervals := vec.Interval()[:n]
-			// Appending to the binary builder will copy the bytes, so it's safe to
-			// reuse a scratch bytes to encode the interval into.
-			scratchIntervalBytes := make([]byte, sizeOfInt64*3)
-			for _, interval := range intervals {
-				nanos, months, days, err := interval.Encode()
-				if err != nil {
-					return nil, err
-				}
-				binary.LittleEndian.PutUint64(scratchIntervalBytes[0:sizeOfInt64], uint64(nanos))
-				binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64:sizeOfInt64*2], uint64(months))
-				binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
-				c.builders.binaryBuilder.Append(scratchIntervalBytes)
-			}
-			data = c.builders.binaryBuilder.NewBinaryArray().Data()
-		case typeconv.DatumVecCanonicalTypeFamily:
-			datums := vec.Datum().Slice(0 /* start */, n)
-			for idx := 0; idx < n; idx++ {
-				b, err := datums.MarshalAt(idx)
-				if err != nil {
-					return nil, err
-				}
-				c.builders.binaryBuilder.Append(b)
-			}
-			data = c.builders.binaryBuilder.NewBinaryArray().Data()
+		data, err := c.batchToArrowSpecialType(vec, n, nulls)
+		if err != nil {
+			return nil, err
 		}
 		if data != nil {
-			if arrowBitmap != nil {
-				// Overwrite empty null bitmap with the true bitmap.
-				data.Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
-			}
-			c.scratch.arrowData[i] = data
+			c.scratch.arrowData[vecIdx] = data
 			continue
 		}
 
@@ -170,7 +116,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			datumSize int
 		)
 
-		switch canonicalTypeFamily {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BytesFamily:
 			var int32Offsets []int32
 			values, int32Offsets = vec.Bytes().ToArrowSerializationFormat(n)
@@ -213,14 +159,19 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			valuesHeader.Cap = dataHeader.Cap * datumSize
 		}
 
+		var arrowBitmap []byte
+		if nulls != nil {
+			arrowBitmap = nulls.NullBitmap()
+		}
+
 		// Construct the underlying arrow buffers.
 		// WARNING: The ordering of construction is critical.
-		c.scratch.buffers[i] = c.scratch.buffers[i][:0]
-		c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(arrowBitmap))
+		c.scratch.buffers[vecIdx] = c.scratch.buffers[vecIdx][:0]
+		c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(arrowBitmap))
 		if offsets != nil {
-			c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(offsets))
+			c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(offsets))
 		}
-		c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(values))
+		c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(values))
 
 		// Create the data from the buffers. It might be surprising that we don't
 		// set a type or a null count, but these fields are not used in the way that
@@ -228,11 +179,102 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		// information is inferred from the ArrowBatchConverter schema, null count
 		// is an optimization we can use when working with nulls, and childData is
 		// only used for nested types like Lists, Structs, or Unions.
-		c.scratch.arrowData[i] = array.NewData(
-			nil /* dtype */, n, c.scratch.buffers[i], nil /* childData */, 0 /* nulls */, 0, /* offset */
+		c.scratch.arrowData[vecIdx] = array.NewData(
+			nil /* dtype */, n, c.scratch.buffers[vecIdx], nil /* childData */, 0 /* nulls */, 0, /* offset */
 		)
 	}
 	return c.scratch.arrowData, nil
+}
+
+// batchToArrowSpecialType checks whether the vector requires special handling
+// and performs the conversion to the Arrow format if so. If we support "native"
+// conversion for this vector, then nil is returned.
+func (c *ArrowBatchConverter) batchToArrowSpecialType(
+	vec coldata.Vec, n int, nulls *coldata.Nulls,
+) (*array.Data, error) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(vec.Type().Family()) {
+	case types.BoolFamily:
+		c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
+		data := c.builders.boolBuilder.NewBooleanArray().Data()
+		// Overwrite incorrect null bitmap (that has all values as "valid")
+		// with the actual null bitmap. Note that if we actually don't have
+		// any nulls, we use a bitmap with zero length for it in order to
+		// reduce the size of serialized representation.
+		var arrowBitmap []byte
+		if nulls != nil {
+			arrowBitmap = nulls.NullBitmap()
+		}
+		data.Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
+		return data, nil
+
+	case types.DecimalFamily:
+		decimals := vec.Decimal()[:n]
+		for i := range decimals {
+			if nulls != nil && nulls.NullAt(i) {
+				c.builders.binaryBuilder.AppendNull()
+				continue
+			}
+			marshaled, err := decimals[i].MarshalText()
+			if err != nil {
+				return nil, err
+			}
+			c.builders.binaryBuilder.Append(marshaled)
+		}
+		return c.builders.binaryBuilder.NewBinaryArray().Data(), nil
+
+	case types.TimestampTZFamily:
+		timestamps := vec.Timestamp()[:n]
+		for i := range timestamps {
+			if nulls != nil && nulls.NullAt(i) {
+				c.builders.binaryBuilder.AppendNull()
+				continue
+			}
+			marshaled, err := timestamps[i].MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
+			c.builders.binaryBuilder.Append(marshaled)
+		}
+		return c.builders.binaryBuilder.NewBinaryArray().Data(), nil
+
+	case types.IntervalFamily:
+		intervals := vec.Interval()[:n]
+		// Appending to the binary builder will copy the bytes, so it's safe to
+		// reuse a scratch bytes to encode the interval into.
+		scratchIntervalBytes := make([]byte, sizeOfInt64*3)
+		for i := range intervals {
+			if nulls != nil && nulls.NullAt(i) {
+				c.builders.binaryBuilder.AppendNull()
+				continue
+			}
+			nanos, months, days, err := intervals[i].Encode()
+			if err != nil {
+				return nil, err
+			}
+			binary.LittleEndian.PutUint64(scratchIntervalBytes[0:sizeOfInt64], uint64(nanos))
+			binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64:sizeOfInt64*2], uint64(months))
+			binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
+			c.builders.binaryBuilder.Append(scratchIntervalBytes)
+		}
+		return c.builders.binaryBuilder.NewBinaryArray().Data(), nil
+
+	case typeconv.DatumVecCanonicalTypeFamily:
+		datums := vec.Datum().Slice(0 /* start */, n)
+		for i := 0; i < n; i++ {
+			if nulls != nil && nulls.NullAt(i) {
+				c.builders.binaryBuilder.AppendNull()
+				continue
+			}
+			marshaled, err := datums.MarshalAt(i)
+			if err != nil {
+				return nil, err
+			}
+			c.builders.binaryBuilder.Append(marshaled)
+		}
+		return c.builders.binaryBuilder.NewBinaryArray().Data(), nil
+	}
+
+	return nil, nil
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
@@ -257,17 +299,18 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		vec := b.ColVec(i)
 		d := data[i]
 
-		var arr array.Interface
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			boolArr := array.NewBooleanData(d)
+			handleNulls(boolArr, vec, batchLength)
 			vecArr := vec.Bool()
 			for i := 0; i < boolArr.Len(); i++ {
 				vecArr[i] = boolArr.Value(i)
 			}
-			arr = boolArr
+
 		case types.BytesFamily:
 			bytesArr := array.NewBinaryData(d)
+			handleNulls(bytesArr, vec, batchLength)
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -276,11 +319,18 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				bytes = make([]byte, 0)
 			}
 			coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
-			arr = bytesArr
+
 		case types.DecimalFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
 			// it.
 			bytesArr := array.NewBinaryData(d)
+			handleNulls(bytesArr, vec, batchLength)
+			// We need to be paying attention to nulls values so that we don't
+			// try to unmarshal invalid values.
+			var nulls *coldata.Nulls
+			if vec.MaybeHasNulls() {
+				nulls = vec.Nulls()
+			}
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -291,15 +341,24 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Decimal()
 			for i := 0; i < len(offsets)-1; i++ {
-				if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
-					return err
+				if nulls == nil || !nulls.NullAt(i) {
+					if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
+						return err
+					}
 				}
 			}
-			arr = bytesArr
+
 		case types.TimestampTZFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
 			// it.
 			bytesArr := array.NewBinaryData(d)
+			handleNulls(bytesArr, vec, batchLength)
+			// We need to be paying attention to nulls values so that we don't
+			// try to unmarshal invalid values.
+			var nulls *coldata.Nulls
+			if vec.MaybeHasNulls() {
+				nulls = vec.Nulls()
+			}
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -310,15 +369,24 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Timestamp()
 			for i := 0; i < len(offsets)-1; i++ {
-				if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
-					return err
+				if nulls == nil || !nulls.NullAt(i) {
+					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+						return err
+					}
 				}
 			}
-			arr = bytesArr
+
 		case types.IntervalFamily:
 			// TODO(asubiotto): this serialization is quite inefficient compared to
 			//  the direct casts below. Improve it.
 			bytesArr := array.NewBinaryData(d)
+			handleNulls(bytesArr, vec, batchLength)
+			// We need to be paying attention to nulls values so that we don't
+			// try to unmarshal invalid values.
+			var nulls *coldata.Nulls
+			if vec.MaybeHasNulls() {
+				nulls = vec.Nulls()
+			}
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -329,20 +397,29 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Interval()
 			for i := 0; i < len(offsets)-1; i++ {
-				intervalBytes := bytes[offsets[i]:offsets[i+1]]
-				var err error
-				vecArr[i], err = duration.Decode(
-					int64(binary.LittleEndian.Uint64(intervalBytes[0:sizeOfInt64])),
-					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
-					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
-				)
-				if err != nil {
-					return err
+				if nulls == nil || !nulls.NullAt(i) {
+					intervalBytes := bytes[offsets[i]:offsets[i+1]]
+					var err error
+					vecArr[i], err = duration.Decode(
+						int64(binary.LittleEndian.Uint64(intervalBytes[0:sizeOfInt64])),
+						int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
+						int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
+					)
+					if err != nil {
+						return err
+					}
 				}
 			}
-			arr = bytesArr
+
 		case typeconv.DatumVecCanonicalTypeFamily:
 			bytesArr := array.NewBinaryData(d)
+			handleNulls(bytesArr, vec, batchLength)
+			// We need to be paying attention to nulls values so that we don't
+			// try to unmarshal invalid values.
+			var nulls *coldata.Nulls
+			if vec.MaybeHasNulls() {
+				nulls = vec.Nulls()
+			}
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -353,12 +430,13 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Datum()
 			for i := 0; i < len(offsets)-1; i++ {
-				err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]])
-				if err != nil {
-					return err
+				if nulls == nil || !nulls.NullAt(i) {
+					if err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]]); err != nil {
+						return err
+					}
 				}
 			}
-			arr = bytesArr
+
 		default:
 			var col interface{}
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
@@ -366,23 +444,23 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				switch typ.Width() {
 				case 16:
 					intArr := array.NewInt16Data(d)
+					handleNulls(intArr, vec, batchLength)
 					col = coldata.Int16s(intArr.Int16Values())
-					arr = intArr
 				case 32:
 					intArr := array.NewInt32Data(d)
+					handleNulls(intArr, vec, batchLength)
 					col = coldata.Int32s(intArr.Int32Values())
-					arr = intArr
 				case 0, 64:
 					intArr := array.NewInt64Data(d)
+					handleNulls(intArr, vec, batchLength)
 					col = coldata.Int64s(intArr.Int64Values())
-					arr = intArr
 				default:
 					panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 				}
 			case types.FloatFamily:
 				floatArr := array.NewFloat64Data(d)
+				handleNulls(floatArr, vec, batchLength)
 				col = coldata.Float64s(floatArr.Float64Values())
-				arr = floatArr
 			default:
 				panic(
 					fmt.Sprintf("unsupported type for conversion to column batch %s", d.DataType().Name()),
@@ -390,14 +468,21 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			vec.SetCol(col)
 		}
-		arrowBitmap := arr.NullBitmapBytes()
-		if len(arrowBitmap) != 0 {
-			vec.Nulls().SetNullBitmap(arrowBitmap, batchLength)
-		} else {
-			vec.Nulls().UnsetNulls()
-		}
-		b.SetSelection(false)
 	}
+	b.SetSelection(false)
 	b.SetLength(batchLength)
 	return nil
+}
+
+// handleNulls sets the correct nulls bitmap on vec according to arr.
+func handleNulls(arr array.Interface, vec coldata.Vec, batchLength int) {
+	arrowBitmap := arr.NullBitmapBytes()
+	if len(arrowBitmap) != 0 {
+		vec.Nulls().SetNullBitmap(arrowBitmap, batchLength)
+	} else {
+		// For types with the canonical type family of Bool, Bytes, Int, or
+		// Float, when there are no nulls, we have a null bitmap with zero
+		// length.
+		vec.Nulls().UnsetNulls()
+	}
 }
