@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -121,11 +123,14 @@ type externalSorter struct {
 	// outputUnlimitedAllocator is used to track the memory under the output
 	// batch in the merge operation.
 	outputUnlimitedAllocator *colmem.Allocator
+	// mergeMemoryLimit determines the amount of RAM available during the merge
+	// operation. This will be roughly a half of the total limit and is used by
+	// the dequeued batches and the output batch.
+	mergeMemoryLimit int64
 
-	totalMemoryLimit int64
-	state            externalSorterState
-	inputTypes       []*types.T
-	ordering         execinfrapb.Ordering
+	state      externalSorterState
+	inputTypes []*types.T
+	ordering   execinfrapb.Ordering
 	// columnOrdering is the same as ordering used when creating mergers.
 	columnOrdering     colinfo.ColumnOrdering
 	inMemSorter        ResettableOperator
@@ -140,9 +145,27 @@ type externalSorter struct {
 	// numPartitions is the current number of partitions.
 	numPartitions int
 	// firstPartitionIdx is the index of the first partition to merge next.
-	firstPartitionIdx   int
+	firstPartitionIdx int
+	// maxNumberPartitions determines the maximum number of active partitions
+	// we can have at once. This number can be limited by the number of FDs
+	// available as well as by dynamically computed limit when the memory usage
+	// of the merge operation exceeds its allowance.
 	maxNumberPartitions int
-	numForcedMerges     int
+	// maxNumberPartitionsDynamicallyReduced is true when maxNumberPartitions
+	// has been reduced based on the memory usage of the merge operation. Once
+	// it is true, we won't reduce maxNumberPartitions any further.
+	maxNumberPartitionsDynamicallyReduced bool
+	numForcedMerges                       int
+
+	// partitionsInfo tracks some information about all current partitions
+	// (those in [firstPartitionIdx, firstPartitionIdx+numPartitions) range).
+	partitionsInfo struct {
+		// TODO(yuzefovich): use this information to change the order of merging
+		// the partitions (currently, the first partition can become very large
+		// and is constantly being merged).
+		totalSize       []int64
+		maxBatchMemSize []int64
+	}
 
 	// fdState is used to acquire file descriptors up front.
 	fdState struct {
@@ -212,12 +235,13 @@ func NewExternalSorter(
 		// have already spilled, so we'll use a larger limit.
 		memoryLimit = defaultMemoryLimit
 	}
-	estimatedOutputBatchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
-	// memoryLimit of the partitions to sort in memory by those cache sizes. To
-	// be safe, we also estimate the size of the output batch and subtract that
-	// as well.
-	singlePartitionSize := memoryLimit - int64(maxNumberPartitions*diskQueueCfg.BufferSizeBytes+estimatedOutputBatchMemSize)
+	// memoryLimit of the partitions to sort in memory by those cache sizes.
+	memoryLimit -= int64(maxNumberPartitions * diskQueueCfg.BufferSizeBytes)
+	// We give half of the available RAM to the in-memory sorter. Note that we
+	// will reuse that memory for each partition and will be holding onto it all
+	// the time, so we cannot "return" this usage after spilling each partition.
+	singlePartitionSize := memoryLimit / 2
 	if singlePartitionSize < 1 {
 		// If the memory limit is 0, the input partitioning operator will return
 		// a zero-length batch, so make it at least 1.
@@ -239,27 +263,29 @@ func NewExternalSorter(
 		// acquiring.
 		partitionedDiskQueueSemaphore = nil
 	}
+	// We give another half of the available RAM to the merge operation.
+	mergeMemoryLimit := memoryLimit / 2
+	if mergeMemoryLimit < 1 {
+		mergeMemoryLimit = 1
+	}
 	es := &externalSorter{
 		OneInputNode:             NewOneInputNode(inMemSorter),
 		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
-		totalMemoryLimit:         memoryLimit,
+		mergeMemoryLimit:         mergeMemoryLimit,
 		inMemSorter:              inMemSorter,
 		inMemSorterInput:         inputPartitioner.(*inputPartitioningOperator),
 		partitionerCreator: func() colcontainer.PartitionedQueue {
 			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
-		inputTypes:     inputTypes,
-		ordering:       ordering,
-		columnOrdering: execinfrapb.ConvertToColumnOrdering(ordering),
-		// TODO(yuzefovich): maxNumberPartitions should also be semi-dynamically
-		// limited based on the sizes of batches. Consider a scenario when each
-		// input batch is 1 GB in size - if we don't put any limiting in place,
-		// we might try to use 16 partitions at once, which means that during
-		// merging we will be keeping 16 batches (i.e. 16GB of data) in memory.
+		inputTypes:          inputTypes,
+		ordering:            ordering,
+		columnOrdering:      execinfrapb.ConvertToColumnOrdering(ordering),
 		maxNumberPartitions: maxNumberPartitions,
 		numForcedMerges:     numForcedMerges,
 	}
+	es.partitionsInfo.totalSize = make([]int64, maxNumberPartitions)
+	es.partitionsInfo.maxBatchMemSize = make([]int64, maxNumberPartitions)
 	es.fdState.fdSemaphore = fdSemaphore
 	es.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
 	return es
@@ -283,7 +309,6 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterFinalMerging
 				continue
 			}
-			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			if s.partitioner == nil {
 				s.partitioner = s.partitionerCreator()
 				if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil {
@@ -294,20 +319,14 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					s.fdState.acquiredFDs = toAcquire
 				}
 			}
-			// Note that b will never have a selection vector set because the
-			// allSpooler performs a deselection when buffering up the tuples,
-			// and the in-memory sorter has allSpooler as its input.
-			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-				colexecerror.InternalError(err)
-			}
+			s.partitionsInfo.totalSize[s.numPartitions] = 0
+			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = 0
+			s.enqueue(ctx, b)
 			s.state = externalSorterSpillPartition
 
 		case externalSorterSpillPartition:
-			curPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			b := s.input.Next(ctx)
-			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
-				colexecerror.InternalError(err)
-			}
+			s.enqueue(ctx, b)
 			if b.Length() == 0 {
 				// The partition has been fully spilled, so we reset the
 				// in-memory sorter (which will do the "shallow" reset of
@@ -315,17 +334,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.inMemSorterInput.interceptReset = true
 				s.inMemSorter.reset(ctx)
 				s.numPartitions++
-				forceRepeatedMerging := s.numForcedMerges > 0 && s.numPartitions == 2
-				if s.numPartitions == s.maxNumberPartitions-1 || forceRepeatedMerging {
-					// We either have reached the maximum number of active
-					// partitions that we know that we'll be able to merge
-					// without exceeding the limit or we're forced to merge the
-					// partitions in tests, so we need to merge all of them and
-					// spill the new partition to disk before we can proceed on
-					// consuming the input.
-					if forceRepeatedMerging {
-						s.numForcedMerges--
-					}
+				if s.shouldMergeAllPartitions() {
 					s.state = externalSorterRepeatedMerging
 					continue
 				}
@@ -352,15 +361,17 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				colexecerror.InternalError(err)
 			}
 			merger.Init()
-			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
+			s.firstPartitionIdx += s.numPartitions
+			s.numPartitions = 0
+			s.partitionsInfo.totalSize[s.numPartitions] = 0
+			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = 0
 			for b := merger.Next(ctx); ; b = merger.Next(ctx) {
-				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-					colexecerror.InternalError(err)
-				}
+				s.enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
 				}
 			}
+			s.numPartitions = 1
 			// We are now done with the merger, so we can release the memory
 			// used for the output batches (all of which have been enqueued into
 			// the new partition).
@@ -371,8 +382,6 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			if err := s.partitioner.CloseInactiveReadPartitions(ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
-			s.firstPartitionIdx += s.numPartitions
-			s.numPartitions = 1
 			s.state = externalSorterNewPartition
 
 		case externalSorterFinalMerging:
@@ -412,6 +421,82 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
+// enqueue enqueues b to the current partition (which has index
+// firstPartitionIdx + numPartitions) as well as updates the information about
+// the partition.
+func (s *externalSorter) enqueue(ctx context.Context, b coldata.Batch) {
+	if b.Length() > 0 {
+		batchMemSize := colmem.GetBatchMemSize(b)
+		s.partitionsInfo.totalSize[s.numPartitions] += batchMemSize
+		if batchMemSize > s.partitionsInfo.maxBatchMemSize[s.numPartitions] {
+			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = batchMemSize
+		}
+	}
+	curPartitionIdx := s.firstPartitionIdx + s.numPartitions
+	// Note that b will never have a selection vector set because the allSpooler
+	// performs a deselection when buffering up the tuples, and the in-memory
+	// sorter has allSpooler as its input.
+	if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
+		colexecerror.InternalError(err)
+	}
+}
+
+// shouldMergeAllPartitions returns true if we need to merge all current
+// partitions into one before proceeding to spilling a new partition.
+func (s *externalSorter) shouldMergeAllPartitions() bool {
+	if s.numPartitions <= 1 {
+		return false
+	}
+	forceRepeatedMerging := s.numForcedMerges > 0 && s.numPartitions == 2
+	if s.numPartitions == s.maxNumberPartitions-1 || forceRepeatedMerging {
+		// We either have reached the maximum number of active partitions that
+		// we know that we'll be able to merge without exceeding the limit of
+		// FDs or we're forced to merge the partitions in tests, so we need to
+		// merge all of them and spill the new partition to disk before we can
+		// proceed on consuming the input.
+		if forceRepeatedMerging {
+			s.numForcedMerges--
+		}
+		return true
+	}
+	if s.maxNumberPartitionsDynamicallyReduced {
+		// We haven't reached the dynamically computed maximum number of
+		// partitions yet, so we will wait before performing the merge
+		// operation.
+		return false
+	}
+	// Now we check whether already we're likely to exceed the memory limit for
+	// the merge operation.
+	//
+	// Each of the partitions will need to use a single batch at a time, so we
+	// count that usage based on the maximum batch mem size of each partition.
+	var expectedMergeMemUsage int64
+	for i := 0; i < s.numPartitions; i++ {
+		expectedMergeMemUsage += s.partitionsInfo.maxBatchMemSize[i]
+	}
+	// We also need to account for the output batch of the merge operation. We
+	// will estimate that it will use the average of max batch mem sizes from
+	// each of the partition.
+	expectedMergeMemUsage = expectedMergeMemUsage / int64(s.numPartitions) * int64(s.numPartitions+1)
+	if expectedMergeMemUsage < s.mergeMemoryLimit {
+		return false
+	}
+	// From now on, we will never be able to create more partitions than we
+	// currently have due to the fact that we're keeping the memory used for
+	// dequeued batches, so we'll override the maximum number of partitions and
+	// release the unused FDs.
+	//
+	// Note that we need an extra partition to write into.
+	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil {
+		toRelease := s.maxNumberPartitions - s.numPartitions - 1
+		s.fdState.fdSemaphore.Release(toRelease)
+		s.fdState.acquiredFDs -= toRelease
+	}
+	s.maxNumberPartitions = s.numPartitions + 1
+	s.maxNumberPartitionsDynamicallyReduced = true
+	return true
+}
+
 func (s *externalSorter) reset(ctx context.Context) {
 	if r, ok := s.input.(resetter); ok {
 		r.reset(ctx)
@@ -424,6 +509,9 @@ func (s *externalSorter) reset(ctx context.Context) {
 	s.closed = false
 	s.firstPartitionIdx = 0
 	s.numPartitions = 0
+	// Note that we consciously do not reset maxNumberPartitions and
+	// maxNumberPartitionsDynamicallyReduced (when the latter is true) since we
+	// are keeping the memory used for dequeueing batches.
 }
 
 func (s *externalSorter) Close(ctx context.Context) error {
@@ -477,17 +565,35 @@ func (s *externalSorter) createMergerForPartitions(
 		syncInputs[i].Op = s.partitionerToOperators[i]
 	}
 	if log.V(2) {
+		var b strings.Builder
+		for i := 0; i < s.numPartitions; i++ {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(humanizeutil.IBytes(s.partitionsInfo.totalSize[i]))
+		}
 		log.Infof(ctx,
-			"external sorter is merging partitions in range [%d, %d)",
-			s.firstPartitionIdx, s.firstPartitionIdx+s.numPartitions,
+			"external sorter is merging partitions in range [%d, %d) with sizes [%s]",
+			s.firstPartitionIdx, s.firstPartitionIdx+s.numPartitions, b.String(),
 		)
 	}
 
-	// TODO(yuzefovich): we should calculate a more precise memory limit taking
-	// into account how many partitions are currently being merged and the
-	// average batch size in each one of them.
+	// Calculate the limit on the output batch mem size.
+	outputBatchMemSize := s.mergeMemoryLimit
+	for i := 0; i < s.numPartitions; i++ {
+		outputBatchMemSize -= s.partitionsInfo.maxBatchMemSize[i]
+	}
+	// It is possible that the expected usage of the dequeued batches already
+	// exceeds the memory limit (this is likely when the tuples are wide). In
+	// such a scenario we want to produce output batches of relatively large
+	// memory size too, so we give the output batch at least its fair share of
+	// the memory limit.
+	minOutputBatchMemSize := s.mergeMemoryLimit / int64(s.numPartitions+1)
+	if outputBatchMemSize < minOutputBatchMemSize {
+		outputBatchMemSize = minOutputBatchMemSize
+	}
 	return NewOrderedSynchronizer(
-		s.outputUnlimitedAllocator, s.totalMemoryLimit, syncInputs, s.inputTypes, s.columnOrdering,
+		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }
 

@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
