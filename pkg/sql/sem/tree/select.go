@@ -281,6 +281,9 @@ type IndexFlags struct {
 	// references from this table. This is useful in particular for scrub queries
 	// used to verify the consistency of foreign key relations.
 	IgnoreForeignKeys bool
+	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
+	// index constraints.
+	IgnoreUniqueWithoutIndexKeys bool
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -298,9 +301,14 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.IgnoreForeignKeys && other.IgnoreForeignKeys {
 		return errors.New("IGNORE_FOREIGN_KEYS specified multiple times")
 	}
+	if ih.IgnoreUniqueWithoutIndexKeys && other.IgnoreUniqueWithoutIndexKeys {
+		return errors.New("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS specified multiple times")
+	}
 	result := *ih
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
+	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
+		other.IgnoreUniqueWithoutIndexKeys
 
 	if other.Direction != 0 {
 		if ih.Direction != 0 {
@@ -339,7 +347,8 @@ func (ih *IndexFlags) Check() error {
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if !ih.NoIndexJoin && !ih.IgnoreForeignKeys && ih.Direction == 0 {
+	if !ih.NoIndexJoin && !ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys &&
+		ih.Direction == 0 {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -372,6 +381,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		if ih.IgnoreForeignKeys {
 			sep()
 			ctx.WriteString("IGNORE_FOREIGN_KEYS")
+		}
+
+		if ih.IgnoreUniqueWithoutIndexKeys {
+			sep()
+			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
 		}
 		ctx.WriteString("}")
 	}

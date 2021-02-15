@@ -254,7 +254,7 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, tabMeta *opt.Tabl
 	return h.mb.b.buildScan(
 		tabMeta,
 		h.uniqueAndPrimaryKeyOrdinals,
-		nil, /* indexFlags */
+		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
 	), tabMeta

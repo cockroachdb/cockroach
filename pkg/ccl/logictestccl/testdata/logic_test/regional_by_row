@@ -369,15 +369,16 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • cross join (right outer)
+│           └── • cross join (left outer)
 │               │
-│               ├── • scan
-│               │     missing stats
-│               │     table: regional_by_row_table@primary
-│               │     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│               ├── • values
+│               │     size: 6 columns, 1 row
 │               │
-│               └── • values
-│                     size: 6 columns, 1 row
+│               └── • scan
+│                     missing stats
+│                     table: regional_by_row_table@primary
+│                     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│                     locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -391,11 +392,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -409,11 +410,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
@@ -427,11 +428,11 @@ vectorized: true
             │
             └── • cross join
                 │
-                ├── • scan buffer
-                │     label: buffer 1
+                ├── • values
+                │     size: 1 column, 3 rows
                 │
-                └── • values
-                      size: 1 column, 3 rows
+                └── • scan buffer
+                      label: buffer 1
 
 # One row already exists, one row is new.
 statement ok
