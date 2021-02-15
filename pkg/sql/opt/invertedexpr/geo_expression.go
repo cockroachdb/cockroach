@@ -61,9 +61,9 @@ func geoToSpan(span geoindex.KeySpan, b []byte) (inverted.Span, []byte) {
 
 // GeoUnionKeySpansToSpanExpr converts geoindex.UnionKeySpans to a
 // SpanExpression.
-func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) *inverted.SpanExpression {
+func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) inverted.Expression {
 	if len(ukSpans) == 0 {
-		return nil
+		return inverted.NonInvertedColExpression{}
 	}
 	// Avoid per-span heap allocations. Each of the 2 keys in a span is the
 	// geoInvertedIndexMarker (1 byte) followed by a varint.
@@ -79,9 +79,9 @@ func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) *inverted.SpanEx
 }
 
 // GeoRPKeyExprToSpanExpr converts geoindex.RPKeyExpr to SpanExpression.
-func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*inverted.SpanExpression, error) {
+func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (inverted.Expression, error) {
 	if len(rpExpr) == 0 {
-		return nil, nil
+		return inverted.NonInvertedColExpression{}, nil
 	}
 	spansToRead := make([]inverted.Span, 0, len(rpExpr))
 	var b []byte // avoid per-expr heap allocations
@@ -128,7 +128,7 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*inverted.SpanExpression
 		}
 	}
 	if len(stack) != 1 {
-		return nil, errors.Errorf("malformed expression: %s", rpExpr)
+		return inverted.NonInvertedColExpression{}, errors.Errorf("malformed expression: %s", rpExpr)
 	}
 	spanExpr := *stack[0]
 	spanExpr.SpansToRead = spansToRead
