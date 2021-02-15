@@ -2377,6 +2377,31 @@ project
       └── filters
            └── geom:3 ~ '01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
+# Regression test for #59702. Do not panic when empty index spans are generated
+# from a filter on an inverted column.
+exec-ddl
+CREATE TABLE t59702 (
+  k INT PRIMARY KEY,
+  g GEOGRAPHY,
+  INVERTED INDEX (g)
+)
+----
+
+opt
+SELECT * FROM t59702 WHERE st_intersects(g, st_buffer(st_makepoint(1, 1)::GEOGRAPHY, 0))
+----
+select
+ ├── columns: k:1!null g:2
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan t59702
+ │    ├── columns: k:1!null g:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── st_intersects(g:2, '0103000020E610000000000000') [outer=(2), immutable]
+
 # --------------------------------------------------
 # SplitDisjunction
 # --------------------------------------------------

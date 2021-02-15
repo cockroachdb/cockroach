@@ -153,7 +153,7 @@ func TryConstrainGeoIndex(
 	}
 
 	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
-	if !ok {
+	if !ok || spanExpr == nil {
 		return nil, false
 	}
 
