@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -249,6 +250,22 @@ func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
 // SetName sets the name on the descriptor.
 func (desc *Mutable) SetName(name string) {
 	desc.Name = name
+}
+
+// ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
+// iterutil.StopIteration is supported.
+func (desc *Immutable) ForEachSchemaInfo(
+	f func(id descpb.ID, name string, isDropped bool) error,
+) error {
+	for name, info := range desc.Schemas {
+		if err := f(info.ID, name, info.Dropped); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // ValidateSelf validates that the database descriptor is well formed.
