@@ -1312,6 +1312,21 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 	return err
 }
 
+// maybeReconstructMutableTypeDesc reconstructs a Mutable if the given
+// descriptor is a type descriptor and works as a pass through for all other
+// types of descriptors. Reconstructing the type descriptor updates the
+// enumMetadata. This ensures that tables hydration following a type descriptor
+// update (in the same txn) happens using the modified type descriptor.
+func maybeReconstructMutableTypeDesc(
+	desc catalog.MutableDescriptor,
+) (catalog.MutableDescriptor, error) {
+	typeDesc, ok := desc.(catalog.TypeDescriptor)
+	if ok {
+		return typedesc.NewMutableFromModifiedMutable(typeDesc)
+	}
+	return desc, nil
+}
+
 func (tc *Collection) addUncommittedDescriptor(
 	desc catalog.MutableDescriptor,
 ) (*uncommittedDescriptor, error) {
@@ -1323,8 +1338,13 @@ func (tc *Collection) addUncommittedDescriptor(
 			desc.GetID(), version, origVersion)
 	}
 
+	mutable, err := maybeReconstructMutableTypeDesc(desc)
+	if err != nil {
+		return nil, err
+	}
+
 	ud := &uncommittedDescriptor{
-		mutable:   desc,
+		mutable:   mutable,
 		immutable: desc.ImmutableCopy(),
 	}
 

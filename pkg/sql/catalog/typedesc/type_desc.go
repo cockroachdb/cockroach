@@ -113,6 +113,27 @@ func NewExistingMutable(desc descpb.TypeDescriptor) *Mutable {
 	}
 }
 
+// NewMutableFromModifiedMutable returns a new Mutable from the given type
+// descriptor that may have been modified in the same transaction. This function
+// "refreshes" the Immutable field by reconstructing it. This means that the
+// fields used to fill enumMetadata (readOnly, logicalReps, physicalReps) are
+// reconstructed reflecting the modified mutable descriptor's state. This allows
+// us to hydrate tables correctly when preceded by a type descriptor modification
+// in the same transaction.
+func NewMutableFromModifiedMutable(desc catalog.TypeDescriptor) (*Mutable, error) {
+	imm := makeImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+
+	mutable, ok := desc.(*Mutable)
+	if !ok {
+		return nil, errors.AssertionFailedf("type descriptor was not mutable")
+	}
+	return &Mutable{
+		Immutable:      imm,
+		ClusterVersion: mutable.ClusterVersion,
+	}, nil
+}
+
 // NewImmutable returns an Immutable from the given TypeDescriptor.
 func NewImmutable(desc descpb.TypeDescriptor) *Immutable {
 	m := makeImmutable(desc)
