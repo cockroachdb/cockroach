@@ -18,7 +18,7 @@ TABLE xyz
  ├── z int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── x int not null
  └── INDEX foo
       ├── z int
@@ -53,7 +53,7 @@ TABLE abcdef
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (f > 2:::INT8)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       └── rowid int not null default (unique_rowid()) [hidden]
 scan abcdef
  ├── check constraint expressions
@@ -91,7 +91,7 @@ TABLE uvwxy
  ├── FAMILY fam_0_u_v_w (u, v, w)
  ├── FAMILY fam_1_x (x)
  ├── FAMILY fam_2_y (y)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── u int not null
       └── v int not null
 scan uvwxy
@@ -119,7 +119,7 @@ TABLE child
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
@@ -134,7 +134,7 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -161,7 +161,7 @@ TABLE child2
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan child2
@@ -176,7 +176,7 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -213,7 +213,7 @@ TABLE a
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a_other (a, other)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── interleaved by
            └── table=60 index=1
@@ -228,7 +228,7 @@ TABLE ab
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a_b (a, b)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       ├── interleave ancestors
@@ -249,7 +249,7 @@ TABLE abc
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a_b_c_k (a, b, c, k)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── k int not null
  └── INDEX abc_idx
       ├── a int
@@ -271,7 +271,7 @@ TABLE abx
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a_b_x (a, b, x)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       ├── x int not null
