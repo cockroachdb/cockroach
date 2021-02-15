@@ -227,6 +227,12 @@ func NewExternalSorter(
 		// acquiring.
 		partitionedDiskQueueSemaphore = nil
 	}
+	if memoryLimit == 1 {
+		// If memory limit is 1, we're likely in a "force disk spill"
+		// scenario, but we don't want to artificially limit batches when we
+		// have already spilled, so we'll use a larger limit.
+		memoryLimit = defaultMemoryLimit
+	}
 	es := &externalSorter{
 		OneInputNode:       NewOneInputNode(inMemSorter),
 		unlimitedAllocator: unlimitedAllocator,
