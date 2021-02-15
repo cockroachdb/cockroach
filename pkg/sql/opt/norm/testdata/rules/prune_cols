@@ -3603,7 +3603,7 @@ update uniq
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:8!null w:10 x:11 uniq.y:12
  │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(10-12)
+ │    │    │    └── fd: (8)-->(10-12), (10)~~>(8,11,12), (11,12)~~>(8,10)
  │    │    └── filters
  │    │         └── uniq.k:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
  │    └── projections
@@ -3627,7 +3627,7 @@ update uniq
       │         ├── scan uniq
       │         │    ├── columns: uniq.k:19!null w:21
       │         │    ├── key: (19)
-      │         │    └── fd: (19)-->(21)
+      │         │    └── fd: (19)-->(21), (21)~~>(19)
       │         └── filters
       │              ├── w_new:17 = w:21 [outer=(17,21), constraints=(/17: (/NULL - ]; /21: (/NULL - ]), fd=(17)==(21), (21)==(17)]
       │              └── k:18 != uniq.k:19 [outer=(18,19), constraints=(/18: (/NULL - ]; /19: (/NULL - ])]
@@ -3649,7 +3649,7 @@ update uniq
                 ├── scan uniq
                 │    ├── columns: uniq.k:29!null x:32 uniq.y:33
                 │    ├── key: (29)
-                │    └── fd: (29)-->(32,33)
+                │    └── fd: (29)-->(32,33), (32,33)~~>(29)
                 └── filters
                      ├── x_new:26 = x:32 [outer=(26,32), constraints=(/26: (/NULL - ]; /32: (/NULL - ]), fd=(26)==(32), (32)==(26)]
                      ├── y:27 = uniq.y:33 [outer=(27,33), constraints=(/27: (/NULL - ]; /33: (/NULL - ]), fd=(27)==(33), (33)==(27)]
@@ -3702,7 +3702,7 @@ upsert uniq_fk_parent
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: k:10!null a:11 b:12 c:13
  │    │    │    │    ├── key: (10)
- │    │    │    │    └── fd: (10)-->(11-13)
+ │    │    │    │    └── fd: (10)-->(11-13), (11)~~>(10,12,13), (12,13)~~>(10,11)
  │    │    │    └── filters
  │    │    │         └── k:10 = 2 [outer=(10), constraints=(/10: [/2 - /2]; tight), fd=()-->(10)]
  │    │    └── filters (true)
@@ -3729,7 +3729,7 @@ upsert uniq_fk_parent
       │         ├── scan uniq_fk_parent
       │         │    ├── columns: k:24!null a:25
       │         │    ├── key: (24)
-      │         │    └── fd: (24)-->(25)
+      │         │    └── fd: (24)-->(25), (25)~~>(24)
       │         └── filters
       │              ├── upsert_a:22 = a:25 [outer=(22,25), constraints=(/22: (/NULL - ]; /25: (/NULL - ]), fd=(22)==(25), (25)==(22)]
       │              └── upsert_k:23 != k:24 [outer=(23,24), constraints=(/23: (/NULL - ]; /24: (/NULL - ])]
@@ -3751,7 +3751,7 @@ upsert uniq_fk_parent
                 ├── scan uniq_fk_parent
                 │    ├── columns: k:33!null b:35 c:36
                 │    ├── key: (33)
-                │    └── fd: (33)-->(35,36)
+                │    └── fd: (33)-->(35,36), (35,36)~~>(33)
                 └── filters
                      ├── upsert_b:30 = b:35 [outer=(30,35), constraints=(/30: (/NULL - ]; /35: (/NULL - ]), fd=(30)==(35), (35)==(30)]
                      ├── upsert_c:31 = c:36 [outer=(31,36), constraints=(/31: (/NULL - ]; /36: (/NULL - ]), fd=(31)==(36), (36)==(31)]
@@ -3802,7 +3802,7 @@ upsert uniq_fk_parent
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: k:9!null a:10 b:11 c:12 d:13
  │    │    │    │    ├── key: (9)
- │    │    │    │    └── fd: (9)-->(10-13)
+ │    │    │    │    └── fd: (9)-->(10-13), (10)~~>(9,11-13), (11,12)~~>(9,10,13)
  │    │    │    └── filters
  │    │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
  │    │    └── filters (true)
@@ -3830,7 +3830,7 @@ upsert uniq_fk_parent
       │         ├── scan uniq_fk_parent
       │         │    ├── columns: k:23!null a:24
       │         │    ├── key: (23)
-      │         │    └── fd: (23)-->(24)
+      │         │    └── fd: (23)-->(24), (24)~~>(23)
       │         └── filters
       │              ├── upsert_a:21 = a:24 [outer=(21,24), constraints=(/21: (/NULL - ]; /24: (/NULL - ]), fd=(21)==(24), (24)==(21)]
       │              └── upsert_k:22 != k:23 [outer=(22,23), constraints=(/22: (/NULL - ]; /23: (/NULL - ])]
@@ -3852,7 +3852,7 @@ upsert uniq_fk_parent
                 ├── scan uniq_fk_parent
                 │    ├── columns: k:32!null b:34 c:35
                 │    ├── key: (32)
-                │    └── fd: (32)-->(34,35)
+                │    └── fd: (32)-->(34,35), (34,35)~~>(32)
                 └── filters
                      ├── upsert_b:29 = b:34 [outer=(29,34), constraints=(/29: (/NULL - ]; /34: (/NULL - ]), fd=(29)==(34), (34)==(29)]
                      ├── upsert_c:30 = c:35 [outer=(30,35), constraints=(/30: (/NULL - ]; /35: (/NULL - ]), fd=(30)==(35), (35)==(30)]
@@ -3876,7 +3876,7 @@ delete uniq_fk_parent
  │    ├── scan uniq_fk_parent
  │    │    ├── columns: k:7!null uniq_fk_parent.a:8 uniq_fk_parent.b:9 uniq_fk_parent.c:10
  │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8-10)
+ │    │    └── fd: (7)-->(8-10), (8)~~>(7,9,10), (9,10)~~>(7,8)
  │    └── filters
  │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
  └── f-k-checks
@@ -3895,7 +3895,9 @@ delete uniq_fk_parent
       │         │    ├── key: ()
       │         │    └── fd: ()-->(13,14)
       │         ├── scan uniq_fk_child
-      │         │    └── columns: uniq_fk_child.b:16 uniq_fk_child.c:17
+      │         │    ├── columns: uniq_fk_child.b:16 uniq_fk_child.c:17
+      │         │    ├── lax-key: (16,17)
+      │         │    └── fd: (17)~~>(16)
       │         └── filters
       │              ├── b:13 = uniq_fk_child.b:16 [outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
       │              └── c:14 = uniq_fk_child.c:17 [outer=(14,17), constraints=(/14: (/NULL - ]; /17: (/NULL - ]), fd=(14)==(17), (17)==(14)]
