@@ -5514,6 +5514,32 @@ sort (segmented)
            ├── j2.j:5 @> j1.j:2 [outer=(2,5), immutable]
            └── j2.j:5 = '"foo"' [outer=(5), immutable, constraints=(/5: [/'"foo"' - /'"foo"']; tight), fd=()-->(5)]
 
+# Regression test for #59702. Do not panic when empty index spans are generated
+# from a filter on an inverted column.
+exec-ddl
+CREATE TABLE t59702 (
+  k INT PRIMARY KEY,
+  g GEOGRAPHY,
+  INVERTED INDEX (g)
+)
+----
+
+opt
+SELECT * FROM small
+JOIN t59702
+ON st_intersects(t59702.g, st_buffer(st_makepoint(1, 1)::GEOGRAPHY, 0)) AND small.m = t59702.k
+----
+inner-join (lookup t59702)
+ ├── columns: m:1!null n:2 k:5!null g:6!null
+ ├── key columns: [1] = [5]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── st_intersects(g:6, '0103000020E610000000000000') [outer=(6), immutable, constraints=(/6: (/NULL - ])]
+
 # -------------------------------------------------------
 # GenerateInvertedJoins on multi-column inverted indexes
 # -------------------------------------------------------
