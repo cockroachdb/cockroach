@@ -15,21 +15,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	warmupDuration    = 600 * time.Millisecond
+	countdownDuration = 1200 * time.Millisecond
+	delta             = 150 * time.Millisecond
+)
+
 func TestMakeIdleMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderShort(t)
 
 	ctx := context.Background()
 
 	start := timeutil.Now()
-	warmupDuration := 300 * time.Millisecond
-	countdownDuration := 600 * time.Millisecond
-	delta := 5 * time.Millisecond
 
 	var handlerCalled syncutil.AtomicBool
 	monitor := MakeIdleMonitor(ctx, warmupDuration, func() {
@@ -77,13 +82,11 @@ func TestMakeIdleMonitor(t *testing.T) {
 
 func TestMakeIdleMonitor_WithConnectionDuringWarmup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderShort(t)
 
 	ctx := context.Background()
 
 	start := timeutil.Now()
-	warmupDuration := 300 * time.Millisecond
-	countdownDuration := 600 * time.Millisecond
-	delta := 5 * time.Millisecond
 
 	var handlerCalled syncutil.AtomicBool
 	monitor := MakeIdleMonitor(ctx, warmupDuration, func() {
@@ -136,13 +139,11 @@ func TestMakeIdleMonitor_WithConnectionDuringWarmup(t *testing.T) {
 
 func TestMakeIdleMonitor_WithBriefConnectionDuringWarmup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderShort(t)
 
 	ctx := context.Background()
 
 	start := timeutil.Now()
-	warmupDuration := 300 * time.Millisecond
-	countdownDuration := 600 * time.Millisecond
-	delta := 5 * time.Millisecond
 
 	var handlerCalled syncutil.AtomicBool
 	monitor := MakeIdleMonitor(ctx, warmupDuration, func() {
@@ -198,13 +199,11 @@ func TestMakeIdleMonitor_WithBriefConnectionDuringWarmup(t *testing.T) {
 
 func TestMakeIdleMonitor_WithBriefConnectionDuringCountdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderShort(t)
 
 	ctx := context.Background()
 
 	start := timeutil.Now()
-	warmupDuration := 300 * time.Millisecond
-	countdownDuration := 600 * time.Millisecond
-	delta := 5 * time.Millisecond
 
 	var handlerCalled syncutil.AtomicBool
 	monitor := MakeIdleMonitor(ctx, warmupDuration, func() {
