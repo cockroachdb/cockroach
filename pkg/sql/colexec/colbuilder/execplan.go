@@ -455,13 +455,9 @@ func (r opResult) createDiskBackedSort(
 				ctx, r.createBufferingUnlimitedMemAccount(
 					ctx, flowCtx, monitorNamePrefix,
 				), factory)
-			standaloneMemAccount := r.createStandaloneMemAccount(
-				ctx, flowCtx, monitorNamePrefix,
-			)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
 			es := colexec.NewExternalSorter(
 				unlimitedAllocator,
-				standaloneMemAccount,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
@@ -1513,31 +1509,6 @@ func (r opResult) createBufferingUnlimitedMemAccount(
 	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
-}
-
-// createStandaloneMemAccount instantiates an unlimited memory monitor and a
-// memory account that have a standalone budget. This means that the memory
-// registered with these objects is *not* reported to the root monitor (i.e.
-// it will not count towards max-sql-memory). Use it only when the memory in
-// use is accounted for with a different memory monitor. The receiver is
-// updated to have references to both objects.
-func (r opResult) createStandaloneMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
-	standaloneMemMonitor := mon.NewMonitor(
-		name+"-standalone",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		flowCtx.Cfg.Settings,
-	)
-	r.OpMonitors = append(r.OpMonitors, standaloneMemMonitor)
-	standaloneMemMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &standaloneMemAccount)
-	return &standaloneMemAccount
 }
 
 // createDiskAccount instantiates an unlimited disk monitor and a disk account

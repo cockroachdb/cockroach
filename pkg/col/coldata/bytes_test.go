@@ -433,3 +433,31 @@ func TestBytes(t *testing.T) {
 		other.AssertOffsetsAreNonDecreasing(4)
 	})
 }
+
+func TestProportionalSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Use a large value so that the bytes vector needs to expand.
+	value := make([]byte, 3*BytesInitialAllocationFactor)
+
+	rng, _ := randutil.NewPseudoRand()
+	// We need a number divisible by 4.
+	fullCapacity := (1 + rng.Intn(100)) * 4
+	b := NewBytes(fullCapacity)
+	for i := 0; i < fullCapacity; i++ {
+		b.Set(i, value)
+	}
+
+	fullSize := b.ProportionalSize(int64(fullCapacity))
+
+	// Check that if we ask the size for a half of the capacity, we get the
+	// half of full size (modulo a fixed overhead value).
+	halfSize := b.ProportionalSize(int64(fullCapacity / 2))
+	require.Equal(t, int((fullSize-FlatBytesOverhead)/2), int(halfSize-FlatBytesOverhead))
+
+	// Check that if we create a window for a quarter of the capacity, we get
+	// the quarter of full size (modulo a fixed overhead value).
+	// Notably we don't start the window from the beginning.
+	quarterSize := b.Window(fullCapacity/4, fullCapacity/2).ProportionalSize(int64(fullCapacity / 4))
+	require.Equal(t, int(fullSize-FlatBytesOverhead)/4, int(quarterSize-FlatBytesOverhead))
+}
