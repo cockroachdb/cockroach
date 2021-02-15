@@ -236,6 +236,7 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 
 // NewInternalPlanner is an exported version of newInternalPlanner. It
 // returns an interface{} so it can be used outside of the sql package.
+// NewInternalPlanner initializes a new desc.Collection if one isn't passed in.
 func NewInternalPlanner(
 	opName string,
 	txn *kv.Txn,
@@ -243,8 +244,9 @@ func NewInternalPlanner(
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
+	collection *descs.Collection,
 ) (interface{}, func()) {
-	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData)
+	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData, collection)
 }
 
 // newInternalPlanner creates a new planner instance for internal usage. This
@@ -252,6 +254,8 @@ func NewInternalPlanner(
 //
 // Since it can't be reset, the planner can be used only for planning a single
 // statement.
+//
+// A new desc.Collection is initialized if one isn't passed in explicitly.
 //
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
@@ -262,6 +266,7 @@ func newInternalPlanner(
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
+	collection *descs.Collection,
 ) (*planner, func()) {
 	// We need a context that outlives all the uses of the planner (since the
 	// planner captures it in the EvalCtx, and so does the cleanup function that
@@ -280,12 +285,14 @@ func newInternalPlanner(
 	}
 	sd.SessionData.Database = "system"
 	sd.SessionData.UserProto = user.EncodeProto()
-	// The table collection used by the internal planner does not rely on the
-	// deprecatedDatabaseCache and there are no subscribers to the
-	// deprecatedDatabaseCache, so we can leave it uninitialized.
-	// Furthermore, we're not concerned about the efficiency of querying tables
-	// with user-defined types, hence the nil hydratedTables.
-	tables := descs.NewCollection(execCfg.Settings, execCfg.LeaseManager, nil /* hydratedTables */)
+	if collection == nil {
+		// The table collection used by the internal planner does not rely on the
+		// deprecatedDatabaseCache and there are no subscribers to the
+		// deprecatedDatabaseCache, so we can leave it uninitialized.
+		// Furthermore, we're not concerned about the efficiency of querying tables
+		// with user-defined types, hence the nil hydratedTables.
+		collection = descs.NewCollection(execCfg.Settings, execCfg.LeaseManager, nil /* hydratedTables */)
+	}
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
@@ -324,7 +331,7 @@ func newInternalPlanner(
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(
-		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, plannerMon,
+		ctx, sd, dataMutator, collection, txn, ts, ts, execCfg, plannerMon,
 	)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
@@ -344,7 +351,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.extendedEvalCtx.Descs = tables
+	p.extendedEvalCtx.Descs = collection
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)

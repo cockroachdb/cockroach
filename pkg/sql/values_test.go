@@ -49,7 +49,13 @@ func makeTestPlanner() *planner {
 
 	// TODO(andrei): pass the cleanup along to the caller.
 	p, _ /* cleanup */ := newInternalPlanner(
-		"test", nil /* txn */, security.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{},
+		"test",
+		nil, /* txn */
+		security.RootUserName(),
+		&MemoryMetrics{},
+		&execCfg,
+		sessiondatapb.SessionData{},
+		nil, /* collection */
 	)
 	return p
 }
