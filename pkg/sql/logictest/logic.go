@@ -465,7 +465,8 @@ type testClusterConfig struct {
 	isCCLConfig bool
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
-	localities map[int]roachpb.Locality
+	localities          map[int]roachpb.Locality
+	pretend59315IsFixed bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -561,6 +562,13 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
+	},
+	{
+		name:                "5node-pretend59315IsFixed",
+		numNodes:            5,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		pretend59315IsFixed: true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -1332,6 +1340,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplainAnalyze: true,
+					Pretend59315IsFixed:         t.cfg.pretend59315IsFixed,
 				},
 			},
 			ClusterName:   "testclustername",
