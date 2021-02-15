@@ -257,36 +257,16 @@ func (p *planner) AlterPrimaryKey(
 
 	if alterPrimaryKeyLocalitySwap != nil {
 		localityConfigSwap := alterPrimaryKeyLocalitySwap.localityConfigSwap
-		switch localityConfigSwap.OldLocalityConfig.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_Global_,
-			*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-			switch to := localityConfigSwap.NewLocalityConfig.Locality.(type) {
+		switch to := localityConfigSwap.NewLocalityConfig.Locality.(type) {
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			// Check we are migrating from a known locality.
+			switch localityConfigSwap.OldLocalityConfig.Locality.(type) {
 			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-				isNewPartitionAllBy = true
-				allowImplicitPartitioning = true
-				colName := tree.RegionalByRowRegionDefaultColName
-				if as := to.RegionalByRow.As; as != nil {
-					colName = tree.Name(*as)
-				}
-				_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-					ctx,
-					p.txn,
-					tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true},
-				)
-				if err != nil {
-					return err
-				}
-				partitionAllBy = partitionByForRegionalByRow(
-					*dbDesc.DatabaseDesc().RegionConfig,
-					colName,
-				)
-				if alterPrimaryKeyLocalitySwap.newColumnName != nil {
-					allowedNewColumnNames = append(
-						allowedNewColumnNames,
-						*alterPrimaryKeyLocalitySwap.newColumnName,
-					)
-				}
+				// We want to drop the old PARTITION ALL BY clause in this case for all
+				// the indexes if we were from a REGIONAL BY ROW.
+				dropPartitionAllBy = true
+			case *descpb.TableDescriptor_LocalityConfig_Global_,
+				*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 			default:
 				return errors.AssertionFailedf(
 					"unknown locality config swap: %T to %T",
@@ -294,13 +274,44 @@ func (p *planner) AlterPrimaryKey(
 					localityConfigSwap.NewLocalityConfig.Locality,
 				)
 			}
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-			switch localityConfigSwap.NewLocalityConfig.Locality.(type) {
-			case *descpb.TableDescriptor_LocalityConfig_Global_,
-				*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-				// We don't want a PARTITION ALL BY anymore.
-				dropPartitionAllBy = true
+
+			isNewPartitionAllBy = true
+			allowImplicitPartitioning = true
+			colName := tree.RegionalByRowRegionDefaultColName
+			if as := to.RegionalByRow.As; as != nil {
+				colName = tree.Name(*as)
 			}
+			_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+				ctx,
+				p.txn,
+				tableDesc.GetParentID(),
+				tree.DatabaseLookupFlags{Required: true},
+			)
+			if err != nil {
+				return err
+			}
+			partitionAllBy = partitionByForRegionalByRow(
+				*dbDesc.DatabaseDesc().RegionConfig,
+				colName,
+			)
+			if alterPrimaryKeyLocalitySwap.newColumnName != nil {
+				allowedNewColumnNames = append(
+					allowedNewColumnNames,
+					*alterPrimaryKeyLocalitySwap.newColumnName,
+				)
+			}
+		case *descpb.TableDescriptor_LocalityConfig_Global_,
+			*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+			// We should only migrating from a REGIONAL BY ROW.
+			if localityConfigSwap.OldLocalityConfig.GetRegionalByRow() == nil {
+				return errors.AssertionFailedf(
+					"unknown locality config swap: %T to %T",
+					localityConfigSwap.OldLocalityConfig.Locality,
+					localityConfigSwap.NewLocalityConfig.Locality,
+				)
+			}
+			// We don't want a PARTITION ALL BY anymore.
+			dropPartitionAllBy = true
 		default:
 			return errors.AssertionFailedf(
 				"unknown locality config swap: %T to %T",

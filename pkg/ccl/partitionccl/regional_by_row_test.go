@@ -145,7 +145,14 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 			desc:           "REGIONAL BY ROW",
 			setupQuery:     `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			originalPKCols: []string{"crdb_region", "rowid"},
-			alterStates:    regionalByRowAlterStates,
+			alterStates: append(
+				regionalByRowAlterStates,
+				alterState{
+					desc:                  "REGIONAL BY ROW AS cr",
+					alterQuery:            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW AS cr`,
+					cancelOnBackfillChunk: 1,
+				},
+			),
 		},
 		{
 			desc: "REGIONAL BY ROW AS",
@@ -153,7 +160,19 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 				k INT NOT NULL, v INT, cr2 t.public.crdb_internal_region NOT NULL DEFAULT 'ajstorm-1'
 			) LOCALITY REGIONAL BY ROW AS cr2`,
 			originalPKCols: []string{"cr2", "rowid"},
-			alterStates:    regionalByRowAlterStates,
+			alterStates: append(
+				regionalByRowAlterStates,
+				alterState{
+					desc:                  "REGIONAL BY ROW, cancel during column addition",
+					alterQuery:            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+					cancelOnBackfillChunk: 1,
+				},
+				alterState{
+					desc:                  "REGIONAL BY ROW, cancel during PK swap",
+					alterQuery:            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+					cancelOnBackfillChunk: chunksPerBackfill + 1,
+				},
+			),
 		},
 	}
 

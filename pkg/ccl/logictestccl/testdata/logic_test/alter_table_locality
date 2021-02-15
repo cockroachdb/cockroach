@@ -1584,7 +1584,7 @@ TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        voter_constraints = '[+region=ca-central-1]',
                        lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
+statement ok
 DROP TABLE regional_by_row;
 CREATE TABLE regional_by_row (
   pk INT PRIMARY KEY,
@@ -1595,17 +1595,220 @@ CREATE TABLE regional_by_row (
 INSERT INTO regional_by_row (pk, i) VALUES (1, 1);
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
 
-statement error unimplemented: implementation pending
-DROP TABLE regional_by_row;
-CREATE TABLE regional_by_row (
+query TT
+SHOW CREATE TABLE regional_by_row
+----
+regional_by_row  CREATE TABLE public.regional_by_row (
+                 pk INT8 NOT NULL,
+                 i INT8 NULL,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                 INDEX regional_by_row_i_idx (i ASC),
+                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW AS crdb_region
+
+query TT
+SHOW CREATE TABLE regional_by_row
+----
+regional_by_row  CREATE TABLE public.regional_by_row (
+                 pk INT8 NOT NULL,
+                 i INT8 NULL,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                 INDEX regional_by_row_i_idx (i ASC),
+                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
+) LOCALITY REGIONAL BY ROW AS crdb_region;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+# Go back from REGIONAL BY ROW AS crdb_region to just REGIONAL BY ROW.
+statement ok
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE regional_by_row
+----
+regional_by_row  CREATE TABLE public.regional_by_row (
+                 pk INT8 NOT NULL,
+                 i INT8 NULL,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                 CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                 INDEX regional_by_row_i_idx (i ASC),
+                 FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+CREATE TABLE regional_by_row_to_regional_by_row_as (
   pk INT PRIMARY KEY,
   i INT,
   cr crdb_internal_region NOT NULL DEFAULT 'ap-southeast-2',
   INDEX(i),
   FAMILY (pk, i)
 ) LOCALITY REGIONAL BY ROW;
-INSERT INTO regional_by_row (pk, i) VALUES (1, 1);
-ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW AS "cr"
+INSERT INTO regional_by_row_to_regional_by_row_as (pk, i) VALUES (1, 1);
+ALTER TABLE regional_by_row_to_regional_by_row_as SET LOCALITY REGIONAL BY ROW AS "cr"
+
+query TT
+SHOW CREATE TABLE regional_by_row_to_regional_by_row_as
+----
+regional_by_row_to_regional_by_row_as  CREATE TABLE public.regional_by_row_to_regional_by_row_as (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       cr public.crdb_internal_region NOT NULL DEFAULT 'ap-southeast-2':::public.crdb_internal_region,
+                                       crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                       CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                       INDEX regional_by_row_to_regional_by_row_as_i_idx (i ASC),
+                                       FAMILY fam_0_pk_i_cr_crdb_region (pk, i, cr, crdb_region)
+) LOCALITY REGIONAL BY ROW AS cr;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@regional_by_row_to_regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@regional_by_row_to_regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_to_regional_by_row_as@regional_by_row_to_regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_to_regional_by_row_as
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 # Altering from REGIONAL BY ROW AS
 
@@ -1750,19 +1953,68 @@ TABLE regional_by_row_as  ALTER TABLE regional_by_row_as CONFIGURE ZONE USING
                           voter_constraints = '[+region=ca-central-1]',
                           lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
-DROP TABLE regional_by_row_as;
-CREATE TABLE regional_by_row_as (
+statement ok
+CREATE TABLE regional_by_row_as_to_regional_by_row (
   pk INT PRIMARY KEY,
   i INT,
   cr crdb_internal_region NOT NULL DEFAULT 'ap-southeast-2',
   INDEX(i),
   FAMILY (cr, pk, i)
 ) LOCALITY REGIONAL BY ROW AS "cr";
-INSERT INTO regional_by_row_as (pk, i) VALUES (1, 1);
-ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
+INSERT INTO regional_by_row_as_to_regional_by_row (pk, i) VALUES (1, 1);
+ALTER TABLE regional_by_row_as_to_regional_by_row SET LOCALITY REGIONAL BY ROW
 
-statement error unimplemented: implementation pending
+query TT
+SHOW CREATE TABLE regional_by_row_as_to_regional_by_row
+----
+regional_by_row_as_to_regional_by_row  CREATE TABLE public.regional_by_row_as_to_regional_by_row (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       cr public.crdb_internal_region NOT NULL DEFAULT 'ap-southeast-2':::public.crdb_internal_region,
+                                       crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                       CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                       INDEX regional_by_row_as_to_regional_by_row_i_idx (i ASC),
+                                       FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@regional_by_row_as_to_regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@regional_by_row_as_to_regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_as_to_regional_by_row@regional_by_row_as_to_regional_by_row_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_as_to_regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
 DROP TABLE regional_by_row_as;
 CREATE TABLE regional_by_row_as (
   pk INT PRIMARY KEY,
@@ -1774,6 +2026,54 @@ CREATE TABLE regional_by_row_as (
 INSERT INTO regional_by_row_as (pk, i) VALUES (1, 1);
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW AS "cr"
 
+query TT
+SHOW CREATE TABLE regional_by_row_as
+----
+regional_by_row_as  CREATE TABLE public.regional_by_row_as (
+                    pk INT8 NOT NULL,
+                    i INT8 NULL,
+                    cr public.crdb_internal_region NOT NULL DEFAULT 'ap-southeast-2':::public.crdb_internal_region,
+                    CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                    INDEX regional_by_row_as_i_idx (i ASC),
+                    FAMILY fam_0_cr_pk_i (cr, pk, i)
+) LOCALITY REGIONAL BY ROW AS cr;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row_as@regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ap-southeast-2]',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row_as@regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=ca-central-1]',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_as@primary CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row_as@regional_by_row_as_i_idx CONFIGURE ZONE USING
+  num_voters = 3,
+  voter_constraints = '[+region=us-east-1]',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_as
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 5,
+                              num_voters = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '[+region=ca-central-1]',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 # Set a table with a gc.ttlseconds to be a non-default value, and check this is
 # the same after a change to REGIONAL BY TABLE IN PRIMARY REGION, which overrides
