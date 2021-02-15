@@ -150,3 +150,31 @@ indexes  CREATE TABLE public.indexes (
          FAMILY "primary" (a, b)
 )
 -- Warning: Partitioned table with no zone configurations.
+
+# Regression test for #60019. The index predicate should be formatted after the
+# PARTITION BY clause to match the syntax that is accepted.
+statement ok
+CREATE TABLE t60019 (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a, b) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN (3)
+  ) WHERE b > 0,
+  FAMILY (pk, a, b)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t60019]
+----
+CREATE TABLE public.t60019 (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t60019_a_b_idx (a ASC, b ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ) WHERE b > 0:::INT8,
+  FAMILY fam_0_pk_a_b (pk, a, b)
+)
+-- Warning: Partitioned table with no zone configurations.

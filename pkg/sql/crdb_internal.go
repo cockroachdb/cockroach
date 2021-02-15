@@ -1907,7 +1907,7 @@ func showCreateIndexWithInterleave(
 	semaCtx *tree.SemaContext,
 ) error {
 	f.WriteString("CREATE ")
-	idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, table, &tableName, idx, semaCtx)
+	idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, table, &tableName, idx, "" /* partition */, semaCtx)
 	if err != nil {
 		return err
 	}
