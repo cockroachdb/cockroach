@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,8 @@ func TestUnionKeySpansToSpanExpr(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.expected, GeoUnionKeySpansToSpanExpr(c.uks).ToProto().String())
+		spanExpr := GeoUnionKeySpansToSpanExpr(c.uks).(*inverted.SpanExpression)
+		require.Equal(t, c.expected, spanExpr.ToProto().String())
 	}
 }
 
@@ -123,9 +125,10 @@ func TestRPKeyExprToSpanExpr(t *testing.T) {
 	}
 	for _, c := range cases {
 		rpx, err := GeoRPKeyExprToSpanExpr(c.rpx)
+		spanExpr := rpx.(*inverted.SpanExpression)
 		if len(c.err) == 0 {
 			require.NoError(t, err)
-			require.Equal(t, c.expected, rpx.ToProto().String())
+			require.Equal(t, c.expected, spanExpr.ToProto().String())
 		} else {
 			require.Equal(t, c.err, err.Error())
 		}
