@@ -14,6 +14,7 @@ RUN apt-get update \
     gnupg2 \
     libncurses-dev \
     make \
+    unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
  && apt-get clean
