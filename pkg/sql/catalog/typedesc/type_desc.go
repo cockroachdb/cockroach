@@ -113,6 +113,23 @@ func NewExistingMutable(desc descpb.TypeDescriptor) *Mutable {
 	}
 }
 
+// UpdateCachedFieldsOnModifiedMutable refreshes the Immutable field by
+// reconstructing it. This means that the fields used to fill enumMetadata
+// (readOnly, logicalReps, physicalReps) are reconstructed to reflect the
+// modified Mutable's state. This allows us to hydrate tables correctly even
+// when preceded by a type descriptor modification in the same transaction.
+func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable, error) {
+	imm := makeImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+
+	mutable, ok := desc.(*Mutable)
+	if !ok {
+		return nil, errors.AssertionFailedf("type descriptor was not mutable")
+	}
+	mutable.Immutable = imm
+	return mutable, nil
+}
+
 // NewImmutable returns an Immutable from the given TypeDescriptor.
 func NewImmutable(desc descpb.TypeDescriptor) *Immutable {
 	m := makeImmutable(desc)
