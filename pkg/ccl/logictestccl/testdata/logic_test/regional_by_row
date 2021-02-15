@@ -367,15 +367,16 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • cross join (right outer)
+│           └── • cross join (left outer)
 │               │
-│               ├── • scan
-│               │     missing stats
-│               │     table: regional_by_row_table@primary
-│               │     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│               ├── • values
+│               │     size: 6 columns, 1 row
 │               │
-│               └── • values
-│                     size: 6 columns, 1 row
+│               └── • scan
+│                     missing stats
+│                     table: regional_by_row_table@primary
+│                     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│                     locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -389,11 +390,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -407,11 +408,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
@@ -425,11 +426,11 @@ vectorized: true
             │
             └── • cross join
                 │
-                ├── • scan buffer
-                │     label: buffer 1
+                ├── • values
+                │     size: 1 column, 3 rows
                 │
-                └── • values
-                      size: 1 column, 3 rows
+                └── • scan buffer
+                      label: buffer 1
 
 query T
 EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
@@ -451,6 +452,7 @@ vectorized: true
 │           │
 │           └── • lookup join (left outer)
 │               │ table: regional_by_row_table@primary
+│               │ equality cols are key
 │               │ lookup condition: (column2 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │               │ locking strength: for update
 │               │
@@ -471,11 +473,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -489,11 +491,11 @@ vectorized: true
 │           │
 │           └── • cross join
 │               │
-│               ├── • scan buffer
-│               │     label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
 │               │
-│               └── • values
-│                     size: 1 column, 3 rows
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
@@ -507,11 +509,11 @@ vectorized: true
             │
             └── • cross join
                 │
-                ├── • scan buffer
-                │     label: buffer 1
+                ├── • values
+                │     size: 1 column, 3 rows
                 │
-                └── • values
-                      size: 1 column, 3 rows
+                └── • scan buffer
+                      label: buffer 1
 
 query TIIIIIIIIT colnames
 SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)

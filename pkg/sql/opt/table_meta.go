@@ -135,6 +135,10 @@ type TableMeta struct {
 	// the consistency of foreign keys.
 	IgnoreForeignKeys bool
 
+	// IgnoreUniqueWithoutIndexKeys is true if we should disable any rules that
+	// depend on the consistency of unique without index constraints.
+	IgnoreUniqueWithoutIndexKeys bool
+
 	// Constraints stores a *FiltersExpr containing filters that are known to
 	// evaluate to true on the table data. This list is extracted from validated
 	// check constraints; specifically, those check constraints that we can prove

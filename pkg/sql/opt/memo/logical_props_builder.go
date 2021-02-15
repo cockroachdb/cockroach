@@ -1689,6 +1689,52 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			fd.AddStrictKey(keyCols, allCols)
 		}
 	}
+
+	if !md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys {
+		for i := 0; i < tab.UniqueCount(); i++ {
+			unique := tab.Unique(i)
+
+			if !unique.Validated() {
+				// This unique constraint has not been validated, so we cannot use it
+				// as a key.
+				continue
+			}
+
+			if _, isPartial := unique.Predicate(); isPartial {
+				// Partial constraints cannot be considered while building functional
+				// dependency keys for the table because their keys are only unique
+				// for a subset of the rows in the table.
+				continue
+			}
+
+			// If any of the columns are nullable, add a lax key FD. Otherwise, add a
+			// strict key.
+			var keyCols opt.ColSet
+			hasNulls := false
+			for i := 0; i < unique.ColumnCount(); i++ {
+				ord := unique.ColumnOrdinal(tab, i)
+				keyCols.Add(tabID.ColumnID(ord))
+				if tab.Column(ord).IsNullable() {
+					hasNulls = true
+				}
+			}
+
+			if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
+				// See comment above where excludeColumn is set.
+				// (Virtual tables currently do not have UNIQUE WITHOUT INDEX constraints
+				// or implicitly partitioned UNIQUE indexes, but we add this check in case
+				// of future changes.)
+				continue
+			}
+
+			if hasNulls {
+				fd.AddLaxKey(keyCols, allCols)
+			} else {
+				fd.AddStrictKey(keyCols, allCols)
+			}
+		}
+	}
+
 	md.SetTableAnnotation(tabID, fdAnnID, fd)
 	return fd
 }

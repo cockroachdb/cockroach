@@ -173,7 +173,8 @@ type mutationBuilder struct {
 	// cascades contains foreign key check cascades; see buildFK* methods.
 	cascades memo.FKCascades
 
-	// withID is nonzero if we need to buffer the input for FK checks.
+	// withID is nonzero if we need to buffer the input for FK or uniqueness
+	// checks.
 	withID opt.WithID
 
 	// extraAccessibleCols stores all the columns that are available to the
