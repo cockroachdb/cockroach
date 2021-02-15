@@ -675,6 +675,11 @@ func (c *CustomFuncs) IsFilterFalse(filters memo.FiltersExpr) bool {
 	return filters.IsFalse()
 }
 
+// IsFilterEmpty returns true if filters is empty.
+func (c *CustomFuncs) IsFilterEmpty(filters memo.FiltersExpr) bool {
+	return len(filters) == 0
+}
+
 // IsContradiction returns true if the given filter item contains a
 // contradiction constraint.
 func (c *CustomFuncs) IsContradiction(item *memo.FiltersItem) bool {
@@ -690,6 +695,13 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.FiltersExpr) memo.FiltersEx
 	copy(newFilters, left)
 	copy(newFilters[len(left):], right)
 	return newFilters
+}
+
+// DiffFilters creates new Filters that contains all conditions in left that do
+// not exist in right. If right is empty, the original left filters are
+// returned.
+func (c *CustomFuncs) DiffFilters(left, right memo.FiltersExpr) memo.FiltersExpr {
+	return left.Difference(right)
 }
 
 // RemoveFiltersItem returns a new list that is a copy of the given list, except

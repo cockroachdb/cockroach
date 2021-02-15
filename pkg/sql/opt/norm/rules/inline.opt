@@ -246,10 +246,9 @@
         ^(ColsAreEmpty
             $virtualColumns:(VirtualColumns $scanPrivate)
         ) &
-        (InlineSelectVirtualColumnsSucceeded
-            $result:(TryInlineSelectVirtualColumns
+        ^(IsFilterEmpty
+            $inlinableFilters:(InlinableVirtualColumnFilters
                 $filters
-                $projections
                 $virtualColumns
             )
         )
@@ -257,11 +256,14 @@
 =>
 (Select
     (Project
-        (Select $scan (InlinedFilters $result))
+        (Select
+            $scan
+            (InlineSelectProject $inlinableFilters $projections)
+        )
         $projections
         $passthrough
     )
-    (NotInlinedFilters $result)
+    (DiffFilters $filters $inlinableFilters)
 )
 
 # InlineProjectInProject folds an inner Project operator into an outer Project
