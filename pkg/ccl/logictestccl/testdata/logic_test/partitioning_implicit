@@ -183,6 +183,7 @@ vectorized: true
 │       │
 │       └── • hash join (right anti)
 │           │ equality: (pk) = (column2)
+│           │ left cols are key
 │           │ right cols are key
 │           │
 │           ├── • scan
@@ -631,18 +632,18 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • cross join (right outer)
+│           └── • cross join (left outer)
 │               │
-│               ├── • filter
-│               │   │ filter: pk = 3
-│               │   │
-│               │   └── • scan
-│               │         missing stats
-│               │         table: t@primary
-│               │         spans: FULL SCAN
+│               ├── • values
+│               │     size: 7 columns, 1 row
 │               │
-│               └── • values
-│                     size: 7 columns, 1 row
+│               └── • filter
+│                   │ filter: pk = 3
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@primary
+│                         spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -650,6 +651,7 @@ vectorized: true
 │       │
 │       └── • hash join (right semi)
 │           │ equality: (pk) = (upsert_pk)
+│           │ right cols are key
 │           │ pred: column3 != partition_by
 │           │
 │           ├── • scan
@@ -666,6 +668,7 @@ vectorized: true
         │
         └── • hash join (right semi)
             │ equality: (b) = (column5)
+            │ right cols are key
             │ pred: (upsert_pk != pk) OR (column3 != partition_by)
             │
             ├── • scan

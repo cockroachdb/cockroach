@@ -3603,7 +3603,7 @@ update uniq
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:8!null w:10 x:11 uniq.y:12
  │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(10-12)
+ │    │    │    └── fd: (8)-->(10-12), (10)~~>(8,11,12), (11,12)~~>(8,10)
  │    │    └── filters
  │    │         └── uniq.k:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
  │    └── projections
@@ -3702,7 +3702,7 @@ upsert uniq_fk_parent
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: k:10!null a:11 b:12 c:13
  │    │    │    │    ├── key: (10)
- │    │    │    │    └── fd: (10)-->(11-13)
+ │    │    │    │    └── fd: (10)-->(11-13), (11)~~>(10,12,13), (12,13)~~>(10,11)
  │    │    │    └── filters
  │    │    │         └── k:10 = 2 [outer=(10), constraints=(/10: [/2 - /2]; tight), fd=()-->(10)]
  │    │    └── filters (true)
@@ -3802,7 +3802,7 @@ upsert uniq_fk_parent
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: k:9!null a:10 b:11 c:12 d:13
  │    │    │    │    ├── key: (9)
- │    │    │    │    └── fd: (9)-->(10-13)
+ │    │    │    │    └── fd: (9)-->(10-13), (10)~~>(9,11-13), (11,12)~~>(9,10,13)
  │    │    │    └── filters
  │    │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
  │    │    └── filters (true)
@@ -3876,7 +3876,7 @@ delete uniq_fk_parent
  │    ├── scan uniq_fk_parent
  │    │    ├── columns: k:7!null uniq_fk_parent.a:8 uniq_fk_parent.b:9 uniq_fk_parent.c:10
  │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8-10)
+ │    │    └── fd: (7)-->(8-10), (8)~~>(7,9,10), (9,10)~~>(7,8)
  │    └── filters
  │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
  └── f-k-checks
@@ -3895,7 +3895,9 @@ delete uniq_fk_parent
       │         │    ├── key: ()
       │         │    └── fd: ()-->(13,14)
       │         ├── scan uniq_fk_child
-      │         │    └── columns: uniq_fk_child.b:16 uniq_fk_child.c:17
+      │         │    ├── columns: uniq_fk_child.b:16 uniq_fk_child.c:17
+      │         │    ├── lax-key: (16,17)
+      │         │    └── fd: (17)~~>(16)
       │         └── filters
       │              ├── b:13 = uniq_fk_child.b:16 [outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
       │              └── c:14 = uniq_fk_child.c:17 [outer=(14,17), constraints=(/14: (/NULL - ]; /17: (/NULL - ]), fd=(14)==(17), (17)==(14)]
