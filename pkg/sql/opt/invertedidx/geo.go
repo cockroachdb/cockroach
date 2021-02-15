@@ -63,7 +63,7 @@ func GetGeoIndexRelationship(expr opt.ScalarExpr) (_ geoindex.RelationshipType, 
 // and getSpanExprForGeometryIndex and used in extractGeoFilterCondition.
 type getSpanExprForGeoIndexFn func(
 	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
-) *inverted.SpanExpression
+) inverted.Expression
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
 // geography index according to the given constant and geospatial relationship.
@@ -73,10 +73,9 @@ func getSpanExprForGeographyIndex(
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig *geoindex.Config,
-) *inverted.SpanExpression {
+) inverted.Expression {
 	geogIdx := geoindex.NewS2GeographyIndex(*indexConfig.S2Geography)
 	geog := d.(*tree.DGeography).Geography
-	var spanExpr *inverted.SpanExpression
 
 	switch relationship {
 	case geoindex.Covers:
@@ -84,16 +83,18 @@ func getSpanExprForGeographyIndex(
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.CoveredBy:
 		rpKeyExpr, err := geogIdx.CoveredBy(ctx, geog)
 		if err != nil {
 			panic(err)
 		}
-		if spanExpr, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+		spanExpr, err := invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr)
+		if err != nil {
 			panic(err)
 		}
+		return spanExpr
 
 	case geoindex.DWithin:
 		// Parameters are type checked earlier. Keep this consistent with the definition
@@ -122,20 +123,18 @@ func getSpanExprForGeographyIndex(
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.Intersects:
 		unionKeySpans, err := geogIdx.Intersects(ctx, geog)
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	default:
 		panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
 	}
-
-	return spanExpr
 }
 
 // Helper for DWithin and DFullyWithin.
@@ -160,10 +159,9 @@ func getSpanExprForGeometryIndex(
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig *geoindex.Config,
-) *inverted.SpanExpression {
+) inverted.Expression {
 	geomIdx := geoindex.NewS2GeometryIndex(*indexConfig.S2Geometry)
 	geom := d.(*tree.DGeometry).Geometry
-	var spanExpr *inverted.SpanExpression
 
 	switch relationship {
 	case geoindex.Covers:
@@ -171,16 +169,18 @@ func getSpanExprForGeometryIndex(
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.CoveredBy:
 		rpKeyExpr, err := geomIdx.CoveredBy(ctx, geom)
 		if err != nil {
 			panic(err)
 		}
-		if spanExpr, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+		spanExpr, err := invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr)
+		if err != nil {
 			panic(err)
 		}
+		return spanExpr
 
 	case geoindex.DFullyWithin:
 		distance := getDistanceParam(additionalParams)
@@ -188,7 +188,7 @@ func getSpanExprForGeometryIndex(
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.DWithin:
 		distance := getDistanceParam(additionalParams)
@@ -196,20 +196,18 @@ func getSpanExprForGeometryIndex(
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.Intersects:
 		unionKeySpans, err := geomIdx.Intersects(ctx, geom)
 		if err != nil {
 			panic(err)
 		}
-		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+		return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	default:
 		panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
 	}
-
-	return spanExpr
 }
 
 type geoJoinPlanner struct {
@@ -527,7 +525,7 @@ type geoInvertedExpr struct {
 
 	// spanExpr is the result of evaluating the geospatial relationship
 	// represented by this geoInvertedExpr. It is nil prior to evaluation.
-	spanExpr *inverted.SpanExpression
+	spanExpr inverted.Expression
 }
 
 var _ tree.TypedExpr = &geoInvertedExpr{}
@@ -803,9 +801,10 @@ func NewGeoDatumsToInvertedExpr(
 
 			// If possible, get the span expression now so we don't need to recompute
 			// it for every row.
-			var spanExpr *inverted.SpanExpression
+			var spanExpr inverted.Expression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				spanExpr = g.getSpanExpr(evalCtx.Ctx(), d, additionalParams, relationship, g.indexConfig)
+
 			} else if funcExprCount == 1 {
 				// Currently pre-filtering is limited to a single FuncExpr.
 				preFilterRelationship = relationship
