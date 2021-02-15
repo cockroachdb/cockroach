@@ -188,11 +188,15 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 	if idx.IsInverted() {
 		inverted = "INVERTED "
 	}
+	unique := ""
+	if idx.IsUnique() {
+		unique = "UNIQUE "
+	}
 	mutation := ""
 	if IsMutationIndex(tab, ord) {
 		mutation = " (mutation)"
 	}
-	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
+	child := tp.Childf("%s%sINDEX %s%s", inverted, unique, idx.Name(), mutation)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
