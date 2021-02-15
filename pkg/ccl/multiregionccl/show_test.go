@@ -93,6 +93,22 @@ func TestShowCreateTable(t *testing.T) {
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
 			Database: "mrdb",
 		},
+		{
+			CreateStatement: `SET experimental_enable_implicit_column_partitioning = true; CREATE TABLE %s (
+				a INT,
+				crdb_region_col crdb_internal_region,
+				INDEX a_idx (a) WHERE a > 0
+			) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
+			Expect: `CREATE TABLE public.%[1]s (
+	a INT8 NULL,
+	crdb_region_col public.crdb_internal_region NOT NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	INDEX a_idx (a ASC) WHERE a > 0:::INT8,
+	FAMILY "primary" (a, crdb_region_col, rowid)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
+			Database: "mrdb",
+		},
 	}
 	sqltestutils.ShowCreateTableTest(
 		t,
