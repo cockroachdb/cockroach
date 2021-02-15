@@ -27,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -288,14 +290,44 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
-	}
 
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
+		// Finally, make sure all of the leases are updated.
+		if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				return nil
+			}
+			return err
 		}
-		return err
+
+		// Additional work must be performed once the promotion/demotion of enum
+		// members has successfully completed for multi-region enums. In particular,
+		// index partitions for REGIONAL BY ROW tables must be updated to reflect
+		// the new region values available. This is done in a separate transaction
+		// as enum members must be public before we can partition based on those
+		// values, which happens when the transaction above commits.
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM && len(t.transitioningMembers) > 0 {
+			repartitionTables := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				typeDesc, err := descsCol.GetImmutableTypeByID(ctx, txn, t.typeID, tree.ObjectLookupFlags{})
+				if err != nil {
+					return err
+				}
+				if err := repartitionRegionalByRowTables(ctx, typeDesc, txn, t.execCfg, t.execCfg.LeaseManager); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			if err := descs.Txn(
+				ctx,
+				t.execCfg.Settings,
+				t.execCfg.LeaseManager,
+				t.execCfg.InternalExecutor,
+				t.execCfg.DB,
+				repartitionTables,
+			); err != nil {
+				return err
+			}
+		}
 	}
 
 	// If the type is being dropped, remove the descriptor here.
@@ -305,6 +337,103 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.ID))
 			return txn.Run(ctx, b)
 		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func repartitionRegionalByRowTables(
+	ctx context.Context,
+	typeDesc *typedesc.Immutable,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	leaseMgr *lease.Manager,
+) error {
+	p, cleanup := NewInternalPlanner(
+		"repartition-tables",
+		txn,
+		security.RootUserName(),
+		&MemoryMetrics{},
+		execCfg,
+		sessiondatapb.SessionData{},
+	)
+	defer cleanup()
+	localPlanner := p.(*planner)
+
+	_, dbDesc, err := localPlanner.Descriptors().GetImmutableDatabaseByID(
+		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	allDescs, err := localPlanner.Descriptors().GetAllDescriptors(ctx, txn)
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+
+	b := txn.NewBatch()
+	for _, tbID := range lCtx.tbIDs {
+		tableDesc, err := localPlanner.Descriptors().GetMutableTableByID(
+			ctx, txn, tbID, tree.ObjectLookupFlags{})
+		if err != nil {
+			return err
+		}
+		if tableDesc.IsLocalityRegionalByRow() {
+			if tableDesc.Dropped() {
+				// Don't need to repartition a table if it has been dropped.
+				continue
+			}
+			colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+			if err != nil {
+				return err
+			}
+			partitionAllBy := partitionByForRegionalByRow(*dbDesc.RegionConfig, colName)
+
+			// Update the partitioning on all indexes of the table that aren't being
+			// dropped.
+			for _, index := range tableDesc.NonDropIndexes() {
+				newIdx, err := CreatePartitioning(
+					ctx,
+					localPlanner.extendedEvalCtx.Settings,
+					localPlanner.EvalContext(),
+					tableDesc,
+					*index.IndexDesc(),
+					partitionAllBy,
+					nil,  /* allowedNewColumnName*/
+					true, /* allowImplicitPartitioning */
+				)
+				if err != nil {
+					return err
+				}
+				// Update the index descriptor proto's partitioning.
+				index.IndexDesc().Partitioning = newIdx.Partitioning
+			}
+
+			// Update the zone configurations now that the partition's been added.
+			if err := ApplyZoneConfigForMultiRegionTable(
+				ctx,
+				txn,
+				localPlanner.ExecCfg(),
+				*dbDesc.RegionConfig,
+				tableDesc,
+				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+			); err != nil {
+				return err
+			}
+
+			if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
+				return err
+			}
+		}
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// Wait for leases on the modified tables to update.
+	for _, tbID := range lCtx.tbIDs {
+		if err := WaitToUpdateLeases(ctx, leaseMgr, tbID); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				return nil
+			}
 			return err
 		}
 	}

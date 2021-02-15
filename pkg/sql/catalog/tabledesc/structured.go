@@ -4022,6 +4022,19 @@ func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
 	return *region, nil
 }
 
+// GetRegionalByRowTableRegionColumnName returns the region column name of a
+// REGIONAL BY ROW table.
+func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
+	if !desc.IsLocalityRegionalByRow() {
+		return "", errors.New("is not REGIONAL BY ROW")
+	}
+	colName := desc.LocalityConfig.GetRegionalByRow().As
+	if colName == nil {
+		return tree.RegionalByRowRegionDefaultColName, nil
+	}
+	return tree.Name(*colName), nil
+}
+
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region
