@@ -342,6 +342,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
+	// If the table descriptor is resolved but is not a
+	// physical table(stored in the kv layer) then return an error
+	if table != nil && !table.IsPhysicalTable() {
+		return pgerror.Newf(pgcode.WrongObjectType, `"%v" is not a physical table`, table.GetName())
+	}
+
 	if n.zoneSpecifier.TargetsPartition() && len(n.zoneSpecifier.TableOrIndex.Index) == 0 && !n.allIndexes {
 		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 		// index has the specified partition.
