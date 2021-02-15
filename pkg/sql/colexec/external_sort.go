@@ -193,6 +193,12 @@ func NewExternalSorter(
 	if maxNumberPartitions < ExternalSorterMinPartitions {
 		maxNumberPartitions = ExternalSorterMinPartitions
 	}
+	if memoryLimit == 1 {
+		// If memory limit is 1, we're likely in a "force disk spill"
+		// scenario, but we don't want to artificially limit batches when we
+		// have already spilled, so we'll use a larger limit.
+		memoryLimit = defaultMemoryLimit
+	}
 	estimatedOutputBatchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To
@@ -219,12 +225,6 @@ func NewExternalSorter(
 		// Passing in a nil semaphore indicates that the caller will do the
 		// acquiring.
 		partitionedDiskQueueSemaphore = nil
-	}
-	if memoryLimit == 1 {
-		// If memory limit is 1, we're likely in a "force disk spill"
-		// scenario, but we don't want to artificially limit batches when we
-		// have already spilled, so we'll use a larger limit.
-		memoryLimit = defaultMemoryLimit
 	}
 	es := &externalSorter{
 		OneInputNode:       NewOneInputNode(inMemSorter),
