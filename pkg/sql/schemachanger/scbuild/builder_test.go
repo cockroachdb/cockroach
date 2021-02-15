@@ -145,6 +145,7 @@ func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, fun
 		// Setting the database on the session data to "defaultdb" in the obvious
 		// way doesn't seem to do what we want.
 		sessiondatapb.SessionData{},
+		nil, /* collection */
 	)
 	planner := ip.(interface {
 		resolver.SchemaResolver

@@ -873,7 +873,14 @@ func (s *SQLServer) preStart(
 			PlanHookMaker: func(opName string, txn *kv.Txn, user security.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(opName, txn, user, &sql.MemoryMetrics{}, s.execCfg, sessiondatapb.SessionData{})
+				return sql.NewInternalPlanner(
+					opName,
+					txn,
+					user,
+					&sql.MemoryMetrics{},
+					s.execCfg,
+					sessiondatapb.SessionData{},
+				)
 			},
 		},
 		scheduledjobs.ProdJobSchedulerEnv,

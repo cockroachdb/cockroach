@@ -28,12 +28,49 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 // REGIONAL BY ROW tests are defined in multiregionccl as REGIONAL BY ROW
 // requires CCL to operate.
+
+// createTestMultiRegionCluster creates a test cluster with numServers number of
+// nodes with the provided testing knobs applied to each of the nodes. Every
+// node is placed in its own locality, named "us-east1", "us-east2", and so on.
+func createTestMultiRegionCluster(
+	t *testing.T, numServers int, knobs base.TestingKnobs,
+) (serverutils.TestClusterInterface, *gosql.DB, func()) {
+	serverArgs := make(map[int]base.TestServerArgs)
+	regionNames := make([]string, numServers)
+	for i := 0; i < numServers; i++ {
+		// "us-east1", "us-east2"...
+		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	}
+
+	for i := 0; i < numServers; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: knobs,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
+			},
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+
+	ctx := context.Background()
+	cleanup := func() {
+		tc.Stopper().Stop(ctx)
+	}
+
+	sqlDB := tc.ServerConn(0)
+
+	return tc, sqlDB, cleanup
+}
 
 // TestAlterTableLocalityRegionalByRowError tests an alteration involving
 // REGIONAL BY ROW which gets its async job interrupted by some sort of
@@ -349,4 +386,62 @@ USE t;
 			}
 		})
 	}
+}
+
+// TestRepartitionFailureRollback adds and removes a region from a multi-region
+// database, but injects a non-retryable error before regional by row tables
+// can be repartitioned. The expectation is that we should roll back changes to
+// the multi-region enum, reverting to the state before the region add/remove
+// transaction was executed.
+func TestRepartitionFailureRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	numServers := 3
+
+	var mu syncutil.Mutex
+	errorReturned := false
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeMultiRegionUpdates: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if !errorReturned {
+					errorReturned = true
+					return errors.New("boom")
+				}
+				return nil
+			},
+		},
+	}
+	_, sqlDB, cleanup := createTestMultiRegionCluster(t, numServers, knobs)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(
+		`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"; 
+CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
+	require.NoError(t, err)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = sqlDB.Exec(`BEGIN; 
+ALTER DATABASE db ADD REGION "us-east3"; 
+ALTER DATABASE db DROP REGION "us-east2";
+COMMIT;`)
+	require.Error(t, err, "boom")
+
+	// The cleanup job should kick in and revert the changes that happened to the
+	// type descriptor in the user txn. We should eventually be able to add
+	// "us-east3" and remove "us-east2".
+	testutils.SucceedsSoon(t, func() error {
+		_, err = sqlDB.Exec(`BEGIN;
+	ALTER DATABASE db ADD REGION "us-east3";
+	ALTER DATABASE db DROP REGION "us-east2";
+	COMMIT;`)
+		return err
+	})
 }

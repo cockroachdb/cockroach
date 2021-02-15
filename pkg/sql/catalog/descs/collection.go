@@ -1313,6 +1313,21 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 	return err
 }
 
+// maybeRefreshCachedFieldsOnTypeDescriptor refreshes the cached fields on a
+// Mutable if the given descriptor is a type descriptor and works as a pass
+// through for all other descriptors. Mutable type descriptors are refreshed to
+// reconstruct enumMetadata. This ensures that tables hydration following a
+// type descriptor update (in the same txn) happens using the modified fields.
+func maybeRefreshCachedFieldsOnTypeDescriptor(
+	desc catalog.MutableDescriptor,
+) (catalog.MutableDescriptor, error) {
+	typeDesc, ok := desc.(catalog.TypeDescriptor)
+	if ok {
+		return typedesc.UpdateCachedFieldsOnModifiedMutable(typeDesc)
+	}
+	return desc, nil
+}
+
 func (tc *Collection) addUncommittedDescriptor(
 	desc catalog.MutableDescriptor,
 ) (*uncommittedDescriptor, error) {
@@ -1324,8 +1339,13 @@ func (tc *Collection) addUncommittedDescriptor(
 			desc.GetID(), version, origVersion)
 	}
 
+	mutable, err := maybeRefreshCachedFieldsOnTypeDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+
 	ud := &uncommittedDescriptor{
-		mutable:   desc,
+		mutable:   mutable,
 		immutable: desc.ImmutableCopy(),
 	}
 
