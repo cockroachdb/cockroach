@@ -67,6 +67,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 						&sql.MemoryMetrics{},
 						&execCfg,
 						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},
+						nil, /* collection */
 					)
 					if err := dsp.Exec(
 						ctx,

@@ -376,6 +376,7 @@ func TestSchemaChanger(t *testing.T) {
 				&sql.MemoryMetrics{},
 				&execCfg,
 				sessiondatapb.SessionData{},
+				nil, /* collection */
 			)
 			planner := ip.(interface {
 				resolver.SchemaResolver

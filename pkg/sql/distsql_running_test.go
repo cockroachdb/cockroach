@@ -70,6 +70,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		&MemoryMetrics{},
 		&execCfg,
 		sessiondatapb.SessionData{},
+		nil, /* collection */
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
