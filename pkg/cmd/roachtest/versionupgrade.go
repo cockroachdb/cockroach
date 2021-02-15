@@ -352,7 +352,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 			t.l.Printf("restarting node %d", node)
 			c.Stop(ctx, c.Node(node))
 			args := u.uploadVersion(ctx, t, c.Node(node), newVersion)
-			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt, startArgs("--args=--vmodule=*=2"))
 			t.l.Printf("node %d now running binary version %s", node, u.binaryVersion(ctx, t, node))
 
 			// TODO(nvanbenschoten): add upgrade qualification step. What should we
