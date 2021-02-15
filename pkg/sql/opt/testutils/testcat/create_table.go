@@ -487,6 +487,12 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 func (tt *Table) addUniqueConstraint(
 	name tree.Name, columns tree.IndexElemList, predicate tree.Expr, withoutIndex bool,
 ) {
+	// We don't currently use unique constraints with an index (those are already
+	// tracked with unique indexes), so don't bother adding them.
+	// NB: This should stay consistent with opt_catalog.go.
+	if !withoutIndex {
+		return
+	}
 	cols := make([]int, len(columns))
 	for i, c := range columns {
 		cols[i] = tt.FindOrdinal(string(c.Column))
