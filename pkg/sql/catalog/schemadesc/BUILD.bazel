@@ -11,6 +11,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
         "//pkg/sql/sessiondata",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
