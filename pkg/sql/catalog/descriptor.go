@@ -97,6 +97,7 @@ type DatabaseDescriptor interface {
 	IsMultiRegion() bool
 	PrimaryRegionName() (descpb.RegionName, error)
 	MultiRegionEnumID() (descpb.ID, error)
+	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
