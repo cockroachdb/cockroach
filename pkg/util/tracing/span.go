@@ -156,9 +156,6 @@ func (s *Span) GetRecording() Recording {
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
 func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if s.tracer.mode() == modeLegacy && s.crdb.recordingType() == RecordingOff {
-		return nil
-	}
 	return s.crdb.importRemoteSpans(remoteSpans)
 }
 
