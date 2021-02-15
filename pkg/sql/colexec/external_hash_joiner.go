@@ -89,16 +89,17 @@ func NewExternalHashJoiner(
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
 ) colexecbase.Operator {
+	// This memory limit will restrict the size of the batches output by the
+	// in-memory hash joiner in the main strategy as well as by the merge joiner
+	// in the fallback strategy.
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	if memoryLimit == 1 {
+		// If memory limit is 1, we're likely in a "force disk spill"
+		// scenario, but we don't want to artificially limit batches when we
+		// have already spilled, so we'll use a larger limit.
+		memoryLimit = defaultMemoryLimit
+	}
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
-		// This memory limit will restrict the size of the batches output by the
-		// in-memory hash joiner.
-		memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
-		if memoryLimit == 1 {
-			// If memory limit is 1, we're likely in a "force disk spill"
-			// scenario, but we don't want to artificially limit batches when we
-			// have already spilled, so we'll use a larger limit.
-			memoryLimit = defaultMemoryLimit
-		}
 		// Note that the hash-based partitioner will make sure that partitions
 		// to join using in-memory hash joiner fit under the limit, so we use
 		// the same unlimited allocator for both buildSideAllocator and
@@ -128,10 +129,9 @@ func NewExternalHashJoiner(
 			partitionedInputs[1], spec.right.sourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 		)
 		diskBackedSortMerge, err := NewMergeJoinOp(
-			unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg,
-			fdSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
-			spec.left.sourceTypes, spec.right.sourceTypes, leftOrdering, rightOrdering,
-			diskAcc,
+			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.joinType,
+			leftPartitionSorter, rightPartitionSorter, spec.left.sourceTypes,
+			spec.right.sourceTypes, leftOrdering, rightOrdering, diskAcc,
 		)
 		if err != nil {
 			colexecerror.InternalError(err)

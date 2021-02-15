@@ -163,8 +163,11 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	// of 0.
 	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
 		ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
-		func() { spilled = true }, queueCfg, 0 /* numForcedRepartitions */, true, /* delegateFDAcquisitions */
-		sem,
+		func() { spilled = true }, queueCfg,
+		// Force a repartition so that the recursive repartitioning always
+		// occurs.
+		1, /* numForcedRepartitions */
+		true /* delegateFDAcquisitions */, sem,
 	)
 	defer func() {
 		for _, acc := range accounts {

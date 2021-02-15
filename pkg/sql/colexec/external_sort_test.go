@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -223,6 +224,142 @@ func TestExternalSortRandomized(t *testing.T) {
 	}
 	for _, m := range monitors {
 		m.Stop(ctx)
+	}
+}
+
+// TestExternalSortMemoryAccounting is a sanity check for the memory accounting
+// done throughout the external sort operation. At the moment there are a lot of
+// known problems with the memory accounting, so the test is not very strict.
+// The goal of the test is to make sure that the total maximum reported memory
+// usage (as would have been collected as stats) is within reasonable range. It
+// additionally checks that the number of partitions created is as expected too.
+//
+// It is impossible to come up with the exact numbers here due to the randomness
+// of appends (which happen when setting values on Bytes vectors) and due to the
+// randomization of coldata.BatchSize() value.
+func TestExternalSortMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "the test is very memory-intensive and is likely to OOM under stress")
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
+	}
+
+	// Use the Bytes type because we can control the size of values with it
+	// easily.
+	typs := []*types.T{types.Bytes}
+	ordCols := []execinfrapb.Ordering_Column{{ColIdx: 0}}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	// TODO(yuzefovich): randomize some of these values once the memory
+	// accounting is as expected.
+	numInMemoryBufferedBatches := 8
+	// numNewPartitions determines the expected number of partitions created as
+	// a result of consuming the input (i.e. not as a result of the repeated
+	// merging).
+	numNewPartitions := 4
+	numTotalBatches := numInMemoryBufferedBatches * numNewPartitions
+	batchLength := coldata.BatchSize()
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, batchLength)
+	// Use such a size for a single value that the memory footprint of a single
+	// batch is relatively large.
+	singleTupleSize := mon.DefaultPoolAllocationSize
+	singleTupleValue := make([]byte, singleTupleSize)
+	for i := 0; i < batchLength; i++ {
+		batch.ColVec(0).Bytes().Set(i, singleTupleValue)
+	}
+	batch.SetLength(batchLength)
+	memoryLimit := colmem.GetBatchMemSize(batch) * int64(numInMemoryBufferedBatches)
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+	input := newFiniteBatchSource(batch, typs, numTotalBatches)
+
+	var spilled bool
+	// TODO(yuzefovich): randomize number of available FDs.
+	sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+	sorter, accounts, monitors, closers, err := createDiskBackedSorter(
+		ctx, flowCtx, []colexecbase.Operator{input}, typs, ordCols,
+		0 /* matchLen */, 0 /* k */, func() { spilled = true },
+		0 /* numForcedRepartitions */, false, /* delegateFDAcquisition */
+		queueCfg, sem,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(closers))
+
+	sorter.Init()
+	for b := sorter.Next(ctx); b.Length() > 0; b = sorter.Next(ctx) {
+	}
+	require.NoError(t, closers[0].Close(ctx))
+
+	require.True(t, spilled)
+	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
+
+	// In the ideal world, given the limit in the semaphore, we expect that each
+	// newly created partition contains about numInMemoryBufferedBatches number
+	// of batches with only the partition that is the result of the repeated
+	// merge growing with count as a multiple of numInMemoryBufferedBatches
+	// (first merge = 2x, second merge = 3x, third merge 4x, etc, so we expect
+	// 2*numNewPartitions-1 partitions).
+	externalSorter := sorter.(*diskSpillerBase).diskBackedOp.(*externalSorter)
+	numPartitionsCreated := externalSorter.firstPartitionIdx + externalSorter.numPartitions
+	expMinTotalPartitionsCreated := 2*numNewPartitions - 1
+	// Because of some issues we might create more partitions than we would
+	// expect (depending on the batch size if numNewPartitions is 4, then we
+	// will create from 7 (large batch size) to 15 (batch size of 4)).
+	// The formula below might not apply if we change numNewPartitions.
+	expMaxTotalPartitionsCreated := 4*numNewPartitions - 1
+	require.GreaterOrEqualf(t, numPartitionsCreated, expMinTotalPartitionsCreated,
+		"didn't create enough partitions: actual %d, min expected %d",
+		numPartitionsCreated, expMinTotalPartitionsCreated,
+	)
+	require.GreaterOrEqualf(t, expMaxTotalPartitionsCreated, numPartitionsCreated,
+		"created too many partitions: actual %d, max expected %d",
+		numPartitionsCreated, expMaxTotalPartitionsCreated,
+	)
+
+	// Check that the monitor for the in-memory sorter reports lower than
+	// memoryLimit max usage (the allocation that would put the monitor over the
+	// limit must have been denied with OOM error).
+	require.Greater(t, memoryLimit, monitors[0].MaximumBytes())
+
+	// Use the same calculation as we have when computing stats (maximums are
+	// summed).
+	var totalMaxMemUsage int64
+	for i := range monitors {
+		totalMaxMemUsage += monitors[i].MaximumBytes()
+	}
+	// We cannot guarantee a fixed value, so we use an allowed range.
+	//
+	// In an ideal world:
+	// - all of the memory would be accounted for (this is not done at the
+	//   moment)
+	// - no memory is double-counted
+	// - the reported usage is very close to 2 x memoryLimit (the monitor for
+	//   the in-memory sorter reports slightly below and the monitor for the
+	//   external sorter reports slightly above memoryLimit usage).
+	// TODO(yuzefovich): fix known deficiencies of the memory accounting and
+	// tighten the bounds.
+	expMin := memoryLimit * 3 / 2
+	expMax := memoryLimit * 3
+	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
+		"actual %d, expected min %d", totalMaxMemUsage, expMin)
+	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
+		"actual %d, expected max %d", totalMaxMemUsage, expMax)
+
+	for i := range accounts {
+		accounts[i].Close(ctx)
+	}
+	for i := range monitors {
+		monitors[i].Stop(ctx)
 	}
 }
 
