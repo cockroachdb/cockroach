@@ -149,7 +149,7 @@ func (s *Span) SetVerbose(to bool) {
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 func (s *Span) GetRecording() Recording {
-	return s.crdb.getRecording(s.tracer.mode())
+	return s.crdb.getRecording(s.tracer.mode(), s.tracer.TracingVerbosityIndependentSemanticsIsActive())
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
