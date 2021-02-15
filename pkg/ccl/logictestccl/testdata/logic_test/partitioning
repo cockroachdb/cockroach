@@ -425,7 +425,7 @@ TABLE ok1
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes
@@ -469,7 +469,7 @@ TABLE ok2
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes
@@ -513,7 +513,7 @@ TABLE ok3
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes
@@ -560,7 +560,7 @@ TABLE ok4
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes
@@ -600,7 +600,7 @@ TABLE ok5
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes
@@ -665,7 +665,7 @@ TABLE ok6
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── b int not null
 scan ok6
@@ -702,7 +702,7 @@ TABLE ok7
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── b int not null
 scan ok7
@@ -745,7 +745,7 @@ TABLE ok8
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── b int not null
 scan ok8
@@ -790,7 +790,7 @@ TABLE ok9
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── b int not null
 scan ok9
@@ -837,7 +837,7 @@ TABLE ok10
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       └── b int not null
 scan ok10
@@ -893,7 +893,7 @@ TABLE ok11
  ├── c int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       ├── c int not null
@@ -940,7 +940,7 @@ TABLE ok12
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
       └── partition by list prefixes

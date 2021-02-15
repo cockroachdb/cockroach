@@ -44,7 +44,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         └── constraints: [+region=test,+dc=dc2]
@@ -91,7 +91,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         └── constraints: [+region=test,+dc=dc2]
@@ -160,7 +160,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         └── constraints: [+region=test,+dc=dc1]
@@ -272,7 +272,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         ├── constraints: [+region=test]
@@ -329,7 +329,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         ├── constraints: [+region=test]
@@ -440,7 +440,7 @@ TABLE t
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── k int not null
  │    └── ZONE
  │         ├── constraints: [+region=test]

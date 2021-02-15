@@ -184,15 +184,22 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 // debugging and testing.
 func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 	idx := tab.Index(ord)
-	inverted := ""
+	idxType := ""
 	if idx.IsInverted() {
-		inverted = "INVERTED "
+		idxType = "INVERTED "
+	}
+	if idx.IsUnique() {
+		if idx.Ordinal() == PrimaryIndex {
+			idxType = "PRIMARY "
+		} else {
+			idxType = "UNIQUE "
+		}
 	}
 	mutation := ""
 	if IsMutationIndex(tab, ord) {
 		mutation = " (mutation)"
 	}
-	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
+	child := tp.Childf("%sINDEX %s%s", idxType, idx.Name(), mutation)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
