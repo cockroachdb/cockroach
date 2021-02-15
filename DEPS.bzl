@@ -2891,8 +2891,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
         ],
-        sum = "h1:+9CYw4wP53Ryj4CtTy4VJv1fzA6SgyVZkCUEubdsISg=",
-        version = "v3.0.0-20201109164711-01844fd28560",
+        sum = "h1:W9sYVQfb5q8/WMnlTkjpYK8CwMfGCU6Tp9mR+Qm6NFU=",
+        version = "v3.0.0-20210215124703-719f6ce06fbc",
     )
 
     go_repository(
