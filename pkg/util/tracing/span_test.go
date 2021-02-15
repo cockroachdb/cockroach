@@ -183,6 +183,26 @@ Span grandchild:
 	require.Equal(t, exp, recToStrippedString(childRec))
 }
 
+func TestSpan_ImportRemoteSpans(t *testing.T) {
+	// Verify that GetRecording propagates the recording even when the
+	// receiving Span isn't verbose.
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
+	ch.SetVerbose(true)
+	ch.Record("foo")
+	ch.SetVerbose(false)
+	ch.Finish()
+	sp.ImportRemoteSpans(ch.GetRecording())
+	sp.Finish()
+
+	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+Span root:
+Span child:
+  event: foo
+`))
+}
+
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithForceRealSpan())
