@@ -16,6 +16,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"runtime/metrics"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -68,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/go-plus/taskgroup"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
@@ -1280,6 +1282,10 @@ type connExecutor struct {
 	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
+
+	// (Experimental) taskGroup is the Go runtime task group for this
+	// executor's goroutine and children goroutines.
+	taskGroup taskgroup.T
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1514,6 +1520,8 @@ func (ex *connExecutor) run(
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
+	ex.taskGroup = taskgroup.SetTaskGroup()
+
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
@@ -2646,6 +2654,23 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		remoteStr = ex.sessionData.RemoteAddr.String()
 	}
 
+	taskGroupMetrics := []metrics.Sample{
+		{Name: "/taskgroup/sched/ticks:ticks"},
+		{Name: "/taskgroup/sched/cputime:nanoseconds"},
+		{Name: "/taskgroup/heap/largeHeapUsage:bytes"},
+	}
+	taskgroup.ReadTaskGroupMetrics(ex.taskGroup, taskGroupMetrics)
+	var schedTicks, nanos, largeBytes uint64
+	if taskGroupMetrics[0].Value.Kind() != metrics.KindBad {
+		schedTicks = taskGroupMetrics[0].Value.Uint64()
+	}
+	if taskGroupMetrics[1].Value.Kind() != metrics.KindBad {
+		nanos = taskGroupMetrics[1].Value.Uint64()
+	}
+	if taskGroupMetrics[2].Value.Kind() != metrics.KindBad {
+		largeBytes = taskGroupMetrics[2].Value.Uint64()
+	}
+
 	return serverpb.Session{
 		Username:        ex.sessionData.User().Normalized(),
 		ClientAddress:   remoteStr,
@@ -2659,6 +2684,11 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		MaxAllocBytes:   ex.mon.MaximumBytes(),
 
 		LastActiveQueryAnon: lastActiveQueryAnon,
+
+		// Experimental.
+		SchedTicks: schedTicks,
+		Nanos:      nanos,
+		LargeBytes: largeBytes,
 	}
 }
 

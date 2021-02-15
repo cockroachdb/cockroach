@@ -73,8 +73,12 @@ func (b Info) Short() string {
 	if b.CgoTargetTriple != "" {
 		plat = b.CgoTargetTriple
 	}
-	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+	gop := ""
+	if b.GoPlus {
+		gop = ", go+"
+	}
+	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s%s)",
+		b.Distribution, b.Tag, plat, b.Time, b.GoVersion, gop)
 }
 
 // GoTime parses the utcTime string and returns a time.Time.
@@ -109,6 +113,7 @@ func GetInfo() Info {
 		Type:            typ,
 		Channel:         channel,
 		EnvChannel:      envChannel,
+		GoPlus:          goPlus,
 	}
 }
 

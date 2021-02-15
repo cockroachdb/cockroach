@@ -253,6 +253,8 @@ github.com/cockroachdb/errors v1.6.1/go.mod h1:tm6FTP5G81vwJ5lC0SizQo374JNCOPrHy
 github.com/cockroachdb/errors v1.8.1/go.mod h1:qGwQn6JmZ+oMjuLwjWzUNqblqk0xl4CVV3SQbGwK7Ac=
 github.com/cockroachdb/errors v1.8.4 h1:41oZ1A4Eju6LviqkGpu5R2M39gHHVAFvOYsQjot1jNc=
 github.com/cockroachdb/errors v1.8.4/go.mod h1:GScl7wnuvY335l6h0jbkHIKJ+8uEmUmJRVWKnenUbfI=
+github.com/cockroachdb/go-plus v0.0.0-20210628140920-73a12fb4fb95 h1:/66AzDolBIyaZBxGzhvq5FjG/feV1UGpzmRqiyDWzK4=
+github.com/cockroachdb/go-plus v0.0.0-20210628140920-73a12fb4fb95/go.mod h1:WeV5mPVSZofXHVD2K7Yr0E8PCP8V9WwsOYmxRDm21xs=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/gostdlib v1.13.0 h1:TzSEPYgkKDNei3gbLc0rrHu4iHyBp7/+NxPOFmcXGaw=

@@ -39,6 +39,7 @@ require (
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1-0.20201212195501-e89bf9ee1861
 	github.com/cockroachdb/errors v1.8.4
+	github.com/cockroachdb/go-plus v0.0.0-20210628140920-73a12fb4fb95
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
