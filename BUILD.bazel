@@ -103,6 +103,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/pgwire/pgwirebase/servermessagetype_string.go
 # gazelle:exclude pkg/sql/pgwire/pgwirebase/servererrfieldtype_string.go
 # gazelle:exclude pkg/sql/pgwire/pgwirebase/preparetype_string.go
+# gazelle:exclude pkg/testutils/lint/passes/fmtsafe/testdata/**
 
 # Generally useful references:
 #
