@@ -3587,7 +3587,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				sp := tracing.SpanFromContext(ctx.Context)
 				if sp == nil {
-					return nil, errors.New("no active trace span")
+					return tree.DNull, nil
 				}
 				return tree.NewDInt(tree.DInt(sp.GetRecording()[0].TraceID)), nil
 			},
