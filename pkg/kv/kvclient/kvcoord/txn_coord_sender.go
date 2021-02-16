@@ -1143,3 +1143,24 @@ func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.Stepp
 	}
 	return curMode
 }
+
+// ManualRefresh is part of the TxnSender interface.
+func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	// Hijack the pre-emptive refresh code path to perform the refresh but
+	// provide the force flag to ensure that the refresh occurs unconditionally.
+	var ba roachpb.BatchRequest
+	ba.Txn = tc.mu.txn.Clone()
+	const force = true
+	ba, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
+	if pErr != nil {
+		pErr = tc.updateStateLocked(ctx, ba, nil, pErr)
+	} else {
+		var br roachpb.BatchResponse
+		br.Txn = ba.Txn
+		pErr = tc.updateStateLocked(ctx, ba, &br, pErr)
+	}
+	return pErr.GoError()
+}
