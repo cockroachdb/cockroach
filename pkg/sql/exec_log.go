@@ -99,6 +99,12 @@ var unstructuredQueryLog = settings.RegisterBoolSetting(
 	false,
 )
 
+var adminAuditLogEnabled = settings.RegisterBoolSetting(
+	"sql.log.admin_audit.enabled",
+	"when set, log SQL queries that are executed by a user with admin privileges",
+	false,
+)
+
 type executorType int
 
 const (
@@ -123,15 +129,21 @@ func (p *planner) maybeLogStatement(
 	numRetries, rows int,
 	err error,
 	queryReceived time.Time,
+	hasAdminRoleCache *HasAdminRoleCache,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived, hasAdminRoleCache)
 }
 
 var sqlPerfLogger log.ChannelLogger = log.SqlPerf
 var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
 
 func (p *planner) maybeLogStatementInternal(
-	ctx context.Context, execType executorType, numRetries, rows int, err error, startTime time.Time,
+	ctx context.Context,
+	execType executorType,
+	numRetries, rows int,
+	err error,
+	startTime time.Time,
+	hasAdminRoleCache *HasAdminRoleCache,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -146,7 +158,15 @@ func (p *planner) maybeLogStatementInternal(
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
-	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
+	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
+	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
+
+	// Only log to adminAuditLog if the statement is executed by
+	// a user and the user has admin privilege (is directly or indirectly a
+	// member of the admin role).
+
+	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
+		!shouldLogToAdminAuditLog {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -314,6 +334,11 @@ func (p *planner) maybeLogStatementInternal(
 	if logExecuteEnabled {
 		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
+	}
+
+	if shouldLogToAdminAuditLog {
+		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
+			&eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
 	}
 }
 
