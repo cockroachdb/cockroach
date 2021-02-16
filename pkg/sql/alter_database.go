@@ -152,7 +152,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 				n.n.Region.String(),
 				n.n.Name.String(),
 			),
-			"you must add a PRIMARY REGION first using ALTER DATABASE %s SET PRIMARY REGION %s",
+			"you must add a PRIMARY REGION first using ALTER DATABASE %s PRIMARY REGION %s",
 			n.n.Name.String(),
 			n.n.Region.String(),
 		)
@@ -308,7 +308,7 @@ func (p *planner) AlterDatabaseDropRegion(
 			return nil, errors.WithHintf(
 				errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
 				"You must designate another region as the primary region using "+
-					"ALTER DATABASE %s SET PRIMARY REGION <region name> or remove all other regions before "+
+					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
 			)
 		}

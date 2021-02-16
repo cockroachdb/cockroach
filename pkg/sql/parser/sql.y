@@ -1476,7 +1476,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
 // ALTER DATABASE <name> ADD REGIONS <regions>
 // ALTER DATABASE <name> DROP REGIONS <regions>
-// ALTER DATABASE <name> SET PRIMARY REGION <region>
+// ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
@@ -1531,6 +1531,14 @@ alter_database_primary_region_stmt:
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($4),
+    }
+  }
+| ALTER DATABASE database_name SET primary_region_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterDatabasePrimaryRegion{
+      Name: tree.Name($3),
+      PrimaryRegion: tree.Name($5),
     }
   }
 
