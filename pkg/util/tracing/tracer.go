@@ -298,13 +298,9 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = logtags.FromContext(ctx)
 	}
 
-	// Avoid creating a real span when possible. If tracing is globally enabled,
-	// we always need to create spans. If the incoming span has a parent, then we
-	// also create a real child. Additionally, if the caller explicitly asked for
-	// a real span they need to get one. In all other cases, a noop span will do.
-	if !t.AlwaysTrace() &&
-		opts.parentTraceID() == 0 &&
-		!opts.ForceRealSpan {
+	// Are we tracing everything, or have a parent, or want a real span? Then
+	// we create a real trace span. In all other cases, a noop span will do.
+	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
