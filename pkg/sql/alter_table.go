@@ -397,6 +397,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			if n.tableDesc.IsLocalityRegionalByRow() {
+				rbrColName, err := n.tableDesc.GetRegionalByRowTableRegionColumnName()
+				if err != nil {
+					return err
+				}
+				if rbrColName == t.Column {
+					return errors.WithHintf(
+						pgerror.Newf(
+							pgcode.InvalidColumnReference,
+							"cannot drop column %s as it is used as the REGIONAL BY ROW column reference",
+							t.Column,
+						),
+						"You must change the table locality before dropping this table.",
+					)
+				}
+			}
+
 			colToDrop, err := n.tableDesc.FindColumnWithName(t.Column)
 			if err != nil {
 				if t.IfExists {
