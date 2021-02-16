@@ -96,6 +96,14 @@ type MVCCIterator interface {
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
+
+	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
+	// the caller expects to find an intent, and additionally has the txnUUID
+	// for the intent it is looking for. When running with separated intents,
+	// this can optimize the behavior of the underlying Engine for write heavy
+	// keys by avoiding the need to iterate over many deleted intents.
+	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
+
 	// Key returns the current key.
 	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key which could be an encoded
