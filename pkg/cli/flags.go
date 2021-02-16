@@ -472,6 +472,13 @@ func init() {
 		stringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 	}
 
+	// Flags for the connect command.
+	{
+		f := connectCmd.Flags()
+		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
+		stringFlag(f, &baseCfg.InitToken, cliflags.InitToken)
+	}
+
 	for _, cmd := range []*cobra.Command{
 		createCACertCmd,
 		createClientCACertCmd,
