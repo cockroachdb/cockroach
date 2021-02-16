@@ -1178,7 +1178,6 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = conn.Close() }()
 
 	// Create the heartbeat client.
 	log.Infof(ctx, "starting heartbeat client")
@@ -1792,7 +1791,8 @@ func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testin
 	if _, err = c.Connect(ctx); err != nil {
 		require.Regexp(t, "not yet heartbeated", err)
 	}
-	require.NoError(t, c.grpcConn.Close())
+	err = c.grpcConn.Close() // nolint:grpcconnclose
+	require.NoError(t, err)
 }
 
 func BenchmarkGRPCDial(b *testing.B) {

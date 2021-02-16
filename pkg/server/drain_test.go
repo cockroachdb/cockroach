@@ -202,5 +202,7 @@ func getAdminClientForServer(
 		return nil, nil, err
 	}
 	client := serverpb.NewAdminClient(conn)
-	return client, func() { _ = conn.Close() }, nil
+	return client, func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}, nil
 }

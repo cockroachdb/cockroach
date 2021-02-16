@@ -17,7 +17,7 @@ go_test(
     srcs = ["passes_util_test.go"],
     tags = ["broken_in_bazel"],
     deps = [
-        "//pkg/testutils/lint/passes/descriptormarshal",
+        "//pkg/testutils/lint/passes/forbiddenmethod:descriptormarshal",
         "//pkg/testutils/lint/passes/unconvert",
         "//pkg/testutils/skip",
         "@com_github_stretchr_testify//require",

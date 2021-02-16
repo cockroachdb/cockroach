@@ -791,7 +791,9 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(conn *grpc.ClientConn) { _ = conn.Close() }(conn)
+	defer func(conn *grpc.ClientConn) {
+		_ = conn.Close() // nolint:grpcconnclose
+	}(conn)
 	for _, subsystem := range subsystems {
 		t.Run(fmt.Sprintf("no-cert/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)
@@ -814,7 +816,9 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func(conn *grpc.ClientConn) { _ = conn.Close() }(conn)
+	defer func(conn *grpc.ClientConn) {
+		_ = conn.Close() // nolint:grpcconnclose
+	}(conn)
 	for _, subsystem := range subsystems {
 		t.Run(fmt.Sprintf("bad-user/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "a",
+    srcs = ["a.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod/testdata/src/a",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/catalog/descpb"],
+)
+
+go_library(
+    name = "descmarshaltest",
+    srcs = ["foo.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod/testdata/src/descmarshaltest",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/catalog/descpb"],
+)
+
+go_library(
+    name = "grpcconnclosetest",
+    srcs = ["foo.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod/testdata/src/grpcconnclosetest",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_google_grpc//:go_default_library"],
+)
