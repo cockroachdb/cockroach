@@ -285,7 +285,7 @@ func (r *Replica) applyTimestampCache(
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		if roachpb.ConsultsTimestampCache(args) {
+		if roachpb.IsIntentWrite(args) {
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
