@@ -77,12 +77,16 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // into interleaved keys, and is able to function on partial keys for spans
 // and splits.
 type KeyRewriter struct {
+	codec keys.SQLCodec
+
 	prefixes prefixRewriter
 	descs    map[descpb.ID]catalog.TableDescriptor
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
-func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
+func MakeKeyRewriterFromRekeys(
+	codec keys.SQLCodec, rekeys []roachpb.ImportRequest_TableRekey,
+) (*KeyRewriter, error) {
 	descs := make(map[descpb.ID]catalog.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc descpb.Descriptor
@@ -95,11 +99,13 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 		}
 		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutable(*table)
 	}
-	return MakeKeyRewriter(descs)
+	return makeKeyRewriter(codec, descs)
 }
 
-// MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(descs map[descpb.ID]catalog.TableDescriptor) (*KeyRewriter, error) {
+// makeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
+func makeKeyRewriter(
+	codec keys.SQLCodec, descs map[descpb.ID]catalog.TableDescriptor,
+) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
@@ -136,6 +142,7 @@ func MakeKeyRewriter(descs map[descpb.ID]catalog.TableDescriptor) (*KeyRewriter,
 		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
 	})
 	return &KeyRewriter{
+		codec:    codec,
 		prefixes: prefixes,
 		descs:    descs,
 	}, nil
@@ -146,7 +153,7 @@ func MakeKeyRewriter(descs map[descpb.ID]catalog.TableDescriptor) (*KeyRewriter,
 // function, but it takes into account interleaved ancestors, which we don't
 // want here.
 func makeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.IndexID) []byte {
-	return keys.TODOSQLCodec.IndexPrefix(uint32(tableID), uint32(indexID))
+	return keys.SystemSQLCodec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
@@ -166,13 +173,45 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 // byte that we're likely at the end anyway and do not need to search for any
 // further table IDs to replace.
 func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
-	if bytes.HasPrefix(key, keys.TenantPrefix) {
+	if kr.codec.ForSystemTenant() && bytes.HasPrefix(key, keys.TenantPrefix) {
+		// If we're rewriting from the system tenant, we don't rewrite tenant keys
+		// at all since we assume that we're restoring an entire tenant.
 		return key, true, nil
 	}
+
+	noTenantPrefix, oldTenantID, err := keys.DecodeTenantPrefix(key)
+	if err != nil {
+		return nil, false, err
+	}
+
+	rekeyed, ok, err := kr.rewriteTableKey(noTenantPrefix, isFromSpan)
+	if err != nil {
+		return nil, false, err
+	}
+
+	oldCodec := keys.MakeSQLCodec(oldTenantID)
+	oldTenantPrefix := oldCodec.TenantPrefix()
+	newTenantPrefix := kr.codec.TenantPrefix()
+	if len(newTenantPrefix) == len(oldTenantPrefix) {
+		keyTenantPrefix := key[:len(oldTenantPrefix)]
+		copy(keyTenantPrefix, newTenantPrefix)
+		rekeyed = append(keyTenantPrefix, rekeyed...)
+	} else {
+		rekeyed = append(newTenantPrefix, rekeyed...)
+	}
+
+	return rekeyed, ok, err
+}
+
+// rewriteTableKey recursively (in the case of interleaved tables) rewrites the
+// table IDs in the key. It assumes that any tenant ID has been stripped from
+// the key so it operates with the system codec. It is the responsibility of the
+// caller to either remap, or re-prepend any required tenant prefix.
+func (kr *KeyRewriter) rewriteTableKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
-	_, tableID, _ := keys.TODOSQLCodec.DecodeTablePrefix(key)
+	_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(key)
 	// Rewrite the first table ID.
 	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
@@ -183,7 +222,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 	// Check if this key may have interleaved children.
-	k, _, indexID, err := keys.TODOSQLCodec.DecodeIndexPrefix(key)
+	k, _, indexID, err := keys.SystemSQLCodec.DecodeIndexPrefix(key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -257,7 +296,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		return key, true, nil
 	}
 	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.RewriteKey(k, isFromSpan)
+	k, ok, err = kr.rewriteTableKey(k, isFromSpan)
 	if err != nil {
 		return nil, false, err
 	}
