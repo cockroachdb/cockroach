@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -4775,16 +4776,22 @@ may increase either contention or retry errors, or both.`,
 			Category: categoryStreamIngestion,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"job_id", types.Int}},
+			Types: tree.ArgTypes{
+				{"job_id", types.Int},
+				{"cutover_ts", types.TimestampTZ},
+			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				jobID := int(*args[0].(*tree.DInt))
-				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID)
+				cutoverTime := args[1].(*tree.DTimestampTZ).Time
+				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
+				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
-				"The job will eventually stop ingesting, revert to the latest resolved timestamp and leave the " +
-				"cluster in a consistent state. " +
+				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
+				"cluster in a consistent state. The specified timestamp can only be specified up to the" +
+				" microsecond. " +
 				"This function does not wait for the job to reach a terminal state, " +
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
 				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +

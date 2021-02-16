@@ -11,6 +11,7 @@ go_library(
         "//pkg/kv",
         "//pkg/sql/sem/tree",
         "//pkg/streaming",
+        "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -57,13 +57,14 @@ func TestCutoverBuiltin(t *testing.T) {
 	progress := job.Progress()
 	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
-	require.False(t, sp.StreamIngest.MarkedForCompletion)
+	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
+	cutoverTime := timeutil.Now()
 	var jobID int
 	err = db.QueryRowContext(
 		ctx,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1)`,
-		*job.ID()).Scan(&jobID)
+		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
+		*job.ID(), cutoverTime).Scan(&jobID)
 	require.NoError(t, err)
 	require.Equal(t, *job.ID(), int64(jobID))
 
@@ -73,5 +74,8 @@ func TestCutoverBuiltin(t *testing.T) {
 	progress = sj.Progress()
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
-	require.True(t, sp.StreamIngest.MarkedForCompletion)
+	// The builtin only offers microsecond precision and so we must account for
+	// that when comparing against our chosen time.
+	cutoverTime = cutoverTime.Round(time.Microsecond)
+	require.Equal(t, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}, sp.StreamIngest.CutoverTime)
 }
