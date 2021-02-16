@@ -159,6 +159,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	opName := sqlTxnName
 	var traceOpts []tracing.SpanOption
 	if !tranCtx.execTestingKnobs.Pretend59315IsFixed {
+		// The surrounding conditional and this option can be removed once #59315
+		// is addressed.
 		traceOpts = append(traceOpts, tracing.WithBypassRegistry())
 	}
 	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer, traceOpts...)
