@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains facilities to report SQL activities to separate
@@ -99,6 +100,12 @@ var unstructuredQueryLog = settings.RegisterBoolSetting(
 	false,
 )
 
+var adminAuditLogEnabled = settings.RegisterBoolSetting(
+	"sql.log.admin_audit.enabled",
+	"when set, log SQL queries that are executed by a user with admin privileges",
+	false,
+)
+
 type executorType int
 
 const (
@@ -121,17 +128,23 @@ func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
 	numRetries, rows int,
-	err error,
+	res RestrictedCommandResult,
 	queryReceived time.Time,
+	hasAdminRoleCache *HasAdminRoleCache,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, res, queryReceived, hasAdminRoleCache)
 }
 
 var sqlPerfLogger log.ChannelLogger = log.SqlPerf
 var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
 
 func (p *planner) maybeLogStatementInternal(
-	ctx context.Context, execType executorType, numRetries, rows int, err error, startTime time.Time,
+	ctx context.Context,
+	execType executorType,
+	numRetries, rows int,
+	res RestrictedCommandResult,
+	startTime time.Time,
+	hasAdminRoleCache *HasAdminRoleCache,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -145,8 +158,27 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	adminAuditLog := adminAuditLogEnabled.Get(&p.execCfg.Settings.SV)
 
-	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
+	var hasAdminRole bool
+	if adminAuditLog {
+		// hasAdminRoleCache should always be set before the deferred maybeLogStatement
+		// in dispatchToExecutionEngine. If it is not set, we have a problem.
+		if !hasAdminRoleCache.IsSet {
+			// If there is an existing error, don't overwrite it.
+			if res.Err() != nil {
+				res.SetError(errors.New("expected hasAdminRoleCache.IsSet to be true, found "))
+			}
+		}
+		hasAdminRole = hasAdminRoleCache.HasAdminRole
+	}
+
+	// Only log to adminAuditLog if the statement is executed by
+	// a user and the user has admin privilege (is directly or indirectly a
+	// member of the admin role).
+	shouldLogToAdminAuditLog := adminAuditLog && hasAdminRole
+
+	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled && !shouldLogToAdminAuditLog {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -161,6 +193,7 @@ func (p *planner) maybeLogStatementInternal(
 	age := float32(queryDuration.Nanoseconds()) / 1e6
 	// The text of the error encountered, if the query did in fact end
 	// in error.
+	err := res.Err()
 	execErrStr := ""
 	if err != nil {
 		execErrStr = err.Error()
@@ -314,6 +347,11 @@ func (p *planner) maybeLogStatementInternal(
 	if logExecuteEnabled {
 		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
+	}
+
+	if shouldLogToAdminAuditLog {
+		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
+			&eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
 	}
 }
 
