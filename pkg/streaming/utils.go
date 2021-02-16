@@ -13,6 +13,7 @@ package streaming
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // CompleteIngestionHook is the hook run by the
@@ -20,4 +21,4 @@ import (
 // It is used to signal to a running stream ingestion job to stop ingesting data
 // and eventually move to a consistent state as of the latest resolved
 // timestamp.
-var CompleteIngestionHook func(*tree.EvalContext, *kv.Txn, int) error
+var CompleteIngestionHook func(*tree.EvalContext, *kv.Txn, int, hlc.Timestamp) error

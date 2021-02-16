@@ -26,6 +26,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 )

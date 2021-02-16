@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -23,7 +24,9 @@ func init() {
 	streaming.CompleteIngestionHook = doCompleteIngestion
 }
 
-func doCompleteIngestion(evalCtx *tree.EvalContext, txn *kv.Txn, jobID int) error {
+func doCompleteIngestion(
+	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp,
+) error {
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
 	row, err := evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
@@ -49,7 +52,7 @@ func doCompleteIngestion(evalCtx *tree.EvalContext, txn *kv.Txn, jobID int) erro
 
 	// Update the sentinel being polled by the stream ingestion job to
 	// check if a complete has been signaled.
-	sp.StreamIngest.MarkedForCompletion = true
+	sp.StreamIngest.CutoverTime = cutoverTimestamp
 	progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
 	progressBytes, err := protoutil.Marshal(progress)
 	if err != nil {
