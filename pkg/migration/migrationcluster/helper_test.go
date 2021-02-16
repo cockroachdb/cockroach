@@ -36,7 +36,7 @@ func (n NoopDialer) Dial(
 var _ NodeDialer = NoopDialer{}
 
 func TestHelperEveryNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	var mu syncutil.Mutex
@@ -150,7 +150,7 @@ func TestHelperEveryNode(t *testing.T) {
 }
 
 func TestClusterNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	const numNodes = 3

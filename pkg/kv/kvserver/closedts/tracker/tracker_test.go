@@ -33,14 +33,14 @@ import (
 )
 
 func TestLockfreeTracker(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tr := NewLockfreeTracker()
 	testTracker(ctx, t, tr)
 }
 
 func TestHeapTracker(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tr := newHeapTracker()
 	testTracker(ctx, t, tr)
@@ -99,7 +99,7 @@ func testTracker(ctx context.Context, t *testing.T, tr Tracker) {
 // much lower than the lowest timestamp at which a request is currently
 // evaluating).
 func TestLockfreeTrackerRandomStress(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tr := NewLockfreeTracker().(*lockfreeTracker)
 
