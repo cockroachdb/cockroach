@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -108,10 +109,15 @@ func (ctx *FlowCtx) Codec() keys.SQLCodec {
 // ProcessorComponentID returns a ComponentID for the given processor in this
 // flow.
 func (ctx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.ComponentID {
-	return execinfrapb.ProcessorComponentID(ctx.ID, procID)
+	// TODO(radu): the component stats should store SQLInstanceID instead.
+	nodeID := roachpb.NodeID(ctx.NodeID.SQLInstanceID())
+	return execinfrapb.ProcessorComponentID(nodeID, ctx.ID, procID)
 }
 
 // StreamComponentID returns a ComponentID for the given stream in this flow.
+// The stream must originate from the node associated with this FlowCtx.
 func (ctx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
-	return execinfrapb.StreamComponentID(ctx.ID, streamID)
+	// TODO(radu): the component stats should store SQLInstanceID instead.
+	originNodeID := roachpb.NodeID(ctx.NodeID.SQLInstanceID())
+	return execinfrapb.StreamComponentID(originNodeID, ctx.ID, streamID)
 }

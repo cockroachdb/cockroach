@@ -831,9 +831,12 @@ func (s *vectorizedFlowCreator) setupInput(
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
-				op, err = s.wrapWithNetworkVectorizedStatsCollector(
-					inbox, flowCtx.StreamComponentID(inputStream.StreamID), latency,
+				// Note: we can't use flowCtx.StreamComponentID because the stream does
+				// not originate from this node (we are the target node).
+				compID := execinfrapb.StreamComponentID(
+					inputStream.OriginNodeID, flowCtx.ID, inputStream.StreamID,
 				)
+				op, err = s.wrapWithNetworkVectorizedStatsCollector(inbox, compID, latency)
 				if err != nil {
 					return nil, nil, nil, err
 				}
