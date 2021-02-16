@@ -342,6 +342,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
+	// If the table descriptor is resolved but is not a
+	// physical table then return an error.
+	if table != nil && !table.IsPhysicalTable() {
+		return pgerror.Newf(pgcode.WrongObjectType, "cannot set a zone configuration on non-physical object %s", table.GetName())
+	}
+
 	if n.zoneSpecifier.TargetsPartition() && len(n.zoneSpecifier.TableOrIndex.Index) == 0 && !n.allIndexes {
 		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 		// index has the specified partition.
