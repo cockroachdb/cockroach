@@ -265,3 +265,29 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     constraints = '[]',
     voter_constraints = '{+region=test: 1}',
     lease_preferences = '[]'
+
+# Check entities for which we can set zone configs.
+subtest test_entity_validity
+
+statement ok
+CREATE TABLE zc (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+ALTER TABLE zc CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement ok
+CREATE MATERIALIZED VIEW vm (x, y) AS SELECT a,b FROM zc; ALTER TABLE vm CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement error pgcode 42809 cannot set a zone configuration on non-physical object v
+CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+user root
+
+statement error pq: user root does not have ZONECONFIG or CREATE privilege on relation pg_type
+ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement error pq: user root does not have ZONECONFIG or CREATE privilege on relation columns
+ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000

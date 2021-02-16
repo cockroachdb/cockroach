@@ -1422,9 +1422,11 @@ func TestDropPhysicalTableGC(t *testing.T) {
 		tableDescriptor := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", table.name)
 		require.NotNil(t, tableDescriptor)
 		tableDescriptorId := tableDescriptor.GetID()
-		// Create a new zone config for the table to test its proper deletion.
-		_, err = sqlDB.Exec(fmt.Sprintf(`ALTER TABLE test.%s CONFIGURE ZONE USING gc.ttlseconds = 123456;`, table.name))
-		require.NoError(t, err)
+		if table.sqlType != "VIEW" {
+			// Create a new zone config for the table to test its proper deletion.
+			_, err = sqlDB.Exec(fmt.Sprintf(`ALTER TABLE test.%s CONFIGURE ZONE USING gc.ttlseconds = 123456;`, table.name))
+			require.NoError(t, err)
+		}
 		// Drop table.
 		_, err = sqlDB.Exec(fmt.Sprintf(`DROP %s test.%s;`, table.sqlType, table.name))
 		require.NoError(t, err)
