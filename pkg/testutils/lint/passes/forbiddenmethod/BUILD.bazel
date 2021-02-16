@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "descriptormarshal",
+    name = "forbiddenmethod",
     srcs = [
         "analyzers.go",
         "forbiddenmethod.go",
@@ -17,24 +17,13 @@ go_library(
 )
 
 go_test(
-    name = "descriptormarshal_test",
+    name = "forbiddenmethod_test",
     size = "small",
     srcs = ["descriptormarshal_test.go"],
     data = glob(["testdata/**"]),
     tags = ["broken_in_bazel"],
     deps = [
-        ":descriptormarshal",
-        "//pkg/testutils/skip",
-        "@org_golang_x_tools//go/analysis/analysistest",
-    ],
-)
-
-go_test(
-    name = "forbiddenmethod_test",
-    srcs = ["descriptormarshal_test.go"],
-    data = glob(["testdata/**"]),
-    deps = [
-        ":descriptormarshal",
+        ":forbiddenmethod",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
