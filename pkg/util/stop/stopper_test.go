@@ -637,3 +637,21 @@ func BenchmarkStopperPar(b *testing.B) {
 		}
 	})
 }
+
+func TestCancelInCloser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+
+	// This will call the Closer which will call cancel and should
+	// not deadlock.
+	_, cancel := s.WithCancelOnQuiesce(ctx)
+	s.AddCloser(closerFunc(cancel))
+	s.Stop(ctx)
+}
+
+// closerFunc implements Closer.
+type closerFunc func()
+
+func (cf closerFunc) Close() { cf() }
