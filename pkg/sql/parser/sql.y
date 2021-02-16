@@ -1533,6 +1533,14 @@ alter_database_primary_region_stmt:
       PrimaryRegion: tree.Name($4),
     }
   }
+| ALTER DATABASE database_name SET primary_region_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterDatabasePrimaryRegion{
+      Name: tree.Name($3),
+      PrimaryRegion: tree.Name($5),
+    }
+  }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL

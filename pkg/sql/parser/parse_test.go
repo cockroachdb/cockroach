@@ -1830,6 +1830,9 @@ func TestParse2(t *testing.T) {
 			`CREATE DATABASE a PRIMARY REGION = "us-west-1"`,
 			`CREATE DATABASE a PRIMARY REGION "us-west-1"`,
 		},
+		{`ALTER DATABASE a SET PRIMARY REGION "us-west-1"`,
+			`ALTER DATABASE a PRIMARY REGION "us-west-1"`},
+
 		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
 			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
