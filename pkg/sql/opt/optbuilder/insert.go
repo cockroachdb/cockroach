@@ -807,9 +807,8 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// each one.
 	arbiterIndexes.ForEach(func(idx int) {
 		index := mb.tab.Index(idx)
-		_, isPartial := index.Predicate()
 		var predExpr tree.Expr
-		if isPartial {
+		if _, isPartial := index.Predicate(); isPartial {
 			predExpr = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
@@ -819,9 +818,13 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
+		var predExpr tree.Expr
+		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
+			predExpr = mb.parseUniqueConstraintPredicateExpr(uc)
+		}
 		buildInputForArbiter(uniqueConstraint.ColumnCount(), func(i int) int {
 			return uniqueConstraint.ColumnOrdinal(mb.tab, i)
-		}, nil /* predExpr */)
+		}, predExpr)
 	})
 
 	// Loop over each arbiter index and constraint, creating an UpsertDistinctOn
@@ -829,15 +832,16 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// the anti-joins created above, to avoid removing valid rows (see #59125).
 	arbiterIndexes.ForEach(func(idx int) {
 		index := mb.tab.Index(idx)
-		_, isPartial := index.Predicate()
 
 		// If the index is a partial index, project a new column that allows the
 		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialIndexDistinctColumn for more
+		// partial index predicate. See projectPartialArbiterDistinctColumn for more
 		// details.
 		var partialIndexDistinctCol *scopeColumn
-		if isPartial {
-			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
+		if _, isPartial := index.Predicate(); isPartial {
+			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
+			pred := mb.parsePartialIndexPredicateExpr(idx)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
 		}
 		buildDistinctOnForArbiter(index.LaxKeyColumnCount(), func(i int) int {
 			return index.Column(i).Ordinal()
@@ -845,9 +849,20 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
+
+		// If the constraint is partial, project a new column that allows the
+		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
+		// partial predicate. See projectPartialArbiterDistinctColumn for more
+		// details.
+		var partialIndexDistinctCol *scopeColumn
+		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
+			alias := fmt.Sprintf("upsert_partial_constraint_distinct%d", uc)
+			pred := mb.parseUniqueConstraintPredicateExpr(uc)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
+		}
 		buildDistinctOnForArbiter(uniqueConstraint.ColumnCount(), func(i int) int {
 			return uniqueConstraint.ColumnOrdinal(mb.tab, i)
-		}, nil /* partialIndexDistinctCol */)
+		}, partialIndexDistinctCol)
 	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
@@ -1033,23 +1048,24 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		index := mb.tab.Index(idx)
 
 		_, isPartial := index.Predicate()
-		var predExpr tree.Expr
+		var pred tree.Expr
 		if isPartial {
-			predExpr = mb.parsePartialIndexPredicateExpr(idx)
+			pred = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
 		// If the index is a partial index, project a new column that allows the
 		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialIndexDistinctColumn for more
-		// details.
+		// partial index predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
 		var partialIndexDistinctCol *scopeColumn
 		if isPartial {
-			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
+			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
 		}
 
 		buildInputForArbiter(func() *scopeColumn {
 			return &mb.fetchScope.cols[findNotNullIndexCol(index)]
-		}, predExpr, partialIndexDistinctCol)
+		}, pred, partialIndexDistinctCol)
 	} else if arbiterConstraints.Len() > 0 {
 		buildInputForArbiter(func() *scopeColumn {
 			// Use the primary index, since we don't know at this point whether
@@ -1266,21 +1282,33 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 //   2. If it is a partial index, its predicate must be implied by the
 //      arbiterPredicate supplied by the user.
 //
-// An arbiter constraint must have columns that match the columns in
-// conflictOrds. Unique constraints without an index cannot be "partial",
-// so they have no predicate to check for implication with arbiterPredicate.
-// TODO(rytaft): revisit this for the case of implicitly partitioned partial
-//  unique indexes (see #59195).
+// An arbiter constraint:
+//
+//   1. Must have columns that match the columns in conflictOrds.
+//   2. If it is a partial constraint, its predicate must be implied by the
+//      arbiterPredicate supplied by the user.
 //
 // If conflictOrds is empty then all unique indexes and unique without index
 // constraints are returned as arbiters. This is required to support a
 // DO NOTHING with no ON CONFLICT columns. In this case, all unique indexes
 // and constraints are used to check for conflicts.
 //
-// If a non-partial or pseudo-partial arbiter index is found, the return set
-// contains only that index. No other arbiter is necessary because a non-partial
-// or pseudo-partial index guarantees uniqueness of its columns across all
-// rows.
+// If conflictOrds is non-empty, there is an intentional preference for certain
+// types of arbiters. Indexes are preferred over constraints because they will
+// likely lead to a more efficient query plan. Non-partial or pseudo-partial
+// indexes and constraints are preferred over partial indexes and constraints
+// because a non-partial or pseudo-partial index or constraint guarantees
+// uniqueness of its columns across all rows; there is no need for an additional
+// arbiter for a subset of rows. If there are no non-partial or pseudo-partial
+// indexes or constraints found, all valid partial indexes and partial
+// constraints are returned so that uniqueness is guaranteed on the respective
+// subsets of rows. In summary, if conflictOrds is non-empty, this function:
+//
+//   1. Returns a single non-partial or pseudo-partial arbiter index, if found.
+//   2. Return a single non-partial or pseudo-partial arbiter constraint, if
+//      found.
+//   3. Otherwise, returns all partial arbiter indexes and constraints.
+//
 func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
 ) (indexes util.FastIntSet, uniqueConstraints util.FastIntSet) {
@@ -1301,9 +1329,67 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 	}
 
 	tabMeta := mb.md.TableMeta(mb.tabID)
+
+	// initializeTableScopeOnce builds a scan and initializes tableScope as the
+	// scope of a scan on the mutation table. It only performs the
+	// initialization once. This allows for lazily initializing tableScope only
+	// if it is needed to determine if partial indexes or partial unique
+	// constraints can be arbiters.
+	//
+	// A scan is built so that the logical properties of the scan can be used to
+	// fully normalize partial index predicates and partial unique constraint
+	// predicates.
 	var tableScope *scope
+	initializeTableScopeOnce := func() {
+		if tableScope == nil {
+			tableScope = mb.b.buildScan(
+				tabMeta, tableOrdinals(tabMeta.Table, columnKinds{
+					includeMutations:       false,
+					includeSystem:          false,
+					includeVirtualInverted: false,
+					includeVirtualComputed: true,
+				}),
+				nil, /* indexFlags */
+				noRowLocking,
+				mb.b.allocScope(),
+			)
+		}
+	}
+
+	// arbiterPredicateImpliesPredicate returns true if arbiterPredicate implies
+	// pred. If there is no arbiterPredicate (it is nil), it cannot imply any
+	// predicate, so false is returned.
 	var im *partialidx.Implicator
 	var arbiterFilters memo.FiltersExpr
+	arbiterPredicateImpliesPredicate := func(pred memo.FiltersExpr) bool {
+		if arbiterPredicate == nil {
+			return false
+		}
+
+		// Initialize the Implicator once.
+		if im == nil {
+			im = &partialidx.Implicator{}
+			im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
+		}
+
+		// Build the arbiter filters once.
+		if arbiterFilters == nil {
+			var err error
+			arbiterFilters, err = mb.b.buildPartialIndexPredicate(
+				tabMeta, tableScope, arbiterPredicate, "arbiter predicate",
+			)
+			if err != nil {
+				// The error is due to a non-immutable operator in the arbiter
+				// predicate. Return false rather than panicking in case a
+				// matching non-partial or pseudo-partial index exists.
+				return false
+			}
+		}
+
+		_, ok := im.FiltersImplyPredicate(arbiterFilters, pred)
+		return ok
+	}
+
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 
@@ -1331,25 +1417,11 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 			return util.MakeFastIntSet(idx), util.FastIntSet{}
 		}
 
-		// Initialize tableScope once and only if needed. We need to build a scan
-		// so we can use the logical properties of the scan to fully normalize the
-		// index predicates.
-		if tableScope == nil {
-			tableScope = mb.b.buildScan(
-				tabMeta, tableOrdinals(tabMeta.Table, columnKinds{
-					includeMutations:       false,
-					includeSystem:          false,
-					includeVirtualInverted: false,
-					includeVirtualComputed: true,
-				}),
-				nil, /* indexFlags */
-				noRowLocking,
-				mb.b.allocScope(),
-			)
-		}
+		// Initialize tableScope lazily.
+		initializeTableScopeOnce()
 
 		// Fetch the partial index predicate which was added to tabMeta in the
-		// call to buildScan above.
+		// call to initializeTableScopeOnce above.
 		p, _ := tabMeta.PartialIndexPredicate(idx)
 		predFilter := *p.(*memo.FiltersExpr)
 
@@ -1362,31 +1434,8 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 
 		// If the index is a partial index, then it can only be an arbiter if
 		// the arbiterPredicate implies it.
-		if arbiterPredicate != nil {
-
-			// Initialize the Implicator once.
-			if im == nil {
-				im = &partialidx.Implicator{}
-				im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
-			}
-
-			// Build the arbiter filters once.
-			if arbiterFilters == nil {
-				var err error
-				arbiterFilters, err = mb.b.buildPartialIndexPredicate(
-					tabMeta, tableScope, arbiterPredicate, "arbiter predicate",
-				)
-				if err != nil {
-					// The error is due to a non-immutable operator in the arbiter
-					// predicate. Continue on to see if a matching non-partial or
-					// pseudo-partial index exists.
-					continue
-				}
-			}
-
-			if _, ok := im.FiltersImplyPredicate(arbiterFilters, predFilter); ok {
-				indexes.Add(idx)
-			}
+		if arbiterPredicateImpliesPredicate(predFilter) {
+			indexes.Add(idx)
 		}
 	}
 
@@ -1399,36 +1448,66 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 			continue
 		}
 
+		// Determine whether the conflict columns match the columns in the
+		// unique constraint. If not, the constraint cannot be an arbiter. We
+		// check the number of columns first to avoid unnecessarily collecting
+		// the unique constraint ordinals and determining set equality.
 		if uniqueConstraint.ColumnCount() != conflictOrds.Len() {
 			continue
 		}
-
-		// Determine whether the conflict columns match the columns in the unique
-		// constraint. If not, the constraint cannot be an arbiter.
-		var ucOrds util.FastIntSet
-		for i, n := 0, uniqueConstraint.ColumnCount(); i < n; i++ {
-			ucOrds.Add(uniqueConstraint.ColumnOrdinal(mb.tab, i))
+		ucOrds := getUniqueConstraintOrdinals(mb.tab, uniqueConstraint)
+		if !ucOrds.Equals(conflictOrds) {
+			continue
 		}
 
-		if ucOrds.Equals(conflictOrds) {
+		_, isPartial := uniqueConstraint.Predicate()
+
+		// If the unique constraint is not partial, it should be returned
+		// without any partial index arbiters.
+		if !isPartial {
 			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+		}
+
+		// Initialize tableScope lazily.
+		initializeTableScopeOnce()
+
+		// Build and normalize the unique constraint predicate expression.
+		pred, err := mb.b.buildPartialIndexPredicate(
+			tabMeta, tableScope, mb.parseUniqueConstraintPredicateExpr(uc), "unique constraint predicate",
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		// If the constraint is a pseudo-partial unique constraint, it can
+		// always be an arbiter. It should be returned without any partial index
+		// arbiters.
+		if pred.IsTrue() {
+			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+		}
+
+		// If the unique constraint is partial, then it can only be an arbiter
+		// if the arbiterPredicate implies it.
+		if arbiterPredicateImpliesPredicate(pred) {
+			uniqueConstraints.Add(uc)
 		}
 	}
 
 	// There are no full indexes or constraints, so return any partial indexes
-	// that were found.
-	if !indexes.Empty() {
-		return indexes, util.FastIntSet{}
+	// or partial unique constraints that were found.
+	if !indexes.Empty() || !uniqueConstraints.Empty() {
+		return indexes, uniqueConstraints
 	}
 
 	panic(pgerror.Newf(pgcode.InvalidColumnReference,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 
-// projectPartialIndexDistinctColumn projects a column to facilitate
+// projectPartialArbiterDistinctColumn projects a column to facilitate
 // de-duplicating insert rows for UPSERT/INSERT ON CONFLICT when the arbiter
-// index is a partial index. Only those insert rows that satisfy the partial
-// index predicate should be de-duplicated. For example:
+// index or constraint is partial. Only those insert rows that satisfy the
+// partial index or unique constraint predicate should be de-duplicated. For
+// example:
 //
 //   CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
 //   INSERT INTO t VALUES (1, 1), (1, 2), (1, -1), (1, -10) ON CONFLICT DO NOTHING
@@ -1455,20 +1534,18 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 // NULL).
 //
 // The newly project scopeColumn is returned.
-func (mb *mutationBuilder) projectPartialIndexDistinctColumn(
-	insertScope *scope, idx cat.IndexOrdinal,
+func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
+	insertScope *scope, pred tree.Expr, alias string,
 ) *scopeColumn {
 	projectionScope := mb.outScope.replace()
 	projectionScope.appendColumnsFromScope(insertScope)
 
-	predExpr := mb.parsePartialIndexPredicateExpr(idx)
 	expr := &tree.OrExpr{
-		Left:  predExpr,
+		Left:  pred,
 		Right: tree.DNull,
 	}
 	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
 
-	alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
 	scopeCol := projectionScope.addColumn(alias, texpr)
 	mb.b.buildScalar(texpr, mb.outScope, projectionScope, scopeCol, nil)
 
