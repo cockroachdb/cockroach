@@ -16,10 +16,12 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -262,6 +264,32 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(key)
+	i.computePos()
+}
+
+func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+	i.dir = +1
+	i.valid = true
+
+	if i.constraint != notConstrained {
+		i.checkConstraint(key, false)
+	}
+	var engineKey EngineKey
+	engineKey, i.intentKeyBuf = LockTableKey{
+		Key:      key,
+		Strength: lock.Exclusive,
+		TxnUUID:  txnUUID[:],
+	}.ToEngineKey(i.intentKeyBuf)
+	valid, err := i.intentIter.SeekEngineKeyGE(engineKey)
+	if err != nil {
+		i.err = err
+		i.valid = false
+		return
+	}
+	if err := i.tryDecodeLockKey(valid); err != nil {
+		return
+	}
+	i.iter.SeekGE(MVCCKey{Key: key})
 	i.computePos()
 }
 

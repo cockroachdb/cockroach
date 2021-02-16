@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,6 +53,11 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 }
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
+	return setupMVCCInMemPebbleWithSettings(b, makeSettingsForSeparatedIntents(
+		false /* oldClusterVersion */, true /* enabled */))
+}
+
+func setupMVCCInMemPebbleWithSettings(b testing.TB, settings *cluster.Settings) Engine {
 	opts := DefaultPebbleOptions()
 	opts.FS = vfs.NewMem()
 	opts.Cache = pebble.NewCache(testCacheSize)
@@ -61,6 +67,9 @@ func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 		context.Background(),
 		PebbleConfig{
 			Opts: opts,
+			StorageConfig: base.StorageConfig{
+				Settings: settings,
+			},
 		})
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
