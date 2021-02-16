@@ -36,21 +36,28 @@ type ParseError struct {
 	problem string
 	pos     int
 	str     string
+	hint    string
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("%s at pos %d\n%s\n%s^", e.problem, e.pos, e.str, strings.Repeat(" ", e.pos))
+	// TODO(ayang): print only relevant line (with line and pos no) instead of entire input
+	err := fmt.Sprintf("%s at pos %d\n%s\n%s^", e.problem, e.pos, e.str, strings.Repeat(" ", e.pos))
+	if e.hint != "" {
+		err += fmt.Sprintf("\nHINT: %s", e.hint)
+	}
+	return err
 }
 
 // Constant expected by parser when lexer reaches EOF.
 const eof = 0
 
 type wktLex struct {
-	line    string
-	pos     int
-	lastPos int
-	ret     geom.T
-	lastErr error
+	line      string
+	pos       int
+	lastPos   int
+	ret       geom.T
+	curLayout geom.Layout
+	lastErr   error
 }
 
 // Lex lexes a token from the input.
@@ -224,8 +231,134 @@ func (l *wktLex) trimLeft() {
 	}
 }
 
+func getDefaultLayoutForStride(stride int) geom.Layout {
+	switch stride {
+	case 2:
+		return geom.XY
+	case 3:
+		return geom.XYZ
+	case 4:
+		return geom.XYZM
+	default:
+		// This should never happen.
+		panic("unsupported stride")
+	}
+}
+
+func (l *wktLex) validateStrideAndSetLayoutIfNoLayout(stride int) bool {
+	if !l.validateStride(stride) {
+		return false
+	}
+	l.setLayoutIfNoLayout(getDefaultLayoutForStride(stride))
+	return true
+}
+
+func (l *wktLex) validateStride(stride int) bool {
+	if !l.isValidStrideForLayout(stride) {
+		l.setIncorrectStrideError(stride, "")
+		return false
+	}
+	return true
+}
+
+func (l *wktLex) isValidStrideForLayout(stride int) bool {
+	switch l.curLayout {
+	case geom.NoLayout:
+		return true
+	case geom.XY:
+		return stride == 2
+	case geom.XYM:
+		return stride == 3
+	case geom.XYZ:
+		return stride == 3
+	case geom.XYZM:
+		return stride == 4
+	default:
+		// This should never happen.
+		panic("unknown geom.Layout")
+	}
+}
+
+func (l *wktLex) setLayout(layout geom.Layout) bool {
+	if layout == l.curLayout {
+		return true
+	}
+	if l.curLayout != geom.NoLayout {
+		l.setIncorrectLayoutError(layout, "")
+		return false
+	}
+	l.setLayoutIfNoLayout(layout)
+	return true
+}
+
+func (l *wktLex) setLayoutEmptyInCollection() bool {
+	if l.curLayout == geom.XY {
+		return true
+	}
+	if l.curLayout == geom.NoLayout {
+		l.curLayout = geom.XY
+		return true
+	}
+	l.setIncorrectLayoutError(geom.XY, "EMPTY is XY layout in base geometry type collection")
+	return false
+}
+
+func (l *wktLex) setLayoutIfNoLayout(layout geom.Layout) {
+	switch l.curLayout {
+	case geom.NoLayout:
+		l.curLayout = layout
+	case geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
+		break
+	default:
+		// This should never happen.
+		panic("unknown geom.Layout")
+	}
+}
+
 func (l *wktLex) setLexError(expectedTokType string) {
 	l.lastErr = &LexError{expectedTokType: expectedTokType, pos: l.lastPos, str: l.line}
+}
+
+func getLayoutName(layout geom.Layout) string {
+	switch layout {
+	case geom.XY:
+		return "XY"
+	case geom.XYM:
+		return "XYM"
+	case geom.XYZ:
+		return "XYZ"
+	case geom.XYZM:
+		return "XYZM"
+	default:
+		// This should never happen.
+		panic("unknown geom.Layout")
+	}
+}
+
+func (l *wktLex) setIncorrectStrideError(incorrectStride int, hint string) {
+	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s so expecting %d coords but got %d coords",
+		getLayoutName(l.curLayout), l.curLayout.Stride(), incorrectStride)
+	l.setParseError(problem, hint)
+}
+
+func (l *wktLex) setIncorrectLayoutError(incorrectLayout geom.Layout, hint string) {
+	problem := fmt.Sprintf("mixed dimensionality, parsed layout is %s but encountered layout of %s",
+		getLayoutName(l.curLayout), getLayoutName(incorrectLayout))
+	l.setParseError(problem, hint)
+}
+
+func (l *wktLex) setParseError(problem string, hint string) {
+	// Lex errors take precedence.
+	if l.lastErr != nil {
+		return
+	}
+	errProblem := "syntax error: " + problem
+	l.lastErr = &ParseError{
+		problem: errProblem,
+		pos:     l.lastPos,
+		str:     l.line,
+		hint:    hint,
+	}
 }
 
 func (l *wktLex) Error(s string) {

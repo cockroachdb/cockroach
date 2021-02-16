@@ -198,7 +198,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
-			{NodeID: 1, StoreID: 2, Type: &learnerType},
+			{NodeID: 1, StoreID: 3, Type: &learnerType},
 		},
 	}
 	err = validateReplicationChanges(descRebalancing, roachpb.ReplicationChanges{
@@ -206,20 +206,26 @@ func TestValidateReplicationChanges(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Test Case 15: Do an add while rebalancing within a node
+	// Test Case 15: same as 14 but remove the second node
+	err = validateReplicationChanges(descRebalancing, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 16: Do an add while rebalancing within a node
 	err = validateReplicationChanges(descRebalancing, roachpb.ReplicationChanges{
 		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 3, StoreID: 3}},
 	})
 	require.NoError(t, err)
 
-	// Test Case 16: Remove/Add within a node is not allowed, since we expect Add/Remove
+	// Test Case 17: Remove/Add within a node is not allowed, since we expect Add/Remove
 	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
 		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 	})
 	require.Regexp(t, "can only add-remove a replica within a node, but got ", err)
 
-	// Test Case 17: We are rebalancing within a node and have only one replica
+	// Test Case 18: We are rebalancing within a node and have only one replica
 	descSingle := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
