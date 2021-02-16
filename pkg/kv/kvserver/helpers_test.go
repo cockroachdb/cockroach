@@ -263,9 +263,9 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.assertStateLocked(ctx, reader)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
 }
 
 func (r *Replica) RaftLock() {

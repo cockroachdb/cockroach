@@ -969,8 +969,8 @@ func (r *Replica) applySnapshot(
 	// consume the SSTs above, meaning that at this point the in-memory state lags
 	// the on-disk state.
 
-	r.mu.Lock()
 	r.store.mu.Lock()
+	r.mu.Lock()
 	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
 		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 	}
@@ -978,6 +978,9 @@ func (r *Replica) applySnapshot(
 	if err := r.store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 	}
+	// NOTE: even though we acquired the store mutex first (according to the
+	// lock ordering rules described on Store.mu), it is safe to drop it first
+	// without risking a lock-ordering deadlock.
 	r.store.mu.Unlock()
 
 	// Invoke the leasePostApply method to ensure we properly initialize the
@@ -1010,8 +1013,15 @@ func (r *Replica) applySnapshot(
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.mu.raftLogSizeTrusted = false
-	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
+
+	// Assert that the in-memory and on-disk states of the Replica are congruent
+	// after the application of the snapshot. Do so under a read lock, as this
+	// operation can be expensive. This is safe, as we hold the Replica.raftMu
+	// across both Replica.mu critical sections.
+	r.mu.RLock()
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to
 	// each raft command. These will be lost during a snapshot, so disconnect
