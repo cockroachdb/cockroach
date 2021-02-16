@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//import {refreshSessions} from "src/redux/apiReducers";
 import { createMemoryHistory } from "history";
 import { SessionDetailsProps } from "./sessionDetails";
 import {
@@ -17,6 +16,10 @@ import {
   idleTransactionSession,
 } from "./sessionsPage.fixture";
 import { sessionAttr } from "src/util/constants";
+import {
+  CancelSessionRequestMessage,
+  CancelQueryRequestMessage,
+} from "src/api/terminateQueryApi";
 
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
@@ -40,9 +43,12 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
     isExact: true,
     params: { [sessionAttr]: "blah" },
   },
-  //refreshSessions: (() => {}) as (typeof refreshSessions),
-  refreshSessions: (() => {}) as any,
-  cancel: (() => {}) as any,
+
+  refreshSessions: () => {},
+  cancelSession: (req: CancelSessionRequestMessage) => {},
+  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  refreshNodes: () => {},
+  refreshNodesLiveness: () => {},
 };
 
 export const sessionDetailsIdlePropsFixture: SessionDetailsProps = {
