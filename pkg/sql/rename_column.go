@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
@@ -250,6 +251,29 @@ func (p *planner) renameColumn(
 		}
 	}
 
+	// Rename the REGIONAL BY ROW column reference.
+	if tableDesc.IsLocalityRegionalByRow() {
+		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return false, err
+		}
+		if rbrColName == *oldName {
+			rbrConfig := tableDesc.GetLocalityConfig().GetRegionalByRow()
+			if rbrConfig.As == nil {
+				return false, errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidColumnReference,
+						"cannot rename column %s as it is was implicitly created as the REGIONAL BY ROW column reference",
+						*oldName,
+					),
+					"You must use ALTER TABLE %s SET LOCALITY REGIONAL BY ROW AS %s before renaming this column.",
+					tree.Name(tableDesc.GetName()),
+					*oldName,
+				)
+			}
+			tableDesc.SetTableLocalityRegionalByRow(*newName)
+		}
+	}
 	return true, nil
 }
 
