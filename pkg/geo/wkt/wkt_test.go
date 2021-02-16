@@ -394,9 +394,10 @@ POINT POINT
 		{
 			desc:  "2D point with extra comma",
 			input: "POINT(0, 0)",
-			expectedErrStr: `syntax error: unexpected ',', expecting NUM at pos 7
+			expectedErrStr: `syntax error: not enough coordinates at pos 7
 POINT(0, 0)
-       ^`,
+       ^
+HINT: each point needs at least 2 coords`,
 		},
 		{
 			desc:  "2D linestring with no points",
@@ -410,28 +411,31 @@ LINESTRING()
 			input: "LINESTRING(0 0)",
 			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 14
 LINESTRING(0 0)
-              ^`,
+              ^
+HINT: minimum number of points is 2`,
 		},
 		{
 			desc:  "linestring with mixed dimensionality",
 			input: "LINESTRING(0 0, 1 1 1)",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 20
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 21
 LINESTRING(0 0, 1 1 1)
-                    ^`,
+                     ^`,
 		},
 		{
 			desc:  "2D polygon with not enough points",
 			input: "POLYGON((0 0, 1 1, 2 0))",
 			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 22
 POLYGON((0 0, 1 1, 2 0))
-                      ^`,
+                      ^
+HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D polygon with ring that isn't closed",
 			input: "POLYGON((0 0, 1 1, 2 0, 1 -1))",
 			expectedErrStr: `syntax error: polygon ring not closed at pos 28
 POLYGON((0 0, 1 1, 2 0, 1 -1))
-                            ^`,
+                            ^
+HINT: ensure first and last point are the same`,
 		},
 		{
 			desc:  "2D polygon with empty second ring",
@@ -452,7 +456,8 @@ POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)
 			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))",
 			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 40
 POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))
-                                        ^`,
+                                        ^
+HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D multipoint without any points",
@@ -464,9 +469,10 @@ MULTIPOINT()
 		{
 			desc:  "3D multipoint without comma separating points",
 			input: "MULTIPOINT Z (0 0 0 0 0 0)",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 20
+			expectedErrStr: `syntax error: too many coordinates at pos 25
 MULTIPOINT Z (0 0 0 0 0 0)
-                    ^`,
+                         ^
+HINT: each point can have at most 4 coords`,
 		},
 		{
 			desc:  "2D multipoint with EMPTY inside extraneous parentheses",
@@ -478,14 +484,15 @@ MULTIPOINT((EMPTY))
 		{
 			desc:  "3D multipoint using EMPTY as a point without using Z in type",
 			input: "MULTIPOINT(0 0 0, EMPTY)",
-			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM or '(' at pos 18
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ but encountered layout of XY at pos 18
 MULTIPOINT(0 0 0, EMPTY)
-                  ^`,
+                  ^
+HINT: EMPTY is XY layout in base geometry type collection`,
 		},
 		{
 			desc:  "multipoint with mixed dimensionality",
 			input: "MULTIPOINT(0 0 0, 1 1)",
-			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 21
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ so expecting 3 coords but got 2 coords at pos 21
 MULTIPOINT(0 0 0, 1 1)
                      ^`,
 		},
@@ -501,14 +508,15 @@ MULTILINESTRING(())
 			input: "MULTILINESTRING((0 0))",
 			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 20
 MULTILINESTRING((0 0))
-                    ^`,
+                    ^
+HINT: minimum number of points is 2`,
 		},
 		{
 			desc:  "4D multilinestring using EMPTY without using ZM in type",
 			input: "MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 28
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 4 coords at pos 31
 MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))
-                            ^`,
+                               ^`,
 		},
 		{
 			desc:  "2D multipolygon with no polygons",
@@ -527,23 +535,25 @@ MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))
 		{
 			desc:  "multipolygon with mixed dimensionality",
 			input: "MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 44
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 45
 MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))
-                                            ^`,
+                                             ^`,
 		},
 		{
 			desc:  "2D multipolygon with polygon that doesn't have enough points",
 			input: "MULTIPOLYGON(((0 0, 1 1, 2 0)))",
 			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 28
 MULTIPOLYGON(((0 0, 1 1, 2 0)))
-                            ^`,
+                            ^
+HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with ring that isn't closed",
 			input: "MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))",
 			expectedErrStr: `syntax error: polygon ring not closed at pos 34
 MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))
-                                  ^`,
+                                  ^
+HINT: ensure first and last point are the same`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with empty second ring",
@@ -564,14 +574,15 @@ MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))
 			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))",
 			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 46
 MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))
-                                              ^`,
+                                              ^
+HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "3D multipolygon using EMPTY without using Z in its type",
 			input: "MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))",
-			expectedErrStr: `syntax error: unexpected NUM, expecting ')' or ',' at pos 26
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 27
 MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
-                          ^`,
+                           ^`,
 		},
 	}
 
