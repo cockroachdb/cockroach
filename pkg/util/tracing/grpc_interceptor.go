@@ -351,7 +351,7 @@ func newTracingClientStream(
 			// The client span is being finished by another code path; hence, no
 			// action is necessary.
 		case <-cs.Context().Done():
-			finishFunc(cs.Context().Err())
+			finishFunc(nil)
 		}
 	}()
 	otcs := &tracingClientStream{
