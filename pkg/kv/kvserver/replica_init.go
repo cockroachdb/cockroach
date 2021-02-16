@@ -213,7 +213,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
-	r.assertStateLocked(ctx, r.store.Engine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 	return nil
 }
 
