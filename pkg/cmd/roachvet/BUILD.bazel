@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/testutils/lint/passes/errcmp",
         "//pkg/testutils/lint/passes/fmtsafe",
-        "//pkg/testutils/lint/passes/forbiddenmethod:descriptormarshal",
+        "//pkg/testutils/lint/passes/forbiddenmethod",
         "//pkg/testutils/lint/passes/hash",
         "//pkg/testutils/lint/passes/nocopy",
         "//pkg/testutils/lint/passes/returnerrcheck",
