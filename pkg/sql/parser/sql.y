@@ -1476,7 +1476,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
 // ALTER DATABASE <name> ADD REGIONS <regions>
 // ALTER DATABASE <name> DROP REGIONS <regions>
-// ALTER DATABASE <name> SET PRIMARY REGION <region>
+// ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:

@@ -881,7 +881,7 @@ ALTER DATABASE non_multi_region_db DROP REGION "ca-central-1"
 statement ok
 CREATE DATABASE drop_region_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
 
-statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
+statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
 statement ok
@@ -931,7 +931,7 @@ CREATE TABLE start_off_non_multi_region.public.t(a INT);
 ALTER DATABASE start_off_non_multi_region PRIMARY REGION "ca-central-1";
 ALTER DATABASE start_off_non_multi_region ADD REGION "ap-southeast-2"
 
-statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE start_off_non_multi_region SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
+statement error pq: cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE start_off_non_multi_region PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE start_off_non_multi_region DROP REGION "ca-central-1"
 
 statement ok
@@ -1026,7 +1026,7 @@ statement ok
 ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
 
 # Cannot drop the primary region yet, as there are other regions in the db.
-statement error pq: cannot drop region "us-east-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_primary_regions_db SET PRIMARY REGION <region name> or remove all other regions before attempting to drop region "us-east-1"
+statement error pq: cannot drop region "us-east-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_primary_regions_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "us-east-1"
 ALTER DATABASE drop_primary_regions_db DROP REGION "us-east-1"
 
 statement ok
