@@ -25,9 +25,8 @@ import { sessionsTable } from "src/util/docs";
 
 import emptyTableResultsIcon from "../assets/emptyState/empty-table-results.svg";
 
-import { Pagination } from "antd";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { SortSetting, ISortedTablePagination } from "src/sortedtable";
-import { ResultsPerPageLabel } from "src/pagination";
 import { Loading } from "src/loading";
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
@@ -39,17 +38,21 @@ import TerminateSessionModal, {
   TerminateSessionModalRef,
 } from "./terminateSessionModal";
 
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import {
+  CancelSessionRequestMessage,
+  CancelQueryRequestMessage,
+} from "src/api/terminateQueryApi";
 
-const sortableTableCx = classNames.bind(sortableTableStyles);
-
-type ICancelQueryRequest = any;
+import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
+import styles from "src/statementsPage/statementsPage.module.scss";
+const sortableTableCx = classNames.bind(sortedTableStyles);
+const cx = classNames.bind(styles);
 interface OwnProps {
   sessions: SessionInfo[];
-  sessionsError: Error | null;
-  //refreshSessions: typeof refreshSessions;
-  refreshSessions: any;
-  cancel?: (req: ICancelQueryRequest) => void;
+  sessionsError: Error | Error[];
+  refreshSessions: () => void;
+  cancelSession: (req: CancelSessionRequestMessage) => void;
+  cancelQuery: (req: CancelQueryRequestMessage) => void;
   onPageChanged?: (newPage: number) => void;
 }
 
@@ -154,6 +157,7 @@ export class SessionsPage extends React.Component<
   renderSessions = () => {
     const sessionsData = this.props.sessions;
     const { pagination } = this.state;
+
     return (
       <div>
         <section className={sortableTableCx("cl-table-container")}>
@@ -204,14 +208,14 @@ export class SessionsPage extends React.Component<
   };
 
   render() {
-    const { match, cancel } = this.props;
+    const { match, cancelSession, cancelQuery } = this.props;
     const app = getMatchParamByName(match, appAttr);
     return (
-      <React.Fragment>
+      <div>
         <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
 
-        <section>
-          <h1>Sessions</h1>
+        <section className={cx("section")}>
+          <h1 className={cx("base-heading")}>Sessions</h1>
         </section>
 
         <Loading
@@ -219,9 +223,15 @@ export class SessionsPage extends React.Component<
           error={this.props.sessionsError}
           render={this.renderSessions}
         />
-        <TerminateSessionModal ref={this.terminateSessionRef} cancel={cancel} />
-        <TerminateQueryModal ref={this.terminateQueryRef} cancel={cancel} />
-      </React.Fragment>
+        <TerminateSessionModal
+          ref={this.terminateSessionRef}
+          cancel={cancelSession}
+        />
+        <TerminateQueryModal
+          ref={this.terminateQueryRef}
+          cancel={cancelQuery}
+        />
+      </div>
     );
   }
 }
