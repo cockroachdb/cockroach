@@ -294,7 +294,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.IntoDB != nil {
 		maybeAddSep()
 		ctx.WriteString("into_db=")
-		o.IntoDB.Format(ctx)
+		ctx.formatNodeOrHideConstants(o.IntoDB)
 	}
 
 	if o.SkipMissingFKs {
