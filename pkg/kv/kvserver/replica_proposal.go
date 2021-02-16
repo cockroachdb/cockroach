@@ -292,15 +292,27 @@ A file preventing this node from restarting was placed at:
 	}
 }
 
+// leaseJumpOption controls what assertions leasePostApplyLocked can make.
+type leaseJumpOption bool
+
+const (
+	// assertNoLeaseJump means that the new lease must follow the old lease, with
+	// no gaps in the sequence number.
+	assertNoLeaseJump leaseJumpOption = false
+	// allowLeaseJump meanms that sequence number gaps must be tolerated. This is
+	// used when we've found out about the new lease through a snapshot and we
+	// don't know what other previous leases we haven't applied.
+	allowLeaseJump = true
+)
+
 // leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
 // called repeatedly for the same lease safely. However, the method will panic
-// if passed a lease with a lower sequence number than the current lease. By
-// default, the method will also panic if passed a lease that indicates a
-// forward sequence number jump (i.e. a skipped lease). This behavior can
-// be disabled by passing permitJump as true.
+// if passed a lease with a lower sequence number than the current lease.
+// Depending on jumpOpt, we'll also panic if passed a lease that indicates a
+// forward sequence number jump (i.e. a skipped lease).
 func (r *Replica) leasePostApplyLocked(
-	ctx context.Context, newLease roachpb.Lease, permitJump bool,
+	ctx context.Context, newLease roachpb.Lease, jumpOpt leaseJumpOption,
 ) {
 	// Pull out the last lease known to this Replica. It's possible that this is
 	// not actually the last lease in the Range's lease sequence because the
@@ -329,7 +341,7 @@ func (r *Replica) leasePostApplyLocked(
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
-		case s2 > s1+1 && !permitJump:
+		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
 			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
 				log.Safe(prevLease), log.Safe(newLease))
 		}

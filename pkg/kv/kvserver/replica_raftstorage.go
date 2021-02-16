@@ -987,7 +987,7 @@ func (r *Replica) applySnapshot(
 	// replica according to whether it holds the lease. We allow jumps in the
 	// lease sequence because there may be multiple lease changes accounted for
 	// in the snapshot.
-	r.leasePostApplyLocked(ctx, *s.Lease, true /* permitJump */)
+	r.leasePostApplyLocked(ctx, *s.Lease, allowLeaseJump)
 
 	// Inform the concurrency manager that this replica just applied a snapshot.
 	r.concMgr.OnReplicaSnapshotApplied()
