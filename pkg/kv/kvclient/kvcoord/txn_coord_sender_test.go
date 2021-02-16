@@ -2400,3 +2400,170 @@ func TestPutsInStagingTxn(t *testing.T) {
 	// seen a batch with the STAGING status.
 	require.True(t, putInStagingSeen)
 }
+
+// TestTxnManualRefresh verifies that TxnCoordSender's ManualRefresh method
+// works as expected.
+func TestTxnManualRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create some machinery to mock out the kvserver and allow the test to
+	// launch some requests from the client and then pass control flow of handling
+	// those requests back to the test.
+	type resp struct {
+		br   *roachpb.BatchResponse
+		pErr *roachpb.Error
+	}
+	type req struct {
+		ba     roachpb.BatchRequest
+		respCh chan resp
+	}
+	type testCase struct {
+		name string
+		run  func(
+			ctx context.Context,
+			t *testing.T,
+			db *kv.DB,
+			clock *hlc.ManualClock,
+			reqCh <-chan req,
+		)
+	}
+	var cases = []testCase{
+		{
+			name: "no-op",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					var br roachpb.BatchResponse
+					br.Txn = r.ba.Txn
+					br.Add(&roachpb.GetResponse{})
+					r.respCh <- resp{br: &br}
+				}
+				require.NoError(t, <-errCh)
+
+				// Now a refresh should be a no-op which is indicated by the fact that
+				// this call does not block to send requests.
+				require.NoError(t, txn.ManualRefresh(ctx))
+				require.NoError(t, txn.Commit(ctx))
+			},
+		},
+		{
+			name: "refresh occurs due to read",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					var br roachpb.BatchResponse
+					br.Txn = r.ba.Txn
+					br.Add(&roachpb.GetResponse{})
+					r.respCh <- resp{br: &br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.Put(ctx, "bar", "baz")
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Put)
+					require.True(t, ok)
+					var br roachpb.BatchResponse
+					br.Txn = r.ba.Txn.Clone()
+					// Push the WriteTimestamp simulating an interaction with the
+					// timestamp cache.
+					br.Txn.WriteTimestamp =
+						br.Txn.WriteTimestamp.Add(time.Millisecond.Nanoseconds(), 0)
+					br.Add(&roachpb.PutResponse{})
+					r.respCh <- resp{br: &br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.ManualRefresh(ctx)
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Refresh)
+					require.True(t, ok)
+					var br roachpb.BatchResponse
+					br.Txn = r.ba.Txn.Clone()
+					br.Add(&roachpb.RefreshResponse{})
+					r.respCh <- resp{br: &br}
+				}
+				require.NoError(t, <-errCh)
+
+				// Now a refresh should be a no-op which is indicated by the fact that
+				// this call does not block to send requests.
+				require.NoError(t, txn.ManualRefresh(ctx))
+			},
+		},
+	}
+	run := func(t *testing.T, tc testCase) {
+		stopper := stop.NewStopper()
+		manual := hlc.NewManualClock(123)
+		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		reqCh := make(chan req)
+		var senderFn kv.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
+			*roachpb.BatchResponse, *roachpb.Error) {
+			r := req{
+				ba:     ba,
+				respCh: make(chan resp),
+			}
+			select {
+			case reqCh <- r:
+			case <-ctx.Done():
+				return nil, roachpb.NewError(ctx.Err())
+			}
+			select {
+			case rr := <-r.respCh:
+				return rr.br, rr.pErr
+			case <-ctx.Done():
+				return nil, roachpb.NewError(ctx.Err())
+			}
+		}
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		tsf := NewTxnCoordSenderFactory(
+			TxnCoordSenderFactoryConfig{
+				AmbientCtx:        ambient,
+				Clock:             clock,
+				Stopper:           stopper,
+				HeartbeatInterval: time.Hour,
+			},
+			senderFn,
+		)
+		db := kv.NewDB(ambient, tsf, clock, stopper)
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		tc.run(cancelCtx, t, db, manual, reqCh)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
