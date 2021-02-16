@@ -70,11 +70,9 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
 			for _, output := range proc.Output {
 				for _, stream := range output.Streams {
-					if stream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
-						a.streamStats[stream.StreamID] = &streamStats{
-							originNodeID:      nodeID,
-							destinationNodeID: stream.TargetNodeID,
-						}
+					a.streamStats[stream.StreamID] = &streamStats{
+						originNodeID:      nodeID,
+						destinationNodeID: stream.TargetNodeID,
 					}
 				}
 			}
@@ -261,14 +259,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	}
 
 	// Process query level stats.
-	a.queryLevelStats = QueryLevelStats{
-		NetworkBytesSent: int64(0),
-		MaxMemUsage:      int64(0),
-		KVBytesRead:      int64(0),
-		KVRowsRead:       int64(0),
-		KVTime:           time.Duration(0),
-		NetworkMessages:  int64(0),
-	}
+	a.queryLevelStats = QueryLevelStats{}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
 		a.queryLevelStats.NetworkBytesSent += bytesSentByNode
@@ -317,7 +308,9 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, er
 	if v.NetTx.BytesSent.HasValue() {
 		return int64(v.NetTx.BytesSent.Value()), nil
 	}
-	return 0, errors.Errorf("could not get network bytes; neither BytesReceived and BytesSent is set")
+	// If neither BytesReceived or BytesSent is set, this ComponentStat belongs to
+	// a local component, e.g. a local hashrouter output.
+	return 0, nil
 }
 
 func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (int64, error) {
@@ -335,7 +328,9 @@ func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (in
 	if v.NetTx.MessagesSent.HasValue() {
 		return int64(v.NetTx.MessagesSent.Value()), nil
 	}
-	return 0, errors.Errorf("could not get network messages; neither MessagesReceived and MessagesSent is set")
+	// If neither BytesReceived or BytesSent is set, this ComponentStat belongs to
+	// a local component, e.g. a local hashrouter output.
+	return 0, nil
 }
 
 // GetNodeLevelStats returns the node level stats calculated and stored in the
