@@ -52,8 +52,6 @@ vectorized: <hidden>
   spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKKzEUhvf3KcK_zuXO3IWLrIpSoVSttMWNzCKdHGpgmsScM2Ap81i-gE8mM6mCiODy__6Z7-ScE_i5g8FmfjO_2iqrrterW2WhEaKjO3sghnlEjUYj5dgSc8wjOk0fLNwLTKXhQ-plxI1GGzPBnCBeOoLB1u46WpN1lP9V0HAk1neT1s5S9gebj9DYJBvYqL_QWPVi1KyGxvJBiT-QUdXbK5fcxiAUxMfwrZI-dcQqk3VG_ddVdVbsjvKJ6wu19JfQ2Flpn4hV7CWN88annQUfqCiaQaOQ84Isdk8w9aB_f4Q1cYqB6cv-P5mrodEgt6dyaI59buk-x3YaU-Jq-m8CjlhKW5ewCKUamuHPewAAAP__3R6a_g==
-·
-WARNING: this statement is experimental!
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -79,8 +77,6 @@ vectorized: <hidden>
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklGLEzEUhd_9FZfzHGvTB5GAUJQVuq4d6S6-yDxkkssanSYxycAupT_LP-Avk5mMYi2Kuo_n3Dm593zMAflzD4Xri6uLlzdkFppe7Zo3ZOiy2WzJUrMlu-joOZlFBwEfLG_1njPUe0i0AjEFwzmHNFqH6YONvYNaCjgfhzLarYAJiaEOKK70DIUb3fW8Y205PVlCwHLRrp-eNevMBgLXUfus6DEEmqEoWkuxXkHg9Tsqbs-Kll-_5KpN8IV9ccGfjcoQe86UWFtFc7y7Lz8s-ZReQKDTxXzgTGEocVw23jRHv1srtEeBquZWuehbhpJH8ffNL4Pzc3F5WtyuY3J7ne4hcBXCpyHSx-A8Ba9oaj5jwLxg7lZrVScX3ffnDP4TlzzH9WyixXdshvP8gyCu_gXijnMMPvMJwN-9vDy2Amxvuf6iOQzJ8NsUzLSmymbKTYblXOpUVrHxdTQe-HNY_jG8-iXcHh99CwAA__-Hph2I
-·
-WARNING: this statement is experimental!
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -111,8 +107,6 @@ vectorized: <hidden>
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMks9u1DAQxu88xWhOIEybpBIHS5VWoIC2sAlKKy4oB689bC0SO9iOtKvVPhYvwJOh2OVPuqWocOGW-WY-O9_Ps0f_uUOOl-Xb8uUVyBMBr5p6BRKWVVU2sCqb1yVc1MsKFNRVHDgHdbJGhsYqqkRPHvkHzLFlODgryXvrJmkfB5ZqizxjqM0whkluGUrrCPkegw4dIccrse6oIaHInWbIUFEQuovHysXgdC_cDhleDsJ4Ds-QYT0GDoscGb55D0H3xCH7-sWnWloTyARtzVErjENHHhwJxaFI2noXfkj5c3iBDNciyGvyYMcwTDdNP3Vj_S4V2B4Ypuomlg9iQ8jzA_u76Pk8urovevFfRi9-G_1n4tFYp8iRmqVtJ-efRu7gtyK3oQurDbnTYs6vo4_h8SJ_-uTc6c11-pytDm1JjseserGFnnrrdiC6zkoRSHHIIp2p56WbGIHS_tPxxD_xO3vI6jTkB2s83eZ458nZBI_UhtJjeDs6Se-clfGaVNbRFwVFPqRukYqlia2427-a8weYi9vm4l7z2cycHdrDo28BAAD__50-hdw=
-·
-WARNING: this statement is experimental!
 
 statement ok
 RESET vectorize; RESET distsql

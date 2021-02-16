@@ -447,8 +447,6 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 			rows = append(rows, buf.String())
 		}
 	}
-	rows = append(rows, "")
-	rows = append(rows, "WARNING: this statement is experimental!")
 	for _, row := range rows {
 		if err := res.AddRow(ctx, tree.Datums{tree.NewDString(row)}); err != nil {
 			return err
