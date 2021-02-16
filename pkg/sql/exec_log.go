@@ -99,6 +99,12 @@ var unstructuredQueryLog = settings.RegisterBoolSetting(
 	false,
 )
 
+var adminAuditLogEnabled = settings.RegisterBoolSetting(
+	"sql.log.admin_audit.enabled",
+	"when set, log SQL queries that effectively exploit the user's admin privileges",
+	false,
+)
+
 type executorType int
 
 const (
@@ -146,7 +152,16 @@ func (p *planner) maybeLogStatementInternal(
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
-	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
+	hasAdminRole, hasAdminRoleErr := p.HasAdminRole(ctx)
+	log.Warningf(ctx, "checking hasAdminRole failed %v", hasAdminRoleErr)
+
+	// Only log to adminAuditLog if the statement is explicitly executed by
+	// a user and the user has admin privilege (is directly or indirectly a
+	// member of the admin role).
+	shouldLogToAdminAuditLog := adminAuditLogEnabled.Get(&p.execCfg.Settings.SV) &&
+		(execType == executorTypeExec) && hasAdminRole
+
+	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled && !shouldLogToAdminAuditLog {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -187,7 +202,7 @@ func (p *planner) maybeLogStatementInternal(
 		}
 
 		// Now log!
-		if auditEventsDetected {
+		if auditEventsDetected || shouldLogToAdminAuditLog {
 			auditErrStr := "OK"
 			if err != nil {
 				auditErrStr = "ERROR"
@@ -203,6 +218,10 @@ func (p *planner) maybeLogStatementInternal(
 				}
 				fmt.Fprintf(&buf, "%s%q[%d]:%s", sep, ev.desc.GetName(), ev.desc.GetID(), mode)
 				sep = ", "
+			}
+			if shouldLogToAdminAuditLog {
+				buf.WriteString(sep)
+				buf.WriteString("admin")
 			}
 			buf.WriteByte('}')
 			logTrigger := buf.String()
@@ -311,7 +330,7 @@ func (p *planner) maybeLogStatementInternal(
 		}
 	}
 
-	if logExecuteEnabled {
+	if logExecuteEnabled || shouldLogToAdminAuditLog {
 		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
 	}
