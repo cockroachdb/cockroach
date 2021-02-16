@@ -315,7 +315,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			name: "lease is too new",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				r.mu.state.Lease.Start = r.store.Clock().NowAsClockTimestamp()
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.False(t, canGC)
 				require.Zero(t, gcTimestamp)
 			},
@@ -337,7 +337,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				})
 				// We should allow gc to proceed with the normal new threshold if that
 				// threshold is earlier than all of the records.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.True(t, canGC)
 				require.Equal(t, mt.asOf, gcTimestamp)
 			},
@@ -362,8 +362,9 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// protected timestamp. This means we expect a GC timestamp 10 seconds
 				// after ts.Prev() given the policy.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.True(t, canGC)
+				require.False(t, newThreshold.Equal(oldThreshold))
 				require.Equal(t, ts.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
 			},
 		},
@@ -386,11 +387,14 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				// We should not allow GC if the threshold is already the predecessor
-				// of the earliest valid record.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
-				require.False(t, canGC)
-				require.Zero(t, gcTimestamp)
+				// We should allow GC even if the threshold is already the
+				// predecessor of the earliest valid record. However, the GC
+				// queue does not enqueue ranges in such cases, so this is only
+				// applicable to manually enqueued ranges.
+				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				require.True(t, canGC)
+				require.True(t, newThreshold.Equal(oldThreshold))
+				require.Equal(t, th.Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
 			},
 		},
 		{
@@ -411,7 +415,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.True(t, canGC)
 				require.Equal(t, mt.asOf, gcTimestamp)
 			},
