@@ -3332,13 +3332,14 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			}, incArgs,
 		)
 		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
-			// We're on a goroutine and passing the error out is awkward since
-			// it would only surface at shutdown time. A panic ought to be good
-			// enough to get visibility.
-			panic(fmt.Sprintf("unexpected error: %v", pErr))
+			// We're on a goroutine, so cannot fatal.
+			t.Errorf("unexpected error: %v", pErr)
 		}
 	}()
 	startWG.Wait()
+	if t.Failed() {
+		t.FailNow()
+	}
 
 	// Sleep a bit to let the command proposed on node 2 proceed if it's
 	// going to. Prior to the introduction of replica tombstones, this

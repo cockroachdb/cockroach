@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descriptormarshal_test
+package forbiddenmethod_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -21,5 +21,6 @@ import (
 func Test(t *testing.T) {
 	skip.UnderStress(t)
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, descriptormarshal.Analyzer, "a")
+	analysistest.Run(t, testdata, forbiddenmethod.DescriptorMarshalAnalyzer, "descmarshaltest")
+	analysistest.Run(t, testdata, forbiddenmethod.GRPCClientConnCloseAnalyzer, "grpcconnclosetest")
 }
