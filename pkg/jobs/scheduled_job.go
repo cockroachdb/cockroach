@@ -84,23 +84,20 @@ func LoadScheduledJob(
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) (*ScheduledJob, error) {
-	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
+	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "expected to find 1 schedule with schedule_id=%d", id)
 	}
-
-	if len(rows) != 1 {
-		return nil, errors.Newf(
-			"expected to find 1 schedule, found %d with schedule_id=%d",
-			len(rows), id)
+	if row == nil {
+		return nil, errors.Newf("expected to find 1 schedule, found 0, with schedule_id=%d", id)
 	}
 
 	j := NewScheduledJob(env)
-	if err := j.InitFromDatums(rows[0], cols); err != nil {
+	if err := j.InitFromDatums(row, cols); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -362,7 +359,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return err
 	}
 
-	rows, retCols, err := ex.QueryWithCols(ctx, "sched-create", txn,
+	row, retCols, err := ex.QueryRowExWithCols(ctx, "sched-create", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
@@ -370,14 +367,13 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	)
 
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to create new schedule")
 	}
-
-	if len(rows) != 1 {
+	if row == nil {
 		return errors.New("failed to create new schedule")
 	}
 
-	return j.InitFromDatums(rows[0], retCols)
+	return j.InitFromDatums(row, retCols)
 }
 
 // Update saves changes made to this schedule.
