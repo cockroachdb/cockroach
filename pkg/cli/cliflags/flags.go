@@ -711,6 +711,11 @@ Instead, require the user to always specify access keys.`,
 		Description: `Prompt for the new user's password.`,
 	}
 
+	InitToken = FlagInfo{
+		Name:        "init-token",
+		Description: `Shared token for initialization of node TLS certificates`,
+	}
+
 	CertsDir = FlagInfo{
 		Name:        "certs-dir",
 		EnvVar:      "COCKROACH_CERTS_DIR",
