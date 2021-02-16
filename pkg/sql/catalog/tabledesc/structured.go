@@ -4013,13 +4013,26 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 // homed in.
 func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
 	if !desc.IsLocalityRegionalByTable() {
-		return "", errors.New("is not REGIONAL BY TABLE")
+		return "", errors.AssertionFailedf("%s is not REGIONAL BY TABLE", desc.Name)
 	}
 	region := desc.LocalityConfig.GetRegionalByTable().Region
 	if region == nil {
 		return descpb.RegionName(tree.PrimaryRegionLocalityName), nil
 	}
 	return *region, nil
+}
+
+// GetRegionalByRowTableRegionColumnName returns the region column name of a
+// REGIONAL BY ROW table.
+func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
+	if !desc.IsLocalityRegionalByRow() {
+		return "", errors.AssertionFailedf("%s is not REGIONAL BY ROW", desc.Name)
+	}
+	colName := desc.LocalityConfig.GetRegionalByRow().As
+	if colName == nil {
+		return tree.RegionalByRowRegionDefaultColName, nil
+	}
+	return tree.Name(*colName), nil
 }
 
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
