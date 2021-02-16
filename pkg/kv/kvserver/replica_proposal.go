@@ -302,19 +302,28 @@ const (
 // leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
 // called repeatedly for the same lease safely. However, the method will panic
-// if passed a lease with a lower sequence number than the current lease.
-// Depending on jumpOpt, we'll also panic if passed a lease that indicates a
-// forward sequence number jump (i.e. a skipped lease).
+// if newLease has a lower sequence number than the current lease. Depending on
+// jumpOpt, we'll also panic if newLease indicates a forward sequence number
+// jump compared to prevLease (i.e. a skipped lease).
+//
+// prevLease represents the most recent lease this replica was aware of before
+// newLease came along. This is usually (but not necessarily) the latest lease
+// ever applied to the range. However, there's also the case when the replica
+// found out about newLease through a snapshot; in this case the replica might
+// not be aware of other lease changes that happened before the snapshot was
+// generated. This method thus tolerates prevLease being "stale" when
+// allowLeaseJump is passed. It's also
+//
+// newLease represents the lease being applied. Can be nil, meaning that the
+// newLease is the same as prevLease. This allows leasePostApplyLocked to be
+// called for some of its side-effects even if the lease in question has
+// otherwise already been applied to the range.
 func (r *Replica) leasePostApplyLocked(
-	ctx context.Context, newLease roachpb.Lease, jumpOpt leaseJumpOption,
+	ctx context.Context, prevLease *roachpb.Lease, newLease *roachpb.Lease, jumpOpt leaseJumpOption,
 ) {
-	// Pull out the last lease known to this Replica. It's possible that this is
-	// not actually the last lease in the Range's lease sequence because the
-	// Replica may have missed the application of a lease between prevLease and
-	// newLease. However, this should only be possible if a snapshot includes a
-	// lease update. All other forms of lease updates should be continuous
-	// without jumps (see permitJump).
-	prevLease := *r.mu.state.Lease
+	if newLease == nil {
+		newLease = prevLease
+	}
 
 	// Sanity check to make sure that the lease sequence is moving in the right
 	// direction.
@@ -329,7 +338,7 @@ func (r *Replica) leasePostApplyLocked(
 			// the same lease. This can happen when callers are using
 			// leasePostApply for some of its side effects, like with
 			// splitPostApply. It can also happen during lease extensions.
-			if !prevLease.Equivalent(newLease) {
+			if !prevLease.Equivalent(*newLease) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					log.Safe(prevLease), log.Safe(newLease))
 			}
@@ -406,7 +415,7 @@ func (r *Replica) leasePostApplyLocked(
 	// ordering were reversed, it would be possible for requests to see the new
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
-	r.mu.state.Lease = &newLease
+	r.mu.state.Lease = newLease
 	expirationBasedLease := r.requiresExpiringLeaseRLocked()
 
 	// Gossip the first range whenever its lease is acquired. We check to make
@@ -479,7 +488,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
-		r.leaseHistory.add(newLease)
+		r.leaseHistory.add(*newLease)
 	}
 }
 
