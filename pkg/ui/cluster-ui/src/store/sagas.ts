@@ -5,6 +5,8 @@ import { statementsDiagnosticsSagas } from "./statementDiagnostics";
 import { statementsSaga } from "./statements";
 import { nodesSaga } from "./nodes";
 import { livenessSaga } from "./liveness";
+import { sessionsSaga } from "./sessions";
+import { terminateSaga } from "./terminateQuery";
 
 export function* sagas(cacheInvalidationPeriod?: number) {
   yield all([
@@ -13,5 +15,7 @@ export function* sagas(cacheInvalidationPeriod?: number) {
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
+    fork(sessionsSaga),
+    fork(terminateSaga),
   ]);
 }
