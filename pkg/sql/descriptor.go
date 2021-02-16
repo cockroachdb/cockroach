@@ -318,6 +318,9 @@ func (p *planner) createRegionConfig(
 	if primaryRegion == "" && len(regions) == 0 {
 		return nil, nil
 	}
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
+		return nil, err
+	}
 	var regionConfig descpb.DatabaseDescriptor_RegionConfig
 	var err error
 	regionConfig.SurvivalGoal, err = translateSurvivalGoal(survivalGoal)

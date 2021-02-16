@@ -1,0 +1,28 @@
+# LogicTest: local-mixed-20.2-21.1
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+CREATE DATABASE d PRIMARY REGION "us-west1"
+
+statement ok
+CREATE DATABASE d
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+ALTER DATABASE d ADD REGION "us-east1"
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+ALTER DATABASE d DROP REGION "us-east1"
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+ALTER DATABASE d PRIMARY REGION "us-east1"
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+ALTER DATABASE d SURVIVE ZONE FAILURE
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+CREATE TABLE t () LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE TABLE t()
+
+statement error cannot use multi-region features whilst the cluster is upgrading
+ALTER TABLE t SET LOCALITY REGIONAL BY ROW

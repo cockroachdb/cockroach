@@ -51,6 +51,10 @@ func (p *planner) AlterTableLocality(
 		return nil, err
 	}
 
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireTableDesc,
 	)

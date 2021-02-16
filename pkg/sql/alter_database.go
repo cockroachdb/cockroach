@@ -127,6 +127,10 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
+		return nil, err
+	}
+
 	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
 		tree.DatabaseLookupFlags{Required: true},
 	)
@@ -270,6 +274,11 @@ func (p *planner) AlterDatabaseDropRegion(
 	); err != nil {
 		return nil, err
 	}
+
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
+		return nil, err
+	}
+
 	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
@@ -469,6 +478,10 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
+		return nil, err
+	}
+
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
 		return nil, err
 	}
 
@@ -700,6 +713,11 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 	); err != nil {
 		return nil, err
 	}
+
+	if err := checkMultiRegionEnabled(p.EvalContext()); err != nil {
+		return nil, err
+	}
+
 	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
 		tree.DatabaseLookupFlags{Required: true},
 	)

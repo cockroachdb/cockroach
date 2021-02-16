@@ -237,6 +237,13 @@ const (
 	PostTruncatedAndRangeAppliedStateMigration
 	// SeparatedIntents allows the writing of separated intents/locks.
 	SeparatedIntents
+	// ImplicitColumnPartitioning introduces implicit column partitioning to
+	// tables.
+	ImplicitColumnPartitioning
+	// MultiRegionFeatures introduces new multi-region features to the
+	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
+	// on a TABLE.
+	MultiRegionFeatures
 
 	// Step (1): Add new versions here.
 )
@@ -394,6 +401,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     SeparatedIntents,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 26},
+	},
+	{
+		Key:     ImplicitColumnPartitioning,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
+	},
+	{
+		Key:     MultiRegionFeatures,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 30},
 	},
 	// Step (2): Add new versions here.
 })

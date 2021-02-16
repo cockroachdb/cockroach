@@ -1474,6 +1474,12 @@ func NewTableDesc(
 	// been populated.
 	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
 
+	if n.Locality != nil {
+		if err := checkMultiRegionEnabled(evalCtx); err != nil {
+			return nil, err
+		}
+	}
+
 	desc := tabledesc.InitTableDescriptor(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, persistence,
 	)
@@ -1631,6 +1637,12 @@ func NewTableDesc(
 						"PARTITION ALL BY LIST/RANGE is currently experimental",
 					),
 					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
+				)
+			}
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ImplicitColumnPartitioning) {
+				return nil, pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					`cannot use PARTITION ALL BY whilst the cluster is upgrading`,
 				)
 			}
 			desc.PartitionAllBy = true
@@ -2722,4 +2734,14 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
 	return c
+}
+
+func checkMultiRegionEnabled(evalCtx *tree.EvalContext) error {
+	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			`cannot use multi-region features whilst the cluster is upgrading`,
+		)
+	}
+	return nil
 }
