@@ -127,6 +127,13 @@ func TestFormatStatement(t *testing.T) {
 			`ALTER TYPE _ DROP VALUE _`},
 		{`ALTER TYPE a RENAME VALUE 'value1' TO 'value2'`, tree.FmtAnonymize,
 			`ALTER TYPE _ RENAME VALUE _ TO _`},
+
+		{`RESTORE abc.xzy FROM 'a' WITH into_db='foo', skip_missing_foreign_keys`,
+			tree.FmtHideConstants | tree.FmtAnonymize,
+			`RESTORE TABLE _._ FROM _ WITH into_db=_, skip_missing_foreign_keys`},
+		{`RESTORE FROM 'a' WITH into_db='foo', skip_missing_foreign_keys`,
+			tree.FmtHideConstants | tree.FmtAnonymize,
+			`RESTORE FROM _ WITH into_db=_, skip_missing_foreign_keys`},
 	}
 
 	for i, test := range testData {
