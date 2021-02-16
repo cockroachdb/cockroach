@@ -888,7 +888,11 @@ func spansForAllRestoreTableIndexes(
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
-	ctx context.Context, p sql.JobExecContext, sqlDescs []catalog.Descriptor, r *restoreResumer,
+	ctx context.Context,
+	p sql.JobExecContext,
+	backupCodec keys.SQLCodec,
+	sqlDescs []catalog.Descriptor,
+	r *restoreResumer,
 ) (tables []catalog.TableDescriptor, oldTableIDs []descpb.ID, spans []roachpb.Span, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -933,7 +937,7 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans = spansForAllRestoreTableIndexes(p.ExecCfg().Codec, tables, nil)
+	spans = spansForAllRestoreTableIndexes(backupCodec, tables, nil)
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
@@ -1257,6 +1261,27 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err != nil {
 		return err
 	}
+	// backupCodec is the codec that was used to encode the keys in the backup. It
+	// is the tenant in which the backup was taken.
+	backupCodec := keys.SystemSQLCodec
+	if len(sqlDescs) != 0 {
+		if len(latestBackupManifest.Spans) != 0 && len(latestBackupManifest.Tenants) == 0 {
+			// If there are no tenant targets, then the entire keyspace covered by
+			// Spans must lie in 1 tenant.
+			_, backupTenantID, err := keys.DecodeTenantPrefix(latestBackupManifest.Spans[0].Key)
+			if err != nil {
+				return err
+			}
+			backupCodec = keys.MakeSQLCodec(backupTenantID)
+			if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
+				// TODO(pbardea): This is unsupported for now because the key-rewriter
+				// cannot distinguish between RESTORE TENANT and table restore from a
+				// backup taken in a tenant, into the system tenant.
+				return errors.New("cannot restore tenant backups into system tenant")
+			}
+		}
+	}
+
 	lastBackupIndex, err := getBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
@@ -1270,7 +1295,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
-	tables, oldTableIDs, spans, err := createImportingDescriptors(ctx, p, sqlDescs, r)
+	tables, oldTableIDs, spans, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
 	if err != nil {
 		return err
 	}
@@ -1326,7 +1351,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		if !build.IsRelease() {
+		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
 			return err
 		}
 		log.Warningf(ctx, "unable to determine cluster node count: %v", err)

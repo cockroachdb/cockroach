@@ -6271,6 +6271,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	const numAccounts = 1
 	ctx, tc, systemDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
 
@@ -6318,7 +6319,26 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
 	t.Run("inside-tenant", func(t *testing.T) {
-		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+		// This test uses this mock HTTP server to pass the backup files between tenants.
+		httpServer, httpServerCleanup := makeInsecureHTTPServer(t)
+		defer httpServerCleanup()
+		httpAddr := httpServer.String() + "/test"
+
+		tenant10.Exec(t, `BACKUP DATABASE foo TO $1`, httpAddr)
+		t.Run("same-tenant", func(t *testing.T) {
+			tenant10.Exec(t, `CREATE DATABASE foo2`)
+			tenant10.Exec(t, `RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+			tenant10.CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
+		})
+		t.Run("another-tenant", func(t *testing.T) {
+			tenant11.Exec(t, `RESTORE foo.bar FROM $1`, httpAddr)
+			tenant11.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
+		})
+		t.Run("system-tenant", func(t *testing.T) {
+			systemDB.Exec(t, `CREATE DATABASE foo2`)
+			systemDB.ExpectErr(t, `cannot restore tenant backups into system tenant`,
+				`RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+		})
 	})
 
 	t.Run("non-existent", func(t *testing.T) {

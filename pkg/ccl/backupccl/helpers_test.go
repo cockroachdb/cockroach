@@ -12,6 +12,12 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -294,4 +300,57 @@ func injectStatsWithRowCount(
 	}
 	]'`, tableName, columnName, rowCount, rowCount))
 	return sqlDB.QueryStr(t, getStatsQuery(tableName))
+}
+
+func makeInsecureHTTPServer(t *testing.T) (*url.URL, func()) {
+	t.Helper()
+
+	const badHeadResponse = "bad-head-response"
+
+	tmp, dirCleanup := testutils.TempDir(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
+		switch r.Method {
+		case "PUT":
+			f, err := os.Create(localfile)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			defer f.Close()
+			if _, err := io.Copy(f, r.Body); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.WriteHeader(201)
+		case "GET", "HEAD":
+			if filepath.Base(localfile) == badHeadResponse {
+				http.Error(w, "HEAD not implemented", 500)
+				return
+			}
+			http.ServeFile(w, r, localfile)
+		case "DELETE":
+			if err := os.Remove(localfile); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.WriteHeader(204)
+		default:
+			http.Error(w, "unsupported method "+r.Method, 400)
+		}
+	}))
+
+	cleanup := func() {
+		srv.Close()
+		dirCleanup()
+	}
+
+	t.Logf("Mock HTTP Storage %q", srv.URL)
+	uri, err := url.Parse(srv.URL)
+	if err != nil {
+		srv.Close()
+		t.Fatal(err)
+	}
+	uri.Path = filepath.Join(uri.Path, "testing")
+	return uri, cleanup
 }
