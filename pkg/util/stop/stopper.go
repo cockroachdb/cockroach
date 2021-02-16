@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -173,8 +174,11 @@ type Stopper struct {
 		// should execute immediately.
 		quiescing, stopping bool
 		closers             []Closer
-		idAlloc             int            // allocates index into qCancels
-		qCancels            map[int]func() // ctx cancels to be called on Quiesce
+
+		// idAlloc is incremented atomically under the read lock when adding a
+		// context to be canceled.
+		idAlloc  int64 // allocates index into qCancels
+		qCancels sync.Map
 	}
 }
 
@@ -204,8 +208,6 @@ func NewStopper(options ...Option) *Stopper {
 		quiescer: make(chan struct{}),
 		stopped:  make(chan struct{}),
 	}
-
-	s.mu.qCancels = map[int]func(){}
 
 	for _, opt := range options {
 		opt.apply(s)
@@ -272,20 +274,17 @@ func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, fun
 func (s *Stopper) withCancel(ctx context.Context) (context.Context, func()) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.refuseRLocked() {
 		cancel()
 		return ctx, func() {}
 	}
-	id := s.mu.idAlloc
-	s.mu.idAlloc++
-	s.mu.qCancels[id] = cancel
+	id := atomic.AddInt64(&s.mu.idAlloc, 1)
+	s.mu.qCancels.Store(id, cancel)
 	return ctx, func() {
 		cancel()
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		delete(s.mu.qCancels, id)
+		s.mu.qCancels.Delete(id)
 	}
 }
 
@@ -516,10 +515,12 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 			close(s.quiescer)
 		}
 
-		for _, cancel := range s.mu.qCancels {
+		s.mu.qCancels.Range(func(k, v interface{}) (wantMore bool) {
+			cancel := v.(func())
 			cancel()
-		}
-		s.mu.qCancels = nil
+			s.mu.qCancels.Delete(k)
+			return true
+		})
 	}()
 
 	for s.NumTasks() > 0 {
