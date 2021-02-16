@@ -48,7 +48,7 @@ var _ = kvtenantccl.Connector{}
 const elemName = "somestring"
 
 func TestTenantReport(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	rt := startReporterTest(t)
@@ -100,7 +100,7 @@ func TestTenantReport(t *testing.T) {
 // TestServerReport checks nodes, stores, localities, and zone configs.
 // Telemetry metrics are checked in datadriven tests (see sql.TestTelemetry).
 func TestServerReport(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	rt := startReporterTest(t)
