@@ -690,24 +690,27 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// each one.
 	arbiterIndexes.ForEach(func(idx int) {
 		index := mb.tab.Index(idx)
-		_, isPartial := index.Predicate()
-		var predExpr tree.Expr
-		if isPartial {
-			predExpr = mb.parsePartialIndexPredicateExpr(idx)
+		var pred tree.Expr
+		if _, isPartial := index.Predicate(); isPartial {
+			pred = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
 		mb.buildAntiJoinForDoNothingArbiter(
 			inScope,
 			getIndexLaxKeyOrdinals(index),
-			predExpr,
+			pred,
 		)
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
+		var pred tree.Expr
+		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
+			pred = mb.parseUniqueConstraintPredicateExpr(uc)
+		}
 		mb.buildAntiJoinForDoNothingArbiter(
 			inScope,
 			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			nil, /* predExpr */
+			pred,
 		)
 	})
 
@@ -716,15 +719,16 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// the anti-joins created above, to avoid removing valid rows (see #59125).
 	arbiterIndexes.ForEach(func(idx int) {
 		index := mb.tab.Index(idx)
-		_, isPartial := index.Predicate()
 
 		// If the index is a partial index, project a new column that allows the
 		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialIndexDistinctColumn for more
+		// partial index predicate. See projectPartialArbiterDistinctColumn for more
 		// details.
 		var partialIndexDistinctCol *scopeColumn
-		if isPartial {
-			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
+		if _, isPartial := index.Predicate(); isPartial {
+			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
+			pred := mb.parsePartialIndexPredicateExpr(idx)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
 		}
 
 		mb.buildDistinctOnForDoNothingArbiter(
@@ -735,11 +739,23 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
+
+		// If the constraint is partial, project a new column that allows the
+		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
+		// partial predicate. See projectPartialArbiterDistinctColumn for more
+		// details.
+		var partialIndexDistinctCol *scopeColumn
+		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
+			alias := fmt.Sprintf("upsert_partial_constraint_distinct%d", uc)
+			pred := mb.parseUniqueConstraintPredicateExpr(uc)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
+		}
 		mb.buildDistinctOnForDoNothingArbiter(
 			insertColScope,
 			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			nil, /* partialIndexDistinctCol */
+			partialIndexDistinctCol,
 		)
+
 	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
@@ -925,23 +941,24 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		index := mb.tab.Index(idx)
 
 		_, isPartial := index.Predicate()
-		var predExpr tree.Expr
+		var pred tree.Expr
 		if isPartial {
-			predExpr = mb.parsePartialIndexPredicateExpr(idx)
+			pred = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
 		// If the index is a partial index, project a new column that allows the
 		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialIndexDistinctColumn for more
-		// details.
+		// partial index predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
 		var partialIndexDistinctCol *scopeColumn
 		if isPartial {
-			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
+			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
 		}
 
 		buildInputForArbiter(func() *scopeColumn {
 			return &mb.fetchScope.cols[findNotNullIndexCol(index)]
-		}, predExpr, partialIndexDistinctCol)
+		}, pred, partialIndexDistinctCol)
 	} else if arbiterConstraints.Len() > 0 {
 		buildInputForArbiter(func() *scopeColumn {
 			// Use the primary index, since we don't know at this point whether

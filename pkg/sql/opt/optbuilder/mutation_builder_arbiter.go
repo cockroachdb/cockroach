@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -11,8 +11,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -42,26 +40,38 @@ import (
 //   2. If it is a partial index, its predicate must be implied by the
 //      arbiterPredicate supplied by the user.
 //
-// An arbiter constraint must have columns that match the columns in
-// conflictOrds. Unique constraints without an index cannot be "partial",
-// so they have no predicate to check for implication with arbiterPredicate.
-// TODO(rytaft): revisit this for the case of implicitly partitioned partial
-//  unique indexes (see #59195).
+// An arbiter constraint:
+//
+//   1. Must have columns that match the columns in conflictOrds.
+//   2. If it is a partial constraint, its predicate must be implied by the
+//      arbiterPredicate supplied by the user.
 //
 // If conflictOrds is empty then all unique indexes and unique without index
 // constraints are returned as arbiters. This is required to support a
 // DO NOTHING with no ON CONFLICT columns. In this case, all unique indexes
 // and constraints are used to check for conflicts.
 //
-// If a non-partial or pseudo-partial arbiter index is found, the return set
-// contains only that index. No other arbiter is necessary because a non-partial
-// or pseudo-partial index guarantees uniqueness of its columns across all
-// rows.
+// If conflictOrds is non-empty, there is an intentional preference for certain
+// types of arbiters. Indexes are preferred over constraints because they will
+// likely lead to a more efficient query plan. Non-partial or pseudo-partial
+// indexes and constraints are preferred over partial indexes and constraints
+// because a non-partial or pseudo-partial index or constraint guarantees
+// uniqueness of its columns across all rows; there is no need for an additional
+// arbiter for a subset of rows. If there are no non-partial or pseudo-partial
+// indexes or constraints found, all valid partial indexes and partial
+// constraints are returned so that uniqueness is guaranteed on the respective
+// subsets of rows. In summary, if conflictOrds is non-empty, this function:
+//
+//   1. Returns a single non-partial or pseudo-partial arbiter index, if found.
+//   2. Return a single non-partial or pseudo-partial arbiter constraint, if
+//      found.
+//   3. Otherwise, returns all partial arbiter indexes and constraints.
+//
 func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
 ) (indexes util.FastIntSet, uniqueConstraints util.FastIntSet) {
-	// If conflictOrds is empty, then all unique indexes and unique without index
-	// constraints are arbiters.
+	// If conflictOrds is empty, then all unique indexes and unique without
+	// index constraints are arbiters.
 	if conflictOrds.Empty() {
 		for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 			if mb.tab.Index(idx).IsUnique() {
@@ -96,12 +106,10 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 			continue
 		}
 
-		_, isPartial := index.Predicate()
-
 		// If the index is not a partial index, it can always be an arbiter.
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
-		if !isPartial {
+		if _, isPartial := index.Predicate(); !isPartial {
 			return util.MakeFastIntSet(idx), util.FastIntSet{}
 		}
 
@@ -133,22 +141,47 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 			continue
 		}
 
-		// Determine whether the conflict columns match the columns in the unique
-		// constraint. If not, the constraint cannot be an arbiter.
+		// Determine whether the conflict columns match the columns in the
+		// unique constraint. If not, the constraint cannot be an arbiter. We
+		// check the number of columns first to avoid unnecessarily collecting
+		// the unique constraint ordinals and determining set equality.
+		if uniqueConstraint.ColumnCount() != conflictOrds.Len() {
+			continue
+		}
 		ucOrds := getUniqueConstraintOrdinals(mb.tab, uniqueConstraint)
-		if ucOrds.Equals(conflictOrds) {
+		if !ucOrds.Equals(conflictOrds) {
+			continue
+		}
+
+		// If the unique constraint is not partial, it should be returned
+		// without any partial index arbiters.
+		if _, isPartial := uniqueConstraint.Predicate(); !isPartial {
 			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+		}
+
+		// If the constraint is a pseudo-partial unique constraint, it can
+		// always be an arbiter. It should be returned without any partial index
+		// arbiters.
+		pred := h.partialUniqueConstraintPredicate(uc)
+		if pred.IsTrue() {
+			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+		}
+
+		// If the unique constraint is partial, then it can only be an arbiter
+		// if the arbiterPredicate implies it.
+		if h.predicateIsImpliedByArbiterPredicate(pred) {
+			uniqueConstraints.Add(uc)
 		}
 	}
 
-	// There are no full indexes or constraints, so return any partial indexes
-	// that were found.
-	if !indexes.Empty() {
-		return indexes, util.FastIntSet{}
+	// Err if we did not previously return and did not find partial indexes or
+	// partial unique constraints.
+	if indexes.Empty() && uniqueConstraints.Empty() {
+		panic(pgerror.Newf(pgcode.InvalidColumnReference,
+			"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 	}
 
-	panic(pgerror.Newf(pgcode.InvalidColumnReference,
-		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
+	return indexes, uniqueConstraints
 }
 
 // buildAntiJoinForDoNothingArbiter builds an anti-join for a single arbiter index
@@ -158,11 +191,11 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 //
 // 	 - columnOrds is the set of table column ordinals that the arbiter
 //     guarantees uniqueness of.
-// 	 - predExpr is the partial index predicate. If the arbiter is not a partial
-//     index, predExpr is nil.
+// 	 - pred is the partial index predicate. If the arbiter is not a partial
+//     index, pred is nil.
 //
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, columnOrds util.FastIntSet, predExpr tree.Expr,
+	inScope *scope, columnOrds util.FastIntSet, pred tree.Expr,
 ) {
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -184,8 +217,8 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// partial index cannot conflict with insert rows. Therefore, a Select
 	// wraps the scan on the right side of the anti-join with the partial
 	// index predicate expression as the filter.
-	if predExpr != nil {
-		texpr := fetchScope.resolveAndRequireType(predExpr, types.Bool)
+	if pred != nil {
+		texpr := fetchScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
 		fetchScope.expr = mb.b.factory.ConstructSelect(
 			fetchScope.expr,
@@ -216,8 +249,8 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// satisfy the partial index predicate cannot conflict with existing
 	// rows in the unique partial index. Therefore, the partial index
 	// predicate expression is added to the ON filters.
-	if predExpr != nil {
-		texpr := mb.outScope.resolveAndRequireType(predExpr, types.Bool)
+	if pred != nil {
+		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
 		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 	}
@@ -270,10 +303,11 @@ func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
 	}
 }
 
-// projectPartialIndexDistinctColumn projects a column to facilitate
+// projectPartialArbiterDistinctColumn projects a column to facilitate
 // de-duplicating insert rows for UPSERT/INSERT ON CONFLICT when the arbiter
-// index is a partial index. Only those insert rows that satisfy the partial
-// index predicate should be de-duplicated. For example:
+// index or constraint is partial. Only those insert rows that satisfy the
+// partial index or unique constraint predicate should be de-duplicated. For
+// example:
 //
 //   CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
 //   INSERT INTO t VALUES (1, 1), (1, 2), (1, -1), (1, -10) ON CONFLICT DO NOTHING
@@ -300,20 +334,18 @@ func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
 // NULL).
 //
 // The newly project scopeColumn is returned.
-func (mb *mutationBuilder) projectPartialIndexDistinctColumn(
-	insertScope *scope, idx cat.IndexOrdinal,
+func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
+	insertScope *scope, pred tree.Expr, alias string,
 ) *scopeColumn {
 	projectionScope := mb.outScope.replace()
 	projectionScope.appendColumnsFromScope(insertScope)
 
-	predExpr := mb.parsePartialIndexPredicateExpr(idx)
 	expr := &tree.OrExpr{
-		Left:  predExpr,
+		Left:  pred,
 		Right: tree.DNull,
 	}
 	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
 
-	alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
 	scopeCol := projectionScope.addColumn(alias, texpr)
 	mb.b.buildScalar(texpr, mb.outScope, projectionScope, scopeCol, nil)
 
@@ -386,6 +418,21 @@ func (h *arbiterPredicateHelper) partialIndexPredicate(idx cat.IndexOrdinal) mem
 
 	pred, _ := h.tabMeta.PartialIndexPredicate(idx)
 	return *pred.(*memo.FiltersExpr)
+}
+
+// partialUniqueConstraintPredicate returns the predicate of the given unique
+// constraint.
+func (h *arbiterPredicateHelper) partialUniqueConstraintPredicate(
+	idx cat.UniqueOrdinal,
+) memo.FiltersExpr {
+	// Build and normalize the unique constraint predicate expression.
+	pred, err := h.mb.b.buildPartialIndexPredicate(
+		h.tabMeta, h.tableScope(), h.mb.parseUniqueConstraintPredicateExpr(idx), "unique constraint predicate",
+	)
+	if err != nil {
+		panic(err)
+	}
+	return pred
 }
 
 // arbiterFilters returns a scalar expression representing the arbiter
