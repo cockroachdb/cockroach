@@ -100,7 +100,6 @@ const (
 	isPrefix                        // requests which should be grouped with the next request in a batch
 	isUnsplittable                  // range command that must not be split during sending
 	skipLeaseCheck                  // commands which skip the check that the evaluting replica has a valid lease
-	consultsTSCache                 // mutating commands which write data at a timestamp
 	updatesTSCache                  // commands which update the timestamp cache
 	updatesTSCacheOnErr             // commands which make read data available on errors
 	needsRefresh                    // commands which require refreshes to avoid serializable retries
@@ -164,14 +163,6 @@ func IsIntentWrite(args Request) bool {
 // a start and an end key.
 func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
-}
-
-// ConsultsTimestampCache returns whether the request must consult
-// the timestamp cache to determine whether a mutation is safe at
-// a proposed timestamp or needs to move to a higher timestamp to
-// avoid re-writing history.
-func ConsultsTimestampCache(args Request) bool {
-	return (args.flags() & consultsTSCache) != 0
 }
 
 // UpdatesTimestampCache returns whether the command must update
@@ -1174,7 +1165,7 @@ func (gr *GetRequest) flags() int {
 }
 
 func (*PutRequest) flags() int {
-	return isWrite | isTxn | isLocking | isIntentWrite | consultsTSCache | canBackpressure
+	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
 }
 
 // ConditionalPut effectively reads without writing if it hits a
@@ -1183,7 +1174,7 @@ func (*PutRequest) flags() int {
 // they return an error immediately instead of continuing a serializable
 // transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | consultsTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // InitPut, like ConditionalPut, effectively reads without writing if it hits a
@@ -1192,7 +1183,7 @@ func (*ConditionalPutRequest) flags() int {
 // return an error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | consultsTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -1201,11 +1192,11 @@ func (*InitPutRequest) flags() int {
 // error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*IncrementRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | consultsTSCache | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
 }
 
 func (*DeleteRequest) flags() int {
-	return isWrite | isTxn | isLocking | isIntentWrite | consultsTSCache | canBackpressure
+	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
 }
 
 func (drr *DeleteRangeRequest) flags() int {
@@ -1232,7 +1223,7 @@ func (drr *DeleteRangeRequest) flags() int {
 	// it. Note that, even if we didn't update the ts cache, deletes of keys
 	// that exist would not be lost (since the DeleteRange leaves intents on
 	// those keys), but deletes of "empty space" would.
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange | consultsTSCache | updatesTSCache | needsRefresh | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange | updatesTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
