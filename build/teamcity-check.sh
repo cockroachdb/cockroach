@@ -7,6 +7,7 @@ require_justification=0
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
+source "$(dirname "${0}")/teamcity-bazel-support.sh"  # For BAZEL_IMAGE
 
 function check_clean() {
   # The workspace is clean iff `git status --porcelain` produces no output. Any
@@ -43,7 +44,11 @@ check_clean "Run \`make generate\` to automatically regenerate these."
 run build/builder.sh make buildshort &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
 check_clean "Run \`make buildshort\` to automatically regenerate these."
-run build/builder.sh make bazel-generate &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
+# NB: $root is set by teamcity-support.sh.
+run docker run -i ${tty-} --rm --init \
+       --workdir="/go/src/github.com/cockroachdb/cockroach" \
+       -v "$root:/go/src/github.com/cockroachdb/cockroach" \
+       $BAZEL_IMAGE build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
 check_clean "Run \`make bazel-generate\` to automatically regenerate these."
 tc_end_block "Ensure generated code is up-to-date"
