@@ -18,95 +18,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
-
-type defaultSpanGenerator struct {
-	spanBuilder *span.Builder
-	numKeyCols  int
-	lookupCols  []uint32
-
-	indexKeyRow rowenc.EncDatumRow
-	// keyToInputRowIndices maps a lookup span key to the input row indices that
-	// desire that span. This is used for joins other than index joins, for
-	// de-duping spans, and to map the fetched rows to the input rows that need
-	// to join with them. Index joins already have unique rows in the input that
-	// generate unique spans for fetch, and simply output the fetched rows, do
-	// do not use this map.
-	keyToInputRowIndices map[string][]int
-
-	scratchSpans roachpb.Spans
-}
-
-// Generate spans for a given row.
-// If lookup columns are specified will use those to collect the relevant
-// columns. Otherwise the first rows are assumed to correspond with the index.
-// It additionally returns whether the row contains null, which is needed to
-// decide whether or not to split the generated span into separate family
-// specific spans.
-func (g *defaultSpanGenerator) generateSpan(
-	row rowenc.EncDatumRow,
-) (_ roachpb.Span, containsNull bool, _ error) {
-	numLookupCols := len(g.lookupCols)
-	if numLookupCols > g.numKeyCols {
-		return roachpb.Span{}, false, errors.Errorf(
-			"%d lookup columns specified, expecting at most %d", numLookupCols, g.numKeyCols)
-	}
-
-	g.indexKeyRow = g.indexKeyRow[:0]
-	for _, id := range g.lookupCols {
-		g.indexKeyRow = append(g.indexKeyRow, row[id])
-	}
-	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
-}
-
-func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
-	for _, colIdx := range g.lookupCols {
-		if row[colIdx].IsNull() {
-			return true
-		}
-	}
-	return false
-}
-
-func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb.Spans, error) {
-	// This loop gets optimized to a runtime.mapclear call.
-	for k := range g.keyToInputRowIndices {
-		delete(g.keyToInputRowIndices, k)
-	}
-	// We maintain a map from index key to the corresponding input rows so we can
-	// join the index results to the inputs.
-	g.scratchSpans = g.scratchSpans[:0]
-	for i, inputRow := range rows {
-		if g.hasNullLookupColumn(inputRow) {
-			continue
-		}
-		generatedSpan, containsNull, err := g.generateSpan(inputRow)
-		if err != nil {
-			return nil, err
-		}
-		if g.keyToInputRowIndices == nil {
-			// Index join.
-			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
-				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
-		} else {
-			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
-			if inputRowIndices == nil {
-				g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
-					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
-			}
-			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
-		}
-	}
-	return g.scratchSpans, nil
-}
 
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
 	getLookupRowsBatchSizeHint() int64
+	// getMaxLookupKeyCols returns the maximum number of key columns used to
+	// lookup into the index.
+	getMaxLookupKeyCols() int
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
 	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
@@ -135,7 +56,7 @@ type joinReaderStrategy interface {
 // the input ordering. This is more performant than joinReaderOrderingStrategy.
 type joinReaderNoOrderingStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	isPartialJoin bool
 	inputRows     []rowenc.EncDatumRow
 
@@ -176,6 +97,10 @@ func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 2 << 20 /* 2 MiB */
 }
 
+func (s *joinReaderNoOrderingStrategy) getMaxLookupKeyCols() int {
+	return s.maxLookupCols()
+}
+
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -187,7 +112,7 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	_ context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
+	matchingInputRowIndices := s.getMatchingRowIndices(key)
 	if s.isPartialJoin {
 		// In the case of partial joins, only process input rows that have not been
 		// matched yet. Make a copy of the matching input row indices to avoid
@@ -294,7 +219,7 @@ func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
 // join. It does not maintain the ordering.
 type joinReaderIndexJoinStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	inputRows []rowenc.EncDatumRow
 
 	emitState struct {
@@ -316,6 +241,10 @@ type joinReaderIndexJoinStrategy struct {
 // small to no marginal improvements.
 func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 4 << 20 /* 4 MB */
+}
+
+func (s *joinReaderIndexJoinStrategy) getMaxLookupKeyCols() int {
+	return s.maxLookupCols()
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
@@ -360,7 +289,7 @@ var partialJoinSentinel = []int{-1}
 // ordering. This is more expensive than joinReaderNoOrderingStrategy.
 type joinReaderOrderingStrategy struct {
 	*joinerBase
-	defaultSpanGenerator
+	joinReaderSpanGenerator
 	isPartialJoin bool
 
 	inputRows []rowenc.EncDatumRow
@@ -404,6 +333,10 @@ func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 10 << 10 /* 10 KiB */
 }
 
+func (s *joinReaderOrderingStrategy) getMaxLookupKeyCols() int {
+	return s.maxLookupCols()
+}
+
 func (s *joinReaderOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -427,7 +360,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
+	matchingInputRowIndices := s.getMatchingRowIndices(key)
 	if !s.isPartialJoin {
 		// Replace missing values with nulls to appease the row container.
 		for i := range row {

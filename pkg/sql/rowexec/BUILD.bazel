@@ -17,6 +17,7 @@ go_library(
         "inverted_joiner.go",
         "joinerbase.go",
         "joinreader.go",
+        "joinreader_span_generator.go",
         "joinreader_strategies.go",
         "mergejoiner.go",
         "noop.go",

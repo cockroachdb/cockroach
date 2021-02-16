@@ -1482,6 +1482,14 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
+	var lookupExpr tree.TypedExpr
+	if len(join.LookupExpr) > 0 {
+		var err error
+		lookupExpr, err = b.buildScalar(&ctx, &join.LookupExpr)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
 	var onExpr tree.TypedExpr
 	if len(join.On) > 0 {
 		var err error
@@ -1506,6 +1514,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		idx,
 		keyCols,
 		join.LookupColsAreTableKey,
+		lookupExpr,
 		lookupOrdinals,
 		onExpr,
 		join.IsSecondJoinInPairedJoiner,
