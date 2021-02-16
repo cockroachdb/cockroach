@@ -835,6 +835,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			res.RowsAffected(),
 			res.Err(),
 			ex.statsCollector.phaseTimes[sessionQueryReceived],
+			&ex.extraTxnState.hasAdminRoleCache,
 		)
 	}()
 

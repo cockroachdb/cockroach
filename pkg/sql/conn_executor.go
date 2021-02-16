@@ -648,6 +648,8 @@ func (s *Server) newConnExecutor(
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 	ex.statsCollector = ex.newStatsCollector()
 
+	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -893,6 +895,20 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 }
 
+// HasAdminRoleCache is stored in extraTxnState and used to cache if the
+// user has admin role throughout a transaction.
+// This is used for admin audit logging to check if a transaction is being
+// executed with admin privileges.
+// HasAdminRoleCache does not have to be reset when a transaction restarts
+// or roles back as the user's admin status will not change throughout the
+// lifecycle of a single transaction.
+type HasAdminRoleCache struct {
+	HasAdminRole bool
+
+	// IsSet is used to determine if the value for caching is set or not.
+	IsSet bool
+}
+
 type connExecutor struct {
 	_ util.NoCopy
 
@@ -1053,6 +1069,11 @@ type connExecutor struct {
 		// QueryLevelStats which are sampled.
 		rowsRead  int64
 		bytesRead int64
+
+		// hasAdminRole is used to cache if the user running the transaction
+		// has admin privilege. hasAdminRole is set for the first statement
+		// in a transaction in maybeLogStatementInternal.
+		hasAdminRoleCache HasAdminRoleCache
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1243,6 +1264,7 @@ func (ns *prepStmtNamespace) resetTo(
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	if ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.NewSchemaChanger) {
 		ex.extraTxnState.schemaChangerState = SchemaChangerState{
 			mode: ex.sessionData.NewSchemaChangerMode,
