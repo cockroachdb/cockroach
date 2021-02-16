@@ -650,9 +650,12 @@ func (p *Pebble) ExportMVCCToSst(
 	targetSize, maxSize uint64,
 	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	b, summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
 		maxSize, useTBI)
+	r.Free()
+	return b, summary, k, err
 }
 
 // MVCCGet implements the Engine interface.
@@ -660,10 +663,11 @@ func (p *Pebble) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
-	if r, wrapped := tryWrapReader(p, MVCCKeyAndIntentsIterKind); wrapped {
-		return r.MVCCGet(key)
-	}
-	return p.rawGet(EncodeKey(key))
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	v, err := r.MVCCGet(key)
+	r.Free()
+	return v, err
 }
 
 func (p *Pebble) rawGet(key []byte) ([]byte, error) {
@@ -699,16 +703,24 @@ func (p *Pebble) MVCCGetProto(
 func (p *Pebble) MVCCIterate(
 	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
 ) error {
-	r, _ := tryWrapReader(p, iterKind)
-	return iterateOnReader(r, start, end, iterKind, f)
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		err := iterateOnReader(r, start, end, iterKind, f)
+		r.Free()
+		return err
+	}
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
 func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
-		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
-		}
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		iter := r.NewMVCCIterator(iterKind, opts)
+		r.Free()
+		return iter
 	}
 	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
@@ -1269,9 +1281,12 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	targetSize, maxSize uint64,
 	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	b, summary, k, err := pebbleExportToSst(
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+	r.Free()
+	return b, summary, k, err
 }
 
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
@@ -1303,8 +1318,14 @@ func (p *pebbleReadOnly) MVCCIterate(
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	r, _ := tryWrapReader(p, iterKind)
-	return iterateOnReader(r, start, end, iterKind, f)
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		err := iterateOnReader(r, start, end, iterKind, f)
+		r.Free()
+		return err
+	}
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
@@ -1314,9 +1335,11 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
-		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
-		}
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		iter := r.NewMVCCIterator(iterKind, opts)
+		r.Free()
+		return iter
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
@@ -1497,9 +1520,12 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	targetSize, maxSize uint64,
 	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	b, summary, k, err := pebbleExportToSst(
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+	r.Free()
+	return b, summary, k, err
 }
 
 // Get implements the Reader interface.
@@ -1507,10 +1533,11 @@ func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
-	if r, wrapped := tryWrapReader(p, MVCCKeyAndIntentsIterKind); wrapped {
-		return r.MVCCGet(key)
-	}
-	return p.rawGet(EncodeKey(key))
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	v, err := r.MVCCGet(key)
+	r.Free()
+	return v, err
 }
 
 func (p *pebbleSnapshot) rawGet(key []byte) ([]byte, error) {
@@ -1538,16 +1565,24 @@ func (p *pebbleSnapshot) MVCCGetProto(
 func (p *pebbleSnapshot) MVCCIterate(
 	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
 ) error {
-	r, _ := tryWrapReader(p, iterKind)
-	return iterateOnReader(r, start, end, iterKind, f)
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		err := iterateOnReader(r, start, end, iterKind, f)
+		r.Free()
+		return err
+	}
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
 // NewMVCCIterator implements the Reader interface.
 func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
-		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
-		}
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		iter := r.NewMVCCIterator(iterKind, opts)
+		r.Free()
+		return iter
 	}
 	return newPebbleIterator(p.snapshot, nil, opts)
 }

@@ -414,8 +414,9 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 }
 
 // LockTableSingleKey creates a key under which all single-key locks for the
-// given key can be found. buf is used as scratch-space to avoid allocations
-// -- its contents will be overwritten and not appended to.
+// given key can be found. buf is used as scratch-space, up to its capacity,
+// to avoid allocations -- its contents will be overwritten and not appended
+// to.
 // Note that there can be multiple locks for the given key, but those are
 // distinguished using the "version" which is not in scope of the keys
 // package.

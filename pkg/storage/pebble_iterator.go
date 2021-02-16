@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -228,6 +229,11 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	} else {
 		p.iter.SeekGE(p.keyBuf)
 	}
+}
+
+// SeekIntentGE implements the MVCCIterator interface.
+func (p *pebbleIterator) SeekIntentGE(key roachpb.Key, _ uuid.UUID) {
+	p.SeekGE(MVCCKey{Key: key})
 }
 
 // SeekEngineKeyGE implements the EngineIterator interface.
