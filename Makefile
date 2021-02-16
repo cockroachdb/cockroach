@@ -910,7 +910,8 @@ OPTGEN_TARGETS = \
 test-targets := \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
-	roachprod-stress roachprod-stressrace
+	roachprod-stress roachprod-stressrace \
+	testlogic testbaselogic testccllogic testoptlogic
 
 go-targets-ccl := \
 	$(COCKROACH) \

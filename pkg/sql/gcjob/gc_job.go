@@ -149,11 +149,16 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 
 		if expired {
 			// Some elements have been marked as DELETING so save the progress.
-			persistProgress(ctx, execCfg, r.jobID, progress)
+			persistProgress(ctx, execCfg, r.jobID, progress, runningStatusGC(progress))
+			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
+				if err := fn(r.jobID); err != nil {
+					return err
+				}
+			}
 			if err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, execCfg, r.jobID, progress)
+			persistProgress(ctx, execCfg, r.jobID, progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
