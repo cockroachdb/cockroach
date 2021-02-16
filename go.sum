@@ -758,8 +758,8 @@ github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292/go.mod h1:
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560 h1:U/PIBuOTa8JXLPKF81Xh7xhIjA0jbpyqFWUPIiT4Ilc=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560/go.mod h1:0HiXlybqS+XtfgnNkiEZWwGXYYEhWsWL8fDVdZzb7is=
-go.etcd.io/etcd/raft/v3 v3.0.0-20201109164711-01844fd28560 h1:+9CYw4wP53Ryj4CtTy4VJv1fzA6SgyVZkCUEubdsISg=
-go.etcd.io/etcd/raft/v3 v3.0.0-20201109164711-01844fd28560/go.mod h1:k4YNiZ1JOTtvGkRi4GMQRKOAU/ZvuDEQ4h+/Fb7hYEA=
+go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc h1:W9sYVQfb5q8/WMnlTkjpYK8CwMfGCU6Tp9mR+Qm6NFU=
+go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc/go.mod h1:lOAojD+joNvQ+1WBvyjLbjEwCDgymdjYYZdkI6uddZ4=
 go.opencensus.io v0.18.0 h1:Mk5rgZcggtbvtAun5aJzAtjKKN/t0R3jJPlWILlv938=
 go.opencensus.io v0.18.0/go.mod h1:vKdFvxhtzZ9onBp9VKHK8z/sRpBMnKAsufL7wlDrCOA=
 go.uber.org/atomic v1.3.2/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
