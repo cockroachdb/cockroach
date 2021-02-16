@@ -175,7 +175,9 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			// Not a lookup anti-join.
 			return execPlan{}, false, nil
 		}
-		if len(lookupJoin.On) > 0 ||
+		// TODO(rytaft): see if we can remove the requirement that LookupExpr is
+		// empty.
+		if len(lookupJoin.On) > 0 || len(lookupJoin.LookupExpr) > 0 ||
 			len(lookupJoin.KeyCols) != fk.ColumnCount() {
 			return execPlan{}, false, nil
 		}

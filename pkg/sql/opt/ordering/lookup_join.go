@@ -111,6 +111,10 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoic
 		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal())
 		fds.AddEquivalency(colID, indexColID)
 	}
+	for i := range lookupJoin.LookupExpr {
+		filterProps := lookupJoin.LookupExpr[i].ScalarProps()
+		fds.AddFrom(&filterProps.FuncDeps)
+	}
 
 	return remapProvided(childProvided, &fds, lookupJoin.Cols)
 }

@@ -452,12 +452,18 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
 		if !f.HasFlags(ExprFmtHideColumns) {
-			idxCols := make(opt.ColList, len(t.KeyCols))
-			idx := md.Table(t.Table).Index(t.Index)
-			for i := range idxCols {
-				idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
+			if len(t.KeyCols) > 0 {
+				idxCols := make(opt.ColList, len(t.KeyCols))
+				idx := md.Table(t.Table).Index(t.Index)
+				for i := range idxCols {
+					idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
+				}
+				tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
 			}
-			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
+			if len(t.LookupExpr) > 0 {
+				n := tp.Childf("lookup expression")
+				f.formatExpr(&t.LookupExpr, n)
+			}
 		}
 		if t.LookupColsAreTableKey {
 			tp.Childf("lookup columns are key")

@@ -528,18 +528,21 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		a := n.args.(*lookupJoinArgs)
 		e.emitTableAndIndex("table", a.Table, a.Index)
 		inputCols := a.Input.Columns()
-		rightEqCols := make([]string, len(a.EqCols))
-		for i := range rightEqCols {
-			rightEqCols[i] = string(a.Index.Column(i).ColName())
+		if len(a.EqCols) > 0 {
+			rightEqCols := make([]string, len(a.EqCols))
+			for i := range rightEqCols {
+				rightEqCols[i] = string(a.Index.Column(i).ColName())
+			}
+			ob.Attrf(
+				"equality", "(%s) = (%s)",
+				printColumnList(inputCols, a.EqCols),
+				strings.Join(rightEqCols, ","),
+			)
 		}
-		ob.Attrf(
-			"equality", "(%s) = (%s)",
-			printColumnList(inputCols, a.EqCols),
-			strings.Join(rightEqCols, ","),
-		)
 		if a.EqColsAreKey {
 			ob.Attr("equality cols are key", "")
 		}
+		ob.Expr("lookup condition", a.LookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		e.emitLockingPolicy(a.Locking)
 
