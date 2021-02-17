@@ -121,6 +121,10 @@ func MakeClusterSettings() *Settings {
 	sv.Init(s.Version)
 
 	s.Tracer = tracing.NewTracer()
+	s.Tracer.TracingVerbosityIndependentSemanticsIsActive = func() bool {
+		return s.Version.IsActive(context.Background(),
+			clusterversion.TracingVerbosityIndependentSemantics)
+	}
 	s.Tracer.Configure(sv)
 
 	return s

@@ -1,0 +1,25 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.testutils.grpcutils;
+option go_package = "grpcutils";
+
+import "google/protobuf/any.proto";
+
+// GRPCTest is a generic test service that operates on arbitrary protobufs (as
+// Anys) and exposes all combinations of streaming and unary RPCs.
+service GRPCTest {
+  rpc UnaryUnary     (google.protobuf.Any)        returns (google.protobuf.Any)            {}
+  rpc UnaryStream    (google.protobuf.Any)        returns (stream google.protobuf.Any)     {}
+  rpc StreamUnary    (stream google.protobuf.Any) returns (google.protobuf.Any)            {}
+  rpc StreamStream   (stream google.protobuf.Any) returns (stream google.protobuf.Any)     {}
+}
+

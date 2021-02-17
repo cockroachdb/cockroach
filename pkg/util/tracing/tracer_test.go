@@ -46,6 +46,9 @@ func TestTracerRecording(t *testing.T) {
 	}
 	noop1.Record("hello")
 
+	// Noop span returns empty recording.
+	require.Equal(t, Recording(nil), noop1.GetRecording())
+
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
 	if !noop2.isNoop() {
 		t.Error("expected noop child Span")
@@ -61,12 +64,20 @@ func TestTracerRecording(t *testing.T) {
 		t.Error("WithForceRealSpan Span should be black hole")
 	}
 
-	// Unless recording is actually started, child spans are still noop.
-	noop3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
-	if !noop3.isNoop() {
-		t.Error("expected noop child Span")
+	// Initial recording of this fresh (real) span.
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+		Span a:
+			tags: _unfinished=1
+	`); err != nil {
+		t.Fatal(err)
 	}
-	noop3.Finish()
+
+	// Real parent --> real child.
+	real3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
+	if real3.isNoop() {
+		t.Error("expected real child Span")
+	}
+	real3.Finish()
 
 	s1.Recordf("x=%d", 1)
 	s1.SetVerbose(true)
@@ -116,7 +127,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3.Finish()
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	expS1v := `
 		Span a:
       tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -126,12 +137,26 @@ func TestTracerRecording(t *testing.T) {
 		Span c:
 			tags: _verbose=1 tag=val
 			event: x=4
-	`); err != nil {
+	`
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), expS1v); err != nil {
 		t.Fatal(err)
 	}
+	// When we turn off verbosity and add more verbose logs, they get
+	// dropped, i.e. the recording is unchanged mod the _verbose flag.
+	expS1n := `
+		Span a:
+      tags: _unfinished=1
+			event: x=2
+		Span b:
+      tags: _verbose=1
+			event: x=3
+		Span c:
+			tags: _verbose=1 tag=val
+			event: x=4
+	`
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), expS1n); err != nil {
 		t.Fatal(err)
 	}
 
@@ -223,7 +248,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wireSpanMeta.isNilOrNoop() {
+	if wireSpanMeta != nil {
 		t.Errorf("expected noop context: %v", wireSpanMeta)
 	}
 	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
@@ -290,6 +315,27 @@ func TestTracerInjectExtract(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
+	// Verify that when a span is put on the wire on one end, and is checked
+	// against the span inclusion functions both on the client and server, a real
+	// span results in a real span.
+	tr1 := NewTracer()
+	sp1 := tr1.StartSpan("tr1.root", WithForceRealSpan())
+	defer sp1.Finish()
+	carrier := metadataCarrier{MD: metadata.MD{}}
+	require.True(t, spanInclusionFuncForClient(sp1))
+	require.NoError(t, tr1.InjectMetaInto(sp1.Meta(), carrier))
+	require.Equal(t, 2, carrier.Len(), "%+v", carrier) // trace id and span id
+
+	tr2 := NewTracer()
+	meta, err := tr2.ExtractMetaFrom(carrier)
+	require.NoError(t, err)
+	require.True(t, spanInclusionFuncForServer(tr2, meta))
+	sp2 := tr2.StartSpan("tr2.child", WithParentAndManualCollection(meta))
+	defer sp2.Finish()
+	require.NotZero(t, sp2.crdb.spanID)
 }
 
 func TestLightstepContext(t *testing.T) {
@@ -491,4 +537,20 @@ func TestSpanRecordingFinished(t *testing.T) {
 	// Nothing is tracked anymore.
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 	require.Len(t, spanOpsWithFinished, 0)
+}
+
+func TestTracer_TracingVerbosityIndependentSemanticsIsActive(t *testing.T) {
+	// Verify that GetRecording() returns nil for non-verbose spans if we're in
+	// mixed-version mode.
+	tr := NewTracer()
+	tr.TracingVerbosityIndependentSemanticsIsActive = func() bool { return false }
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	sp.SetVerbose(true)
+	sp.Record("foo")
+	require.NotNil(t, sp.GetRecording())
+	sp.SetVerbose(false)
+	require.Nil(t, sp.GetRecording())
+	tr.TracingVerbosityIndependentSemanticsIsActive = func() bool { return true }
+	require.NotNil(t, sp.GetRecording())
 }

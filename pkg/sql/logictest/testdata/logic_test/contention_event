@@ -1,3 +1,5 @@
+# LogicTest: 5node-pretend59315IsFixed
+#
 # Verify that ContentionEvents are emitted. This is mostly a sanity check - look
 # for the datadriven tests in `pkg/kv/kvserver/concurrency` for the actual events
 # that do get emitted in various contention scenarios.
@@ -6,8 +8,8 @@ statement ok
 GRANT ADMIN TO testuser
 
 statement ok
-CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR)
-
+CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
+ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z');
 
 query TT
 SELECT * FROM kv
@@ -23,41 +25,34 @@ INSERT INTO kv VALUES('k', 'v')
 
 user root
 
+# Scan all ranges of the table (note that we have intentionally
+# split it into at least six ranges). This is better than a point
+# lookup in that it gives tracing more of a chance to get things
+# wrong due to DistSender parallelism.
 statement ok
-SET tracing=on
-
-statement ok
-SET TRACING=on;
 BEGIN;
 SET TRANSACTION PRIORITY HIGH;
-INSERT INTO kv VALUES('k', 'my v');
-COMMIT;
-SET TRACING=off;
+SELECT * FROM kv;
 
-# Check for the message emitted by (roachpb.ContentionEvent).String() as proof that a ContentionEvent
-# payload was added to the trace.
-#
-# NB: if the matcher here ever gets updated, make sure to update throughout this file.
-query I
-SELECT count(message) FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
-----
-1
-
-# Clean up.
 user testuser
 
 statement ok
 ROLLBACK
 
-# Do a straightforward non-conflicting insert; we want to check that there's *no* ContentionEvent
-# emitted for those. There's no reason to believe it would be - this is a pure sanity check.
+user root
 
-statement ok
-SET TRACING=on;
-INSERT INTO kv VALUES ('l', 'lll');
-SET TRACING=off;
-
-query I
-SELECT count(message) FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
+# Check that the number of payloads in the open trace is at least 1.
+# TODO(angelapwen): when we have a way to pull particular payloads for
+# a trace, we should verify that we're seeing the right contention event.
+# As is, the payloads could be something else (though we verified manually
+# and there is a contention event).
+#
+# NB: the contention event is not in our trace span but in one of its
+# children, so it wouldn't be found if we filtered by the trace span ID.
+#
+# NB: this needs the 5node-pretend59315 config because otherwise the span is not
+# tracked.
+query B
+SELECT count(num_payloads) > 0 FROM crdb_internal.node_inflight_trace_spans WHERE trace_id = crdb_internal.trace_id();
 ----
-0
+true

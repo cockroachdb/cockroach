@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -183,9 +184,28 @@ Span grandchild:
 	require.Equal(t, exp, recToStrippedString(childRec))
 }
 
+func TestSpan_ImportRemoteSpans(t *testing.T) {
+	// Verify that GetRecording propagates the recording even when the
+	// receiving Span isn't verbose.
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
+	ch.SetVerbose(true)
+	ch.Record("foo")
+	ch.SetVerbose(false)
+	ch.Finish()
+	require.NoError(t, sp.ImportRemoteSpans(ch.GetRecording()))
+	sp.Finish()
+
+	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+Span root:
+Span child:
+  event: foo
+`))
+}
+
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
-	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
@@ -230,4 +250,26 @@ func TestSpanMaxChildren(t *testing.T) {
 		}
 		require.Len(t, sp.crdb.mu.recording.children, exp)
 	}
+}
+
+type countingNetTrace struct {
+	trace.Trace
+	n int
+}
+
+func (nt *countingNetTrace) Finish() {
+	nt.n++
+	nt.Trace.Finish()
+}
+
+func TestSpan_FinishTwice(t *testing.T) {
+	tr := NewTracer()
+	tr._useNetTrace = 1
+	sp := tr.StartSpan("foo", WithForceRealSpan())
+	require.NotNil(t, sp.netTr)
+	nt := &countingNetTrace{Trace: sp.netTr}
+	sp.netTr = nt
+	sp.Finish()
+	sp.Finish()
+	require.Equal(t, 1, nt.n)
 }
