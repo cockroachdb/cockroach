@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -71,6 +72,7 @@ func TestOutbox(t *testing.T) {
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
+		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
 	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
@@ -227,6 +229,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
+		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
 	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
@@ -301,6 +304,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
+				NodeID: base.TestingIDContainer,
 			}
 			streamID := execinfrapb.StreamID(42)
 			var outbox *Outbox
@@ -376,6 +380,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 						Settings: cluster.MakeTestingClusterSettings(),
 						Stopper:  stopper,
 					},
+					NodeID: base.TestingIDContainer,
 				})
 				outbox.Init(rowenc.OneIntCol)
 				// In a RunSyncFlow call, the outbox runs under the call's context.
@@ -437,6 +442,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
+		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
 	var outbox *Outbox
@@ -490,6 +496,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			// a nil nodeDialer will always fail to connect.
 			NodeDialer: nil,
 		},
+		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
 	var outbox *Outbox
@@ -560,6 +567,7 @@ func BenchmarkOutbox(b *testing.B) {
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
+				NodeID: base.TestingIDContainer,
 			}
 			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 			outbox.Init(rowenc.MakeIntCols(numCols))

@@ -26,20 +26,22 @@ import (
 )
 
 // ProcessorComponentID returns a ComponentID for the given processor in a flow.
-func ProcessorComponentID(flowID FlowID, processorID int32) ComponentID {
+func ProcessorComponentID(nodeID roachpb.NodeID, flowID FlowID, processorID int32) ComponentID {
 	return ComponentID{
 		FlowID: flowID,
 		Type:   ComponentID_PROCESSOR,
 		ID:     processorID,
+		NodeID: nodeID,
 	}
 }
 
 // StreamComponentID returns a ComponentID for the given stream in a flow.
-func StreamComponentID(flowID FlowID, streamID StreamID) ComponentID {
+func StreamComponentID(originNodeID roachpb.NodeID, flowID FlowID, streamID StreamID) ComponentID {
 	return ComponentID{
 		FlowID: flowID,
 		Type:   ComponentID_STREAM,
 		ID:     int32(streamID),
+		NodeID: originNodeID,
 	}
 }
 

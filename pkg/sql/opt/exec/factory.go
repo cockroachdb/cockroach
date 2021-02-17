@@ -304,6 +304,9 @@ type ExecutionStats struct {
 
 	KVBytesRead optional.Uint
 	KVRowsRead  optional.Uint
+
+	// Nodes on which this operator was executed.
+	Nodes []string
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

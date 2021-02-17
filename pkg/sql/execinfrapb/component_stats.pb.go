@@ -69,7 +69,7 @@ func (x *ComponentID_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ComponentID_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{0, 0}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{0, 0}
 }
 
 // ComponentID identifies a component in a flow. There are multiple types of
@@ -81,10 +81,8 @@ type ComponentID struct {
 	// Identifier of this component, within the domain of components of the same
 	// type.
 	ID int32 `protobuf:"varint,3,opt,name=id" json:"id"`
-	// NodeID of the node this component ran on.
-	// TODO(asubiotto): This is only used when Type = FLOW to uniquely describe
-	// a flow (since flows on different nodes still have the same FlowID). Use
-	// this for processors/streams as well.
+	// NodeID of the node this component is associated with. For cross-node
+	// streams, this is the *origin* node for the stream.
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,4,opt,name=node_id,json=nodeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id"`
 }
 
@@ -92,7 +90,7 @@ func (m *ComponentID) Reset()         { *m = ComponentID{} }
 func (m *ComponentID) String() string { return proto.CompactTextString(m) }
 func (*ComponentID) ProtoMessage()    {}
 func (*ComponentID) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{0}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{0}
 }
 func (m *ComponentID) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -139,7 +137,7 @@ func (m *ComponentStats) Reset()         { *m = ComponentStats{} }
 func (m *ComponentStats) String() string { return proto.CompactTextString(m) }
 func (*ComponentStats) ProtoMessage()    {}
 func (*ComponentStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{1}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{1}
 }
 func (m *ComponentStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -176,7 +174,7 @@ func (m *InputStats) Reset()         { *m = InputStats{} }
 func (m *InputStats) String() string { return proto.CompactTextString(m) }
 func (*InputStats) ProtoMessage()    {}
 func (*InputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{2}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{2}
 }
 func (m *InputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -220,7 +218,7 @@ func (m *NetworkRxStats) Reset()         { *m = NetworkRxStats{} }
 func (m *NetworkRxStats) String() string { return proto.CompactTextString(m) }
 func (*NetworkRxStats) ProtoMessage()    {}
 func (*NetworkRxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{3}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{3}
 }
 func (m *NetworkRxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -258,7 +256,7 @@ func (m *NetworkTxStats) Reset()         { *m = NetworkTxStats{} }
 func (m *NetworkTxStats) String() string { return proto.CompactTextString(m) }
 func (*NetworkTxStats) ProtoMessage()    {}
 func (*NetworkTxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{4}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{4}
 }
 func (m *NetworkTxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -299,7 +297,7 @@ func (m *KVStats) Reset()         { *m = KVStats{} }
 func (m *KVStats) String() string { return proto.CompactTextString(m) }
 func (*KVStats) ProtoMessage()    {}
 func (*KVStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{5}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{5}
 }
 func (m *KVStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -338,7 +336,7 @@ func (m *ExecStats) Reset()         { *m = ExecStats{} }
 func (m *ExecStats) String() string { return proto.CompactTextString(m) }
 func (*ExecStats) ProtoMessage()    {}
 func (*ExecStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{6}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{6}
 }
 func (m *ExecStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -375,7 +373,7 @@ func (m *OutputStats) Reset()         { *m = OutputStats{} }
 func (m *OutputStats) String() string { return proto.CompactTextString(m) }
 func (*OutputStats) ProtoMessage()    {}
 func (*OutputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{7}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{7}
 }
 func (m *OutputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -409,7 +407,7 @@ func (m *FlowStats) Reset()         { *m = FlowStats{} }
 func (m *FlowStats) String() string { return proto.CompactTextString(m) }
 func (*FlowStats) ProtoMessage()    {}
 func (*FlowStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_1e4b47cb6b511195, []int{8}
+	return fileDescriptor_component_stats_e22770c51d19c14e, []int{8}
 }
 func (m *FlowStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2545,10 +2543,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/component_stats.proto", fileDescriptor_component_stats_1e4b47cb6b511195)
+	proto.RegisterFile("sql/execinfrapb/component_stats.proto", fileDescriptor_component_stats_e22770c51d19c14e)
 }
 
-var fileDescriptor_component_stats_1e4b47cb6b511195 = []byte{
+var fileDescriptor_component_stats_e22770c51d19c14e = []byte{
 	// 970 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0x4d, 0x6f, 0x1a, 0x47,
 	0x18, 0xc7, 0xd9, 0x05, 0x16, 0xf3, 0x10, 0x13, 0x32, 0xcd, 0x01, 0x59, 0x2d, 0x76, 0x68, 0x23,

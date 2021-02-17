@@ -20,11 +20,13 @@ import (
 )
 
 type processorStats struct {
+	// TODO(radu): this field redundant with stats.Component.NodeID.
 	nodeID roachpb.NodeID
 	stats  *execinfrapb.ComponentStats
 }
 
 type streamStats struct {
+	// TODO(radu): this field redundant with stats.Component.NodeID.
 	originNodeID      roachpb.NodeID
 	destinationNodeID roachpb.NodeID
 	stats             *execinfrapb.ComponentStats
