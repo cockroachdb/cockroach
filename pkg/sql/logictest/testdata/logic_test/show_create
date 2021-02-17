@@ -106,3 +106,24 @@ c  CREATE TABLE public.c (
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
 COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+
+# Regression test for #60701. In the SHOW CREATE output of a table with a
+# partial interleaved index, the INTERLEAVE clause should precede the WHERE
+# clause. This matches the accepted syntax for creating partial interleaved
+# indexes.
+statement ok
+CREATE TABLE t60701_a (a INT PRIMARY KEY, FAMILY (a));
+CREATE TABLE t60701_b (b INT PRIMARY KEY, a INT REFERENCES t60701_a (a), FAMILY (b, a));
+CREATE INDEX i ON t60701_b (a) INTERLEAVE IN PARENT t60701_a (a) WHERE b > 0;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t60701_b]
+----
+CREATE TABLE public.t60701_b (
+   b INT8 NOT NULL,
+   a INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (b ASC),
+   CONSTRAINT fk_a_ref_t60701_a FOREIGN KEY (a) REFERENCES public.t60701_a(a),
+   INDEX i (a ASC) INTERLEAVE IN PARENT public.t60701_a (a) WHERE b > 0:::INT8,
+   FAMILY fam_0_b_a (b, a)
+)
