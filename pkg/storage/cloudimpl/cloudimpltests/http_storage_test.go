@@ -308,6 +308,26 @@ func TestCanDisableHttp(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCanDisableOutbound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	conf := base.ExternalIODirConfig{
+		DisableOutbound: true,
+	}
+	for _, provider := range []roachpb.ExternalStorageProvider{
+		roachpb.ExternalStorageProvider_Http,
+		roachpb.ExternalStorageProvider_S3,
+		roachpb.ExternalStorageProvider_GoogleCloud,
+		roachpb.ExternalStorageProvider_LocalFile,
+	} {
+		s, err := cloudimpl.MakeExternalStorage(
+			context.Background(),
+			roachpb.ExternalStorage{Provider: provider},
+			conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
+		require.Nil(t, s)
+		require.Error(t, err)
+	}
+}
+
 func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
