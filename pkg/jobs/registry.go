@@ -517,6 +517,14 @@ func (r *Registry) CreateStartableJobWithTxn(
 	_, span := tracing.ForkSpan(ctx, "job")
 	if span != nil {
 		resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
+
+		// This trace span unfortunately is sometimes never finished.
+		// As a hack/workaround, finish it now so that it leaves the
+		// tracer registry.
+		//
+		// Remove this when this issue is fixed:
+		// https://github.com/cockroachdb/cockroach/issues/60671
+		span.Finish()
 	}
 
 	if r.startUsingSQLLivenessAdoption(ctx) {
