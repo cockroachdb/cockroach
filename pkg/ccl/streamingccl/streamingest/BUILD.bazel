@@ -22,6 +22,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/bulk",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
@@ -42,6 +43,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
