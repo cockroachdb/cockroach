@@ -107,10 +107,14 @@ func NewFilledInExistingMutable(
 
 // makeImmutable returns an immutable from the given TableDescriptor.
 func makeImmutable(tbl descpb.TableDescriptor) immutable {
+	mutations := newMutationCache(&tbl)
+	indexes := newIndexCache(&tbl, mutations)
+	columns := newColumnCache(&tbl, mutations)
 	desc := immutable{wrapper: wrapper{
 		TableDescriptor: tbl,
-		indexCache:      newIndexCache(&tbl),
-		columnCache:     newColumnCache(&tbl),
+		mutationCache:   mutations,
+		indexCache:      indexes,
+		columnCache:     columns,
 	}}
 
 	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
@@ -769,7 +773,7 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	}
 
 	// Process all non-index mutations.
-	for _, mut := range desc.GetMutations() {
+	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
 			if err := doCol(c); err != nil {
 				return err
@@ -1523,7 +1527,7 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	currentMutationID := desc.ClusterVersion.NextMutationID
 	for _, col := range desc.DeletableColumns() {
 		if (col.Public() && col.ColName() == name) ||
-			(col.Adding() && col.(*column).mutationID == currentMutationID) {
+			(col.Adding() && col.MutationID() == currentMutationID) {
 			return col, nil
 		}
 	}

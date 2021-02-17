@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "column.go",
         "index.go",
+        "mutation.go",
         "safe_format.go",
         "structured.go",
         "table.go",
