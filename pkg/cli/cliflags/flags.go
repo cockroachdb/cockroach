@@ -678,6 +678,11 @@ Also see: ` + build.MakeIssueURL(53404) + `
 Disable use of implicit credentials when accessing external data.
 Instead, require the user to always specify access keys.`,
 	}
+	ExternalIODisabled = FlagInfo{
+		Name: "external-io-disabled",
+		Description: `
+Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal), or anything other than userfile.`,
+	}
 
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.
