@@ -58,7 +58,7 @@ func (x State) String() string {
 	return proto.EnumName(State_name, int32(x))
 }
 func (State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{0}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{0}
 }
 
 type Target_Direction int32
@@ -84,7 +84,7 @@ func (x Target_Direction) String() string {
 	return proto.EnumName(Target_Direction_name, int32(x))
 }
 func (Target_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{1, 0}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{1, 0}
 }
 
 type SequenceDependency_Type int32
@@ -110,7 +110,7 @@ func (x SequenceDependency_Type) String() string {
 	return proto.EnumName(SequenceDependency_Type_name, int32(x))
 }
 func (SequenceDependency_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{5, 0}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{5, 0}
 }
 
 type ElementProto struct {
@@ -126,7 +126,7 @@ func (m *ElementProto) Reset()         { *m = ElementProto{} }
 func (m *ElementProto) String() string { return proto.CompactTextString(m) }
 func (*ElementProto) ProtoMessage()    {}
 func (*ElementProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{0}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{0}
 }
 func (m *ElementProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -160,7 +160,7 @@ func (m *Target) Reset()         { *m = Target{} }
 func (m *Target) String() string { return proto.CompactTextString(m) }
 func (*Target) ProtoMessage()    {}
 func (*Target) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{1}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{1}
 }
 func (m *Target) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -196,7 +196,7 @@ func (m *Column) Reset()         { *m = Column{} }
 func (m *Column) String() string { return proto.CompactTextString(m) }
 func (*Column) ProtoMessage()    {}
 func (*Column) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{2}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{2}
 }
 func (m *Column) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -233,7 +233,7 @@ func (m *PrimaryIndex) Reset()         { *m = PrimaryIndex{} }
 func (m *PrimaryIndex) String() string { return proto.CompactTextString(m) }
 func (*PrimaryIndex) ProtoMessage()    {}
 func (*PrimaryIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{3}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{3}
 }
 func (m *PrimaryIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -268,7 +268,7 @@ func (m *SecondaryIndex) Reset()         { *m = SecondaryIndex{} }
 func (m *SecondaryIndex) String() string { return proto.CompactTextString(m) }
 func (*SecondaryIndex) ProtoMessage()    {}
 func (*SecondaryIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{4}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{4}
 }
 func (m *SecondaryIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -298,14 +298,18 @@ type SequenceDependency struct {
 	ColumnID   github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,2,opt,name=column_id,json=columnId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"column_id,omitempty"`
 	SequenceID github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID       `protobuf:"varint,3,opt,name=sequence_id,json=sequenceId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"sequence_id,omitempty"`
 	Type       SequenceDependency_Type                                          `protobuf:"varint,4,opt,name=type,proto3,enum=cockroach.sql.schemachanger.scpb.SequenceDependency_Type" json:"type,omitempty"`
-	ByID       bool                                                             `protobuf:"varint,5,opt,name=by_id,json=byId,proto3" json:"by_id,omitempty"`
+	// ByID indicates whether the sequence is referenced via its name or its ID.
+	// For example, nextval('foo.public.seq') vs. nextval(12345::REGCLASS),
+	// where 12345 is the ID of foo.public.seq.
+	// Sequences referenced only by its ID have the ability to be renamed.
+	ByID bool `protobuf:"varint,5,opt,name=by_id,json=byId,proto3" json:"by_id,omitempty"`
 }
 
 func (m *SequenceDependency) Reset()         { *m = SequenceDependency{} }
 func (m *SequenceDependency) String() string { return proto.CompactTextString(m) }
 func (*SequenceDependency) ProtoMessage()    {}
 func (*SequenceDependency) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{5}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{5}
 }
 func (m *SequenceDependency) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -340,7 +344,7 @@ func (m *UniqueConstraint) Reset()         { *m = UniqueConstraint{} }
 func (m *UniqueConstraint) String() string { return proto.CompactTextString(m) }
 func (*UniqueConstraint) ProtoMessage()    {}
 func (*UniqueConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{6}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{6}
 }
 func (m *UniqueConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -377,7 +381,7 @@ func (m *CheckConstraint) Reset()         { *m = CheckConstraint{} }
 func (m *CheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*CheckConstraint) ProtoMessage()    {}
 func (*CheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_scpb_db985c3334fcfe45, []int{7}
+	return fileDescriptor_scpb_d1abbf2b1b19a753, []int{7}
 }
 func (m *CheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2765,10 +2769,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/schemachanger/scpb/scpb.proto", fileDescriptor_scpb_db985c3334fcfe45)
+	proto.RegisterFile("sql/schemachanger/scpb/scpb.proto", fileDescriptor_scpb_d1abbf2b1b19a753)
 }
 
-var fileDescriptor_scpb_db985c3334fcfe45 = []byte{
+var fileDescriptor_scpb_d1abbf2b1b19a753 = []byte{
 	// 1092 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x56, 0xcf, 0x6f, 0xe3, 0xc4,
 	0x17, 0x8f, 0x13, 0x27, 0x4d, 0x5e, 0xdb, 0xd4, 0xdf, 0xe9, 0x7e, 0x51, 0x58, 0x41, 0x5c, 0x8a,

@@ -1042,7 +1042,7 @@ func RewriteTableDescs(
 			descriptorRewrites, table.IsTemporary())
 		table.ParentID = tableRewrite.ParentID
 
-		// Remap type IDs in all serialized expressions within the TableDescriptor.
+		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
 		if err := tabledesc.ForEachExprStringInTableDesc(table, func(expr *string) error {
 			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
@@ -1050,14 +1050,8 @@ func RewriteTableDescs(
 				return err
 			}
 			*expr = newExpr
-			return nil
-		}); err != nil {
-			return err
-		}
 
-		// Rewrite sequence IDs within the TableDescriptor.
-		if err := tabledesc.ForEachExprStringInTableDesc(table, func(expr *string) error {
-			newExpr, err := rewriteSequencesInExpr(*expr, descriptorRewrites)
+			newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
 			if err != nil {
 				return err
 			}
