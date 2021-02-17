@@ -1329,12 +1329,12 @@ upsert transactiondetails
  ├── columns: <none>
  ├── arbiter indexes: detailsprimarykey
  ├── canary column: transactiondetails.dealerid:22
- ├── fetch columns: transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondate:24 cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
+ ├── fetch columns: transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondetails.transactiondate:24 transactiondetails.cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
  ├── insert-mapping:
  │    ├── "?column?":12 => transactiondetails.dealerid:2
  │    ├── bool:13 => transactiondetails.isbuy:3
- │    ├── current_timestamp:14 => transactiondate:4
- │    ├── int8:15 => cardid:5
+ │    ├── current_timestamp:14 => transactiondetails.transactiondate:4
+ │    ├── int8:15 => transactiondetails.cardid:5
  │    ├── int8:16 => quantity:6
  │    ├── sellprice:20 => transactiondetails.sellprice:7
  │    ├── buyprice:21 => transactiondetails.buyprice:8
@@ -1346,13 +1346,13 @@ upsert transactiondetails
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: upsert_dealerid:31 upsert_isbuy:32 upsert_transactiondate:33 upsert_cardid:34 "?column?":12!null bool:13!null current_timestamp:14!null int8:15!null int8:16!null column19:19 sellprice:20 buyprice:21 transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondate:24 cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
+ │    ├── columns: upsert_dealerid:31 upsert_isbuy:32 upsert_transactiondate:33 upsert_cardid:34 "?column?":12!null bool:13!null current_timestamp:14!null int8:15!null int8:16!null column19:19 sellprice:20 buyprice:21 transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondetails.transactiondate:24 transactiondetails.cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
  │    ├── cardinality: [1 - 2]
  │    ├── volatile
  │    ├── key: (15,16)
  │    ├── fd: ()-->(12-14), (15,16)-->(19-29), (22-26)-->(27-29), (22)-->(31), (22,23)-->(32), (22,24)-->(33), (15,22,25)-->(34)
  │    ├── left-join (lookup transactiondetails)
- │    │    ├── columns: "?column?":12!null bool:13!null current_timestamp:14!null int8:15!null int8:16!null column19:19 sellprice:20 buyprice:21 transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondate:24 cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
+ │    │    ├── columns: "?column?":12!null bool:13!null current_timestamp:14!null int8:15!null int8:16!null column19:19 sellprice:20 buyprice:21 transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondetails.transactiondate:24 transactiondetails.cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
  │    │    ├── key columns: [12 13 14 15 16] = [22 23 24 25 26]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [1 - 2]
@@ -1403,33 +1403,33 @@ upsert transactiondetails
  │    └── projections
  │         ├── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN "?column?":12 ELSE transactiondetails.dealerid:22 END [as=upsert_dealerid:31, outer=(12,22)]
  │         ├── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN bool:13 ELSE transactiondetails.isbuy:23 END [as=upsert_isbuy:32, outer=(13,22,23)]
- │         ├── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN current_timestamp:14 ELSE transactiondate:24 END [as=upsert_transactiondate:33, outer=(14,22,24)]
- │         └── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN int8:15 ELSE cardid:25 END [as=upsert_cardid:34, outer=(15,22,25)]
+ │         ├── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN current_timestamp:14 ELSE transactiondetails.transactiondate:24 END [as=upsert_transactiondate:33, outer=(14,22,24)]
+ │         └── CASE WHEN transactiondetails.dealerid:22 IS NULL THEN int8:15 ELSE transactiondetails.cardid:25 END [as=upsert_cardid:34, outer=(15,22,25)]
  └── f-k-checks
       ├── f-k-checks-item: transactiondetails(dealerid,isbuy,transactiondate) -> transactions(dealerid,isbuy,date)
       │    └── anti-join (lookup transactions)
-      │         ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39
+      │         ├── columns: dealerid:37 isbuy:38 transactiondate:39
       │         ├── key columns: [37 38 39] = [40 41 42]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 2]
       │         ├── with-scan &2
-      │         │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39
+      │         │    ├── columns: dealerid:37 isbuy:38 transactiondate:39
       │         │    ├── mapping:
-      │         │    │    ├──  upsert_dealerid:31 => upsert_dealerid:37
-      │         │    │    ├──  upsert_isbuy:32 => upsert_isbuy:38
-      │         │    │    └──  upsert_transactiondate:33 => upsert_transactiondate:39
+      │         │    │    ├──  upsert_dealerid:31 => dealerid:37
+      │         │    │    ├──  upsert_isbuy:32 => isbuy:38
+      │         │    │    └──  upsert_transactiondate:33 => transactiondate:39
       │         │    └── cardinality: [1 - 2]
       │         └── filters (true)
       └── f-k-checks-item: transactiondetails(cardid) -> cards(id)
            └── anti-join (lookup cards)
-                ├── columns: upsert_cardid:48
+                ├── columns: cardid:48
                 ├── key columns: [48] = [49]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── with-scan &2
-                │    ├── columns: upsert_cardid:48
+                │    ├── columns: cardid:48
                 │    ├── mapping:
-                │    │    └──  upsert_cardid:34 => upsert_cardid:48
+                │    │    └──  upsert_cardid:34 => cardid:48
                 │    └── cardinality: [1 - 2]
                 └── filters (true)
 

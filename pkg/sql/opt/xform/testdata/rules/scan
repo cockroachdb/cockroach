@@ -415,16 +415,16 @@ insert fk_b
  └── f-k-checks
       └── f-k-checks-item: fk_b(a) -> fk_a(a)
            └── anti-join (lookup fk_a)
-                ├── columns: column2:6!null
+                ├── columns: a:6!null
                 ├── key columns: [6] = [7]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(6)
                 ├── with-scan &1
-                │    ├── columns: column2:6!null
+                │    ├── columns: a:6!null
                 │    ├── mapping:
-                │    │    └──  column2:5 => column2:6
+                │    │    └──  column2:5 => a:6
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(6)

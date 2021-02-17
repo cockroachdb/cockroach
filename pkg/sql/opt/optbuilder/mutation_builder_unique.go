@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -129,12 +130,11 @@ type uniqueCheckHelper struct {
 	// uniqueOrdinals are the table ordinals of the unique columns in the table
 	// that is being mutated. They correspond 1-to-1 to the columns in the
 	// UniqueConstraint.
-	uniqueOrdinals []int
+	uniqueOrdinals util.FastIntSet
 
-	// uniqueAndPrimaryKeyOrdinals includes all the ordinals from uniqueOrdinals,
-	// plus the ordinals from any primary key columns that are not already
-	// included in uniqueOrdinals.
-	uniqueAndPrimaryKeyOrdinals []int
+	// primaryKeyOrdinals includes the ordinals from any primary key columns
+	// that are not included in uniqueOrdinals.
+	primaryKeyOrdinals util.FastIntSet
 }
 
 // init initializes the helper with a unique constraint.
@@ -150,15 +150,18 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 		uniqueOrdinal: uniqueOrdinal,
 	}
 
-	uniqueCount := h.unique.ColumnCount()
-
 	var uniqueOrds util.FastIntSet
-	for i := 0; i < uniqueCount; i++ {
+	for i, n := 0, h.unique.ColumnCount(); i < n; i++ {
 		uniqueOrds.Add(h.unique.ColumnOrdinal(mb.tab, i))
 	}
 
 	// Find the primary key columns that are not part of the unique constraint.
 	// If there aren't any, we don't need a check.
+	// TODO(mgartner): We also don't need a check if there exists a unique index
+	// with columns that are a subset of the unique constraint columns.
+	// Similarly, we don't need a check for a partial unique constraint if there
+	// exists a non-partial unique constraint with columns that are a subset of
+	// the partial unique constrain columns.
 	primaryOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
 	primaryOrds.DifferenceWith(uniqueOrds)
 	if primaryOrds.Empty() {
@@ -167,13 +170,13 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 		return false
 	}
 
-	h.uniqueAndPrimaryKeyOrdinals = append(uniqueOrds.Ordered(), primaryOrds.Ordered()...)
-	h.uniqueOrdinals = h.uniqueAndPrimaryKeyOrdinals[:uniqueCount]
+	h.uniqueOrdinals = uniqueOrds
+	h.primaryKeyOrdinals = primaryOrds
 
 	// Check if we are setting NULL values for the unique columns, like when this
 	// mutation is the result of a SET NULL cascade action.
 	numNullCols := 0
-	for _, tabOrd := range h.uniqueOrdinals {
+	for tabOrd, ok := h.uniqueOrdinals.Next(0); ok; tabOrd, ok = h.uniqueOrdinals.Next(tabOrd + 1) {
 		colID := mb.mapToReturnColID(tabOrd)
 		if memo.OutputColumnIsAlwaysNull(mb.outScope.expr, colID) {
 			numNullCols++
@@ -189,32 +192,54 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 // table. The input to the insertion check will be produced from the input to
 // the mutation operator.
 func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
-	checkInput, withScanCols, _ := h.mb.makeCheckInputScan(
-		checkInputScanNewVals, h.uniqueAndPrimaryKeyOrdinals,
-	)
-
-	numCols := len(withScanCols)
 	f := h.mb.b.factory
 
 	// Build a self semi-join, with the new values on the left and the
 	// existing values on the right.
+	scanScope, ordinals := h.buildTableScan()
 
-	scanScope, _ := h.buildTableScan()
+	withScanScope, _ := h.mb.buildCheckInputScan(
+		checkInputScanNewVals, ordinals,
+	)
 
 	// Build the join filters:
 	//   (new_a = existing_a) AND (new_b = existing_b) AND ...
 	//
-	// Set the capacity to len(h.uniqueOrdinals)+1 since we'll have an equality
+	// Set the capacity to h.uniqueOrdinals.Len()+1 since we'll have an equality
 	// condition for each column in the unique constraint, plus one additional
-	// condition to prevent rows from matching themselves (see below).
-	semiJoinFilters := make(memo.FiltersExpr, 0, len(h.uniqueOrdinals)+1)
-	for i := 0; i < len(h.uniqueOrdinals); i++ {
+	// condition to prevent rows from matching themselves (see below). If the
+	// constraint is partial, add 2 to account for filtering both the WithScan
+	// and the Scan by the partial unique constraint predicate.
+	numFilters := h.uniqueOrdinals.Len() + 1
+	_, isPartial := h.unique.Predicate()
+	if isPartial {
+		numFilters += 2
+	}
+	semiJoinFilters := make(memo.FiltersExpr, 0, numFilters)
+	for i, ok := h.uniqueOrdinals.Next(0); ok; i, ok = h.uniqueOrdinals.Next(i + 1) {
 		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(
 			f.ConstructEq(
-				f.ConstructVariable(withScanCols[i]),
+				f.ConstructVariable(withScanScope.cols[i].id),
 				f.ConstructVariable(scanScope.cols[i].id),
 			),
 		))
+	}
+
+	// If the unique constraint is partial, we need to filter out inserted rows
+	// that don't satisfy the predicate. We also need to make sure that rows do
+	// not match existing rows in the the table that do not satisfy the
+	// predicate. So we add the predicate as a filter on both the WithScan
+	// columns and the Scan columns.
+	if isPartial {
+		pred := h.mb.parseUniqueConstraintPredicateExpr(h.uniqueOrdinal)
+
+		typedPred := withScanScope.resolveAndRequireType(pred, types.Bool)
+		withScanPred := h.mb.b.buildScalar(typedPred, withScanScope, nil, nil, nil)
+		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(withScanPred))
+
+		typedPred = scanScope.resolveAndRequireType(pred, types.Bool)
+		scanPred := h.mb.b.buildScalar(typedPred, scanScope, nil, nil, nil)
+		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(scanPred))
 	}
 
 	// We need to prevent rows from matching themselves in the semi join. We can
@@ -222,9 +247,9 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	// two rows are identical:
 	//    (new_pk1 != existing_pk1) OR (new_pk2 != existing_pk2) OR ...
 	var pkFilter opt.ScalarExpr
-	for i := len(h.uniqueOrdinals); i < numCols; i++ {
+	for i, ok := h.primaryKeyOrdinals.Next(0); ok; i, ok = h.primaryKeyOrdinals.Next(i + 1) {
 		pkFilterLocal := f.ConstructNe(
-			f.ConstructVariable(withScanCols[i]),
+			f.ConstructVariable(withScanScope.cols[i].id),
 			f.ConstructVariable(scanScope.cols[i].id),
 		)
 		if pkFilter == nil {
@@ -235,27 +260,38 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	}
 	semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(pkFilter))
 
-	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
+	semiJoin := f.ConstructSemiJoin(withScanScope.expr, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
+
+	// Collect the key columns that will be shown in the error message if there
+	// is a duplicate key violation resulting from this uniqueness check.
+	keyCols := make(opt.ColList, 0, h.uniqueOrdinals.Len())
+	for i, ok := h.uniqueOrdinals.Next(0); ok; i, ok = h.uniqueOrdinals.Next(i + 1) {
+		keyCols = append(keyCols, withScanScope.cols[i].id)
+	}
 
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
-		// uniqueOrdinals is always a prefix of uniqueAndPrimaryKeyOrdinals, which
-		// maps 1-to-1 to the columns in withScanCols. The remaining columns are
-		// primary key columns and should not be included in the KeyCols.
-		KeyCols: withScanCols[:len(h.uniqueOrdinals)],
-		OpName:  h.mb.opName,
+		KeyCols:      keyCols,
+		OpName:       h.mb.opName,
 	})
 }
 
-// buildTableScan builds a Scan of the table.
-func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, tabMeta *opt.TableMeta) {
-	tabMeta = h.mb.b.addTable(h.mb.tab, tree.NewUnqualifiedTableName(h.mb.tab.Name()))
+// buildTableScan builds a Scan of the table. The ordinals of the columns
+// scanned are also returned.
+func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
+	tabMeta := h.mb.b.addTable(h.mb.tab, tree.NewUnqualifiedTableName(h.mb.tab.Name()))
+	ordinals = tableOrdinals(tabMeta.Table, columnKinds{
+		includeMutations:       false,
+		includeSystem:          false,
+		includeVirtualInverted: false,
+		includeVirtualComputed: true,
+	})
 	return h.mb.b.buildScan(
 		tabMeta,
-		h.uniqueAndPrimaryKeyOrdinals,
+		ordinals,
 		nil, /* indexFlags */
 		noRowLocking,
 		h.mb.b.allocScope(),
-	), tabMeta
+	), ordinals
 }

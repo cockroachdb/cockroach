@@ -507,7 +507,7 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 }
 
 // colSet returns a ColSet of all the columns in this scope,
-// excluding orderByCols.
+// excluding extraCols.
 func (s *scope) colSet() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range s.cols {
@@ -524,6 +524,16 @@ func (s *scope) colSetWithExtraCols() opt.ColSet {
 		colSet.Add(s.extraCols[i].id)
 	}
 	return colSet
+}
+
+// colList returns a ColList of all the columns in this scope,
+// excluding extraCols.
+func (s *scope) colList() opt.ColList {
+	colList := make(opt.ColList, len(s.cols))
+	for i := range s.cols {
+		colList[i] = s.cols[i].id
+	}
+	return colList
 }
 
 // hasSameColumns returns true if this scope has the same columns

@@ -1336,12 +1336,12 @@ upsert transactiondetails
  ├── columns: <none>
  ├── arbiter indexes: detailsprimarykey
  ├── canary column: transactiondetails.dealerid:26
- ├── fetch columns: transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondate:28 cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ ├── fetch columns: transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
  ├── insert-mapping:
  │    ├── "?column?":14 => transactiondetails.dealerid:2
  │    ├── bool:15 => transactiondetails.isbuy:3
- │    ├── current_timestamp:16 => transactiondate:4
- │    ├── int8:17 => cardid:5
+ │    ├── current_timestamp:16 => transactiondetails.transactiondate:4
+ │    ├── int8:17 => transactiondetails.cardid:5
  │    ├── int8:18 => quantity:6
  │    ├── sellprice:23 => transactiondetails.sellprice:7
  │    ├── buyprice:24 => transactiondetails.buyprice:8
@@ -1355,13 +1355,13 @@ upsert transactiondetails
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39 upsert_cardid:40 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondate:28 cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39 upsert_cardid:40 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
  │    ├── cardinality: [1 - 2]
  │    ├── volatile
  │    ├── key: (17,18)
  │    ├── fd: ()-->(14-16,25), (17,18)-->(21,23,24,26-35), (26-30)-->(31-35), (26)-->(37), (26,27)-->(38), (26,28)-->(39), (17,26,29)-->(40)
  │    ├── left-join (lookup transactiondetails)
- │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondate:28 cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
  │    │    ├── key columns: [14 15 16 17 18] = [26 27 28 29 30]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [1 - 2]
@@ -1415,33 +1415,33 @@ upsert transactiondetails
  │    └── projections
  │         ├── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN "?column?":14 ELSE transactiondetails.dealerid:26 END [as=upsert_dealerid:37, outer=(14,26)]
  │         ├── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN bool:15 ELSE transactiondetails.isbuy:27 END [as=upsert_isbuy:38, outer=(15,26,27)]
- │         ├── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN current_timestamp:16 ELSE transactiondate:28 END [as=upsert_transactiondate:39, outer=(16,26,28)]
- │         └── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN int8:17 ELSE cardid:29 END [as=upsert_cardid:40, outer=(17,26,29)]
+ │         ├── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN current_timestamp:16 ELSE transactiondetails.transactiondate:28 END [as=upsert_transactiondate:39, outer=(16,26,28)]
+ │         └── CASE WHEN transactiondetails.dealerid:26 IS NULL THEN int8:17 ELSE transactiondetails.cardid:29 END [as=upsert_cardid:40, outer=(17,26,29)]
  └── f-k-checks
       ├── f-k-checks-item: transactiondetails(dealerid,isbuy,transactiondate) -> transactions(dealerid,isbuy,date)
       │    └── anti-join (lookup transactions)
-      │         ├── columns: upsert_dealerid:43 upsert_isbuy:44 upsert_transactiondate:45
+      │         ├── columns: dealerid:43 isbuy:44 transactiondate:45
       │         ├── key columns: [43 44 45] = [46 47 48]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 2]
       │         ├── with-scan &2
-      │         │    ├── columns: upsert_dealerid:43 upsert_isbuy:44 upsert_transactiondate:45
+      │         │    ├── columns: dealerid:43 isbuy:44 transactiondate:45
       │         │    ├── mapping:
-      │         │    │    ├──  upsert_dealerid:37 => upsert_dealerid:43
-      │         │    │    ├──  upsert_isbuy:38 => upsert_isbuy:44
-      │         │    │    └──  upsert_transactiondate:39 => upsert_transactiondate:45
+      │         │    │    ├──  upsert_dealerid:37 => dealerid:43
+      │         │    │    ├──  upsert_isbuy:38 => isbuy:44
+      │         │    │    └──  upsert_transactiondate:39 => transactiondate:45
       │         │    └── cardinality: [1 - 2]
       │         └── filters (true)
       └── f-k-checks-item: transactiondetails(cardid) -> cards(id)
            └── anti-join (lookup cards)
-                ├── columns: upsert_cardid:56
+                ├── columns: cardid:56
                 ├── key columns: [56] = [57]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── with-scan &2
-                │    ├── columns: upsert_cardid:56
+                │    ├── columns: cardid:56
                 │    ├── mapping:
-                │    │    └──  upsert_cardid:40 => upsert_cardid:56
+                │    │    └──  upsert_cardid:40 => cardid:56
                 │    └── cardinality: [1 - 2]
                 └── filters (true)
 
