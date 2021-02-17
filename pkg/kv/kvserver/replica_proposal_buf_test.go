@@ -158,6 +158,7 @@ func newPropData(leaseReq bool) (*ProposalData, []byte) {
 		ba.Add(&roachpb.PutRequest{})
 	}
 	return &ProposalData{
+		ctx:     context.Background(),
 		command: &kvserverpb.RaftCommand{},
 		Request: &ba,
 	}, make([]byte, 0, kvserverpb.MaxRaftCommandFooterSize())
