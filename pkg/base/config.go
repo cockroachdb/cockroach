@@ -560,6 +560,10 @@ type ExternalIODirConfig struct {
 	// This turns off implicit credentials, and requires the user to provide
 	// necessary access keys.
 	DisableImplicitCredentials bool
+
+	// DisableOutbound disables the use of any external-io that dials out such as
+	// to s3, gcs, or even `nodelocal` as it may need to dial another node.
+	DisableOutbound bool
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
