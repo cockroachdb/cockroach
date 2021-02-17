@@ -52,7 +52,7 @@ type IndexContentionEvents struct {
 func (m *IndexContentionEvents) Reset()      { *m = IndexContentionEvents{} }
 func (*IndexContentionEvents) ProtoMessage() {}
 func (*IndexContentionEvents) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_38bb230587b267d1, []int{0}
+	return fileDescriptor_contention_c4b958fee1c9da1f, []int{0}
 }
 func (m *IndexContentionEvents) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -85,13 +85,16 @@ type SingleKeyContention struct {
 	// Txns are all contending transactions that we kept track of. Note that some
 	// transactions could have been forgotten since we're keeping a limited LRU
 	// cache of them.
+	//
+	// The transactions are ordered by the number of times they were encountered
+	// in DESC order (i.e. most frequent first).
 	Txns []SingleKeyContention_SingleTxnContention `protobuf:"bytes,2,rep,name=txns,proto3" json:"txns"`
 }
 
 func (m *SingleKeyContention) Reset()      { *m = SingleKeyContention{} }
 func (*SingleKeyContention) ProtoMessage() {}
 func (*SingleKeyContention) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_38bb230587b267d1, []int{1}
+	return fileDescriptor_contention_c4b958fee1c9da1f, []int{1}
 }
 func (m *SingleKeyContention) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -131,7 +134,7 @@ func (m *SingleKeyContention_SingleTxnContention) Reset() {
 }
 func (*SingleKeyContention_SingleTxnContention) ProtoMessage() {}
 func (*SingleKeyContention_SingleTxnContention) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_38bb230587b267d1, []int{1, 0}
+	return fileDescriptor_contention_c4b958fee1c9da1f, []int{1, 0}
 }
 func (m *SingleKeyContention_SingleTxnContention) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -847,10 +850,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/contentionpb/contention.proto", fileDescriptor_contention_38bb230587b267d1)
+	proto.RegisterFile("sql/contentionpb/contention.proto", fileDescriptor_contention_c4b958fee1c9da1f)
 }
 
-var fileDescriptor_contention_38bb230587b267d1 = []byte{
+var fileDescriptor_contention_c4b958fee1c9da1f = []byte{
 	// 520 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x52, 0x3f, 0x6f, 0xd3, 0x40,
 	0x14, 0xb7, 0xf3, 0x5f, 0xd7, 0xb0, 0xb8, 0xad, 0x14, 0x32, 0xd8, 0xa1, 0x53, 0xa6, 0x33, 0x4a,
