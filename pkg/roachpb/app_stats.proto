@@ -168,6 +168,7 @@ message StatementStatisticsKey {
   optional bool opt = 5 [(gogoproto.nullable) = false];
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
+  optional bool full_scan = 8 [(gogoproto.nullable) = false];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some
