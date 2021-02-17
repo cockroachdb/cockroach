@@ -5,18 +5,11 @@ def stringer(src, typ, name):
       name = name,
       srcs = [src], # Accessed below using `$<`.
       outs = [typ.lower() + "_string.go"],
-      # golang.org/x/tools executes commands via
-      # golang.org/x/sys/execabs which requires all PATH lookups to
-      # result in absolute paths. To account for this, we resolve the
-      # relative path returned by location to an absolute path.
       cmd = """
-         GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
-         GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
-         env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
-         $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type={} $<
+         HOME=$$TMPDIR/gohome \
+           $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type={} $<
       """.format(typ),
       tools = [
-         "@go_sdk//:bin/go",
          "@org_golang_x_tools//cmd/stringer",
        ],
    )
