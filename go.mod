@@ -137,7 +137,7 @@ require (
 	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/sasha-s/go-deadlock v0.2.0
-	github.com/shirou/gopsutil v2.20.6+incompatible
+	github.com/shirou/gopsutil v2.20.9+incompatible
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
