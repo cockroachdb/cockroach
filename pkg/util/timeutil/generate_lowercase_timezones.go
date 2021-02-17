@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -69,6 +70,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error parsing tzdata: %+v", err)
 	}
+	sort.Strings(zones)
 
 	of, err := os.Create(fileName)
 	if err != nil {
