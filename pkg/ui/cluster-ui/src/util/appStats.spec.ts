@@ -105,6 +105,7 @@ describe("flattenStatementStats", () => {
             distSQL: true,
             vec: false,
             opt: true,
+            full_scan: true,
             failed: false,
           },
           node_id: 1,
@@ -119,6 +120,7 @@ describe("flattenStatementStats", () => {
             distSQL: false,
             vec: false,
             opt: false,
+            full_scan: false,
             failed: true,
           },
           node_id: 2,
@@ -137,6 +139,7 @@ describe("flattenStatementStats", () => {
       assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
       assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
       assert.equal(flattened[i].opt, stats[i].key.key_data.opt);
+      assert.equal(flattened[i].full_scan, stats[i].key.key_data.full_scan);
       assert.equal(flattened[i].failed, stats[i].key.key_data.failed);
       assert.equal(flattened[i].node_id, stats[i].key.node_id);
 
