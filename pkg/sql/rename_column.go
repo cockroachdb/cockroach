@@ -250,6 +250,16 @@ func (p *planner) renameColumn(
 		}
 	}
 
+	// Rename the REGIONAL BY ROW column reference.
+	if tableDesc.IsLocalityRegionalByRow() {
+		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return false, err
+		}
+		if rbrColName == *oldName {
+			tableDesc.SetTableLocalityRegionalByRow(*newName)
+		}
+	}
 	return true, nil
 }
 
