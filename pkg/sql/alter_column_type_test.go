@@ -278,7 +278,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE INT;
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
 		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(desc.GetMutations()) != 0 {
+		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}
 		return nil

@@ -22,11 +22,9 @@ var _ catalog.Index = (*index)(nil)
 // index implements the catalog.Index interface by wrapping the protobuf index
 // descriptor along with some metadata from its parent table descriptor.
 type index struct {
-	desc              *descpb.IndexDescriptor
-	ordinal           int
-	mutationID        descpb.MutationID
-	mutationDirection descpb.DescriptorMutation_Direction
-	mutationState     descpb.DescriptorMutation_State
+	maybeMutation
+	desc    *descpb.IndexDescriptor
+	ordinal int
 }
 
 // IndexDesc returns the underlying protobuf descriptor.
@@ -57,28 +55,7 @@ func (w index) Primary() bool {
 
 // Public returns true iff the index is active, i.e. readable.
 func (w index) Public() bool {
-	return w.mutationState == descpb.DescriptorMutation_UNKNOWN
-}
-
-// Adding returns true iff the index is an add mutation in the table descriptor.
-func (w index) Adding() bool {
-	return w.mutationDirection == descpb.DescriptorMutation_ADD
-}
-
-// Dropped returns true iff the index is a drop mutation in the table descriptor.
-func (w index) Dropped() bool {
-	return w.mutationDirection == descpb.DescriptorMutation_DROP
-}
-
-// WriteAndDeleteOnly returns true iff the index is a mutation in the
-// delete-and-write-only state.
-func (w index) WriteAndDeleteOnly() bool {
-	return w.mutationState == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-}
-
-// DeleteOnly returns true iff the index is a mutation in the delete-only state.
-func (w index) DeleteOnly() bool {
-	return w.mutationState == descpb.DescriptorMutation_DELETE_ONLY
+	return !w.IsMutation()
 }
 
 // GetID returns the index ID.
@@ -328,43 +305,36 @@ type indexCache struct {
 
 // newIndexCache returns a fresh fully-populated indexCache struct for the
 // TableDescriptor.
-func newIndexCache(desc *descpb.TableDescriptor) *indexCache {
+func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *indexCache {
 	c := indexCache{}
-	// Build a slice of structs to back the interfaces in c.all.
+	// Build a slice of structs to back the public interfaces in c.all.
 	// This is better than allocating memory once per struct.
-	backingStructs := make([]index, 1+len(desc.Indexes), 1+len(desc.Indexes)+len(desc.Mutations))
+	numPublic := 1 + len(desc.Indexes)
+	backingStructs := make([]index, numPublic)
 	backingStructs[0] = index{desc: &desc.PrimaryIndex}
 	for i := range desc.Indexes {
 		backingStructs[i+1] = index{desc: &desc.Indexes[i], ordinal: i + 1}
 	}
-	for _, m := range desc.Mutations {
-		if idxDesc := m.GetIndex(); idxDesc != nil {
-			idx := index{
-				desc:              idxDesc,
-				ordinal:           len(backingStructs),
-				mutationID:        m.MutationID,
-				mutationState:     m.State,
-				mutationDirection: m.Direction,
-			}
-			backingStructs = append(backingStructs, idx)
-		}
-	}
-	// Populate the c.all slice with index interfaces.
-	c.all = make([]catalog.Index, len(backingStructs))
+	// Populate the c.all slice with Index interfaces.
+	numMutations := len(mutations.indexes)
+	c.all = make([]catalog.Index, numPublic, numPublic+numMutations)
 	for i := range backingStructs {
 		c.all[i] = &backingStructs[i]
 	}
-	// Populate the remaining fields.
+	for _, m := range mutations.indexes {
+		c.all = append(c.all, m.AsIndex())
+	}
+	// Populate the remaining fields in c.
 	c.primary = c.all[0]
-	c.active = c.all[:1+len(desc.Indexes)]
+	c.active = c.all[:numPublic]
 	c.publicNonPrimary = c.active[1:]
 	c.deletableNonPrimary = c.all[1:]
-	if len(c.active) == len(c.all) {
+	if numMutations == 0 {
 		c.writableNonPrimary = c.publicNonPrimary
 	} else {
 		for _, idx := range c.deletableNonPrimary {
 			if idx.DeleteOnly() {
-				lazyAllocAppendIndex(&c.deleteOnlyNonPrimary, idx, len(c.all)-len(c.active))
+				lazyAllocAppendIndex(&c.deleteOnlyNonPrimary, idx, numMutations)
 			} else {
 				lazyAllocAppendIndex(&c.writableNonPrimary, idx, len(c.deletableNonPrimary))
 			}
