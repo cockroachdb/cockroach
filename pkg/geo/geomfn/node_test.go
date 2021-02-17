@@ -96,6 +96,18 @@ func TestNode(t *testing.T) {
 			geo.Geometry{},
 			true,
 		},
+		{
+			"EMPTY LineString",
+			geo.MustParseGeometry("SRID=4326;LINESTRING EMPTY"),
+			geo.MustParseGeometry("SRID=4326;GEOMETRYCOLLECTION EMPTY"),
+			false,
+		},
+		{
+			"EMPTY MultiLineString",
+			geo.MustParseGeometry("SRID=4326;MULTILINESTRING EMPTY"),
+			geo.MustParseGeometry("SRID=4326;GEOMETRYCOLLECTION EMPTY"),
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
