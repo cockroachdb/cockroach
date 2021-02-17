@@ -19,10 +19,10 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-
 export interface StatementsSummaryData {
   statement: string;
   implicitTxn: boolean;
+  fullScan: boolean;
   stats: StatementStatistics[];
 }
 
@@ -143,6 +143,7 @@ export const selectStatements = createSelector(
         statsByStatementAndImplicitTxn[key] = {
           statement: stmt.statement,
           implicitTxn: stmt.implicit_txn,
+          fullScan: stmt.full_scan,
           stats: [],
         };
       }
@@ -154,6 +155,7 @@ export const selectStatements = createSelector(
       return {
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
+        fullScan: stmt.fullScan,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };

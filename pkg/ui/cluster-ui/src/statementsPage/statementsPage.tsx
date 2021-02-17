@@ -71,6 +71,7 @@ export interface StatementsPageState {
   sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
+  fullScan: boolean;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
@@ -97,6 +98,7 @@ export class StatementsPage extends React.Component<
         current: 1,
       },
       search: "",
+      fullScan: false,
     };
 
     const stateFromHistory = this.getStateFromHistory();
@@ -214,13 +216,19 @@ export class StatementsPage extends React.Component<
   filteredStatementsData = () => {
     const { search } = this.state;
     const { statements } = this.props;
-    return statements.filter(statement =>
-      search
-        .split(" ")
-        .every(val =>
-          statement.label.toLowerCase().includes(val.toLowerCase()),
-        ),
-    );
+    return statements
+      .filter(statement => (this.state.fullScan ? statement.fullScan : true))
+      .filter(statement =>
+        search
+          .split(" ")
+          .every(val =>
+            statement.label.toLowerCase().includes(val.toLowerCase()),
+          ),
+      );
+  };
+
+  fullScanChange = () => {
+    this.setState({ fullScan: !this.state.fullScan });
   };
 
   renderLastCleared = () => {
@@ -264,6 +272,20 @@ export class StatementsPage extends React.Component<
                 {`App: ${decodeURIComponent(currentOption.name)}`}
               </Text>
             </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
+            <div>
+              <input
+                type="checkbox"
+                id="full-table-scan-toggle"
+                defaultChecked={this.state.fullScan}
+                onChange={this.fullScanChange}
+              />
+              <label htmlFor="full-table-scan-toggle">
+                {"  "} Only show statements that contain queries with full table
+                scans
+              </label>
+            </div>
           </PageConfigItem>
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
