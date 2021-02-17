@@ -252,6 +252,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 			DiskMonitor: testDiskMonitor,
 		},
 	}
+	rng, _ := randutil.NewPseudoRand()
 
 	// Use the Bytes type because we can control the size of values with it
 	// easily.
@@ -260,14 +261,14 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
-	// TODO(yuzefovich): randomize some of these values once the memory
-	// accounting is as expected.
-	numInMemoryBufferedBatches := 8
+	numInMemoryBufferedBatches := 8 + rng.Intn(4)
 	// numNewPartitions determines the expected number of partitions created as
 	// a result of consuming the input (i.e. not as a result of the repeated
 	// merging).
-	numNewPartitions := 4
+	numNewPartitions := 4 + rng.Intn(3)
 	numTotalBatches := numInMemoryBufferedBatches * numNewPartitions
 	batchLength := coldata.BatchSize()
 	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, batchLength)
@@ -279,13 +280,16 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		batch.ColVec(0).Bytes().Set(i, singleTupleValue)
 	}
 	batch.SetLength(batchLength)
-	memoryLimit := colmem.GetBatchMemSize(batch) * int64(numInMemoryBufferedBatches)
+	numFDs := ExternalSorterMinPartitions + rng.Intn(3)
+	// The memory limit in the external sorter is divided as follows:
+	// - BufferSizeBytes for each of the disk queues is subtracted right away
+	// - the remaining part is divided evenly between the sorter and the merger.
+	memoryLimit := 2*colmem.GetBatchMemSize(batch)*int64(numInMemoryBufferedBatches) + int64(queueCfg.BufferSizeBytes*numFDs)
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 	input := newFiniteBatchSource(batch, typs, numTotalBatches)
 
 	var spilled bool
-	// TODO(yuzefovich): randomize number of available FDs.
-	sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+	sem := colexecbase.NewTestingSemaphore(numFDs)
 	sorter, accounts, monitors, closers, err := createDiskBackedSorter(
 		ctx, flowCtx, []colexecbase.Operator{input}, typs, ordCols,
 		0 /* matchLen */, 0 /* k */, func() { spilled = true },
@@ -298,25 +302,26 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	sorter.Init()
 	for b := sorter.Next(ctx); b.Length() > 0; b = sorter.Next(ctx) {
 	}
-	require.NoError(t, closers[0].Close(ctx))
+	for _, c := range closers {
+		require.NoError(t, c.Close(ctx))
+	}
 
 	require.True(t, spilled)
 	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
 
-	// In the ideal world, given the limit in the semaphore, we expect that each
-	// newly created partition contains about numInMemoryBufferedBatches number
-	// of batches with only the partition that is the result of the repeated
-	// merge growing with count as a multiple of numInMemoryBufferedBatches
-	// (first merge = 2x, second merge = 3x, third merge 4x, etc, so we expect
-	// 2*numNewPartitions-1 partitions).
 	externalSorter := sorter.(*diskSpillerBase).diskBackedOp.(*externalSorter)
 	numPartitionsCreated := externalSorter.firstPartitionIdx + externalSorter.numPartitions
-	expMinTotalPartitionsCreated := 2*numNewPartitions - 1
-	// Because of some issues we might create more partitions than we would
-	// expect (depending on the batch size if numNewPartitions is 4, then we
-	// will create from 7 (large batch size) to 15 (batch size of 4)).
-	// The formula below might not apply if we change numNewPartitions.
-	expMaxTotalPartitionsCreated := 4*numNewPartitions - 1
+	// This maximum can be achieved when we have minimum required number of FDs
+	// as follows: we expect that each newly created partition contains about
+	// numInMemoryBufferedBatches number of batches with only the partition that
+	// is the result of the repeated merge growing with count as a multiple of
+	// numInMemoryBufferedBatches (first merge = 2x, second merge = 3x, third
+	// merge 4x, etc, so we expect 2*numNewPartitions-1 partitions).
+	expMaxTotalPartitionsCreated := 2*numNewPartitions - 1
+	// Because of our "after the fact" memory accounting, we might create less
+	// partitions than maximum defined above (e.g., if numNewPartitions is 5,
+	// then we will create 5 partitions when batch size is 3).
+	expMinTotalPartitionsCreated := numNewPartitions
 	require.GreaterOrEqualf(t, numPartitionsCreated, expMinTotalPartitionsCreated,
 		"didn't create enough partitions: actual %d, min expected %d",
 		numPartitionsCreated, expMinTotalPartitionsCreated,
@@ -339,17 +344,12 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	}
 	// We cannot guarantee a fixed value, so we use an allowed range.
 	//
-	// In an ideal world:
-	// - all of the memory would be accounted for (this is not done at the
-	//   moment)
-	// - no memory is double-counted
-	// - the reported usage is very close to 2 x memoryLimit (the monitor for
-	//   the in-memory sorter reports slightly below and the monitor for the
-	//   external sorter reports slightly above memoryLimit usage).
-	// TODO(yuzefovich): fix known deficiencies of the memory accounting and
-	// tighten the bounds.
+	// In an ideal world the reported usage is very close to 2 x memoryLimit
+	// (the monitor for the in-memory sorter reports slightly below and the
+	// monitors for the external sorter report slightly above memoryLimit
+	// usage).
 	expMin := memoryLimit * 3 / 2
-	expMax := memoryLimit * 3
+	expMax := memoryLimit * 5 / 2
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
