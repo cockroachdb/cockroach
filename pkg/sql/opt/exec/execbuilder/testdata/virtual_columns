@@ -1365,3 +1365,70 @@ vectorized: true
       estimated row count: 60 (missing stats)
       table: checks@checks_v_b_idx
       spans: /0/10-/0/16 /1/10-/1/16 /2/10-/2/16 /3/10-/3/16
+
+subtest InvertedIndexes
+
+statement ok
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  iv INT AS (i + 10) VIRTUAL,
+  jv JSON AS (j->'a') VIRTUAL,
+  INVERTED INDEX jv_idx (jv),
+  INVERTED INDEX i_jv_idx (i, jv),
+  INVERTED INDEX iv_j_idx (iv, j),
+  INVERTED INDEX iv_jv_idx (iv, jv)
+)
+
+# Verify that we use jv_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 111 (missing stats)
+  table: inv@jv_idx
+  spans: /"a"/"b"-/"a"/"b"/PrefixEnd
+
+# Verify that we use i_jv_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE i IN (10, 20, 30) AND jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@i_jv_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Verify that we use iv_j_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND j @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@iv_j_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Verify that we use iv_jv_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@iv_jv_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd

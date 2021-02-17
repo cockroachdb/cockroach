@@ -772,3 +772,108 @@ ALTER TABLE sc ADD COLUMN w INT AS (a*b) VIRTUAL CHECK (w <= 100)
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO sc VALUES (20, 20)
+
+# Test inverted indexes on virtual columns.
+subtest InvertedIndexes
+
+statement ok
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  iv INT AS (i + 10) VIRTUAL,
+  jv JSON AS (j->'a') VIRTUAL,
+  INVERTED INDEX jv_idx (jv),
+  INVERTED INDEX i_jv_idx (i, jv),
+  INVERTED INDEX iv_j_idx (iv, j),
+  INVERTED INDEX iv_jv_idx (iv, jv)
+)
+
+statement ok
+INSERT INTO inv VALUES
+  (1, 10, NULL),
+  (2, 10, '1'),
+  (3, 10, '"a"'),
+  (4, 10, 'true'),
+  (5, 10, 'null'),
+  (6, 10, '{}'),
+  (7, 10, '[]'),
+  (8, 10, '{"a": "b"}'),
+  (9, 10, '{"a": "b", "c": "d"}'),
+  (10, 10, '{"a": {}, "b": "c"}'),
+  (11, 10, '{"a": {"b": "c"}, "d": "e"}'),
+  (12, 10, '{"a": {"b": "c", "d": "e"}}'),
+  (13, 10, '{"a": [], "d": "e"}'),
+  (14, 10, '{"a": ["b", "c"], "d": "e"}'),
+  (15, 10, '["a"]'),
+  (16, 10, '["a", "b", "c"]'),
+  (17, 10, '[{"a": "b"}, "c"]')
+
+statement ok
+INSERT INTO inv
+SELECT k+17, 20, j FROM inv
+
+query IT
+SELECT k, jv FROM inv@jv_idx WHERE jv @> '{"b": "c"}' ORDER BY k
+----
+11  {"b": "c"}
+12  {"b": "c", "d": "e"}
+28  {"b": "c"}
+29  {"b": "c", "d": "e"}
+
+query IT
+SELECT k, jv FROM inv@jv_idx WHERE jv->'b' = '"c"' ORDER BY k
+----
+11  {"b": "c"}
+12  {"b": "c", "d": "e"}
+28  {"b": "c"}
+29  {"b": "c", "d": "e"}
+
+query IT
+SELECT k, jv FROM inv@jv_idx WHERE jv @> '"b"' ORDER BY k
+----
+8   "b"
+9   "b"
+14  ["b", "c"]
+25  "b"
+26  "b"
+31  ["b", "c"]
+
+query IIT
+SELECT k, i, jv FROM inv@i_jv_idx WHERE i IN (10, 20, 30) AND jv @> '{"b": "c"}' ORDER BY k
+----
+11  10  {"b": "c"}
+12  10  {"b": "c", "d": "e"}
+28  20  {"b": "c"}
+29  20  {"b": "c", "d": "e"}
+
+query IIT
+SELECT k, i, jv FROM inv@i_jv_idx WHERE i = 20 AND jv @> '{"b": "c"}' ORDER BY k
+----
+28  20  {"b": "c"}
+29  20  {"b": "c", "d": "e"}
+
+query IIT
+SELECT k, iv, j FROM inv@iv_j_idx WHERE iv IN (10, 20, 30) AND j @> '{"b": "c"}' ORDER BY k
+----
+10  20  {"a": {}, "b": "c"}
+27  30  {"a": {}, "b": "c"}
+
+query IIT
+SELECT k, iv, j FROM inv@iv_j_idx WHERE iv = 20 AND j @> '{"b": "c"}' ORDER BY k
+----
+10  20  {"a": {}, "b": "c"}
+
+query IIT
+SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv IN (10, 20, 30) AND jv @> '{"b": "c"}' ORDER BY k
+----
+11  20  {"b": "c"}
+12  20  {"b": "c", "d": "e"}
+28  30  {"b": "c"}
+29  30  {"b": "c", "d": "e"}
+
+query IIT
+SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv = 20 AND jv @> '{"b": "c"}' ORDER BY k
+----
+11  20  {"b": "c"}
+12  20  {"b": "c", "d": "e"}
