@@ -26,10 +26,12 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/sql/contentionpb",
         "//pkg/storage/enginepb",
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
+        "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

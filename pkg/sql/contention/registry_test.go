@@ -20,10 +20,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -51,10 +53,14 @@ import (
 // evcheck tableid=1 indexid=1 key=key txnid=b duration=2
 // ----
 // < Registry b as string >
+//
+// # Merge two registries into one and verify state.
+// merge first=a second=b
+// ----
+// < Merged registries a and b as string >
 func TestRegistry(t *testing.T) {
 	uuidMap := make(map[string]uuid.UUID)
-	testFriendlyRegistryString := func(r *Registry) string {
-		stringRepresentation := r.String()
+	testFriendlyRegistryString := func(stringRepresentation string) string {
 		// Swap out all UUIDs for corresponding test-friendly IDs.
 		for friendlyID, txnID := range uuidMap {
 			stringRepresentation = strings.Replace(stringRepresentation, txnID.String(), friendlyID, -1)
@@ -76,6 +82,24 @@ func TestRegistry(t *testing.T) {
 				registryMap[registryKey] = registry
 			}
 			return d.Expected
+		case "merge":
+			var firstRegistryKey, secondRegistryKey string
+			d.ScanArgs(t, "first", &firstRegistryKey)
+			first, ok := registryMap[firstRegistryKey]
+			if !ok {
+				return fmt.Sprintf("registry %q not found", first)
+			}
+			d.ScanArgs(t, "second", &secondRegistryKey)
+			second, ok := registryMap[secondRegistryKey]
+			if !ok {
+				return fmt.Sprintf("registry %q not found", second)
+			}
+			merged := MergeSerializedRegistries(first.Serialize(), second.Serialize())
+			var b strings.Builder
+			for i := range merged {
+				b.WriteString(merged[i].String())
+			}
+			return testFriendlyRegistryString(b.String())
 		case "ev", "evcheck":
 			var (
 				tableIDStr string
@@ -119,7 +143,7 @@ func TestRegistry(t *testing.T) {
 				return err.Error()
 			}
 			if d.Cmd == "evcheck" {
-				return testFriendlyRegistryString(registry)
+				return testFriendlyRegistryString(registry.String())
 			}
 			return d.Expected
 		default:
@@ -163,4 +187,107 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 		numContentionEvents += v.numContentionEvents
 	})
 	require.Equal(t, uint64(numGoroutines), numContentionEvents)
+}
+
+// TestSerializedRegistryInvariants verifies that the serialized registries
+// maintain all invariants, namely that
+// - all three levels of objects are subject to the respective maximum size
+// - all three levels of objects satisfy the respective ordering
+//   requirements.
+func TestSerializedRegistryInvariants(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+	const sizeLimit = 5
+	const keySpaceSize = sizeLimit * sizeLimit
+	// Use large limit on the number of contention events so that the likelihood
+	// of "collisions" is pretty high.
+	const maxNumContentionEvents = keySpaceSize * keySpaceSize * keySpaceSize
+	indexMapMaxSize := 1 + rng.Intn(sizeLimit)
+	orderedKeyMapMaxSize := 1 + rng.Intn(sizeLimit)
+	maxNumTxns := 1 + rng.Intn(sizeLimit)
+
+	cleanup := setSizeConstants(indexMapMaxSize, orderedKeyMapMaxSize, maxNumTxns)
+	defer cleanup()
+
+	// keySpace defines a continuous byte slice that we will be sub-slicing in
+	// order to get the keys.
+	keySpace := make([]byte, keySpaceSize)
+	_, err := rng.Read(keySpace)
+	require.NoError(t, err)
+	getKey := func() []byte {
+		keyStart := rng.Intn(len(keySpace))
+		keyEnd := keyStart + 1 + rng.Intn(len(keySpace)-keyStart)
+		return keySpace[keyStart:keyEnd]
+	}
+
+	// populateRegistry add a random number of contention events (limited by
+	// maxNumContentionEvents) to r.
+	populateRegistry := func(r *Registry) {
+		numContentionEvents := rng.Intn(maxNumContentionEvents)
+		for i := 0; i < numContentionEvents; i++ {
+			tableID := uint32(1 + rng.Intn(indexMapMaxSize+1))
+			indexID := uint32(1 + rng.Intn(indexMapMaxSize+1))
+			key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+			key = append(key, getKey()...)
+			require.NoError(t, r.AddContentionEvent(roachpb.ContentionEvent{
+				Key: key,
+				TxnMeta: enginepb.TxnMeta{
+					ID:  uuid.MakeV4(),
+					Key: getKey(),
+				},
+				Duration: time.Duration(int64(rng.Uint64())),
+			}))
+		}
+	}
+
+	// checkSerializedRegistryInvariants verifies that all invariants about the
+	// sizes of registries and the ordering of objects at all levels are
+	// maintained.
+	checkSerializedRegistryInvariants := func(ice []contentionpb.IndexContentionEvents) {
+		// Check the total size of the serialized registry.
+		require.GreaterOrEqual(t, indexMapMaxSize, len(ice))
+		for i := range ice {
+			if i > 0 {
+				// Check the ordering of IndexContentionEvents.
+				require.LessOrEqual(t, ice[i].NumContentionEvents, ice[i-1].NumContentionEvents)
+				if ice[i].NumContentionEvents == ice[i-1].NumContentionEvents {
+					require.LessOrEqual(t, int64(ice[i].CumulativeContentionTime), int64(ice[i-1].CumulativeContentionTime))
+				}
+			}
+			// Check the number of contended keys.
+			keys := ice[i].Events
+			require.GreaterOrEqual(t, orderedKeyMapMaxSize, len(keys))
+			for j := range keys {
+				if j > 0 {
+					// Check the ordering of the keys.
+					require.True(t, keys[j].Key.Compare(keys[j-1].Key) >= 0)
+				}
+				// Check the number of contended transactions on this key.
+				txns := keys[j].Txns
+				require.GreaterOrEqual(t, maxNumTxns, len(txns))
+				for k := range txns {
+					if k > 0 {
+						// Check the ordering of the transactions.
+						require.LessOrEqual(t, txns[k].Count, txns[k-1].Count)
+					}
+				}
+			}
+		}
+	}
+
+	createNewSerializedRegistry := func() []contentionpb.IndexContentionEvents {
+		r := NewRegistry()
+		populateRegistry(r)
+		s := r.Serialize()
+		checkSerializedRegistryInvariants(s)
+		return s
+	}
+
+	m := createNewSerializedRegistry()
+
+	const numMerges = 5
+	for i := 0; i < numMerges; i++ {
+		s := createNewSerializedRegistry()
+		m = MergeSerializedRegistries(m, s)
+		checkSerializedRegistryInvariants(m)
+	}
 }
