@@ -189,8 +189,8 @@ func deserializeExprForFormatting(
 		return nil, err
 	}
 
-	// Replace sequence regclasses with their fully qualified names.
-	seqReplacedExpr, err := replaceWithSequenceNames(ctx, expr, semaCtx)
+	// Replace any IDs in the expr with their fully qualified names.
+	seqReplacedExpr, err := replaceIDsWithFQNames(ctx, expr, semaCtx)
 	if err != nil {
 		return nil, err
 	}

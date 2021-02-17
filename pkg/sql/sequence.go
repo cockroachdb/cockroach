@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -629,6 +631,7 @@ func addSequenceOwner(
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
 	ctx context.Context,
+	st *cluster.Settings,
 	sc resolver.SchemaResolver,
 	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
@@ -639,6 +642,10 @@ func maybeAddSequenceDependencies(
 	if err != nil {
 		return nil, err
 	}
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
 	var seqDescs []*tabledesc.Mutable
 	var tn tree.TableName
 	seqNameToID := make(map[string]int64)
@@ -658,7 +665,6 @@ func maybeAddSequenceDependencies(
 		}
 
 		var seqDesc *tabledesc.Mutable
-		var err error
 		p, ok := sc.(*planner)
 		if ok {
 			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
@@ -692,7 +698,7 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      true, // All new sequences are by ID.
+				ByID:      byID,
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
@@ -700,7 +706,9 @@ func maybeAddSequenceDependencies(
 		seqDescs = append(seqDescs, seqDesc)
 	}
 
-	if len(seqIdentifiers) > 0 {
+	// If sequences are present in the expr (and the cluster is the right version),
+	// walk the expr tree and replace any sequences names with their IDs.
+	if len(seqIdentifiers) > 0 && byID {
 		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return nil, err

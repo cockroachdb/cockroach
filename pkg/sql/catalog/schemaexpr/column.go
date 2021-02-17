@@ -286,9 +286,10 @@ func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDes
 	return ptrs
 }
 
-// replaceWithSequenceNames replaces occurrences of sequence regclasses in an expression with
-// the sequence's fully qualified names.
-func replaceWithSequenceNames(
+// replaceIDsWithFQNames walks the given expr and replaces occurrences
+// of regclass IDs in the expr with the descriptor's fully qualified name.
+// For example, nextval(12345::REGCLASS) => nextval('foo.public.seq').
+func replaceIDsWithFQNames(
 	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
