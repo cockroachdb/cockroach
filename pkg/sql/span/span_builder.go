@@ -316,25 +316,9 @@ func (s *Builder) encodeConstraintKey(
 			}
 		}
 
-		if s.index.Type == descpb.IndexDescriptor_INVERTED {
-			keys, err := rowenc.EncodeInvertedIndexTableKeys(val, key, s.index.Version)
-			if err != nil {
-				return nil, false, err
-			}
-			if len(keys) == 0 {
-				err := errors.AssertionFailedf("trying to use null key in index lookup")
-				return nil, false, err
-			}
-			if len(keys) > 1 {
-				err := errors.AssertionFailedf("trying to use multiple keys in index lookup")
-				return nil, false, err
-			}
-			key = keys[0]
-		} else {
-			key, err = rowenc.EncodeTableKey(key, val, dir)
-			if err != nil {
-				return nil, false, err
-			}
+		key, err = rowenc.EncodeTableKey(key, val, dir)
+		if err != nil {
+			return nil, false, err
 		}
 	}
 	return key, containsNull, nil
