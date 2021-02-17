@@ -4,6 +4,7 @@ go_library(
     name = "security",
     srcs = [
         "auth.go",
+        "auto_tls_init.go",
         "certificate_loader.go",
         "certificate_manager.go",
         "certs.go",
@@ -47,6 +48,7 @@ go_test(
     size = "medium",
     srcs = [
         "auth_test.go",
+        "auto_tls_init_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",
         "certs_rotation_test.go",
