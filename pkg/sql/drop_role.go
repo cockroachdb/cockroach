@@ -273,6 +273,9 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		if numSchedulesRow == nil {
+			return errors.New("failed to check user schedules")
+		}
 		numSchedules := int64(tree.MustBeDInt(numSchedulesRow[0]))
 		if numSchedules > 0 {
 			return pgerror.Newf(pgcode.DependentObjectsStillExist,

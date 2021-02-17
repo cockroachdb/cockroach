@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,6 +73,9 @@ func TestInternalExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if row == nil {
+		t.Fatal("empty result")
+	}
 	r, ok = row[0].(*tree.DInt)
 	if !ok || *r != 99 {
 		t.Fatalf("expected a DInt == 99, got: %T:%s", r, r)
@@ -94,6 +98,9 @@ func TestInternalExecutor(t *testing.T) {
 		)
 		if err != nil {
 			return err
+		}
+		if row == nil {
+			return errors.New("empty result")
 		}
 		r, ok = row[0].(*tree.DInt)
 		if !ok || *r != 99 {

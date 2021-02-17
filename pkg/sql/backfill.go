@@ -1294,6 +1294,9 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				if err != nil {
 					return err
 				}
+				if row == nil {
+					return errors.New("failed to verify inverted index count")
+				}
 				expectedCount[i] = int64(tree.MustBeDInt(row[0]))
 				return nil
 			}); err != nil {
@@ -1374,6 +1377,9 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				if err != nil {
 					return err
 				}
+				if row == nil {
+					return errors.New("failed to verify index count")
+				}
 				idxLen = int64(tree.MustBeDInt(row[0]))
 				return nil
 			}); err != nil {
@@ -1453,6 +1459,9 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
 			if err != nil {
 				return err
+			}
+			if cnt == nil {
+				return errors.New("failed to verify index")
 			}
 
 			tableRowCount = int64(tree.MustBeDInt(cnt[0]))

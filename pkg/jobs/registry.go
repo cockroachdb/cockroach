@@ -355,6 +355,9 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
 		}
+		if row == nil {
+			return errors.New("polling for queued jobs failed")
+		}
 		count := int64(tree.MustBeDInt(row[0]))
 		if log.V(3) {
 			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
