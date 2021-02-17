@@ -506,6 +506,7 @@ func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
 	kafka.install(ctx)
 	testCerts := kafka.configureAuth(ctx)
 	kafka.start(ctx, "kafka")
+	kafka.addSCRAMUsers(ctx)
 	defer kafka.stop(ctx)
 
 	db := c.Conn(ctx, 1)
@@ -530,26 +531,45 @@ func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
 		t.Fatal(err)
 	}
 
+	caCert := testCerts.CACertBase64()
+	saslURL := kafka.sinkURLSASL(ctx)
+	feeds := []struct {
+		desc     string
+		queryArg string
+	}{
+		{
+			"create changefeed with insecure TLS transport and no auth",
+			fmt.Sprintf("%s?tls_enabled=true&insecure_tls_skip_verify=true", kafka.sinkURLTLS(ctx)),
+		},
+		{
+			"create changefeed with TLS transport and no auth",
+			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s", kafka.sinkURLTLS(ctx), testCerts.CACertBase64()),
+		},
+		{
+			"create changefeed with TLS transport and SASL/PLAIN (default mechanism)",
+			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=plain&sasl_password=plain-secret", saslURL, caCert),
+		},
+		{
+			"create changefeed with TLS transport and SASL/PLAIN (explicit mechanism)",
+			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=plain&sasl_password=plain-secret&sasl_mechanism=PLAIN", saslURL, caCert),
+		},
+		{
+			"create changefeed with TLS transport and SASL/SCRAM-SHA-256",
+			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram256&sasl_password=scram256-secret&sasl_mechanism=SCRAM-SHA-256", saslURL, caCert),
+		},
+		{
+			"create changefeed with TLS transport and SASL/SCRAM-SHA-512",
+			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", saslURL, caCert),
+		},
+	}
+
 	var jobID int
-	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
-		fmt.Sprintf("%s?tls_enabled=true&insecure_tls_skip_verify=true", kafka.sinkURLTLS(ctx)),
-	).Scan(&jobID); err != nil {
-		t.Fatalf("create changefeed with insecure TLS transport: %s", err.Error())
-	}
-
-	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
-		fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s", kafka.sinkURLTLS(ctx), testCerts.CACertBase64()),
-	).Scan(&jobID); err != nil {
-		t.Fatalf("create changefeed with TLS transport: %s", err.Error())
-	}
-
-	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR auth_test_table INTO $1`,
-		fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=plain&sasl_password=plain-secret", kafka.sinkURLSASL(ctx), testCerts.CACertBase64()),
-	).Scan(&jobID); err != nil {
-		t.Fatalf("create changefeed with TLS transport and SASL/PLAIN auth: %s", err.Error())
+	for _, f := range feeds {
+		t.Status(f.desc)
+		row := db.QueryRow(`CREATE CHANGEFEED FOR auth_test_table INTO $1`, f.queryArg)
+		if err := row.Scan(&jobID); err != nil {
+			t.Fatalf("%s: %s", f.desc, err.Error())
+		}
 	}
 }
 
@@ -896,6 +916,10 @@ tar xvf /tmp/confluent.tar.gz -C "$CONFLUENT_DIR"
 	// user called "plain" with password "plain-secret" that can
 	// authenticate via SASL/PLAIN.
 	//
+	// Users to test SCRAM authentication are added via
+	// kafka-config commands as their credentials are stored in
+	// zookeeper.
+	//
 	// Newer versions of confluent configure this directly in
 	// server.properties.
 	//
@@ -909,6 +933,10 @@ KafkaServer {
    password="admin-secret"
    user_admin="admin-secret"
    user_plain="plain-secret";
+
+   org.apache.kafka.common.security.scram.ScramLoginModule required
+   username="admin"
+   password="admin-secret";
 };
 `
 
@@ -967,6 +995,10 @@ func (k kafkaManager) basePath() string {
 
 func (k kafkaManager) configDir() string {
 	return k.basePath() + `/confluent-4.0.0/etc/kafka/`
+}
+
+func (k kafkaManager) binDir() string {
+	return k.basePath() + `/confluent-4.0.0/bin/`
 }
 
 func (k kafkaManager) serverJAASConfig() string {
@@ -1073,6 +1105,23 @@ func (k kafkaManager) PutConfigContent(ctx context.Context, data string, path st
 	if err != nil {
 		k.c.t.Fatal(err)
 	}
+}
+
+func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
+	k.c.status("adding entries for SASL/SCRAM users")
+	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+		"--zookeeper", "localhost:2181",
+		"--alter",
+		"--add-config", "SCRAM-SHA-512=[password=scram512-secret]",
+		"--entity-type", "users",
+		"--entity-name", "scram512")
+
+	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+		"--zookeeper", "localhost:2181",
+		"--alter",
+		"--add-config", "SCRAM-SHA-256=[password=scram256-secret]",
+		"--entity-type", "users",
+		"--entity-name", "scram256")
 }
 
 func (k kafkaManager) start(ctx context.Context, services ...string) {
