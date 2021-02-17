@@ -999,6 +999,8 @@ func TestLint(t *testing.T) {
 			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!rpc/codec.go",
+			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scbuild/builder_test.go",
@@ -1043,6 +1045,8 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
 			":!util/hlc/timestamp.go",
+			":!rpc/codec.go",
+			":!rpc/codec_test.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
@@ -1482,6 +1486,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|release|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/rpc: github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lex/allkeywords: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/timeutil/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/roachpb/gen: log$`),
@@ -1650,6 +1655,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
 				// Using deprecated WireLength call.
 				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
+				// rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).
+				stream.GrepNot(`pkg/rpc/codec.go:.*package github.com/golang/protobuf/proto is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
