@@ -265,6 +265,14 @@ func (cl CertsLocator) CACertPath() string {
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
 
+// CAKeyPath returns the expected file path for the CA certificate.
+func (cl CertsLocator) CAKeyPath() string {
+	return filepath.Join(cl.certsDir, CAKeyFilename())
+}
+
+// CAKeyFilename returns the expected file name for the CA certificate.
+func CAKeyFilename() string { return "ca" + keyExtension }
+
 // TenantClientCACertPath returns the expected file path for the Tenant client CA
 // certificate.
 func (cl CertsLocator) TenantClientCACertPath() string {
@@ -283,10 +291,22 @@ func (cl CertsLocator) ClientCACertPath() string {
 	return filepath.Join(cl.certsDir, "ca-client"+certExtension)
 }
 
+// ClientCAKeyPath returns the expected file path for the CA key
+// used to sign client certificates.
+func (cl CertsLocator) ClientCAKeyPath() string {
+	return filepath.Join(cl.certsDir, "ca-client"+keyExtension)
+}
+
 // UICACertPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICACertPath() string {
 	return filepath.Join(cl.certsDir, "ca-ui"+certExtension)
+}
+
+// UICAKeyPath returns the expected file path for the CA certificate
+// used to verify Admin UI certificates.
+func (cl CertsLocator) UICAKeyPath() string {
+	return filepath.Join(cl.certsDir, "ca-ui"+keyExtension)
 }
 
 // NodeCertPath returns the expected file path for the node certificate.
@@ -357,6 +377,98 @@ func (cl CertsLocator) ClientKeyPath(user SQLUsername) string {
 // ClientKeyFilename returns the expected file name for the user's key.
 func ClientKeyFilename(user SQLUsername) string {
 	return "client." + user.Normalized() + keyExtension
+}
+
+// SQLServiceCertPath returns the expected file path for the
+// SQL service certificate
+func (cl CertsLocator) SQLServiceCertPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCertFilename())
+}
+
+// SQLServiceCertFilename returns the expected file name for the SQL service
+// certificate
+func SQLServiceCertFilename() string {
+	return "service.sql" + certExtension
+}
+
+// SQLServiceKeyPath returns the expected file path for the SQL service key
+func (cl CertsLocator) SQLServiceKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceKeyFilename())
+}
+
+// SQLServiceKeyFilename returns the expected file name for the SQL service
+// certificate
+func SQLServiceKeyFilename() string {
+	return "service.sql" + keyExtension
+}
+
+// SQLServiceCACertPath returns the expected file path for the
+// SQL CA certificate
+func (cl CertsLocator) SQLServiceCACertPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCACertFilename())
+}
+
+// SQLServiceCACertFilename returns the expected file name for the SQL CA
+// certificate
+func SQLServiceCACertFilename() string {
+	return "service.ca.sql" + certExtension
+}
+
+// SQLServiceCAKeyPath returns the expected file path for the SQL CA key
+func (cl CertsLocator) SQLServiceCAKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCAKeyFilename())
+}
+
+// SQLServiceCAKeyFilename returns the expected file name for the SQL CA
+// certificate
+func SQLServiceCAKeyFilename() string {
+	return "service.ca.sql" + keyExtension
+}
+
+// RPCServiceCertPath returns the expected file path for the
+// RPC service certificate
+func (cl CertsLocator) RPCServiceCertPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCertFilename())
+}
+
+// RPCServiceCertFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCertFilename() string {
+	return "service.rpc" + certExtension
+}
+
+// RPCServiceKeyPath returns the expected file path for the RPC service key
+func (cl CertsLocator) RPCServiceKeyPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceKeyFilename())
+}
+
+// RPCServiceKeyFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceKeyFilename() string {
+	return "service.rpc" + keyExtension
+}
+
+// RPCServiceCACertPath returns the expected file path for the
+// RPC service certificate
+func (cl CertsLocator) RPCServiceCACertPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCACertFilename())
+}
+
+// RPCServiceCACertFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCACertFilename() string {
+	return "service.rpc" + certExtension
+}
+
+// RPCServiceCAKeyPath returns the expected file path for the RPC service key
+func (cl CertsLocator) RPCServiceCAKeyPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCAKeyFilename())
+}
+
+// RPCServiceCAKeyFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCAKeyFilename() string {
+	return "service.rpc" + keyExtension
 }
 
 // CACert returns the CA cert. May be nil.
