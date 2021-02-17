@@ -447,10 +447,7 @@ func (p *planner) AlterPrimaryKey(
 		// PARTITION BY statements. We currently do not support this and ignore
 		// these old statements.
 		//
-		// Detect partitioning if we are newly adding a PARTITION BY ALL statement.
-		// If the table is already PARTITION ALL BY, we already have the correct implicit
-		// column descriptor in front of each index, and calling CreatePartitioning again
-		// will make these indexes explicit.
+		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
 			if *newIndex, err = CreatePartitioning(
 				ctx,
