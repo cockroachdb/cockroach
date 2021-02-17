@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -39,6 +40,16 @@ var realSequenceOpts tree.SequenceOptions
 var virtualSequenceOpts = tree.SequenceOptions{
 	tree.SequenceOption{Name: tree.SeqOptVirtual},
 }
+
+// cachedSequencesCacheSize is the default cache size used when
+// SessionNormalizationMode is SerialUsesCachedSQLSequences.
+var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
+	"sql.defaults.serial_sequences_cache_size",
+	"the default cache size when the session's serial normalization mode is set to cached sequences"+
+		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
+	256,
+	settings.PositiveInt,
+)
 
 // processSerialInColumnDef analyzes a column definition and determines
 // whether to use a sequence if the requested type is SERIAL-like.
@@ -84,7 +95,7 @@ func (p *planner) processSerialInColumnDef(
 		// switch this behavior around.
 		newSpec.Type = types.Int
 
-	case sessiondata.SerialUsesSQLSequences:
+	case sessiondata.SerialUsesSQLSequences, sessiondata.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
 
 	default:
@@ -154,6 +165,13 @@ func (p *planner) processSerialInColumnDef(
 	if serialNormalizationMode == sessiondata.SerialUsesVirtualSequences {
 		seqType = "virtual "
 		seqOpts = virtualSequenceOpts
+	} else if serialNormalizationMode == sessiondata.SerialUsesCachedSQLSequences {
+		seqType = "cached "
+
+		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		seqOpts = tree.SequenceOptions{
+			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
+		}
 	}
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
 		d, tableName, seqType, seqName, defaultExpr)

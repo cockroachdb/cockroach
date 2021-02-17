@@ -63,11 +63,64 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 	desc := n.seqDesc
 
+	oldMinValue := desc.SequenceOpts.MinValue
+	oldMaxValue := desc.SequenceOpts.MaxValue
+
 	err := assignSequenceOptions(
 		desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID(), desc.ParentID,
 	)
 	if err != nil {
 		return err
+	}
+	opts := desc.SequenceOpts
+	seqValueKey := params.p.ExecCfg().Codec.SequenceKey(uint32(desc.ID))
+	if err != nil {
+		return err
+	}
+
+	getSequenceValue := func() (int64, error) {
+		kv, err := params.p.txn.Get(params.ctx, seqValueKey)
+		if err != nil {
+			return 0, err
+		}
+		return kv.ValueInt(), nil
+	}
+
+	// Due to the semantics of sequence caching (see sql.planner.incrementSequenceUsingCache()),
+	// it is possible for a sequence to have a value that exceeds its MinValue or MaxValue. Users
+	// do no see values extending the sequence's bounds, and instead see "bounds exceeded" errors.
+	// To make a usable again after exceeding its bounds, there are two options:
+	// 1. The user changes the sequence's value by calling setval(...)
+	// 2. The user performs a schema change to alter the sequences MinValue or MaxValue. In this case, the
+	// value of the sequence must be restored to the original MinValue or MaxValue transactionally.
+	// The code below handles the second case.
+
+	// The sequence is decreasing and the minvalue is being decreased.
+	if opts.Increment < 0 && desc.SequenceOpts.MinValue < oldMinValue {
+		sequenceVal, err := getSequenceValue()
+		if err != nil {
+			return err
+		}
+
+		// If the sequence exceeded the old MinValue, it must be changed to start at the old MinValue.
+		if sequenceVal < oldMinValue {
+			err := params.p.txn.Put(params.ctx, seqValueKey, oldMinValue)
+			if err != nil {
+				return err
+			}
+		}
+	} else if opts.Increment > 0 && desc.SequenceOpts.MaxValue > oldMaxValue {
+		sequenceVal, err := getSequenceValue()
+		if err != nil {
+			return err
+		}
+
+		if sequenceVal > oldMaxValue {
+			err := params.p.txn.Put(params.ctx, seqValueKey, oldMaxValue)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := params.p.writeSchemaChange(

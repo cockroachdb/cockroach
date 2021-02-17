@@ -347,3 +347,73 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serials
 
 statement ok
 DROP TABLE serials, smallbig, serial
+
+# Verify that the sequence gets incremented to the default cache
+# size of 256 and that serial values increase by 1 each time.
+subtest serial_cached_sequence
+
+statement ok
+SET serial_normalization = sql_sequence_cached
+
+statement ok
+CREATE TABLE serial (
+  cached SERIAL
+);
+
+statement ok
+INSERT INTO serial (cached) VALUES (DEFAULT);
+
+query I
+SELECT cached from serial;
+----
+1
+
+query T
+SELECT pg_get_serial_sequence('serial', 'cached')
+----
+public.serial_cached_seq
+
+query I
+SELECT last_value from public.serial_cached_seq;
+----
+256
+
+statement ok
+INSERT INTO serial (cached) VALUES (DEFAULT);
+
+query I
+SELECT cached from serial ORDER BY cached;
+----
+1
+2
+
+query I
+SELECT last_value from public.serial_cached_seq;
+----
+256
+
+statement ok
+DROP TABLE serial;
+
+# Verify that the cache size for serial sequences can be changed
+# from 256, the default, to 512.
+subtest serial_cached_sequence_cluster_settings
+
+statement ok
+SET CLUSTER SETTING sql.defaults.serial_sequences_cache_size = 512;
+
+statement ok
+CREATE TABLE serial (
+  cached512 SERIAL
+);
+
+statement ok
+INSERT INTO serial (cached512) VALUES (DEFAULT);
+
+query I
+SELECT last_value from public.serial_cached512_seq;
+----
+512
+
+statement ok
+DROP TABLE serial;
