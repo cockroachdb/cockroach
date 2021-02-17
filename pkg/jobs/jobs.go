@@ -915,6 +915,12 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 			"cannot call CleanupOnRollback for a StartableJob with a non-finalized transaction")
 	}
 	sj.registry.unregister(*sj.ID())
+	if sj.span != nil {
+		sj.span.Finish()
+	}
+	if sj.cancel != nil {
+		sj.cancel()
+	}
 	return nil
 }
 
