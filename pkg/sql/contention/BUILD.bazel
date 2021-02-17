@@ -9,6 +9,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/contentionpb",
         "//pkg/util/cache",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
