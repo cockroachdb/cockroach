@@ -19,6 +19,7 @@ import { Fraction } from "./statementDetails";
 interface StatementDetailsData {
   nodeId: number;
   implicitTxn: boolean;
+  fullScan: boolean;
   stats: StatementStatistics[];
 }
 
@@ -37,6 +38,7 @@ function coalesceNodeStats(
       byNodeAndImplicitTxn[key] = {
         nodeId: stmt.node_id,
         implicitTxn: stmt.implicit_txn,
+        fullScan: stmt.full_scan,
         stats: [],
       };
     }
@@ -48,6 +50,7 @@ function coalesceNodeStats(
     return {
       label: stmt.nodeId.toString(),
       implicitTxn: stmt.implicitTxn,
+      fullScan: stmt.fullScan,
       stats: combineStatementStats(stmt.stats),
     };
   });
@@ -126,6 +129,7 @@ export const selectStatement = createSelector(
       vec: fractionMatching(results, s => s.vec),
       opt: fractionMatching(results, s => s.opt),
       implicit_txn: fractionMatching(results, s => s.implicit_txn),
+      full_scan: fractionMatching(results, s => s.full_scan),
       failed: fractionMatching(results, s => s.failed),
       node_id: _.uniq(results.map(s => s.node_id)),
     };

@@ -46,6 +46,7 @@ export const aggregateStatements = (
   statements.map((s: Statement) => ({
     label: s.key.key_data.query,
     implicitTxn: false,
+    fullScan: s.key.key_data.full_scan,
     stats: s.stats,
   }));
 
