@@ -24,7 +24,13 @@ func (n *CommentOnColumn) Format(ctx *FmtCtx) {
 	ctx.FormatNode(n.ColumnItem)
 	ctx.WriteString(" IS ")
 	if n.Comment != nil {
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
+		// TODO(knz): Replace all this with ctx.FormatNode
+		// when COMMENT supports expressions.
+		if ctx.flags.HasFlags(FmtHideConstants) {
+			ctx.WriteByte('_')
+		} else {
+			lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
+		}
 	} else {
 		ctx.WriteString("NULL")
 	}

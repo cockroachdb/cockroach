@@ -1708,7 +1708,7 @@ type ColumnAccessExpr struct {
 
 	// ColName is the name of the column to access. Empty if ByIndex is
 	// set.
-	ColName string
+	ColName Name
 
 	// ColIndex indicates the index of the column in the tuple. This is
 	// either:
@@ -1724,7 +1724,7 @@ type ColumnAccessExpr struct {
 
 // NewTypedColumnAccessExpr creates a pre-typed ColumnAccessExpr.
 // A by-index ColumnAccessExpr can be specified by passing an empty string as colName.
-func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *ColumnAccessExpr {
+func NewTypedColumnAccessExpr(expr TypedExpr, colName Name, colIdx int) *ColumnAccessExpr {
 	return &ColumnAccessExpr{
 		Expr:           expr,
 		ColName:        colName,
@@ -1742,7 +1742,7 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	if node.ByIndex {
 		fmt.Fprintf(ctx, "@%d", node.ColIndex+1)
 	} else {
-		ctx.WriteString(node.ColName)
+		ctx.FormatNode(&node.ColName)
 	}
 }
 

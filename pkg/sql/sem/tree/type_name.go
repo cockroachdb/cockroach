@@ -42,7 +42,7 @@ func (t *TypeName) Type() string {
 
 // Format implements the NodeFormatter interface.
 func (t *TypeName) Format(ctx *FmtCtx) {
-	t.ObjectNamePrefix.Format(ctx)
+	ctx.FormatNode(&t.ObjectNamePrefix)
 	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}

@@ -1,0 +1,34 @@
+## TABLE is shorthand for: SELECT * FROM a;
+## used e.g. in CREATE VIEW v AS TABLE t
+
+parse
+TABLE a
+----
+TABLE a
+TABLE a -- fully parenthetized
+TABLE a -- literals removed
+TABLE _ -- identifiers removed
+
+parse
+EXPLAIN TABLE a
+----
+EXPLAIN TABLE a
+EXPLAIN TABLE a -- fully parenthetized
+EXPLAIN TABLE a -- literals removed
+EXPLAIN TABLE _ -- identifiers removed
+
+parse
+TABLE [123 AS a]
+----
+TABLE [123 AS a]
+TABLE [123 AS a] -- fully parenthetized
+TABLE [123 AS a] -- literals removed
+TABLE [123 AS _] -- identifiers removed
+
+parse
+VALUES ("") -- nb: double quote is an identifier, not a string
+----
+VALUES ("") -- normalized!
+VALUES (("")) -- fully parenthetized
+VALUES ("") -- literals removed
+VALUES (_) -- identifiers removed

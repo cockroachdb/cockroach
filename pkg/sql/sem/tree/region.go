@@ -65,7 +65,7 @@ func (node *Locality) Format(ctx *FmtCtx) {
 	case LocalityLevelTable:
 		ctx.WriteString("REGIONAL BY TABLE IN ")
 		if node.TableRegion != "" {
-			node.TableRegion.Format(ctx)
+			ctx.FormatNode(&node.TableRegion)
 		} else {
 			ctx.WriteString("PRIMARY REGION")
 		}
@@ -73,7 +73,7 @@ func (node *Locality) Format(ctx *FmtCtx) {
 		ctx.WriteString("REGIONAL BY ROW")
 		if node.RegionalByRowColumn != "" {
 			ctx.WriteString(" AS ")
-			node.RegionalByRowColumn.Format(ctx)
+			ctx.FormatNode(&node.RegionalByRowColumn)
 		}
 	default:
 		panic(fmt.Sprintf("unknown regional affinity: %#v", node.LocalityLevel))

@@ -42,9 +42,9 @@ type ReparentDatabase struct {
 // Format implements the NodeFormatter interface.
 func (node *ReparentDatabase) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
-	node.Name.Format(ctx)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" CONVERT TO SCHEMA WITH PARENT ")
-	node.Parent.Format(ctx)
+	ctx.FormatNode(&node.Parent)
 }
 
 // RenameTable represents a RENAME TABLE or RENAME VIEW or RENAME SEQUENCE

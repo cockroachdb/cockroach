@@ -101,7 +101,7 @@ func (b *Builder) expandStar(
 				}
 				// NewTypedColumnAccessExpr expects colName to be empty if the tuple
 				// should be accessed by index.
-				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, colName, i)
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, tree.Name(colName), i)
 			}
 		}
 		for i := len(aliases); i < len(typ.TupleContents()); i++ {
