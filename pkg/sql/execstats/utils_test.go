@@ -17,21 +17,17 @@ import (
 
 // AddComponentStats modifies TraceAnalyzer internal state to add stats for the
 // processor/stream/flow specified in stats.ComponentID and the given node ID.
-func (a *TraceAnalyzer) AddComponentStats(
-	nodeID roachpb.NodeID, stats *execinfrapb.ComponentStats,
-) {
-	a.FlowsMetadata.AddComponentStats(nodeID, stats)
+func (a *TraceAnalyzer) AddComponentStats(stats *execinfrapb.ComponentStats) {
+	a.FlowsMetadata.AddComponentStats(stats)
 }
 
 // AddComponentStats modifies FlowsMetadata to add stats for the
 // processor/stream/flow specified in stats.ComponentID and the given node ID.
-func (m *FlowsMetadata) AddComponentStats(
-	nodeID roachpb.NodeID, stats *execinfrapb.ComponentStats,
-) {
+func (m *FlowsMetadata) AddComponentStats(stats *execinfrapb.ComponentStats) {
 	switch stats.Component.Type {
 	case execinfrapb.ComponentID_PROCESSOR:
 		processorStat := &processorStats{
-			nodeID: nodeID,
+			nodeID: stats.Component.NodeID,
 			stats:  stats,
 		}
 		if m.processorStats == nil {
@@ -40,7 +36,7 @@ func (m *FlowsMetadata) AddComponentStats(
 		m.processorStats[execinfrapb.ProcessorID(stats.Component.ID)] = processorStat
 	case execinfrapb.ComponentID_STREAM:
 		streamStat := &streamStats{
-			originNodeID: nodeID,
+			originNodeID: stats.Component.NodeID,
 			stats:        stats,
 		}
 		if m.streamStats == nil {
@@ -53,6 +49,6 @@ func (m *FlowsMetadata) AddComponentStats(
 		if m.flowStats == nil {
 			m.flowStats = make(map[roachpb.NodeID]*flowStats)
 		}
-		m.flowStats[nodeID] = flowStat
+		m.flowStats[stats.Component.NodeID] = flowStat
 	}
 }
