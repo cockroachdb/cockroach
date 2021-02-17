@@ -592,7 +592,7 @@ func maybePrint(context.Context) {
 }
 
 func BenchmarkDirectCall(b *testing.B) {
-	defer leaktest.AfterTest(b)
+	defer leaktest.AfterTest(b)()
 	s := stop.NewStopper()
 	ctx := context.Background()
 	defer s.Stop(ctx)
@@ -602,7 +602,7 @@ func BenchmarkDirectCall(b *testing.B) {
 }
 
 func BenchmarkStopper(b *testing.B) {
-	defer leaktest.AfterTest(b)
+	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
 	s := stop.NewStopper()
 	defer s.Stop(ctx)
@@ -613,7 +613,7 @@ func BenchmarkStopper(b *testing.B) {
 	}
 }
 func BenchmarkDirectCallPar(b *testing.B) {
-	defer leaktest.AfterTest(b)
+	defer leaktest.AfterTest(b)()
 	s := stop.NewStopper()
 	ctx := context.Background()
 	defer s.Stop(ctx)
@@ -625,7 +625,7 @@ func BenchmarkDirectCallPar(b *testing.B) {
 }
 
 func BenchmarkStopperPar(b *testing.B) {
-	defer leaktest.AfterTest(b)
+	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
 	s := stop.NewStopper()
 	defer s.Stop(ctx)
