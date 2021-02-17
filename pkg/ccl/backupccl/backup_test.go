@@ -1152,7 +1152,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
-			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db='restoredb'`,
+			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
 		DescriptorIDs: descpb.IDs{
@@ -1207,16 +1207,19 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var encryptionOption string
-			var sanitizedEncryptionOption string
+			var sanitizedEncryptionOption1 string
+			var sanitizedEncryptionOption2 string
 			if tc.useKMS {
 				correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
-				encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
+				encryptionOption = fmt.Sprintf("kms = '%s'", correctKMSURI)
 				sanitizedURI, err := redactTestKMSURI(correctKMSURI)
 				require.NoError(t, err)
-				sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
+				sanitizedEncryptionOption1 = fmt.Sprintf("kms = '%s'", sanitizedURI)
+				sanitizedEncryptionOption2 = sanitizedEncryptionOption1
 			} else {
-				encryptionOption = "encryption_passphrase='abcdefg'"
-				sanitizedEncryptionOption = "encryption_passphrase='redacted'"
+				encryptionOption = "encryption_passphrase = 'abcdefg'"
+				sanitizedEncryptionOption1 = "encryption_passphrase = '*****'"
+				sanitizedEncryptionOption2 = "encryption_passphrase = 'redacted'"
 			}
 			_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitManualReplication)
 			conn := sqlDB.DB.(*gosql.DB)
@@ -1238,7 +1241,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 					Username: security.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
-						backupLoc1, sanitizedEncryptionOption),
+						backupLoc1, sanitizedEncryptionOption1),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
 						descpb.ID(backupTableID),
@@ -1255,8 +1258,8 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 				Username: security.RootUserName(),
 				Description: fmt.Sprintf(
-					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db='restoredb'`,
-					backupLoc1, sanitizedEncryptionOption,
+					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
+					backupLoc1, sanitizedEncryptionOption2,
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
@@ -4278,8 +4281,8 @@ func TestEncryptedBackup(t *testing.T) {
 				encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
 				incorrectEncryptionOption = fmt.Sprintf("kms='%s'", incorrectKeyARNURI)
 			} else {
-				encryptionOption = "encryption_passphrase='abcdefg'"
-				incorrectEncryptionOption = "encryption_passphrase='wrongpassphrase'"
+				encryptionOption = "encryption_passphrase = 'abcdefg'"
+				incorrectEncryptionOption = "encryption_passphrase = 'wrongpassphrase'"
 			}
 			ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitManualReplication)
 			defer cleanupFn()
@@ -5531,7 +5534,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history"},
-			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db='data 2', skip_missing_foreign_keys"},
+			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
 		},
 	)
 }
@@ -7597,10 +7600,10 @@ func TestManifestBitFlip(t *testing.T) {
 	})
 
 	t.Run("encrypted", func(t *testing.T) {
-		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase='abc'`)
+		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase = 'abc'`)
 		flipBitInManifests(t, rawDir)
 		sqlDB.ExpectErr(t, checksumError,
-			`RESTORE data.* FROM 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase='abc', into_db='r3'`)
+			`RESTORE data.* FROM 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase = 'abc', into_db = 'r3'`)
 	})
 }
 

@@ -304,7 +304,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:   "enterprise-license-required-for-encryption",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup'  WITH encryption_passphrase='secret' RECURRING '@hourly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup'  WITH encryption_passphrase = 'secret' RECURRING '@hourly'",
 			user:   freeUser,
 			errMsg: "use of BACKUP with encryption requires an enterprise license",
 		},
@@ -333,12 +333,12 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user: enterpriseUser,
 			query: `
 		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
-		WITH encryption_passphrase='secret' RECURRING '@weekly'`,
+		WITH encryption_passphrase = 'secret' RECURRING '@weekly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase='secret', detached",
-					shownStmt:  "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase='redacted', detached",
+					backupStmt: "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase = 'secret', detached",
+					shownStmt:  "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase = '*****', detached",
 					period:     7 * 24 * time.Hour,
 				},
 			},

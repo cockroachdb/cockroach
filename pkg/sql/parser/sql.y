@@ -10793,7 +10793,7 @@ d_expr:
   }
 | '(' a_expr ')' '.' unrestricted_name
   {
-    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ColName: $5 }
+    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ColName: tree.Name($5) }
   }
 | '(' a_expr ')' '.' '@' ICONST
   {

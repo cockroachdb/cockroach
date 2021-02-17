@@ -994,12 +994,12 @@ type LockingItem struct {
 
 // Format implements the NodeFormatter interface.
 func (f *LockingItem) Format(ctx *FmtCtx) {
-	f.Strength.Format(ctx)
+	ctx.FormatNode(f.Strength)
 	if len(f.Targets) > 0 {
 		ctx.WriteString(" OF ")
-		f.Targets.Format(ctx)
+		ctx.FormatNode(&f.Targets)
 	}
-	f.WaitPolicy.Format(ctx)
+	ctx.FormatNode(f.WaitPolicy)
 }
 
 // LockingStrength represents the possible row-level lock modes for a SELECT
