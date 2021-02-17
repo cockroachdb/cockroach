@@ -64,7 +64,7 @@ func (d FakeResumer) OnPauseRequest(
 // Started is a wrapper around the internal function that moves a job to the
 // started state.
 func (j *Job) Started(ctx context.Context) error {
-	return j.started(ctx)
+	return j.started(ctx, nil /* txn */)
 }
 
 // Created is a test only function that inserts a new jobs table row.
@@ -72,23 +72,23 @@ func (j *Job) Created(ctx context.Context) error {
 	if j.ID() != nil {
 		return errors.Errorf("job already created with ID %v", *j.ID())
 	}
-	return j.deprecatedInsert(ctx, j.registry.makeJobID(), nil /* lease */, nil /* session */)
+	return j.deprecatedInsert(ctx, nil /* txn */, j.registry.makeJobID(), nil /* lease */, nil /* session */)
 }
 
 // Paused is a wrapper around the internal function that moves a job to the
 // paused state.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.paused(ctx, nil /* fn */)
+	return j.paused(ctx, nil /* txn */, nil /* fn */)
 }
 
 // Failed is a wrapper around the internal function that moves a job to the
 // failed state.
 func (j *Job) Failed(ctx context.Context, causingErr error) error {
-	return j.failed(ctx, causingErr, nil /* fn */)
+	return j.failed(ctx, nil /* txn */, causingErr, nil /* fn */)
 }
 
 // Succeeded is a wrapper around the internal function that moves a job to the
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.succeeded(ctx, nil /* fn */)
+	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
 }

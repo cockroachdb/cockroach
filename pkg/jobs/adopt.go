@@ -301,7 +301,7 @@ RETURNING id, status`,
 				r.unregister(id)
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
-				if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 					r.unregister(id)
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)

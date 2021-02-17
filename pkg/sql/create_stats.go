@@ -531,8 +531,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// job progress to coerce out the correct error type. If the update succeeds
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
+			// TODO: This job update should possibly use the txn (#60690).
 			if jobErr := r.job.FractionProgressed(
-				ctx,
+				ctx, nil, /* txn */
 				func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
 					// The job failed so the progress value here doesn't really matter.
 					return 0

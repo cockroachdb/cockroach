@@ -807,8 +807,8 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 		}
 		if runStatus != "" && !desc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(
-				ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+			if err := sc.job.RunningStatus(
+				ctx, txn, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 					return runStatus, nil
 				}); err != nil {
 				return errors.Wrapf(err, "failed to update job status")
@@ -959,7 +959,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
+			if err := sc.job.RunningStatus(ctx, txn, func(
 				ctx context.Context, details jobspb.Details,
 			) (jobs.RunningStatus, error) {
 				return runStatus, nil
@@ -1810,8 +1810,8 @@ func (sc *SchemaChanger) updateJobForRollback(
 		}
 	}
 	oldDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
-	if err := sc.job.WithTxn(txn).SetDetails(
-		ctx, jobspb.SchemaChangeDetails{
+	if err := sc.job.SetDetails(
+		ctx, txn, jobspb.SchemaChangeDetails{
 			DescID:          sc.descID,
 			TableMutationID: sc.mutationID,
 			ResumeSpanList:  spanList,
@@ -1820,12 +1820,9 @@ func (sc *SchemaChanger) updateJobForRollback(
 	); err != nil {
 		return err
 	}
-	if err := sc.job.WithTxn(txn).SetProgress(ctx, jobspb.SchemaChangeProgress{}); err != nil {
+	if err := sc.job.SetProgress(ctx, txn, jobspb.SchemaChangeProgress{}); err != nil {
 		return err
 	}
-	// Set the transaction back to nil so that this job can be used in other
-	// transactions.
-	sc.job.WithTxn(nil)
 
 	return nil
 }

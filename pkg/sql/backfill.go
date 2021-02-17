@@ -1110,7 +1110,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.WithTxn(txn).FractionProgressed(ctx,
+				if err := sc.job.FractionProgressed(ctx, txn,
 					jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
@@ -1269,7 +1269,8 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
+				// TODO: This job update should possibly use the txn (#60690).
+				if err := sc.job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			}
@@ -1377,7 +1378,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
+			if err := sc.job.RunningStatus(ctx, txn, func(
 				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return status, nil
 			}); err != nil {
