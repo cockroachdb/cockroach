@@ -63,7 +63,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 	// Load schedule expression.  This is needed for resume command, but we
 	// also use this query to check for the schedule existence.
-	datums, cols, err := params.ExecCfg().InternalExecutor.QueryWithCols(
+	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
 		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -77,11 +77,11 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	}
 
 	// Not an error if schedule does not exist.
-	if len(datums) != 1 {
+	if datums == nil {
 		return nil, nil
 	}
 
-	if err := schedule.InitFromDatums(datums[0], cols); err != nil {
+	if err := schedule.InitFromDatums(datums, cols); err != nil {
 		return nil, err
 	}
 	return schedule, nil
