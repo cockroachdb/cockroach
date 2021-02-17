@@ -51,10 +51,14 @@ import (
 // evcheck tableid=1 indexid=1 key=key txnid=b duration=2
 // ----
 // < Registry b as string >
+//
+// # Merge two registries into one and verify state.
+// merge first=a second=b
+// ----
+// < Merged registries a and b as string >
 func TestRegistry(t *testing.T) {
 	uuidMap := make(map[string]uuid.UUID)
-	testFriendlyRegistryString := func(r *Registry) string {
-		stringRepresentation := r.String()
+	testFriendlyRegistryString := func(stringRepresentation string) string {
 		// Swap out all UUIDs for corresponding test-friendly IDs.
 		for friendlyID, txnID := range uuidMap {
 			stringRepresentation = strings.Replace(stringRepresentation, txnID.String(), friendlyID, -1)
@@ -76,6 +80,24 @@ func TestRegistry(t *testing.T) {
 				registryMap[registryKey] = registry
 			}
 			return d.Expected
+		case "merge":
+			var firstRegistryKey, secondRegistryKey string
+			d.ScanArgs(t, "first", &firstRegistryKey)
+			first, ok := registryMap[firstRegistryKey]
+			if !ok {
+				return fmt.Sprintf("registry %q not found", first)
+			}
+			d.ScanArgs(t, "second", &secondRegistryKey)
+			second, ok := registryMap[secondRegistryKey]
+			if !ok {
+				return fmt.Sprintf("registry %q not found", second)
+			}
+			merged := MergeSerializedRegistries(first.Serialize(), second.Serialize())
+			var b strings.Builder
+			for i := range merged {
+				b.WriteString(merged[i].String())
+			}
+			return testFriendlyRegistryString(b.String())
 		case "ev", "evcheck":
 			var (
 				tableIDStr string
@@ -119,7 +141,7 @@ func TestRegistry(t *testing.T) {
 				return err.Error()
 			}
 			if d.Cmd == "evcheck" {
-				return testFriendlyRegistryString(registry)
+				return testFriendlyRegistryString(registry.String())
 			}
 			return d.Expected
 		default:

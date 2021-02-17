@@ -253,6 +253,29 @@ func (r *Registry) Serialize() []contentionpb.IndexContentionEvents {
 	return resp
 }
 
+// MergeSerializedRegistries merges the serialized representations of two
+// Registries into one. first is updated in-place whenever first and second
+// contain contention events on the same index (i.e. with the same
+// (tableID, indexID) pair).
+func MergeSerializedRegistries(
+	first, second []contentionpb.IndexContentionEvents,
+) []contentionpb.IndexContentionEvents {
+	for s := range second {
+		found := false
+		for f := range first {
+			if first[f].TableID == second[s].TableID && first[f].IndexID == second[s].IndexID {
+				first[f].Merge(second[s])
+				found = true
+				break
+			}
+		}
+		if !found {
+			first = append(first, second[s])
+		}
+	}
+	return first
+}
+
 // String returns a string representation of the Registry.
 func (r *Registry) String() string {
 	var b strings.Builder
