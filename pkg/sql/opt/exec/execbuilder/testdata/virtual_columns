@@ -69,7 +69,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_a (a)
  ├── FAMILY fam_1_b (b)
- └── INDEX primary
+ └── PRIMARY INDEX primary
       └── a int not null
 project
  ├── scan t

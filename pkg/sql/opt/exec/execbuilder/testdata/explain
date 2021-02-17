@@ -1152,7 +1152,7 @@ TABLE tc
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── INDEX c
       ├── a int
@@ -1171,7 +1171,7 @@ TABLE tc
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── INDEX c
       ├── a int
@@ -1181,7 +1181,7 @@ TABLE t
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- └── INDEX primary
+ └── PRIMARY INDEX primary
       └── k int not null
 inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7

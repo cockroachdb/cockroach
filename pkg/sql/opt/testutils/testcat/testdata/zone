@@ -20,20 +20,18 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    └── a int not null (storing)
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    └── a int not null (storing)
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      └── a int not null (storing)
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=east]'
@@ -47,22 +45,20 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    └── a int not null (storing)
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      └── a int not null (storing)
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=west]'
@@ -76,24 +72,22 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=central]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    ├── a int not null (storing)
- │    └── ZONE
- │         └── constraints: [+region=west]
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
 
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us,+dc=central,+rack=1]'
@@ -107,24 +101,22 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    ├── a int not null (storing)
- │    └── ZONE
- │         └── constraints: [+region=west]
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack=1]'
@@ -138,24 +130,22 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=east,+rack=1]
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    ├── a int not null (storing)
- │    └── ZONE
- │         └── constraints: [+region=west]
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=west]'
@@ -169,21 +159,19 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=central,+rack=1]
- ├── INDEX bc1
+ ├── UNIQUE INDEX bc1
  │    ├── b int
  │    ├── c string
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=east,+rack=1]
- ├── INDEX bc2
- │    ├── b int
- │    ├── c string
- │    ├── a int not null (storing)
- │    └── ZONE
- │         └── constraints: [+dc=west]
- ├── UNIQUE (a)
- └── UNIQUE (b, c)
+ └── UNIQUE INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+dc=west]

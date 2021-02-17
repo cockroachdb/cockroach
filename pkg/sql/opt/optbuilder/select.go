@@ -454,8 +454,13 @@ func (b *Builder) buildScan(
 	tab := tabMeta.Table
 	tabID := tabMeta.MetaID
 
-	if indexFlags != nil && indexFlags.IgnoreForeignKeys {
-		tabMeta.IgnoreForeignKeys = true
+	if indexFlags != nil {
+		if indexFlags.IgnoreForeignKeys {
+			tabMeta.IgnoreForeignKeys = true
+		}
+		if indexFlags.IgnoreUniqueWithoutIndexKeys {
+			tabMeta.IgnoreUniqueWithoutIndexKeys = true
+		}
 	}
 
 	outScope = inScope.push()

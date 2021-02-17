@@ -12,10 +12,9 @@ SHOW CREATE parent
 TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── p int not null
- ├── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
- └── UNIQUE (p)
+ └── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
 
 exec-ddl
 SHOW CREATE child
@@ -24,10 +23,9 @@ TABLE child
  ├── c int not null
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── c int not null
- ├── CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
- └── UNIQUE (c)
+ └── CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
 
 exec-ddl
 CREATE TABLE parent2 (p INT UNIQUE)
@@ -44,14 +42,12 @@ TABLE parent2
  ├── p int
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INDEX parent2_p_key
+ ├── UNIQUE INDEX parent2_p_key
  │    ├── p int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── REFERENCED BY CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
- ├── UNIQUE (rowid)
- └── UNIQUE (p)
+ └── REFERENCED BY CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
 exec-ddl
 SHOW CREATE child2
@@ -60,10 +56,9 @@ TABLE child2
  ├── c int not null
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── c int not null
- ├── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
- └── UNIQUE (c)
+ └── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
 exec-ddl
 CREATE TABLE parent_multicol (p INT, q INT, r INT, PRIMARY KEY (p,q,r))
@@ -97,13 +92,12 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
  ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol (p, q, r) REFERENCES parent_multicol (p, q, r)
- ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
- └── UNIQUE (p, q, r)
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
 
 exec-ddl
 SHOW CREATE child_multicol
@@ -113,12 +107,11 @@ TABLE child_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
- ├── CONSTRAINT fk FOREIGN KEY child_multicol (p, q, r) REFERENCES parent_multicol (p, q, r)
- └── UNIQUE (p, q, r)
+ └── CONSTRAINT fk FOREIGN KEY child_multicol (p, q, r) REFERENCES parent_multicol (p, q, r)
 
 exec-ddl
 SHOW CREATE child_multicol_full
@@ -128,12 +121,11 @@ TABLE child_multicol_full
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
- ├── CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
- └── UNIQUE (p, q, r)
+ └── CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
 
 exec-ddl
 DROP TABLE child
@@ -145,9 +137,8 @@ SHOW CREATE parent
 TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
- │    └── p int not null
- └── UNIQUE (p)
+ └── PRIMARY INDEX primary
+      └── p int not null
 
 exec-ddl
 DROP TABLE child_multicol
@@ -161,12 +152,11 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
- ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
- └── UNIQUE (p, q, r)
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
 
 exec-ddl
 DROP TABLE child_multicol_full
@@ -180,11 +170,10 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
- │    ├── p int not null
- │    ├── q int not null
- │    └── r int not null
- └── UNIQUE (p, q, r)
+ └── PRIMARY INDEX primary
+      ├── p int not null
+      ├── q int not null
+      └── r int not null
 
 # Verify we can drop a self-referencing table.
 exec-ddl
