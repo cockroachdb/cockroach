@@ -8,6 +8,7 @@ go_library(
         "api_auth.go",
         "api_error.go",
         "authentication.go",
+        "auto_tls_init.go",
         "auto_upgrade.go",
         "config.go",
         "config_unix.go",

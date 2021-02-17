@@ -4,6 +4,7 @@ go_library(
     name = "security",
     srcs = [
         "auth.go",
+        "auto_tls_init.go",
         "certificate_loader.go",
         "certificate_manager.go",
         "certs.go",
