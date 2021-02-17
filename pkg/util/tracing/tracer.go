@@ -150,6 +150,7 @@ type Tracer struct {
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithLocalParent(<non-nil>) option was supplied.
 	// It also elides spans created using WithBypassRegistry.
+	// The map is keyed on the span ID, which is deterministically unique.
 	//
 	// In normal operation, a local root Span is inserted on creation and
 	// removed on .Finish().
@@ -164,7 +165,7 @@ type Tracer struct {
 		// has grown to accommodate the usual number of active local root spans,
 		// and the critical sections of the mutex are very small.
 		syncutil.Mutex
-		m map[*Span]struct{}
+		m map[uint64]*Span
 	}
 
 	includeAsyncSpansInRecordings bool // see TestingIncludeAsyncSpansInRecordings
@@ -175,7 +176,7 @@ type Tracer struct {
 // backends.
 func NewTracer() *Tracer {
 	t := &Tracer{}
-	t.activeSpans.m = map[*Span]struct{}{}
+	t.activeSpans.m = make(map[uint64]*Span)
 	t.noopSpan = &Span{tracer: t}
 	return t
 }
@@ -442,7 +443,7 @@ func (t *Tracer) startSpanGeneric(
 			// Local root span - put it into the registry of active local root
 			// spans. `Span.Finish` takes care of deleting it again.
 			t.activeSpans.Lock()
-			t.activeSpans.m[s] = struct{}{}
+			t.activeSpans.m[spanID] = s
 			t.activeSpans.Unlock()
 		}
 
@@ -680,7 +681,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	t.activeSpans.Lock()
 	sl := make([]*Span, 0, len(t.activeSpans.m))
-	for sp := range t.activeSpans.m {
+	for _, sp := range t.activeSpans.m {
 		sl = append(sl, sp)
 	}
 	t.activeSpans.Unlock()

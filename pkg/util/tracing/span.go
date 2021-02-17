@@ -228,7 +228,7 @@ func (s *Span) Finish() {
 		s.netTr.Finish()
 	}
 	s.tracer.activeSpans.Lock()
-	delete(s.tracer.activeSpans.m, s)
+	delete(s.tracer.activeSpans.m, s.crdb.spanID)
 	s.tracer.activeSpans.Unlock()
 }
 
