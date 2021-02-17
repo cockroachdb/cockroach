@@ -236,6 +236,10 @@ type LocalOnlySessionData struct {
 
 	// NewSchemaChangerMode indicates whether to use the new schema changer.
 	NewSchemaChangerMode NewSchemaChangerMode
+
+	// SequenceCache stores sequence values which have been cached using the
+	// CACHE sequence option.
+	SequenceCache SequenceCache
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
@@ -369,8 +373,18 @@ const (
 	// use INT NOT NULL DEFAULT nextval(...).
 	SerialUsesVirtualSequences
 	// SerialUsesSQLSequences means create a regular SQL sequence and
-	// use INT NOT NULL DEFAULT nextval(...).
+	// use INT NOT NULL DEFAULT nextval(...). Each call to nextval()
+	// is a distributed call to kv. This minimizes the size of gaps
+	// between successive sequence numbers (which occur due to
+	// node failures or errors), but the multiple kv calls
+	// can impact performance negatively.
 	SerialUsesSQLSequences
+	// SerialUsesCachedSQLSequences is identical to SerialUsesSQLSequences with
+	// the exception that nodes can cache sequence values. This significantly
+	// reduces contention and distributed calls to kv, which results in better
+	// performance. Gaps between sequences may be larger as a result of cached
+	// values being lost to errors and/or node failures.
+	SerialUsesCachedSQLSequences
 )
 
 func (m SerialNormalizationMode) String() string {
@@ -381,6 +395,8 @@ func (m SerialNormalizationMode) String() string {
 		return "virtual_sequence"
 	case SerialUsesSQLSequences:
 		return "sql_sequence"
+	case SerialUsesCachedSQLSequences:
+		return "sql_sequence_cached"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -395,6 +411,8 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 		return SerialUsesVirtualSequences, true
 	case "SQL_SEQUENCE":
 		return SerialUsesSQLSequences, true
+	case "SQL_SEQUENCE_CACHED":
+		return SerialUsesCachedSQLSequences, true
 	default:
 		return 0, false
 	}

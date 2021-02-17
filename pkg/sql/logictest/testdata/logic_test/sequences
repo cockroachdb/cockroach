@@ -122,20 +122,11 @@ CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
 statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
 CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
 
-statement error pgcode 22023 CACHE \(-1\) must be greater than zero
-CREATE SEQUENCE cache_test CACHE -1
-
-statement error pgcode 22023 CACHE \(0\) must be greater than zero
-CREATE SEQUENCE cache_test CACHE 0
-
-statement error pgcode 0A000 CACHE values larger than 1 are not supported, found 5
-CREATE SEQUENCE cache_test CACHE 5
-
 statement error pgcode 0A000 CYCLE option is not supported
 CREATE SEQUENCE cycle_test CYCLE
 
 statement ok
-CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
+CREATE SEQUENCE ignored_options_test NO CYCLE
 
 # Verify presence in crdb_internal.create_statements.
 
@@ -146,7 +137,7 @@ query ITTITTTTTTTB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions
-52           test           public       66             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false
+52           test           public       63             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
@@ -1395,7 +1386,6 @@ CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
 statement error invalid OWNED BY option
 ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
 
-
 # Test that passing a descriptor other than a sequence
 # returns an appropriate error.
 subtest invalid_ids
@@ -1483,3 +1473,273 @@ SELECT setval(12345::regclass, 30, false) # Bogus ID
 
 statement error does not exist
 SELECT currval(12345::regclass) # Bogus ID
+
+subtest cached_sequences
+
+statement error pgcode 22023 CACHE \(-1\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE -1
+
+statement error pgcode 22023 CACHE \(0\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE 0
+
+statement ok
+CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
+
+# Verify cache invalidation with schema changes.
+
+# 10 values (1,2,...,10) are cached, and the underlying sequence is incremented to 10.
+query I
+SELECT nextval('cache_test')
+----
+1
+
+# sanity checks
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT currval('cache_test')
+----
+1
+
+query I
+SELECT last_value FROM cache_test
+----
+10
+
+statement ok
+BEGIN
+
+statement ok
+ALTER SEQUENCE cache_test INCREMENT 5
+
+# The cache is invalidated due to the above schema change, and 10 new values (15,20,...,60) are cached.
+query I
+SELECT nextval('cache_test')
+----
+15
+
+# Rollback the schema change to use the old INCREMENT amount.
+statement ok
+ABORT
+
+# The underlying sequence was still incremented despite the txn being aborted.
+query I
+SELECT last_value FROM cache_test
+----
+60
+
+# 10 new values (61,62,...,70) are cached.
+query I
+SELECT nextval('cache_test')
+----
+61
+
+query I
+SELECT last_value FROM cache_test
+----
+70
+
+statement ok
+DROP SEQUENCE cache_test
+
+subtest cached_sequences_with_bounds_increasing
+
+statement ok
+CREATE SEQUENCE cached_upper_bound_test MAXVALUE 4 START WITH 2 CACHE 5 INCREMENT BY 2;
+
+# Without this MAXVALUE CONSTRAINT, the values 2,4,6,8,10 would be cached
+# and the underlying sequence would be set to 10. Given the constraint, only
+# 2 and 4 are cached, but the underlying sequence is still set to 10.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+2
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+10
+
+# nextval() should return errors while still incrementing the underlying sequence
+# by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
+# currval() and lastval() should not change.
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+query I
+SELECT lastval();
+----
+4
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+30
+
+# Performing a schema change on the sequence to increase the bounds should reset the underlying
+# sequence to its original MAXVALUE.
+
+statement ok
+ALTER SEQUENCE cached_upper_bound_test MAXVALUE 100;
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+4
+
+# Calling nextval() should cache the values 6,8,10,12,14 while incrementing
+# the underlying sequence to 14.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+6
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+14
+
+query I
+SELECT lastval();
+----
+6
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+6
+
+statement ok
+drop sequence cached_upper_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_increasing, except it uses negative values.
+subtest cached_sequences_with_bounds_decreasing
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-2
+
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-30
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-4
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-6
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-14
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_decreasing, except it uses both positive and negative values.
+subtest cached_sequences_with_bounds_middle
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test_2 MINVALUE -2 MAXVALUE 2 START WITH 2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+2
+
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+0
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-2
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-6
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-26
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test_2 MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-2
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-12
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test_2;

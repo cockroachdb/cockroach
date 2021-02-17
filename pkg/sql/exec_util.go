@@ -404,9 +404,10 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"default handling of SERIAL in table definitions",
 	"rowid",
 	map[int64]string{
-		int64(sessiondata.SerialUsesRowID):            "rowid",
-		int64(sessiondata.SerialUsesVirtualSequences): "virtual_sequence",
-		int64(sessiondata.SerialUsesSQLSequences):     "sql_sequence",
+		int64(sessiondata.SerialUsesRowID):              "rowid",
+		int64(sessiondata.SerialUsesVirtualSequences):   "virtual_sequence",
+		int64(sessiondata.SerialUsesSQLSequences):       "sql_sequence",
+		int64(sessiondata.SerialUsesCachedSQLSequences): "sql_sequence_cached",
 	},
 ).WithPublic()
 
@@ -2296,6 +2297,11 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 // SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
 func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
 	m.data.NoticeDisplaySeverity = severity
+}
+
+// initSequenceCache creates an empty sequence cache instance for the session.
+func (m *sessionDataMutator) initSequenceCache() {
+	m.data.SequenceCache = sessiondata.SequenceCache{}
 }
 
 type sqlStatsCollector struct {

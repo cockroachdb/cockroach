@@ -642,6 +642,7 @@ var (
 			MinValue:  1,
 			MaxValue:  math.MaxInt64,
 			Start:     1,
+			CacheSize: 1,
 		},
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.DescIDSequenceID], security.NodeUserName()),
