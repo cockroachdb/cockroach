@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
@@ -29,28 +28,9 @@ func registerTPCDSVec(r *testRegistry) {
 	)
 
 	queriesToSkip := map[int]bool{
-		// The plans for these queries contain processors with
-		// core.LocalPlanNode which currently cannot be wrapped by the
-		// vectorized engine, so 'vectorize' session variable will make no
-		// difference.
+		// These queries don't complete within 5 minutes.
 		1:  true,
-		2:  true,
-		4:  true,
-		11: true,
-		23: true,
-		24: true,
-		30: true,
-		31: true,
-		39: true,
-		45: true,
-		47: true,
-		57: true,
-		59: true,
 		64: true,
-		74: true,
-		75: true,
-		81: true,
-		95: true,
 
 		// These queries contain unsupported function 'rollup' (#46280).
 		5:  true,
@@ -60,28 +40,6 @@ func registerTPCDSVec(r *testRegistry) {
 		67: true,
 		77: true,
 		80: true,
-	}
-
-	queriesToSkip20_1 := map[int]bool{
-		// These queries do not finish in 5 minutes on 20.1 branch.
-		7:  true,
-		13: true,
-		17: true,
-		19: true,
-		25: true,
-		26: true,
-		29: true,
-		//45: true,
-		46: true,
-		48: true,
-		50: true,
-		61: true,
-		//64: true,
-		66: true,
-		68: true,
-		72: true,
-		84: true,
-		85: true,
 	}
 
 	tpcdsTables := []string{
@@ -113,10 +71,6 @@ func registerTPCDSVec(r *testRegistry) {
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, clusterConn)
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
 		// timeout, the query actually keeps on going and the connection
@@ -169,11 +123,6 @@ func registerTPCDSVec(r *testRegistry) {
 			for queryNum := 1; queryNum <= tpcds.NumQueries; queryNum++ {
 				if _, toSkip := queriesToSkip[queryNum]; toSkip {
 					continue
-				}
-				if strings.HasPrefix(versionString, "v20.1") {
-					if _, toSkip := queriesToSkip20_1[queryNum]; toSkip {
-						continue
-					}
 				}
 				query, ok := tpcds.QueriesByNumber[queryNum]
 				if !ok {
