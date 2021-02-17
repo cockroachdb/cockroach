@@ -964,6 +964,7 @@ func TestLint(t *testing.T) {
 			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!rpc/codec.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scbuild/builder_test.go",
@@ -1007,6 +1008,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
+			":!rpc/codec.go",
 			":!util/hlc/timestamp.go",
 			":!sql/types/types_jsonpb.go",
 		)
