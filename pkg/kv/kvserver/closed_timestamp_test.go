@@ -89,7 +89,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		}
 
 		repls := replsForRange(ctx, t, tc, desc, numNodes)
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		ts := tc.Server(0).Clock().Now()
 		baRead := makeTxnReadBatchForDesc(desc, ts)
 		testutils.SucceedsSoon(t, func() error {
 			return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
@@ -189,7 +189,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
 	}
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
@@ -348,7 +348,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Start by ensuring that the values can be read from all replicas at ts.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(2))
@@ -423,7 +423,7 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 
 	// Grab a timestamp before initiating a lease transfer, transfer the lease,
 	// then ensure that reads at that timestamp can occur from all the replicas.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	lh := getCurrentLeaseholder(t, tc, desc)
 	target := pickRandomTarget(tc, lh, desc)
 	require.Nil(t, tc.TransferRangeLease(desc, target))
@@ -431,11 +431,11 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
-	// Make a non-writing transaction that has a GlobalUncertaintyLimit after
-	// the lease transfer but a timestamp before.
-	roTxn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, ts,
-		timeutil.Now().UnixNano()-ts.WallTime)
-	baRead.Header.Txn = &roTxn
+
+	// Update the batch to simulate a transaction that has a global uncertainty
+	// limit after the lease transfer. Keep its read timestamp from before the
+	// lease transfer.
+	baRead.Txn.GlobalUncertaintyLimit = tc.Server(0).Clock().Now().Add(time.Second.Nanoseconds(), 0)
 	// Send the request to all three replicas. One should succeed and
 	// the other two should return NotLeaseHolderErrors.
 	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
@@ -461,7 +461,7 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	}
 
 	// Verify that we can serve a follower read at a timestamp. Wait if necessary.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
@@ -510,7 +510,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 
 	// Verify that we can serve a follower read at a timestamp. Wait if
 	// necessary.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
@@ -551,7 +551,7 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 
 	// Verify that we can serve a follower read at a timestamp with a
 	// transactional batch. Wait if necessary.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	ts := tc.Server(0).Clock().Now()
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
