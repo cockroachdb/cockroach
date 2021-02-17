@@ -168,20 +168,30 @@ func ShowCreateTable(
 				return "", err
 			}
 
+			// Add interleave or Foreign Key indexes only to the create_table columns,
+			// and not the create_nofks column.
+			var interleaveBuf bytes.Buffer
+			if includeInterleaveClause {
+				if err := showCreateInterleave(idx, &interleaveBuf, dbPrefix, lCtx); err != nil {
+					return "", err
+				}
+			}
+
 			f.WriteString(",\n\t")
-			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, partitionBuf.String(), &p.RunParams(ctx).p.semaCtx)
+			idxStr, err := schemaexpr.FormatIndexForDisplay(
+				ctx,
+				desc,
+				&descpb.AnonymousTable,
+				idx,
+				partitionBuf.String(),
+				interleaveBuf.String(),
+				p.RunParams(ctx).p.SemaCtx(),
+			)
 			if err != nil {
 				return "", err
 			}
 			f.WriteString(idxStr)
 
-			// Add interleave or Foreign Key indexes only to the create_table columns,
-			// and not the create_nofks column.
-			if includeInterleaveClause {
-				if err := showCreateInterleave(idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-					return "", err
-				}
-			}
 		}
 	}
 
