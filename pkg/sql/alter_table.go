@@ -1069,7 +1069,7 @@ func applyColumnMutation(
 
 			// Add references to the sequence descriptors this column is now using.
 			changedSeqDescs, err := maybeAddSequenceDependencies(
-				params.ctx, params.p, tableDesc, col, expr, nil, /* backrefs */
+				params.ctx, params.p.ExecCfg().Settings, params.p, tableDesc, col, expr, nil, /* backrefs */
 			)
 			if err != nil {
 				return err

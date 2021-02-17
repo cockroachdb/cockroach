@@ -237,6 +237,10 @@ const (
 	PostTruncatedAndRangeAppliedStateMigration
 	// SeparatedIntents allows the writing of separated intents/locks.
 	SeparatedIntents
+	// SequencesRegclass starts storing sequences used in DEFAULT expressions
+	// via their IDs instead of their names, which leads to allowing such
+	// sequences to be renamed.
+	SequencesRegclass
 
 	// Step (1): Add new versions here.
 )
@@ -394,6 +398,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     SeparatedIntents,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 26},
+	},
+	{
+		Key:     SequencesRegclass,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
 	},
 	// Step (2): Add new versions here.
 })
