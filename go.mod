@@ -3,7 +3,7 @@ module github.com/cockroachdb/cockroach
 go 1.15
 
 require (
-	cloud.google.com/go v0.34.0
+	cloud.google.com/go/storage v1.10.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.12.0
 	github.com/Azure/go-autorest/autorest v0.10.2
@@ -70,16 +70,14 @@ require (
 	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.4.3
 	github.com/golang/snappy v0.0.2
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.5.2
+	github.com/google/go-cmp v0.5.4
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/martian v2.1.0+incompatible // indirect
-	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
+	github.com/google/pprof v0.0.0-20201203190320-1bf35d6f28c2
 	github.com/google/uuid v1.2.0 // indirect
-	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.3.0
@@ -149,20 +147,20 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
-	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
+	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
-	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
+	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20210217105451-b926d437f341
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.5
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/tools v0.1.0
-	google.golang.org/api v0.1.0
-	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
-	google.golang.org/grpc v1.29.1
-	google.golang.org/protobuf v1.23.0
+	google.golang.org/api v0.40.0
+	google.golang.org/grpc v1.35.0
+	google.golang.org/grpc/examples v0.0.0-20210217184607-1b75f7144df2 // indirect
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
