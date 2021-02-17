@@ -670,7 +670,9 @@ func (r *DistSQLReceiver) Push(
 						r.contendedQueryMetric = nil
 					}
 					if err := r.contentionRegistry.AddContentionEvent(ev); err != nil {
-						r.resultWriter.SetError(errors.Wrap(err, "unable to add contention event to registry"))
+						// TODO(asubiotto): see https://github.com/cockroachdb/cockroach/issues/60669
+						// r.resultWriter.SetError(errors.Wrap(err, "unable to add contention event to registry"))
+						_ = err
 					}
 				})
 			}
