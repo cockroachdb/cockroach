@@ -467,7 +467,107 @@ ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (x) REFERENCES fk(u)
 statement error virtual column "v" cannot reference a foreign key
 ALTER TABLE fk2 ADD CONSTRAINT foo FOREIGN KEY (v) REFERENCES fk(a)
 
-subtest schema_changes
+# Tests with not null virtual columns.
+subtest NotNull
+
+statement ok
+CREATE TABLE n (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT NOT NULL AS (a+b) VIRTUAL
+)
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO n VALUES (1, NULL)
+
+statement ok
+INSERT INTO n VALUES (1, 1), (2, 2)
+
+statement error null value in column "v" violates not-null constraint
+UPDATE n SET b = NULL WHERE a > 0
+
+statement error null value in column "v" violates not-null constraint
+UPSERT INTO n VALUES (1, NULL)
+
+statement error null value in column "v" violates not-null constraint
+UPSERT INTO n VALUES (3, NULL)
+
+statement ok
+INSERT INTO n VALUES (1, NULL) ON CONFLICT DO NOTHING
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO n VALUES (3, NULL) ON CONFLICT DO NOTHING
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO n VALUES (1, 10) ON CONFLICT (a) DO UPDATE SET b = NULL
+
+statement error null value in column "v" violates not-null constraint
+INSERT INTO n VALUES (3, NULL) ON CONFLICT (a) DO UPDATE SET b = NULL
+
+# Tests with check constraints on virtual columns.
+subtest Checks
+
+statement ok
+CREATE TABLE t_check (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL CHECK (v >= 10),
+  w INT AS (a*b) VIRTUAL,
+  CHECK (v < w)
+)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check VALUES (1,1), (5,5)
+
+statement ok
+INSERT INTO t_check VALUES (5,5), (6,6)
+
+statement error failed to satisfy CHECK constraint
+UPDATE t_check SET b=b-1
+
+statement ok
+UPDATE t_check SET b=b+1
+
+query IIII colnames,rowsort
+SELECT * FROM t_check
+----
+a  b  v   w
+5  6  11  30
+6  7  13  42
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t_check VALUES (5, 2), (8, 8)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t_check VALUES (5, 10), (8, 1)
+
+statement ok
+UPSERT INTO t_check VALUES (5, 10), (8, 8)
+
+query IIII colnames,rowsort
+SELECT * FROM t_check
+----
+a  b   v   w
+5  10  15  50
+6  7   13  42
+8  8   16  64
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check VALUES (5, 1) ON CONFLICT (a) DO UPDATE SET b=3
+
+statement ok
+INSERT INTO t_check VALUES (5, 1) ON CONFLICT (a) DO UPDATE SET b=5
+
+query IIII colnames,rowsort
+SELECT * FROM t_check
+----
+a  b  v   w
+5  5  10  25
+6  7  13  42
+8  8  16  64
+
+# Test schema changes with virtual columns.
+subtest SchemaChanges
 
 statement ok
 CREATE TABLE sc (a INT PRIMARY KEY, b INT)
@@ -635,3 +735,40 @@ SELECT a FROM sc@v_partial_idx WHERE v > 20
 ----
 2
 3
+
+statement ok
+INSERT INTO sc VALUES (10, 10), (11, 9)
+
+query III rowsort,colnames
+SELECT * FROM sc
+----
+a   b   v
+1   10  11
+2   20  22
+3   30  33
+10  10  20
+11  9   20
+
+# Create a partial unique index on v which should fail.
+statement error violates unique constraint
+CREATE UNIQUE INDEX v_partial_idx2 ON sc(v) WHERE v > 10
+
+# Create a check constraint which should fail.
+statement error validation.*failed on row
+ALTER TABLE sc ADD CONSTRAINT c CHECK (v < 30)
+
+statement ok
+ALTER TABLE sc ADD CONSTRAINT c CHECK (v < 40)
+
+statement error failed to satisfy CHECK constraint
+UPDATE sc SET b=b+10
+
+# Add a virtual column with a check constraint.
+statement error validation.*failed on row
+ALTER TABLE sc ADD COLUMN w INT AS (a*b) VIRTUAL CHECK (w < 100)
+
+statement ok
+ALTER TABLE sc ADD COLUMN w INT AS (a*b) VIRTUAL CHECK (w <= 100)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO sc VALUES (20, 20)
