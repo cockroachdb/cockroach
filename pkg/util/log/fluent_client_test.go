@@ -27,7 +27,7 @@ import (
 )
 
 func TestFluentClient(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	sc := Scope(t)
 	defer sc.Close(t)
 

@@ -21,7 +21,7 @@ import (
 )
 
 func TestNodesString(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	ns := func(ids ...int) Nodes {
 		var nodes []Node
@@ -49,7 +49,7 @@ func TestNodesString(t *testing.T) {
 }
 
 func TestNodesIdentical(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	list := func(nodes ...string) Nodes { // takes in strings of the form "ID@Epoch"
 		var ns []Node

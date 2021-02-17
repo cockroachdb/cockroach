@@ -24,7 +24,7 @@ import (
 )
 
 func TestCluster_IterateRangeDescriptors(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	const numNodes = 1
