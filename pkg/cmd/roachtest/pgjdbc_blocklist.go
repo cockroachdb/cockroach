@@ -25,7 +25,6 @@ var pgjdbcBlockList21_1 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":           "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testVaryingTypeCounts":                  "26508",
 	"org.postgresql.jdbc.PgSQLXMLTest.setCharacterStream":                                       "43355",
-	"org.postgresql.test.core.OptionsPropertyTest.testOptionsInProperties":                      "unknown",
 	"org.postgresql.test.jdbc2.ArrayTest.testEscaping[binary = FORCE]":                          "32552",
 	"org.postgresql.test.jdbc2.ArrayTest.testEscaping[binary = REGULAR]":                        "32552",
 	"org.postgresql.test.jdbc2.ArrayTest.testMultiDimensionalArray[binary = FORCE]":             "32552",
