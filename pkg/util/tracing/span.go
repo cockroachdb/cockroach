@@ -149,16 +149,13 @@ func (s *Span) SetVerbose(to bool) {
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 func (s *Span) GetRecording() Recording {
-	return s.crdb.getRecording(s.tracer.mode())
+	return s.crdb.getRecording(s.tracer.mode(), s.tracer.TracingVerbosityIndependentSemanticsIsActive())
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
 func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if s.tracer.mode() == modeLegacy && s.crdb.recordingType() == RecordingOff {
-		return nil
-	}
 	return s.crdb.importRemoteSpans(remoteSpans)
 }
 
@@ -172,13 +169,6 @@ func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 // starting spans.
 func (s *Span) IsBlackHole() bool {
 	return s.crdb.recordingType() == RecordingOff && s.netTr == nil && s.ot == (otSpan{})
-}
-
-// isNilOrNoop returns true if the Span context is either nil
-// or corresponds to a "no-op" Span. If this is true, any Span
-// derived from this context will be a "black hole Span".
-func (sm *SpanMeta) isNilOrNoop() bool {
-	return sm == nil || (sm.recordingType == RecordingOff && sm.shadowTracerType == "")
 }
 
 // SpanStats are stats that can be added to a Span.
@@ -218,9 +208,21 @@ func (s *Span) Finish() {
 		return
 	}
 	finishTime := time.Now()
+
 	s.crdb.mu.Lock()
+	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
+		s.crdb.mu.Unlock()
+
+		// External spans and net/trace are not always forgiving about spans getting
+		// finished twice, but it may happen so let's be resilient to it.
+		return
+	}
 	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
+	if s.crdb.mu.duration == 0 {
+		s.crdb.mu.duration = time.Nanosecond
+	}
 	s.crdb.mu.Unlock()
+
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.Finish()
 	}

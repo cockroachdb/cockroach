@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -3575,6 +3576,25 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "Returns the collation of the argument",
 			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	// Get the current trace ID.
+	"crdb_internal.trace_id": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sp := tracing.SpanFromContext(ctx.Context)
+				if sp == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.DInt(sp.GetRecording()[0].TraceID)), nil
+			},
+			Info: "Returns the current trace ID or an error if no trace is open.",
+			// NB: possibly this is or could be made stable, but it's not worth it.
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 

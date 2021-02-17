@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	ptypes "github.com/gogo/protobuf/types"
 )
 
 // CrdbInternalName is the name of the crdb_internal schema.
@@ -1148,9 +1149,18 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   duration       INTERVAL,        -- The span's duration, measured from start to Finish().
                                   -- A span whose recording is collected before it's finished will
                                   -- have the duration set as the "time of collection - start time".
+  num_payloads   INT NOT NULL,    -- The number of structured payloads in this span.
   operation      STRING NULL      -- The span's operation.
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		hasAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
+		}
 		return p.ExecCfg().Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
 			for _, rec := range span.GetRecording() {
 				traceID := rec.TraceID
@@ -1167,7 +1177,14 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				spanDuration := rec.Duration
 				operation := rec.Operation
 
+				var numStructured int
+				rec.Structured(func(any *ptypes.Any) {
+					numStructured++
+				})
+
 				if err := addRow(
+					// TODO(angelapwen): we're casting uint64s to int64 here,
+					// is that ok?
 					tree.NewDInt(tree.DInt(traceID)),
 					tree.NewDInt(tree.DInt(parentSpanID)),
 					tree.NewDInt(tree.DInt(spanID)),
@@ -1178,6 +1195,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 						duration.MakeDuration(spanDuration.Nanoseconds(), 0, 0),
 						types.DefaultIntervalTypeMetadata,
 					),
+					tree.NewDInt(tree.DInt(numStructured)),
 					tree.NewDString(operation),
 				); err != nil {
 					return err

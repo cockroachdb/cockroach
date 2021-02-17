@@ -592,9 +592,10 @@ func (s *Server) newConnExecutor(
 			nodeIDOrZero: nodeIDOrZero,
 			clock:        s.cfg.Clock,
 			// Future transaction's monitors will inherits from sessionRootMon.
-			connMon:  sessionRootMon,
-			tracer:   s.cfg.AmbientCtx.Tracer,
-			settings: s.cfg.Settings,
+			connMon:          sessionRootMon,
+			tracer:           s.cfg.AmbientCtx.Tracer,
+			settings:         s.cfg.Settings,
+			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
 		planner:    planner{execCfg: s.cfg, alloc: &rowenc.DatumAlloc{}},

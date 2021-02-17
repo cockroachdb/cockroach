@@ -135,19 +135,27 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
-func (s *crdbSpan) getRecording(m mode) Recording {
+func (s *crdbSpan) getRecording(m mode, everyoneIsV211 bool) Recording {
 	if s == nil {
-		return nil
+		return nil // noop span
 	}
-	if m == modeLegacy && s.recordingType() == RecordingOff {
-		// In legacy tracing (pre always-on), we avoid allocations when the
-		// Span is not actively recording.
-		//
-		// TODO(tbg): we could consider doing the same when background tracing
-		// is on but the current span contains "nothing of interest".
-		return nil
-	}
+
 	s.mu.Lock()
+
+	if !everyoneIsV211 {
+		// The cluster may contain nodes that are running v20.2. Unfortunately that
+		// version can easily crash when a peer returns a recording that that node
+		// did not expect would get created. To circumvent this, retain the v20.2
+		// behavior of eliding recordings when verbosity is off until we're sure
+		// that v20.2 is not around any longer.
+		//
+		// TODO(tbg): remove this in the v21.2 cycle.
+		if m == modeLegacy && s.recordingType() == RecordingOff {
+			s.mu.Unlock()
+			return nil
+		}
+	}
+
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
 	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
@@ -158,7 +166,7 @@ func (s *crdbSpan) getRecording(m mode) Recording {
 	s.mu.Unlock()
 
 	for _, child := range children {
-		result = append(result, child.getRecording(m)...)
+		result = append(result, child.getRecording(m, everyoneIsV211)...)
 	}
 
 	// Sort the spans by StartTime, except the first Span (the root of this
