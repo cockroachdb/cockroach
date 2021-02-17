@@ -129,6 +129,13 @@ func (r *Replica) evalAndPropose(
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
 		proposal.ctx, proposal.sp = tracing.ForkSpan(ctx, "async consensus")
+		{
+			// This span sometimes leaks. Disable it for the time being.
+			//
+			// Tracked in: https://github.com/cockroachdb/cockroach/issues/60677
+			proposal.sp.Finish()
+			proposal.sp = nil
+		}
 
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
