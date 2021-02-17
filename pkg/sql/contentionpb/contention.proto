@@ -58,6 +58,9 @@ message SingleKeyContention {
   // Txns are all contending transactions that we kept track of. Note that some
   // transactions could have been forgotten since we're keeping a limited LRU
   // cache of them.
+  //
+  // The transactions are ordered by the number of times they were encountered
+  // in DESC order (i.e. most frequent first).
   repeated SingleTxnContention txns = 2 [(gogoproto.nullable) = false];
 
   // SingleTxnContention describes a single transaction that contended with the
