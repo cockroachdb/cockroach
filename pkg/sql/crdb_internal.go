@@ -1145,9 +1145,9 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   goroutine_id   INT NOT NULL,    -- The ID of the goroutine on which the span was created.
   finished       BOOL NOT NULL,   -- True if the span has been Finish()ed, false otherwise.
   start_time     TIMESTAMPTZ,     -- The span's start time.
-  duration       INTERVAL,        -- The span's duration, measured from start to Finish(). 
-																  -- A span whose recording is collected before it's finished will 
-																	-- have the duration set as the "time of collection - start time".
+  duration       INTERVAL,        -- The span's duration, measured from start to Finish().
+                                  -- A span whose recording is collected before it's finished will
+                                  -- have the duration set as the "time of collection - start time".
   operation      STRING NULL      -- The span's operation.
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
