@@ -28,6 +28,7 @@ go_test(
     embed = [":invertedexpr"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/sql/inverted",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
