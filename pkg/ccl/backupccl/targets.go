@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -207,6 +209,60 @@ func getAllDescChanges(
 		}
 	}
 	return res, nil
+}
+
+// validateMultiRegionBackup validates that for all tables included in the
+// backup, their parent database is also being backed up. For multi-region
+// tables, we require that the parent database is included to ensure that the
+// multi-region enum (which is required for multi-region tables) is also
+// present.
+func validateMultiRegionBackup(
+	backupStmt *annotatedBackupStatement,
+	descs []catalog.Descriptor,
+	tables []catalog.TableDescriptor,
+) error {
+	// We only need to block in the table backup case, so there's nothing to do
+	// if we're running a cluster backup.
+	if backupStmt.Coverage() == tree.AllDescriptors {
+		return nil
+	}
+	// We build a map of the target databases here because the supplied list of
+	// descriptors contains ALL database descriptors for the corresponding
+	// tables (regardless of whether or not the databases are included in the
+	// backup targets list). The map helps below so that we're not looping over
+	// the descriptors slice for every table.
+	databaseTargetIDs := map[descpb.ID]struct{}{}
+	databaseTargetNames := map[tree.Name]struct{}{}
+	for _, name := range backupStmt.Targets.Databases {
+		databaseTargetNames[name] = struct{}{}
+	}
+
+	for _, desc := range descs {
+		switch desc.(type) {
+		case catalog.DatabaseDescriptor:
+			// If the database descriptor found is included in the targets list, add
+			// it to the targetsID map.
+			if _, ok := databaseTargetNames[tree.Name(desc.GetName())]; ok {
+				databaseTargetIDs[desc.GetID()] = struct{}{}
+			}
+		}
+	}
+
+	// Look through the list of tables and for every multi-region table, see if
+	// its parent database is being backed up.
+	for _, table := range tables {
+		if table.GetLocalityConfig() != nil {
+			if _, ok := databaseTargetIDs[table.GetParentID()]; !ok {
+				// Found a table which is being backed up without its parent database.
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"cannot backup individual table %d from multi-region database %d",
+					table.GetID(),
+					table.GetParentID(),
+				)
+			}
+		}
+	}
+	return nil
 }
 
 func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
