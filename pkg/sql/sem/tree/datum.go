@@ -3272,6 +3272,8 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	if ctx.flags.HasFlags(fmtRawStrings) {
 		ctx.WriteString(s)
 	} else {
+		// TODO(knz): This seems incorrect,
+		// see https://github.com/cockroachdb/cockroach/issues/60673
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, s, ctx.flags.EncodeFlags())
 	}
 }
