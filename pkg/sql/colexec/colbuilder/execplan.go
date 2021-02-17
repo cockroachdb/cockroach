@@ -270,12 +270,9 @@ var (
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
 	errChangeFrontierWrap             = errors.New("core.ChangeFrontier is not supported")
 	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
-	errReadImportWrap                 = errors.New("core.ReadImport is not supported (not an execinfra.RowSource)")
 	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
-	errBackupDataWrap                 = errors.New("core.BackupData is not supported (not an execinfra.RowSource)")
-	errSplitAndScatterWrap            = errors.New("core.SplitAndScatter is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 )
 
@@ -286,7 +283,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	switch {
 	case spec.Core.Noop != nil:
 	case spec.Core.TableReader != nil:
-	case spec.Core.Filterer != nil:
 	case spec.Core.JoinReader != nil:
 	case spec.Core.Sorter != nil:
 	case spec.Core.Aggregator != nil:
@@ -297,7 +293,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.Backfiller != nil:
 		return errBackfillerWrap
 	case spec.Core.ReadImport != nil:
-		return errReadImportWrap
 	case spec.Core.CSVWriter != nil:
 		return errCSVWriterWrap
 	case spec.Core.Sampler != nil:
@@ -331,10 +326,11 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.InvertedFilterer != nil:
 	case spec.Core.InvertedJoiner != nil:
 	case spec.Core.BackupData != nil:
-		return errBackupDataWrap
 	case spec.Core.SplitAndScatter != nil:
-		return errSplitAndScatterWrap
 	case spec.Core.RestoreData != nil:
+	case spec.Core.Filterer != nil:
+	case spec.Core.StreamIngestionData != nil:
+	case spec.Core.StreamIngestionFrontier != nil:
 	default:
 		return errors.AssertionFailedf("unexpected processor core %q", spec.Core)
 	}
