@@ -48,6 +48,7 @@ go_test(
         "table_col_set_test.go",
     ],
     embed = [":catalog"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",

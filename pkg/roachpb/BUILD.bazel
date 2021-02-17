@@ -159,6 +159,7 @@ go_test(
         "version_test.go",
     ],
     embed = [":with-mocks"],  # keep
+    tags = ["no-remote"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/kv/kvserver/concurrency/lock",

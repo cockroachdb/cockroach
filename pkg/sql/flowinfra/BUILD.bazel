@@ -62,6 +62,7 @@ go_test(
         "utils_test.go",
     ],
     embed = [":flowinfra"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",

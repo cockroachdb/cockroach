@@ -43,6 +43,7 @@ go_test(
         "vec_test.go",
     ],
     embed = [":coldata"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
