@@ -891,7 +891,9 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 			cf.MoveToDraining(err)
 			return ctx
 		}
-		cf.jobProgressedFn = job.HighWaterProgressed
+		cf.jobProgressedFn = func(ctx context.Context, fn jobs.HighWaterProgressedFn) error {
+			return job.HighWaterProgressed(ctx, nil /* txn */, fn)
+		}
 
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {

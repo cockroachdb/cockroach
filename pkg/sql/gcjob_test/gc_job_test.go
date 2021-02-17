@@ -370,7 +370,7 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx)
+		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, st)
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
@@ -401,7 +401,7 @@ func TestGCResumer(t *testing.T) {
 
 		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx)
+		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, st)
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)

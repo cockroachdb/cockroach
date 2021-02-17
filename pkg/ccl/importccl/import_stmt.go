@@ -1271,7 +1271,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			}
 
 			// Update the job once all descs have been prepared for ingestion.
-			err = r.job.WithTxn(txn).SetDetails(ctx, importDetails)
+			err = r.job.SetDetails(ctx, txn, importDetails)
 
 			return err
 		})
@@ -1372,7 +1372,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 	owner := r.job.Payload().UsernameProto.Decode()
 
 	if details.ParseBundleSchema {
-		if err := r.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*r.job.ID()))
@@ -1409,7 +1409,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		// Prevent job from redoing schema parsing and table desc creation
 		// on subsequent resumptions.
 		details.ParseBundleSchema = false
-		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
+		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
 			return err
 		}
 	}
@@ -1495,7 +1495,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
+		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
 			return err
 		}
 	}
@@ -1615,7 +1615,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 
 		// Update job record to mark tables published state as complete.
 		details.TablesPublished = true
-		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+		err := r.job.SetDetails(ctx, txn, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}

@@ -256,5 +256,5 @@ func SetResumeSpansInJob(
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	return job.WithTxn(txn).SetDetails(ctx, details)
+	return job.SetDetails(ctx, txn, details)
 }

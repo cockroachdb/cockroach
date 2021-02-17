@@ -431,8 +431,8 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	if !r.startUsingSQLLivenessAdoption(ctx) {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
-		if err := j.WithTxn(txn).deprecatedInsert(
-			ctx, r.makeJobID(), r.deprecatedNewLease(), s,
+		if err := j.deprecatedInsert(
+			ctx, txn, r.makeJobID(), r.deprecatedNewLease(), s,
 		); err != nil {
 			return nil, err
 		}
@@ -477,8 +477,8 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 	// in the cluster) to adopt this job at a later time.
 	lease := &jobspb.Lease{NodeID: invalidNodeID}
 
-	if err := j.WithTxn(txn).deprecatedInsert(
-		ctx, r.makeJobID(), lease, nil,
+	if err := j.deprecatedInsert(
+		ctx, txn, r.makeJobID(), lease, nil,
 	); err != nil {
 		return nil, err
 	}
@@ -505,11 +505,6 @@ func (r *Registry) CreateStartableJobWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	// The job itself must not hold on to this transaction. We ensure in Start()
-	// that the transaction used to create the job is committed. When jobs hold
-	// onto transactions they use the transaction in methods which modify the job.
-	// On the whole this pattern is bug-prone and hard to reason about.
-	j.WithTxn(nil)
 	resumer, err := r.createResumer(j, r.settings)
 	if err != nil {
 		return nil, err
@@ -564,7 +559,7 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn)
 		id:       &jobID,
 		registry: r,
 	}
-	if err := j.WithTxn(txn).load(ctx); err != nil {
+	if err := j.load(ctx, txn); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -580,7 +575,7 @@ func (r *Registry) UpdateJobWithTxn(
 		id:       &jobID,
 		registry: r,
 	}
-	return j.WithTxn(txn).Update(ctx, updateFunc)
+	return j.Update(ctx, txn, updateFunc)
 }
 
 // DefaultCancelInterval is a reasonable interval at which to poll this node
@@ -1004,12 +999,12 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) e
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
 			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
-				return job.WithTxn(txn).cancelRequested(ctx, nil)
+				return job.cancelRequested(ctx, txn, nil)
 			}
 		}
 		return err
 	}
-	return job.WithTxn(txn).cancelRequested(ctx, nil)
+	return job.cancelRequested(ctx, txn, nil)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
@@ -1022,7 +1017,7 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) er
 	if pr, ok := resumer.(PauseRequester); ok {
 		onPauseRequested = pr.OnPauseRequest
 	}
-	return job.WithTxn(txn).pauseRequested(ctx, onPauseRequested)
+	return job.pauseRequested(ctx, txn, onPauseRequested)
 }
 
 // Succeeded marks the job with id as succeeded.
@@ -1031,7 +1026,7 @@ func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).succeeded(ctx, nil)
+	return job.succeeded(ctx, txn, nil)
 }
 
 // Failed marks the job with id as failed.
@@ -1040,7 +1035,7 @@ func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingErr
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).failed(ctx, causingError, nil)
+	return job.failed(ctx, txn, causingError, nil)
 }
 
 // Unpause changes the paused job with id to running or reverting using the
@@ -1050,7 +1045,7 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id int64) error {
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).unpaused(ctx)
+	return job.unpaused(ctx, txn)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
@@ -1157,7 +1152,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", *job.ID())
 		if payload.StartedMicros == 0 {
-			if err := job.started(ctx); err != nil {
+			if err := job.started(ctx, nil /* txn */); err != nil {
 				return err
 			}
 		}
@@ -1204,7 +1199,7 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: unexpected status %s provided to state machine", *job.ID(), status)
 	case StatusCanceled:
-		if err := job.canceled(ctx, nil); err != nil {
+		if err := job.canceled(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", *job.ID(), jobErr)
@@ -1215,7 +1210,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: successful bu unexpected error provided", *job.ID())
 		}
-		if err := job.succeeded(ctx, nil); err != nil {
+		if err := job.succeeded(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
 			// through reverting state first.
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
@@ -1225,7 +1220,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		return nil
 	case StatusReverting:
-		if err := job.reverted(ctx, jobErr, nil); err != nil {
+		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
@@ -1272,7 +1267,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: has StatusFailed but no error was provided", *job.ID())
 		}
-		if err := job.failed(ctx, jobErr, nil); err != nil {
+		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)

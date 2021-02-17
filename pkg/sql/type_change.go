@@ -95,10 +95,10 @@ func (p *planner) writeTypeSchemaChange(
 			TypeID:               typeDesc.ID,
 			TransitioningMembers: transitioningMembers,
 		}
-		if err := job.WithTxn(p.txn).SetDetails(ctx, newDetails); err != nil {
+		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
 			return err
 		}
-		if err := job.WithTxn(p.txn).SetDescription(ctx,
+		if err := job.SetDescription(ctx, p.txn,
 			func(ctx context.Context, description string) (string, error) {
 				return description + "; " + jobDesc, nil
 			},
