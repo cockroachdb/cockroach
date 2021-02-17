@@ -51,6 +51,7 @@ type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDi
 interface StatementsSummaryData {
   statement: string;
   implicitTxn: boolean;
+  fullScan: boolean;
   stats: StatementStatistics[];
 }
 
@@ -68,7 +69,7 @@ export const selectStatements = createSelector(
     state: CachedDataReducerState<StatementsResponseMessage>,
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
-  ) => {
+  ): AggregateStatistics[] => {
     if (!state.data) {
       return null;
     }
@@ -105,6 +106,7 @@ export const selectStatements = createSelector(
         statsByStatementAndImplicitTxn[key] = {
           statement: stmt.statement,
           implicitTxn: stmt.implicit_txn,
+          fullScan: stmt.full_scan,
           stats: [],
         };
       }
@@ -116,6 +118,7 @@ export const selectStatements = createSelector(
       return {
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
+        fullScan: stmt.fullScan,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };
@@ -179,7 +182,6 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-
     return PrintTime(TimestampToMoment(state.data.last_reset));
   },
 );
