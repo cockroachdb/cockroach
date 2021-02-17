@@ -26,6 +26,11 @@ func Node(g geo.Geometry) (geo.Geometry, error) {
 		return geo.Geometry{}, errors.New("geometry type is unsupported. Please pass a LineString or a MultiLineString")
 	}
 
+	// Return GEOMETRYCOLLECTION EMPTY if it is empty.
+	if g.Empty() {
+		return geo.MakeGeometryFromGeomT(geom.NewGeometryCollection().SetSRID(int(g.SRID())))
+	}
+
 	res, err := geos.Node(g.EWKB())
 	if err != nil {
 		return geo.Geometry{}, err
@@ -56,7 +61,13 @@ func Node(g geo.Geometry) (geo.Geometry, error) {
 	if err != nil {
 		return geo.Geometry{}, errors.Newf("error extracting endpoints: %v", err)
 	}
-	mllines := glines.(*geom.MultiLineString)
+	var mllines *geom.MultiLineString
+	switch t := glines.(type) {
+	case *geom.MultiLineString:
+		mllines = t
+	default:
+		return geo.Geometry{}, errors.AssertionFailedf("unknown LineMerge result type: %T", t)
+	}
 
 	gep, err := ep.AsGeomT()
 	if err != nil {
