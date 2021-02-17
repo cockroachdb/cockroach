@@ -2366,8 +2366,8 @@ def go_deps():
         name = "com_github_shirou_gopsutil",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/shirou/gopsutil",
-        sum = "h1:P37G9YH8M4vqkKcwBosp+URN5O8Tay67D2MbR361ioY=",
-        version = "v2.20.6+incompatible",
+        sum = "h1:msXs2frUV+O/JLva9EDLpuJ84PrFsdCTCQex8PUdtkQ=",
+        version = "v2.20.9+incompatible",
     )
     go_repository(
         name = "com_github_shopify_goreferrer",
