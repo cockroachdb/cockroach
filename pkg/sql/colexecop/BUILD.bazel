@@ -26,6 +26,7 @@ go_test(
     size = "small",
     srcs = ["dep_test.go"],
     embed = [":colexecop"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/testutils/buildutil",
         "//pkg/util/leaktest",

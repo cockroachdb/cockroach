@@ -35,6 +35,7 @@ go_test(
     name = "colexecagg_test",
     srcs = ["dep_test.go"],
     embed = [":colexecagg"],
+    tags = ["no-remote"],
     deps = ["//pkg/testutils/buildutil"],
 )
 

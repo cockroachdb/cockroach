@@ -47,6 +47,7 @@ go_test(
         "mergejoiner_test.go",
     ],
     embed = [":colexecjoin"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
