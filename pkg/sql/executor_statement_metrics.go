@@ -202,7 +202,9 @@ func (ex *connExecutor) recordStatementSummary(
 	stmtID := ex.statsCollector.recordStatement(
 		stmt, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
-		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
+		flags.IsSet(planFlagImplicitTxn),
+		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
 
