@@ -957,3 +957,15 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
                                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                          voter_constraints = '[+region=ca-central-1]',
                                          lease_preferences = '[[+region=ca-central-1]]'
+
+statement error cannot backup individual tables from a multi-region database
+BACKUP TABLE regional_by_row_table TO 'nodelocal://self/rbr_table/';
+
+statement error cannot backup individual tables from a multi-region database
+BACKUP TABLE regional_by_table_in_primary_region TO 'nodelocal://self/rbr_table/';
+
+statement error cannot backup individual tables from a multi-region database
+BACKUP TABLE regional_by_table_in_ca_central_1 TO 'nodelocal://self/rbr_table/';
+
+statement error cannot backup individual tables from a multi-region database
+BACKUP TABLE global_table TO 'nodelocal://self/rbr_table/';

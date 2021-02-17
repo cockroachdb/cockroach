@@ -209,6 +209,56 @@ func getAllDescChanges(
 	return res, nil
 }
 
+// blockMultiRegionTableBackup validates that for all tables included in the
+// backup, their parent database is also being backed up.
+func blockMultiRegionTableBackup(
+	backupStmt *annotatedBackupStatement,
+	descs []catalog.Descriptor,
+	tables []catalog.TableDescriptor,
+) error {
+	// We only need to block in the table backup case, so there's nothing to do
+	// if we're running a cluster backup.
+	if backupStmt.Coverage() == tree.AllDescriptors {
+		return nil
+	}
+	// We build a map of the target databases here because the supplied list of
+	// descriptors contains ALL database descriptors for the corresponding
+	// tables (regardless of whether or not the databases are included in the
+	// backup targets list). The map helps below so that we're not looping over
+	// the descriptors slice for every table.
+	databaseTargets := map[descpb.ID]struct{}{}
+	for _, desc := range descs {
+		switch desc.(type) {
+		case catalog.DatabaseDescriptor:
+			// If the database descriptor found is included in the targets list, add
+			// it to the map.
+			for _, name := range backupStmt.Targets.Databases {
+				if desc.GetName() == name.String() {
+					databaseTargets[desc.GetID()] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Look through the list of tables and for every multi-region table, see if
+	// its parent database is being backed up.
+	for _, table := range tables {
+		if table.GetLocalityConfig() != nil {
+			if _, ok := databaseTargets[table.GetParentID()]; !ok {
+				// Found a table which is being backed up without its parent database.
+				return errors.WithDetail(errors.Newf(
+					"backing up multi-region table %d without backing up parent database %d",
+					table.GetID(),
+					table.GetParentID(),
+				),
+					"cannot backup individual tables from a multi-region database",
+				)
+			}
+		}
+	}
+	return nil
+}
+
 func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	inBackup := make(map[descpb.ID]bool, len(tables))
 	for _, t := range tables {
