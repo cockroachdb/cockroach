@@ -27,13 +27,14 @@ CREATE TABLE uniq_overlaps_pk (
   PRIMARY KEY (a, b),
   UNIQUE WITHOUT INDEX (b, c),
   UNIQUE WITHOUT INDEX (a, b, d),
-  UNIQUE WITHOUT INDEX (a),
-  UNIQUE WITHOUT INDEX (c, d),
   FAMILY (a),
   FAMILY (b),
   FAMILY (c),
   FAMILY (d)
-)
+);
+ALTER TABLE uniq_overlaps_pk ADD CONSTRAINT unique_a UNIQUE WITHOUT INDEX (a) NOT VALID;
+ALTER TABLE uniq_overlaps_pk ADD CONSTRAINT unique_c_d UNIQUE WITHOUT INDEX (c, d) NOT VALID
+
 
 statement ok
 CREATE TABLE uniq_hidden_pk (
@@ -881,12 +882,14 @@ vectorized: true
 │               │ columns: (column1, column2, column3, column4)
 │               │ estimated row count: 0 (missing stats)
 │               │ table: uniq_enum@uniq_enum_r_s_j_key
+│               │ equality cols are key
 │               │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (column1, column2, column3, column4)
 │                   │ estimated row count: 0 (missing stats)
 │                   │ table: uniq_enum@primary
+│                   │ equality cols are key
 │                   │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │                   │
 │                   └── • lookup join (anti)
@@ -1476,6 +1479,80 @@ vectorized: true
             └── • scan buffer
                   label: buffer 1
 
+statement ok
+ALTER TABLE uniq_overlaps_pk VALIDATE CONSTRAINT unique_a
+
+# Same test as the previous, but now that the constraint has been validated, it
+# can be treated as a key. This allows the joins to be more efficient.
+query T
+EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_overlaps_pk
+│   │ set: a, b, c, d
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_overlaps_pk@primary
+│                 spans: [/5 - /5]
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (b_new, c_new)
+│           │ right cols are key
+│           │ pred: a_new != a
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_overlaps_pk@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: uniq_overlaps_pk@primary
+│           │ equality: (a_new) = (a)
+│           │ pred: b_new != b
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (c, d) = (c_new, d_new)
+            │ right cols are key
+            │ pred: (a_new != a) OR (b_new != b)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_overlaps_pk@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
 # Update with non-constant input.
 # No need to add a check for b,c since those columns weren't updated.
 # Add inequality filters for the hidden primary key column.
@@ -1614,6 +1691,7 @@ vectorized: true
 │       │
 │       └── • hash join (right anti)
 │           │ equality: (b, c) = (b_new, c)
+│           │ right cols are key
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -2688,6 +2766,7 @@ vectorized: true
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)
 │                       │ estimated row count: 2 (missing stats)
 │                       │ table: uniq_enum@uniq_enum_r_s_j_key
+│                       │ equality cols are key
 │                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │                       │
 │                       └── • values

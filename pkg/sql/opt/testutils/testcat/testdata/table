@@ -12,9 +12,8 @@ TABLE kv
  ├── k int not null
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
- │    └── k int not null
- └── UNIQUE (k)
+ └── PRIMARY INDEX primary
+      └── k int not null
 
 exec-ddl
 CREATE TABLE abcdef (
@@ -42,9 +41,8 @@ TABLE abcdef
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── CHECK (f > 2)
- ├── INDEX primary
- │    └── rowid int not null default (unique_rowid()) [hidden]
- └── UNIQUE (rowid)
+ └── PRIMARY INDEX primary
+      └── rowid int not null default (unique_rowid()) [hidden]
 
 exec-ddl
 CREATE TABLE uvwxy (
@@ -74,10 +72,9 @@ TABLE uvwxy
  ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp)
  ├── FAMILY family2 (x)
  ├── FAMILY family3 (y)
- ├── INDEX primary
- │    ├── u int not null
- │    └── v int not null
- └── UNIQUE (u, v)
+ └── PRIMARY INDEX primary
+      ├── u int not null
+      └── v int not null
 
 exec-ddl
 CREATE TABLE a (a INT UNIQUE)
@@ -90,13 +87,11 @@ TABLE a
  ├── a int
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INDEX a_a_key
- │    ├── a int
- │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── UNIQUE (rowid)
- └── UNIQUE (a)
+ └── UNIQUE INDEX a_a_key
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden] (storing)
 
 exec-ddl
 CREATE TABLE part1 (a INT PRIMARY KEY, b INT) PARTITION BY LIST (a) (
@@ -113,14 +108,13 @@ TABLE part1
  ├── a int not null
  ├── b int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
- │    ├── a int not null
- │    └── partition by list prefixes
- │         ├── (1)
- │         ├── (3)
- │         ├── (4)
- │         └── (5)
- └── UNIQUE (a)
+ └── PRIMARY INDEX primary
+      ├── a int not null
+      └── partition by list prefixes
+           ├── (1)
+           ├── (3)
+           ├── (4)
+           └── (5)
 
 exec-ddl
 CREATE TABLE part2 (
@@ -147,7 +141,7 @@ TABLE part2
  ├── b string not null
  ├── c int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    ├── a string not null
  │    ├── b string not null
  │    ├── c int not null
@@ -156,15 +150,14 @@ TABLE part2
  │         ├── ('foo', 'baz')
  │         ├── ('qux', 'qux')
  │         └── ('waldo')
- ├── INDEX secondary
- │    ├── c int not null
- │    ├── a string not null
- │    ├── b string not null
- │    └── partition by list prefixes
- │         ├── (1)
- │         ├── (3)
- │         └── (4)
- └── UNIQUE (a, b, c)
+ └── INDEX secondary
+      ├── c int not null
+      ├── a string not null
+      ├── b string not null
+      └── partition by list prefixes
+           ├── (1)
+           ├── (3)
+           └── (4)
 
 exec-ddl
 CREATE TABLE inv (
@@ -188,15 +181,14 @@ TABLE inv
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── j_inverted_key jsonb not null [virtual-inverted]
  ├── g_inverted_key geometry not null [virtual-inverted]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── k int not null
  ├── INVERTED INDEX secondary
  │    ├── j_inverted_key jsonb not null [virtual-inverted]
  │    └── k int not null
- ├── INVERTED INDEX secondary
- │    ├── g_inverted_key geometry not null [virtual-inverted]
- │    └── k int not null
- └── UNIQUE (k)
+ └── INVERTED INDEX secondary
+      ├── g_inverted_key geometry not null [virtual-inverted]
+      └── k int not null
 
 # Table with inverted indexes and implicit primary index.
 exec-ddl
@@ -220,15 +212,14 @@ TABLE inv2
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── j_inverted_key jsonb not null [virtual-inverted]
  ├── g_inverted_key geometry not null [virtual-inverted]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INVERTED INDEX secondary
  │    ├── j_inverted_key jsonb not null [virtual-inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INVERTED INDEX secondary
- │    ├── g_inverted_key geometry not null [virtual-inverted]
- │    └── rowid int not null default (unique_rowid()) [hidden]
- └── UNIQUE (rowid)
+ └── INVERTED INDEX secondary
+      ├── g_inverted_key geometry not null [virtual-inverted]
+      └── rowid int not null default (unique_rowid()) [hidden]
 
 # Table with unique constraints.
 exec-ddl
@@ -257,19 +248,16 @@ TABLE uniq
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── CHECK (k IN ('foo', 'bar', 'baz'))
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INDEX uniq_i_key
+ ├── UNIQUE INDEX uniq_i_key
  │    ├── i int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── INDEX secondary
+ ├── UNIQUE INDEX secondary
  │    ├── k string
  │    ├── j string
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
- ├── UNIQUE (rowid)
- ├── UNIQUE (i)
  ├── UNIQUE WITHOUT INDEX (j)
- ├── UNIQUE (j, k)
  ├── UNIQUE WITHOUT INDEX (l, m)
  └── UNIQUE WITHOUT INDEX (l)
       └── WHERE l > 0
@@ -297,12 +285,11 @@ TABLE mutations
  ├── c int [write-only]
  ├── d int [delete-only]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INDEX idxa (mutation)
  │    ├── a int
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INDEX idxb (mutation)
- │    ├── b int [inaccessible]
- │    └── rowid int not null default (unique_rowid()) [hidden]
- └── UNIQUE (rowid)
+ └── INDEX idxb (mutation)
+      ├── b int [inaccessible]
+      └── rowid int not null default (unique_rowid()) [hidden]

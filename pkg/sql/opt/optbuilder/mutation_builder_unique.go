@@ -290,7 +290,9 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	return h.mb.b.buildScan(
 		tabMeta,
 		ordinals,
-		nil, /* indexFlags */
+		// After the update we can't guarantee that the constraints are unique
+		// (which is why we need the uniqueness checks in the first place).
+		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
 	), ordinals
