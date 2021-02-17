@@ -2126,7 +2126,8 @@ func NewTableDesc(
 	for i := range n.Defs {
 		if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
 			if expr := columnDefaultExprs[i]; expr != nil {
-				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[colIdx], expr, affected)
+				changedSeqDescs, err := maybeAddSequenceDependencies(
+					ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
 				if err != nil {
 					return nil, err
 				}

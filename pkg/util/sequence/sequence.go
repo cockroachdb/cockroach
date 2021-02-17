@@ -125,7 +125,7 @@ func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
 // any sequence names in the expression by their IDs instead.
 // e.g. nextval('foo') => nextval(123::regclass)
 func ReplaceSequenceNamesWithIDs(
-	defaultExpr tree.Expr, nameToID map[string]int64,
+	defaultExpr tree.TypedExpr, nameToID map[string]int64,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch t := expr.(type) {
