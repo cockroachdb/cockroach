@@ -180,6 +180,7 @@ export interface ExecutionStatistics {
   vec: boolean;
   opt: boolean;
   implicit_txn: boolean;
+  full_scan: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -195,6 +196,7 @@ export function flattenStatementStats(
     vec: stmt.key.key_data.vec,
     opt: stmt.key.key_data.opt,
     implicit_txn: stmt.key.key_data.implicit_txn,
+    full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
     node_id: stmt.key.node_id,
     stats: stmt.stats,
