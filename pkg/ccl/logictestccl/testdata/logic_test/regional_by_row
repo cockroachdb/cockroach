@@ -297,7 +297,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@24, column1) = (crdb_region,pk)
+│           │ equality: (lookup_join_const_col_@22, column1) = (crdb_region,pk)
 │           │ equality cols are key
 │           │ pred: column15 != crdb_region
 │           │
@@ -315,7 +315,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@36, column4) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@37, column4) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (column1 != pk) OR (column15 != crdb_region)
 │           │
@@ -333,7 +333,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@49, column3, column4) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@52, column3, column4) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (column1 != pk) OR (column15 != crdb_region)
             │
@@ -383,7 +383,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@35, upsert_pk) = (crdb_region,pk)
+│           │ equality: (lookup_join_const_col_@33, upsert_pk) = (crdb_region,pk)
 │           │ equality cols are key
 │           │ pred: column1 != crdb_region
 │           │
@@ -401,7 +401,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@47, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@48, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -419,7 +419,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@60, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@63, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
@@ -465,7 +465,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@35, upsert_pk) = (crdb_region,pk)
+│           │ equality: (lookup_join_const_col_@33, upsert_pk) = (crdb_region,pk)
 │           │ equality cols are key
 │           │ pred: column1 != crdb_region
 │           │
@@ -483,7 +483,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@47, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@48, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -501,7 +501,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@60, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@63, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │

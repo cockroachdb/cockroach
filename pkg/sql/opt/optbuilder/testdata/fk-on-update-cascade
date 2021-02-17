@@ -53,15 +53,15 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child(p) -> parent(p)
                      └── anti-join (hash)
-                          ├── columns: p_new:14!null
+                          ├── columns: p:14!null
                           ├── with-scan &2
-                          │    ├── columns: p_new:14!null
+                          │    ├── columns: p:14!null
                           │    └── mapping:
-                          │         └──  p_new:13 => p_new:14
+                          │         └──  p_new:13 => p:14
                           ├── scan parent
                           │    └── columns: parent.p:15!null
                           └── filters
-                               └── p_new:14 = parent.p:15
+                               └── p:14 = parent.p:15
 
 exec-ddl
 CREATE TABLE parent_multi (
@@ -136,22 +136,22 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
                      └── anti-join (hash)
-                          ├── columns: p_new:23!null q_new:24!null
+                          ├── columns: p:23!null q:24!null
                           ├── select
-                          │    ├── columns: p_new:23!null q_new:24!null
+                          │    ├── columns: p:23!null q:24!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: p_new:23 q_new:24
+                          │    │    ├── columns: p:23 q:24
                           │    │    └── mapping:
-                          │    │         ├──  p_new:21 => p_new:23
-                          │    │         └──  q_new:22 => q_new:24
+                          │    │         ├──  p_new:21 => p:23
+                          │    │         └──  q_new:22 => q:24
                           │    └── filters
-                          │         ├── p_new:23 IS NOT NULL
-                          │         └── q_new:24 IS NOT NULL
+                          │         ├── p:23 IS NOT NULL
+                          │         └── q:24 IS NOT NULL
                           ├── scan parent_multi
                           │    └── columns: parent_multi.p:26 parent_multi.q:27
                           └── filters
-                               ├── p_new:23 = parent_multi.p:26
-                               └── q_new:24 = parent_multi.q:27
+                               ├── p:23 = parent_multi.p:26
+                               └── q:24 = parent_multi.q:27
 
 # Update only one of the two FK columns. The "before" and "after" values of q
 # come from the same column in the mutation input.
@@ -206,20 +206,20 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
                      └── anti-join (hash)
-                          ├── columns: p_new:22!null q:23!null
+                          ├── columns: p:22!null q:23!null
                           ├── select
-                          │    ├── columns: p_new:22!null q:23!null
+                          │    ├── columns: p:22!null q:23!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: p_new:22!null q:23
+                          │    │    ├── columns: p:22!null q:23
                           │    │    └── mapping:
-                          │    │         ├──  p_new:20 => p_new:22
+                          │    │         ├──  p_new:20 => p:22
                           │    │         └──  q:21 => q:23
                           │    └── filters
                           │         └── q:23 IS NOT NULL
                           ├── scan parent_multi
                           │    └── columns: parent_multi.p:25 parent_multi.q:26
                           └── filters
-                               ├── p_new:22 = parent_multi.p:25
+                               ├── p:22 = parent_multi.p:25
                                └── q:23 = parent_multi.q:26
 
 build-cascades
@@ -292,17 +292,17 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
                      └── anti-join (hash)
-                          ├── columns: column2:25!null column3:26!null
+                          ├── columns: p:25!null q:26!null
                           ├── with-scan &2
-                          │    ├── columns: column2:25!null column3:26!null
+                          │    ├── columns: p:25!null q:26!null
                           │    └── mapping:
-                          │         ├──  column2:23 => column2:25
-                          │         └──  column3:24 => column3:26
+                          │         ├──  column2:23 => p:25
+                          │         └──  column3:24 => q:26
                           ├── scan parent_multi
                           │    └── columns: parent_multi.p:28 parent_multi.q:29
                           └── filters
-                               ├── column2:25 = parent_multi.p:28
-                               └── column3:26 = parent_multi.q:29
+                               ├── p:25 = parent_multi.p:28
+                               └── q:26 = parent_multi.q:29
 
 # Upsert that only touches one of the FK columns.
 build-cascades
@@ -379,20 +379,20 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
                      └── anti-join (hash)
-                          ├── columns: column2:26!null q:27!null
+                          ├── columns: p:26!null q:27!null
                           ├── select
-                          │    ├── columns: column2:26!null q:27!null
+                          │    ├── columns: p:26!null q:27!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: column2:26!null q:27
+                          │    │    ├── columns: p:26!null q:27
                           │    │    └── mapping:
-                          │    │         ├──  column2:24 => column2:26
+                          │    │         ├──  column2:24 => p:26
                           │    │         └──  q:25 => q:27
                           │    └── filters
                           │         └── q:27 IS NOT NULL
                           ├── scan parent_multi
                           │    └── columns: parent_multi.p:29 parent_multi.q:30
                           └── filters
-                               ├── column2:26 = parent_multi.p:29
+                               ├── p:26 = parent_multi.p:29
                                └── q:27 = parent_multi.q:30
 
 build-cascades
@@ -469,20 +469,20 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
                      └── anti-join (hash)
-                          ├── columns: upsert_p:28!null q:29!null
+                          ├── columns: p:28!null q:29!null
                           ├── select
-                          │    ├── columns: upsert_p:28!null q:29!null
+                          │    ├── columns: p:28!null q:29!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: upsert_p:28!null q:29
+                          │    │    ├── columns: p:28!null q:29
                           │    │    └── mapping:
-                          │    │         ├──  upsert_p:26 => upsert_p:28
+                          │    │         ├──  upsert_p:26 => p:28
                           │    │         └──  q:27 => q:29
                           │    └── filters
                           │         └── q:29 IS NOT NULL
                           ├── scan parent_multi
                           │    └── columns: parent_multi.p:31 parent_multi.q:32
                           └── filters
-                               ├── upsert_p:28 = parent_multi.p:31
+                               ├── p:28 = parent_multi.p:31
                                └── q:29 = parent_multi.q:32
 
 # Test a two-level cascade.
@@ -547,21 +547,21 @@ root
       │    └── f-k-checks
       │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
       │              └── anti-join (hash)
-      │                   ├── columns: p:22!null q_new:23!null
+      │                   ├── columns: p:22!null q:23!null
       │                   ├── select
-      │                   │    ├── columns: p:22!null q_new:23!null
+      │                   │    ├── columns: p:22!null q:23!null
       │                   │    ├── with-scan &2
-      │                   │    │    ├── columns: p:22!null q_new:23
+      │                   │    │    ├── columns: p:22!null q:23
       │                   │    │    └── mapping:
       │                   │    │         ├──  p:20 => p:22
-      │                   │    │         └──  q_new:21 => q_new:23
+      │                   │    │         └──  q_new:21 => q:23
       │                   │    └── filters
-      │                   │         └── q_new:23 IS NOT NULL
+      │                   │         └── q:23 IS NOT NULL
       │                   ├── scan parent_multi
       │                   │    └── columns: parent_multi.p:25 parent_multi.q:26
       │                   └── filters
       │                        ├── p:22 = parent_multi.p:25
-      │                        └── q_new:23 = parent_multi.q:26
+      │                        └── q:23 = parent_multi.q:26
       └── cascade
            └── update grandchild
                 ├── columns: <none>
@@ -591,21 +591,21 @@ root
                 └── f-k-checks
                      └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
                           └── anti-join (hash)
-                               ├── columns: c:40!null q_new:41!null
+                               ├── columns: c:40!null q:41!null
                                ├── select
-                               │    ├── columns: c:40!null q_new:41!null
+                               │    ├── columns: c:40!null q:41!null
                                │    ├── with-scan &3
-                               │    │    ├── columns: c:40!null q_new:41
+                               │    │    ├── columns: c:40!null q:41
                                │    │    └── mapping:
                                │    │         ├──  c:38 => c:40
-                               │    │         └──  q_new:39 => q_new:41
+                               │    │         └──  q_new:39 => q:41
                                │    └── filters
-                               │         └── q_new:41 IS NOT NULL
+                               │         └── q:41 IS NOT NULL
                                ├── scan child_multi
                                │    └── columns: child_multi.c:42!null child_multi.q:44
                                └── filters
                                     ├── c:40 = child_multi.c:42
-                                    └── q_new:41 = child_multi.q:44
+                                    └── q:41 = child_multi.q:44
 
 build-cascades
 UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
@@ -679,17 +679,17 @@ root
       │    └── f-k-checks
       │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
       │              └── anti-join (hash)
-      │                   ├── columns: column2:25!null column3:26!null
+      │                   ├── columns: p:25!null q:26!null
       │                   ├── with-scan &2
-      │                   │    ├── columns: column2:25!null column3:26!null
+      │                   │    ├── columns: p:25!null q:26!null
       │                   │    └── mapping:
-      │                   │         ├──  column2:23 => column2:25
-      │                   │         └──  column3:24 => column3:26
+      │                   │         ├──  column2:23 => p:25
+      │                   │         └──  column3:24 => q:26
       │                   ├── scan parent_multi
       │                   │    └── columns: parent_multi.p:28 parent_multi.q:29
       │                   └── filters
-      │                        ├── column2:25 = parent_multi.p:28
-      │                        └── column3:26 = parent_multi.q:29
+      │                        ├── p:25 = parent_multi.p:28
+      │                        └── q:26 = parent_multi.q:29
       └── cascade
            └── update grandchild
                 ├── columns: <none>
@@ -719,17 +719,17 @@ root
                 └── f-k-checks
                      └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
                           └── anti-join (hash)
-                               ├── columns: c:43!null column3:44!null
+                               ├── columns: c:43!null q:44!null
                                ├── with-scan &3
-                               │    ├── columns: c:43!null column3:44!null
+                               │    ├── columns: c:43!null q:44!null
                                │    └── mapping:
                                │         ├──  c:41 => c:43
-                               │         └──  column3:42 => column3:44
+                               │         └──  column3:42 => q:44
                                ├── scan child_multi
                                │    └── columns: child_multi.c:45!null child_multi.q:47
                                └── filters
                                     ├── c:43 = child_multi.c:45
-                                    └── column3:44 = child_multi.q:47
+                                    └── q:44 = child_multi.q:47
 
 # Test a cascade to a child with a partial index.
 exec-ddl
@@ -806,15 +806,15 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_partial(p) -> parent_partial(p)
                      └── anti-join (hash)
-                          ├── columns: p_new:19!null
+                          ├── columns: p:19!null
                           ├── with-scan &2
-                          │    ├── columns: p_new:19!null
+                          │    ├── columns: p:19!null
                           │    └── mapping:
-                          │         └──  p_new:15 => p_new:19
+                          │         └──  p_new:15 => p:19
                           ├── scan parent_partial
                           │    └── columns: parent_partial.p:20!null
                           └── filters
-                               └── p_new:19 = parent_partial.p:20
+                               └── p:19 = parent_partial.p:20
 
 # Test a cascade to a child with a partial index with an ambiguous name.
 exec-ddl
@@ -1006,22 +1006,22 @@ root
            └── f-k-checks
                 └── f-k-checks-item: child_multi_partial(p,q) -> parent_multi_partial(p,q)
                      └── anti-join (hash)
-                          ├── columns: column6:29!null column6:30!null
+                          ├── columns: p:29!null q:30!null
                           ├── select
-                          │    ├── columns: column6:29!null column6:30!null
+                          │    ├── columns: p:29!null q:30!null
                           │    ├── with-scan &2
-                          │    │    ├── columns: column6:29 column6:30
+                          │    │    ├── columns: p:29 q:30
                           │    │    └── mapping:
-                          │    │         ├──  column6:24 => column6:29
-                          │    │         └──  column6:25 => column6:30
+                          │    │         ├──  column6:24 => p:29
+                          │    │         └──  column6:25 => q:30
                           │    └── filters
-                          │         ├── column6:29 IS NOT NULL
-                          │         └── column6:30 IS NOT NULL
+                          │         ├── p:29 IS NOT NULL
+                          │         └── q:30 IS NOT NULL
                           ├── scan parent_multi_partial
                           │    └── columns: parent_multi_partial.p:32 parent_multi_partial.q:33
                           └── filters
-                               ├── column6:29 = parent_multi_partial.p:32
-                               └── column6:30 = parent_multi_partial.q:33
+                               ├── p:29 = parent_multi_partial.p:32
+                               └── q:30 = parent_multi_partial.q:33
 
 # Regression test for #57148. A check constraint or computed column in a child
 # table that references a column with the same name as the parent's synthesized

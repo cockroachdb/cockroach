@@ -793,16 +793,16 @@ insert c
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: column2:6!null
+                ├── columns: p:6!null
                 ├── key columns: [6] = [7]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── stats: [rows=1e-10]
                 ├── cost: 12.08
                 ├── with-scan &1
-                │    ├── columns: column2:6!null
+                │    ├── columns: p:6!null
                 │    ├── mapping:
-                │    │    └──  column2:5 => column2:6
+                │    │    └──  column2:5 => p:6
                 │    ├── cardinality: [2 - 2]
                 │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
                 │    └── cost: 0.01
@@ -832,7 +832,7 @@ insert c
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: column2:6!null
+                ├── columns: p:6!null
                 ├── flags: prefer lookup join (into right side)
                 ├── key columns: [6] = [7]
                 ├── lookup columns are key
@@ -840,9 +840,9 @@ insert c
                 ├── stats: [rows=1e-10]
                 ├── cost: 0.02001206
                 ├── with-scan &1
-                │    ├── columns: column2:6!null
+                │    ├── columns: p:6!null
                 │    ├── mapping:
-                │    │    └──  column2:5 => column2:6
+                │    │    └──  column2:5 => p:6
                 │    ├── cardinality: [2 - 2]
                 │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
                 │    └── cost: 0.01
@@ -885,7 +885,7 @@ insert c
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
            └── anti-join (lookup p)
-                ├── columns: column2:6!null
+                ├── columns: p:6!null
                 ├── key columns: [6] = [7]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
@@ -894,9 +894,9 @@ insert c
                 ├── key: ()
                 ├── fd: ()-->(6)
                 ├── with-scan &1
-                │    ├── columns: column2:6!null
+                │    ├── columns: p:6!null
                 │    ├── mapping:
-                │    │    └──  column2:5 => column2:6
+                │    │    └──  column2:5 => p:6
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
                 │    ├── cost: 0.01
