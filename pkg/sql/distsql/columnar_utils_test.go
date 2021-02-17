@@ -12,10 +12,11 @@ package distsql
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -257,14 +258,6 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 			procRows, colOpRows, procMetas, colOpMetas)
 	}
 
-	printRowsOutput := func(rows [][]string) string {
-		res := ""
-		for i, row := range rows {
-			res = fmt.Sprintf("%s\n%d: %v", res, i, row)
-		}
-		return res
-	}
-
 	datumsMatch := func(expected, actual string, typ *types.T) (bool, error) {
 		switch typ.Family() {
 		case types.FloatFamily:
@@ -303,54 +296,38 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 			colIdxsToCheckForEquality[i] = i
 		}
 	}
+
 	if args.anyOrder {
-		used := make([]bool, len(colOpRows))
-		for i, expStrRow := range procRows {
-			rowMatched := false
-			for j, retStrRow := range colOpRows {
-				if used[j] {
-					continue
-				}
-				foundDifference := false
+		// The rows are allowed to be in any order, so in order to use the
+		// ordered comparison below we will sort rows from both the processor
+		// and the operator lexicographically.
+		getLessFn := func(rows [][]string) func(int, int) bool {
+			return func(i, j int) bool {
 				for _, colIdx := range colIdxsToCheckForEquality {
-					match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
-					if err != nil {
-						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
-							expStrRow, retStrRow, err.Error())
-					}
-					if !match {
-						foundDifference = true
-						break
+					if cmp := strings.Compare(rows[i][colIdx], rows[j][colIdx]); cmp != 0 {
+						return cmp < 0
 					}
 				}
-				if !foundDifference {
-					rowMatched = true
-					used[j] = true
-					break
-				}
-			}
-			if !rowMatched {
-				return errors.Errorf("different results: no match found for row %d of processor output\n"+
-					"processor output:%s\n\ncolumnar operator output:%s",
-					i, printRowsOutput(procRows), printRowsOutput(colOpRows))
+				return false
 			}
 		}
-	} else {
-		for i, expStrRow := range procRows {
-			retStrRow := colOpRows[i]
-			// anyOrder is false, so the result rows must match in the same order.
-			for _, colIdx := range colIdxsToCheckForEquality {
-				match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
-				if err != nil {
-					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
-						expStrRow, retStrRow, err.Error())
-				}
-				if !match {
-					return errors.Errorf(
-						"different results on row %d;\nexpected:\n%s\ngot:\n%s",
-						i, expStrRow, retStrRow,
-					)
-				}
+		sort.Slice(procRows, getLessFn(procRows))
+		sort.Slice(colOpRows, getLessFn(colOpRows))
+	}
+
+	for i, expStrRow := range procRows {
+		retStrRow := colOpRows[i]
+		for _, colIdx := range colIdxsToCheckForEquality {
+			match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
+			if err != nil {
+				return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
+					expStrRow, retStrRow, err.Error())
+			}
+			if !match {
+				return errors.Errorf(
+					"different results on row %d;\nexpected:\n%s\ngot:\n%s",
+					i, expStrRow, retStrRow,
+				)
 			}
 		}
 	}
