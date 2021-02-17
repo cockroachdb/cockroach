@@ -208,9 +208,21 @@ func (s *Span) Finish() {
 		return
 	}
 	finishTime := time.Now()
+
 	s.crdb.mu.Lock()
+	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
+		s.crdb.mu.Unlock()
+
+		// External spans and net/trace are not always forgiving about spans getting
+		// finished twice, but it may happen so let's be resilient to it.
+		return
+	}
 	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
+	if s.crdb.mu.duration == 0 {
+		s.crdb.mu.duration = time.Nanosecond
+	}
 	s.crdb.mu.Unlock()
+
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.Finish()
 	}
