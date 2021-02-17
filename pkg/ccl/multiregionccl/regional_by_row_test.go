@@ -419,10 +419,10 @@ USE t;
 								tableDesc := catalogkv.TestingGetTableDescriptor(
 									kvDB, keys.SystemSQLCodec, "t", "test",
 								)
-								if len(tableDesc.GetMutations()) != 0 {
+								if len(tableDesc.AllMutations()) != 0 {
 									return errors.Errorf(
 										"expected 0 mutations after cancellation, found %d",
-										len(tableDesc.GetMutations()),
+										len(tableDesc.AllMutations()),
 									)
 								}
 								if tableDesc.GetPrimaryIndex().NumColumns() != len(testCase.originalPKCols) {

@@ -25,11 +25,9 @@ var _ catalog.Column = (*column)(nil)
 // column descriptor along with some metadata from its parent table
 // descriptor.
 type column struct {
-	desc              *descpb.ColumnDescriptor
-	ordinal           int
-	mutationID        descpb.MutationID
-	mutationDirection descpb.DescriptorMutation_Direction
-	mutationState     descpb.DescriptorMutation_State
+	maybeMutation
+	desc    *descpb.ColumnDescriptor
+	ordinal int
 }
 
 // ColumnDesc returns the underlying protobuf descriptor.
@@ -47,11 +45,9 @@ func (w column) ColumnDescDeepCopy() descpb.ColumnDescriptor {
 func (w column) DeepCopy() catalog.Column {
 	desc := w.ColumnDescDeepCopy()
 	return &column{
-		desc:              &desc,
-		ordinal:           w.ordinal,
-		mutationID:        w.mutationID,
-		mutationDirection: w.mutationDirection,
-		mutationState:     w.mutationState,
+		maybeMutation: w.maybeMutation,
+		desc:          &desc,
+		ordinal:       w.ordinal,
 	}
 }
 
@@ -65,31 +61,7 @@ func (w column) Ordinal() int {
 
 // Public returns true iff the column is active, i.e. readable.
 func (w column) Public() bool {
-	return w.mutationState == descpb.DescriptorMutation_UNKNOWN && !w.IsSystemColumn()
-}
-
-// Adding returns true iff the column is an add mutation in the table
-//descriptor.
-func (w column) Adding() bool {
-	return w.mutationDirection == descpb.DescriptorMutation_ADD
-}
-
-// Dropped returns true iff the column is a drop mutation in the table
-// descriptor.
-func (w column) Dropped() bool {
-	return w.mutationDirection == descpb.DescriptorMutation_DROP
-}
-
-// WriteAndDeleteOnly returns true iff the column is a mutation in the
-// delete-and-write-only state.
-func (w column) WriteAndDeleteOnly() bool {
-	return w.mutationState == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-}
-
-// DeleteOnly returns true iff the column is a mutation in the delete-only
-// state.
-func (w column) DeleteOnly() bool {
-	return w.mutationState == descpb.DescriptorMutation_DELETE_ONLY
+	return !w.IsMutation() && !w.IsSystemColumn()
 }
 
 // GetID returns the column ID.
@@ -219,75 +191,70 @@ type columnCache struct {
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
 // TableDescriptor.
-func newColumnCache(desc *descpb.TableDescriptor) *columnCache {
+func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *columnCache {
 	c := columnCache{}
-	// Build a slice of structs to back the interfaces in c.all.
+	// Build a slice of structs to back the public and system interfaces in c.all.
 	// This is better than allocating memory once per struct.
-	backingStructs := make([]column, len(desc.Columns), len(desc.Columns)+len(desc.Mutations)+len(colinfo.AllSystemColumnDescs))
+	numPublic := len(desc.Columns)
+	backingStructs := make([]column, numPublic, numPublic+len(colinfo.AllSystemColumnDescs))
 	for i := range desc.Columns {
 		backingStructs[i] = column{desc: &desc.Columns[i], ordinal: i}
 	}
-	for _, m := range desc.Mutations {
-		if colDesc := m.GetColumn(); colDesc != nil {
-			col := column{
-				desc:              colDesc,
-				ordinal:           len(backingStructs),
-				mutationID:        m.MutationID,
-				mutationState:     m.State,
-				mutationDirection: m.Direction,
-			}
-			backingStructs = append(backingStructs, col)
-		}
-	}
-	numDeletable := len(backingStructs)
+	numMutations := len(mutations.columns)
+	numDeletable := numPublic + numMutations
 	for i := range colinfo.AllSystemColumnDescs {
 		col := column{
 			desc:    &colinfo.AllSystemColumnDescs[i],
-			ordinal: len(backingStructs),
+			ordinal: numDeletable + i,
 		}
 		backingStructs = append(backingStructs, col)
 	}
-
-	// Populate the c.all slice with column interfaces.
-	c.all = make([]catalog.Column, len(backingStructs))
-	for i := range backingStructs {
-		c.all[i] = &backingStructs[i]
+	// Populate the c.all slice with Column interfaces.
+	c.all = make([]catalog.Column, 0, numDeletable+len(colinfo.AllSystemColumnDescs))
+	for i := range backingStructs[:numPublic] {
+		c.all = append(c.all, &backingStructs[i])
+	}
+	for _, m := range mutations.columns {
+		c.all = append(c.all, m.AsColumn())
+	}
+	for i := range backingStructs[numPublic:] {
+		c.all = append(c.all, &backingStructs[numPublic+i])
 	}
 	// Populate the remaining fields.
 	c.deletable = c.all[:numDeletable]
 	c.system = c.all[numDeletable:]
-	c.public = c.all[:len(desc.Columns)]
-	if len(c.public) == len(c.deletable) {
+	c.public = c.all[:numPublic]
+	if numMutations == 0 {
 		c.readable = c.public
 		c.writable = c.public
 		c.nonDrop = c.public
 	} else {
-		readableDescs := make([]descpb.ColumnDescriptor, 0, len(c.deletable)-len(c.public))
-		readableBackingStructs := make([]column, 0, cap(readableDescs))
-		for i, col := range c.deletable {
+		readableDescs := make([]descpb.ColumnDescriptor, 0, numMutations)
+		readableBackingStructs := make([]column, 0, numMutations)
+		for _, col := range c.deletable {
 			if !col.DeleteOnly() {
-				lazyAllocAppendColumn(&c.writable, col, len(c.deletable))
+				lazyAllocAppendColumn(&c.writable, col, numDeletable)
 			}
 			if !col.Dropped() {
-				lazyAllocAppendColumn(&c.nonDrop, col, len(c.deletable))
+				lazyAllocAppendColumn(&c.nonDrop, col, numDeletable)
 			}
 			if !col.Public() && !col.IsNullable() {
 				j := len(readableDescs)
 				readableDescs = append(readableDescs, *col.ColumnDesc())
 				readableDescs[j].Nullable = true
-				readableBackingStructs = append(readableBackingStructs, backingStructs[i])
+				readableBackingStructs = append(readableBackingStructs, *col.(*column))
 				readableBackingStructs[j].desc = &readableDescs[j]
 				col = &readableBackingStructs[j]
 			}
-			lazyAllocAppendColumn(&c.readable, col, len(c.deletable))
+			lazyAllocAppendColumn(&c.readable, col, numDeletable)
 		}
 	}
 	for _, col := range c.deletable {
 		if col.Public() && !col.IsHidden() {
-			lazyAllocAppendColumn(&c.visible, col, len(c.public))
+			lazyAllocAppendColumn(&c.visible, col, numPublic)
 		}
 		if col.HasType() && col.GetType().UserDefined() {
-			lazyAllocAppendColumn(&c.withUDTs, col, len(c.deletable))
+			lazyAllocAppendColumn(&c.withUDTs, col, numDeletable)
 		}
 	}
 	return &c

@@ -286,7 +286,7 @@ func formatSafeTableMutationJobs(w *redact.StringBuilder, td catalog.TableDescri
 }
 
 func formatSafeMutations(w *redact.StringBuilder, td catalog.TableDescriptor) {
-	mutations := td.GetMutations()
+	mutations := td.TableDesc().Mutations
 	for i := range mutations {
 		w.Printf(", ")
 		m := &mutations[i]

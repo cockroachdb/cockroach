@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,12 +91,11 @@ func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 }
 
 func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
-	for _, m := range desc.GetMutations() {
-		if m.GetColumn() == nil {
+	for _, m := range desc.AllMutations() {
+		if m.AsColumn() == nil {
 			continue
 		}
-		if m.Direction == descpb.DescriptorMutation_DROP &&
-			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+		if m.Dropped() && m.WriteAndDeleteOnly() {
 			return true
 		}
 	}
@@ -117,8 +115,8 @@ func newColumnNoBackfill(e TableEvent) (res bool) {
 }
 
 func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
-	for _, m := range desc.GetMutations() {
-		if m.Direction == descpb.DescriptorMutation_ADD && m.GetPrimaryKeySwap() != nil {
+	for _, m := range desc.AllMutations() {
+		if m.Adding() && m.AsPrimaryKeySwap() != nil {
 			return true
 		}
 	}

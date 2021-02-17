@@ -408,7 +408,7 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	}
 
 	// Process all non-index mutations.
-	for _, mut := range desc.GetMutations() {
+	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
 			if err := doCol(c); err != nil {
 				return err
@@ -1162,7 +1162,7 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	currentMutationID := desc.ClusterVersion.NextMutationID
 	for _, col := range desc.DeletableColumns() {
 		if (col.Public() && col.ColName() == name) ||
-			(col.Adding() && col.(*column).mutationID == currentMutationID) {
+			(col.Adding() && col.MutationID() == currentMutationID) {
 			return col, nil
 		}
 	}

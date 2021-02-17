@@ -57,7 +57,7 @@ func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDe
 		Direction:   descpb.DescriptorMutation_DROP,
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID() - 1)},
 	})
-	return desc
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
 }
 
 // AddNewColumnBackfillMutation adds a mutation to desc to add a column.
@@ -70,5 +70,5 @@ func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDes
 		MutationID:  0,
 		Rollback:    false,
 	})
-	return desc
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
 }
