@@ -2333,6 +2333,7 @@ func (s *sqlStatsCollector) recordStatement(
 	distSQLUsed bool,
 	vectorized bool,
 	implicitTxn bool,
+	fullScan bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -2340,7 +2341,7 @@ func (s *sqlStatsCollector) recordStatement(
 	stats topLevelQueryStats,
 ) roachpb.StmtID {
 	return s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn,
+		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
 		ovhLat, stats,
 	)
