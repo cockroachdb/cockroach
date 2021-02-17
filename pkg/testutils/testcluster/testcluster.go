@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -131,9 +132,21 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// [1]: cleanupSessionTempObjects
 		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
 		testutils.SucceedsSoon(tc.t, func() error {
-			return tracer.VisitSpans(func(span *tracing.Span) error {
-				return errors.Newf("expected to find no active spans, found %s", span.Meta())
+			var sps []*tracing.Span
+			_ = tracer.VisitSpans(func(span *tracing.Span) error {
+				sps = append(sps, span)
+				return nil
 			})
+			if len(sps) == 0 {
+				return nil
+			}
+			var buf strings.Builder
+			buf.WriteString("unexpectedly found active spans:\n")
+			for _, sp := range sps {
+				fmt.Fprintln(&buf, sp.GetRecording())
+				fmt.Fprintln(&buf)
+			}
+			return errors.Newf("%s", buf.String())
 		})
 	}
 }
