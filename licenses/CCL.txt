@@ -19,7 +19,7 @@ CockroachDB Community License Agreement
         Labs, including both CockroachDB Core and CockroachDB Enterprise
         editions, as defined below.
 
-    (b) "CockroachDB Core" shall mean the open source version of
+    (b) "CockroachDB Core" shall mean the version of
         CockroachDB, available free of charge at
 
             https://github.com/cockroachdb/cockroach
@@ -139,16 +139,16 @@ CockroachDB Community License Agreement
           granted to You under this License for that Work shall terminate as
           of the date such litigation is filed.
 
-      iii License to Third Party Works:  From time to time Cockroach Labs may
-          use, or provide You access to, Third Party Works in connection
-          CockroachDB Enterprise Edition.  You acknowledge and agree that in
+      iii License to Third Party Works: From time to time Cockroach Labs may
+          use, or provide You access to, Third Party Works in connection with
+          CockroachDB Enterprise Edition. You acknowledge and agree that in
           addition to this Agreement, Your use of Third Party Works is subject
           to all other terms and conditions set forth in the License provided
-          with or contained in such Third Party Works.  Some Third Party Works
+          with or contained in such Third Party Works. Some Third Party Works
           may be licensed to You solely for use with CockroachDB Enterprise
           Edition under the terms of a third party License, or as otherwise
           notified by Cockroach Labs, and not under the terms of this
-          Agreement.  You agree that the owners and third party licensors of
+          Agreement. You agree that the owners and third party licensors of
           Third Party Works are intended third party beneficiaries to this
           Agreement.
 
@@ -158,18 +158,25 @@ CockroachDB Community License Agreement
 
   4. Fees for CockroachDB Enterprise Edition or CockroachDB Support.
 
-    (a) Fees.  The License to CockroachDB Enterprise Edition is conditioned upon
-        Your payment of the fees specified on
+    (a) Fees. The License to CockroachDB Enterprise Edition is conditioned
+        upon Your entering into a signed written agreement with Cockroach Labs
+        for its use (a “Paid Enterprise License”) and timely paying Cockroach
+        Labs for such Paid Enterprise License; provided that features of
+        CockroachDB Enterprise Edition that are not designated as “Enterprise
+        features” at
 
-            https://cockroachlabs.com/pricing
+            https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html
 
-        which You agree to pay to Cockroach Labs in accordance with the payment
-        terms set out on that page.  Any professional services or support for
-        CockroachDB may also be subject to Your payment of fees, which will be
-        specified by Cockroach Labs when you sign up to receive such
-        professional services or support. Cockroach Labs reserves the right to
-        change the fees at any time with prior written notice; for recurring
-        fees, any such adjustments will take effect as of the next pay period.
+        and do not require a license key (e.g. the feature does not require
+        the use of the ‘enterprise.license’ cluster setting, and the software
+        has not been modified to remove such a requirement) may be used for
+        free under the terms of the Agreement without a Paid Enterprise
+        License. Any professional services or support for CockroachDB may also
+        be subject to Your payment of fees, which will be specified by
+        Cockroach Labs when you sign up to receive such professional services
+        or support. Cockroach Labs reserves the right to change the fees at
+        any time with prior written notice; for recurring fees, any such
+        adjustments will take effect as of the next pay period.
 
     (b) Overdue Payments and Taxes. Overdue payments are subject to a service
         charge equal to the lesser of 1.5% per month or the maximum legal
