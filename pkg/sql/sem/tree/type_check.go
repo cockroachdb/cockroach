@@ -668,7 +668,7 @@ func (expr *ColumnAccessExpr) TypeCheck(
 		// Go through all of the labels to find a match.
 		expr.ColIndex = -1
 		for i, label := range resolvedType.TupleLabels() {
-			if label == expr.ColName {
+			if label == string(expr.ColName) {
 				if expr.ColIndex != -1 {
 					// Found a duplicate label.
 					return nil, pgerror.Newf(pgcode.AmbiguousColumn, "column reference %q is ambiguous", label)
@@ -679,7 +679,7 @@ func (expr *ColumnAccessExpr) TypeCheck(
 		if expr.ColIndex < 0 {
 			return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 				"could not identify column %q in %s",
-				ErrNameStringP(&expr.ColName), resolvedType,
+				ErrString(&expr.ColName), resolvedType,
 			)
 		}
 	}

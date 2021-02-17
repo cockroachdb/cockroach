@@ -376,7 +376,7 @@ func (b *Builder) buildColumnAccess(
 	if childTyp.TupleLabels() != nil {
 		lbl = childTyp.TupleLabels()[colIdx]
 	}
-	return tree.NewTypedColumnAccessExpr(input, lbl, colIdx), nil
+	return tree.NewTypedColumnAccessExpr(input, tree.Name(lbl), colIdx), nil
 }
 
 func (b *Builder) buildArray(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {

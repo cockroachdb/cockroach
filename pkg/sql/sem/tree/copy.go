@@ -70,13 +70,13 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 	if o.Delimiter != nil {
 		maybeAddSep()
 		ctx.WriteString("DELIMITER ")
-		o.Delimiter.Format(ctx)
+		ctx.FormatNode(o.Delimiter)
 		addSep = true
 	}
 	if o.Null != nil {
 		maybeAddSep()
 		ctx.WriteString("NULL ")
-		o.Null.Format(ctx)
+		ctx.FormatNode(o.Null)
 		addSep = true
 	}
 	if o.Destination != nil {
@@ -85,7 +85,7 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		// by copy_file_upload.go, so this will provide backward
 		// compatibility with older servers.
 		ctx.WriteString("destination = ")
-		o.Destination.Format(ctx)
+		ctx.FormatNode(o.Destination)
 		addSep = true
 	}
 }
