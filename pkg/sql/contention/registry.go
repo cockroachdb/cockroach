@@ -11,7 +11,6 @@
 package contention
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unsafe"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -123,7 +123,7 @@ type indexMapValue struct {
 // initialized with that event's data.
 func newIndexMapValue(c roachpb.ContentionEvent) *indexMapValue {
 	txnCache := cache.NewUnorderedCache(txnCacheCfg)
-	txnCache.Add(c.TxnMeta.ID, 1)
+	txnCache.Add(c.TxnMeta.ID, uint64(1))
 	keyMap := cache.NewOrderedCache(orderedKeyMapCfg)
 	keyMap.Add(comparableKey(c.Key), txnCache)
 	return &indexMapValue{
@@ -138,11 +138,11 @@ func newIndexMapValue(c roachpb.ContentionEvent) *indexMapValue {
 func (v *indexMapValue) addContentionEvent(c roachpb.ContentionEvent) {
 	v.numContentionEvents++
 	v.cumulativeContentionTime += c.Duration
-	var numTimesThisTxnWasEncountered int
+	var numTimesThisTxnWasEncountered uint64
 	txnCache, ok := v.orderedKeyMap.Get(comparableKey(c.Key))
 	if ok {
 		if txnVal, ok := txnCache.(*cache.UnorderedCache).Get(c.TxnMeta.ID); ok {
-			numTimesThisTxnWasEncountered = txnVal.(int)
+			numTimesThisTxnWasEncountered = txnVal.(uint64)
 		}
 	} else {
 		// This key was not found in the map. Create a new txn cache for this key.
@@ -218,32 +218,43 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) error {
 	return nil
 }
 
-// String returns a string representation of the Registry.
-func (r *Registry) String() string {
+// Serialize returns the serialized representation of the registry.
+func (r *Registry) Serialize() []contentionpb.IndexContentionEvents {
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
-	var b strings.Builder
+	resp := make([]contentionpb.IndexContentionEvents, r.indexMap.internalCache.Len())
+	var iceCount int
 	r.indexMap.internalCache.Do(func(e *cache.Entry) {
+		ice := &resp[iceCount]
 		key := e.Key.(indexMapKey)
-		b.WriteString(fmt.Sprintf("tableID=%d indexID=%d\n", key.tableID, key.indexID))
-		writeChild := func(prefix, s string) {
-			b.WriteString(prefix + s)
-		}
-		const prefixString = "  "
-		prefix := prefixString
+		ice.TableID = key.tableID
+		ice.IndexID = key.indexID
 		v := e.Value.(*indexMapValue)
-		writeChild(prefix, fmt.Sprintf("num contention events: %d\n", v.numContentionEvents))
-		writeChild(prefix, fmt.Sprintf("cumulative contention time: %s\n", v.cumulativeContentionTime))
-		writeChild(prefix, "keys:\n")
-		keyPrefix := prefix + prefixString
+		ice.NumContentionEvents = v.numContentionEvents
+		ice.CumulativeContentionTime = v.cumulativeContentionTime
+		ice.Events = make([]contentionpb.SingleKeyContention, v.orderedKeyMap.Len())
+		var skcCount int
 		v.orderedKeyMap.Do(func(k, txnCache interface{}) bool {
-			writeChild(keyPrefix, fmt.Sprintf("%s contending txns:\n", roachpb.Key(k.(comparableKey))))
-			txnPrefix := keyPrefix + prefixString
+			skc := &ice.Events[skcCount]
+			skc.Key = roachpb.Key(k.(comparableKey))
 			txnCache.(*cache.UnorderedCache).Do(func(e *cache.Entry) {
-				writeChild(txnPrefix, fmt.Sprintf("id=%s count=%d\n", e.Key.(uuid.UUID), e.Value.(int)))
+				skc.TxnIDs = append(skc.TxnIDs, e.Key.(uuid.UUID))
+				skc.Counts = append(skc.Counts, e.Value.(uint64))
 			})
+			skcCount++
 			return false
 		})
+		iceCount++
 	})
+	return resp
+}
+
+// String returns a string representation of the Registry.
+func (r *Registry) String() string {
+	var b strings.Builder
+	serialized := r.Serialize()
+	for i := range serialized {
+		b.WriteString(serialized[i].String())
+	}
 	return b.String()
 }
