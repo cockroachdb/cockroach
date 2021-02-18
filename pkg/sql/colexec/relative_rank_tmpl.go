@@ -64,7 +64,7 @@ func NewRelativeRankOperator(
 	}
 	rrInitFields := relativeRankInitFields{
 		rankInitFields: rankInitFields{
-			OneInputNode:    NewOneInputNode(input),
+			OneInputNode:    colexecbase.NewOneInputNode(input),
 			allocator:       unlimitedAllocator,
 			outputColIdx:    outputColIdx,
 			partitionColIdx: partitionColIdx,
@@ -268,7 +268,7 @@ type _RELATIVE_RANK_STRINGOp struct {
 var _ closableOperator = &_RELATIVE_RANK_STRINGOp{}
 
 func (r *_RELATIVE_RANK_STRINGOp) Init() {
-	r.Input().Init()
+	r.Input.Init()
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	// {{if .HasPartition}}
@@ -355,7 +355,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input().Next(ctx)
+			batch := r.Input.Next(ctx)
 			n := batch.Length()
 			if n == 0 {
 				if err := r.bufferedTuples.enqueue(ctx, coldata.ZeroBatch); err != nil {

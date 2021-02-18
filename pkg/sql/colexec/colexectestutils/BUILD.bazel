@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colexectestutils",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/typeconv",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/parser",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/json",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeofday",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pmezard_go_difflib//difflib",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "colexectestutils_test",
+    srcs = [
+        "main_test.go",
+        "utils_test.go",
+    ],
+    embed = [":colexectestutils"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+    ],
+)

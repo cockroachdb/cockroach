@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,19 +41,19 @@ func TestDefaultCmpProjOps(t *testing.T) {
 	testCases := []struct {
 		cmpExpr      string
 		inputTypes   []*types.T
-		inputTuples  tuples
-		outputTuples tuples
+		inputTuples  colexectestutils.Tuples
+		outputTuples colexectestutils.Tuples
 	}{
 		{
 			cmpExpr:    "@1 ILIKE @2",
 			inputTypes: []*types.T{types.String, types.String},
-			inputTuples: tuples{
+			inputTuples: colexectestutils.Tuples{
 				{"abc", "ABC"},
 				{"a42", "A%"},
 				{nil, "%A"},
 				{"abc", "A%b"},
 			},
-			outputTuples: tuples{
+			outputTuples: colexectestutils.Tuples{
 				{"abc", "ABC", true},
 				{"a42", "A%", true},
 				{nil, "%A", nil},
@@ -62,13 +63,13 @@ func TestDefaultCmpProjOps(t *testing.T) {
 		{
 			cmpExpr:    "@1 ILIKE 'A%'",
 			inputTypes: []*types.T{types.String},
-			inputTuples: tuples{
+			inputTuples: colexectestutils.Tuples{
 				{"abc"},
 				{"a42"},
 				{nil},
 				{"def"},
 			},
-			outputTuples: tuples{
+			outputTuples: colexectestutils.Tuples{
 				{"abc", true},
 				{"a42", true},
 				{nil, nil},
@@ -78,12 +79,12 @@ func TestDefaultCmpProjOps(t *testing.T) {
 		{
 			cmpExpr:    "@1 IS DISTINCT FROM @2",
 			inputTypes: []*types.T{types.String, types.String},
-			inputTuples: tuples{
+			inputTuples: colexectestutils.Tuples{
 				{"abc", "abc"},
 				{nil, nil},
 				{"abc", "ab"},
 			},
-			outputTuples: tuples{
+			outputTuples: colexectestutils.Tuples{
 				{"abc", "abc", false},
 				{nil, nil, false},
 				{"abc", "ab", true},
@@ -92,12 +93,12 @@ func TestDefaultCmpProjOps(t *testing.T) {
 		{
 			cmpExpr:    "(1, 2) IS DISTINCT FROM @1",
 			inputTypes: []*types.T{types.MakeTuple([]*types.T{types.Int, types.Int})},
-			inputTuples: tuples{
+			inputTuples: colexectestutils.Tuples{
 				{"(1, NULL)"},
 				{nil},
 				{"(1, 2)"},
 			},
-			outputTuples: tuples{
+			outputTuples: colexectestutils.Tuples{
 				{"(1, NULL)", true},
 				{nil, true},
 				{"(1, 2)", false},
@@ -106,7 +107,7 @@ func TestDefaultCmpProjOps(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.cmpExpr, func(t *testing.T) {
-			runTestsWithTyps(t, []tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, orderedVerifier,
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, colexectestutils.OrderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return createTestProjectingOperator(
 						ctx, flowCtx, input[0], c.inputTypes,

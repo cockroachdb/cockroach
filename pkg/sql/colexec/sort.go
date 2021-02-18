@@ -41,7 +41,7 @@ func newSorter(
 	input spooler,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (ResettableOperator, error) {
+) (colexecbase.ResettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
@@ -98,7 +98,7 @@ type spooler interface {
 // allSpooler is the spooler that spools all tuples from the input. It is used
 // by the general sorter over the whole input.
 type allSpooler struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	allocator *colmem.Allocator
@@ -113,20 +113,20 @@ type allSpooler struct {
 }
 
 var _ spooler = &allSpooler{}
-var _ resetter = &allSpooler{}
+var _ colexecbase.Resetter = &allSpooler{}
 
 func newAllSpooler(
 	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []*types.T,
 ) spooler {
 	return &allSpooler{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		inputTypes:   inputTypes,
 	}
 }
 
 func (p *allSpooler) init() {
-	p.input.Init()
+	p.Input.Init()
 	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
 	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
@@ -136,7 +136,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 		colexecerror.InternalError(errors.AssertionFailedf("spool() is called for the second time"))
 	}
 	p.spooled = true
-	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
+	for batch := p.Input.Next(ctx); batch.Length() != 0; batch = p.Input.Next(ctx) {
 		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
 			p.bufferedTuples.append(batch, 0 /* startIdx */, batch.Length())
 		})
@@ -174,9 +174,9 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 	return p.windowedBatch
 }
 
-func (p *allSpooler) reset(ctx context.Context) {
-	if r, ok := p.input.(resetter); ok {
-		r.reset(ctx)
+func (p *allSpooler) Reset(ctx context.Context) {
+	if r, ok := p.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	p.spooled = false
 	p.bufferedTuples.ResetInternalBatch()
@@ -216,7 +216,7 @@ type sortOp struct {
 }
 
 var _ colexecbase.BufferingInMemoryOperator = &sortOp{}
-var _ resetter = &sortOp{}
+var _ colexecbase.Resetter = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
@@ -403,9 +403,9 @@ func (p *sortOp) sort(ctx context.Context) {
 	}
 }
 
-func (p *sortOp) reset(ctx context.Context) {
-	if r, ok := p.input.(resetter); ok {
-		r.reset(ctx)
+func (p *sortOp) Reset(ctx context.Context) {
+	if r, ok := p.input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	p.emitted = 0
 	p.exported = 0

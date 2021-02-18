@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -141,8 +142,8 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	// We don't need to set the data since zero values in the columns work.
 	batch.SetLength(coldata.BatchSize())
 	nBatches := 2
-	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
-	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
+	leftSource := colexectestutils.NewFiniteBatchSource(testAllocator, batch, sourceTypes, nBatches)
+	rightSource := colexectestutils.NewFiniteBatchSource(testAllocator, batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
 		joinType:     descpb.InnerJoin,
 		leftTypes:    sourceTypes,
@@ -258,8 +259,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					b.SetBytes(int64(8 * nRows * nCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						leftSource := newChunkingBatchSource(sourceTypes, cols, nRows)
-						rightSource := newChunkingBatchSource(sourceTypes, cols, nRows)
+						leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
+						rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
 							ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
 							func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */

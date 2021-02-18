@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,46 +30,46 @@ func TestDeselector(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		typs     []*types.T
-		tuples   []tuple
+		tuples   []colexectestutils.Tuple
 		sel      []int
-		expected []tuple
+		expected []colexectestutils.Tuple
 	}{
 		{
 			typs:     []*types.T{types.Int},
-			tuples:   tuples{{0}, {1}, {2}},
+			tuples:   colexectestutils.Tuples{{0}, {1}, {2}},
 			sel:      nil,
-			expected: tuples{{0}, {1}, {2}},
+			expected: colexectestutils.Tuples{{0}, {1}, {2}},
 		},
 		{
 			typs:     []*types.T{types.Int},
-			tuples:   tuples{{0}, {1}, {2}},
+			tuples:   colexectestutils.Tuples{{0}, {1}, {2}},
 			sel:      []int{},
-			expected: tuples{},
+			expected: colexectestutils.Tuples{},
 		},
 		{
 			typs:     []*types.T{types.Int},
-			tuples:   tuples{{0}, {1}, {2}},
+			tuples:   colexectestutils.Tuples{{0}, {1}, {2}},
 			sel:      []int{1},
-			expected: tuples{{1}},
+			expected: colexectestutils.Tuples{{1}},
 		},
 		{
 			typs:     []*types.T{types.Int},
-			tuples:   tuples{{0}, {1}, {2}},
+			tuples:   colexectestutils.Tuples{{0}, {1}, {2}},
 			sel:      []int{0, 2},
-			expected: tuples{{0}, {2}},
+			expected: colexectestutils.Tuples{{0}, {2}},
 		},
 		{
 			typs:     []*types.T{types.Int},
-			tuples:   tuples{{0}, {1}, {2}},
+			tuples:   colexectestutils.Tuples{{0}, {1}, {2}},
 			sel:      []int{0, 1, 2},
-			expected: tuples{{0}, {1}, {2}},
+			expected: colexectestutils.Tuples{{0}, {1}, {2}},
 		},
 	}
 
 	for _, tc := range tcs {
-		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.typs, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
+		colexectestutils.RunTestsWithFixedSel(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.typs, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
 			op := NewDeselectorOp(testAllocator, input[0], tc.typs)
-			out := newOpTestOutput(op, tc.expected)
+			out := colexectestutils.NewOpTestOutput(op, tc.expected)
 
 			if err := out.Verify(); err != nil {
 				t.Fatal(err)

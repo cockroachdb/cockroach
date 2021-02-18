@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -78,7 +80,12 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p.curPlan.flags.Set(planFlagExecDone)
 			p.curPlan.close(ctx)
 			if d.Cmd == "plan-string" {
-				return ih.planStringForBundle(&phaseTimes{})
+				ob := ih.buildExplainAnalyzePlan(
+					explain.Flags{Verbose: true, ShowTypes: true},
+					&phaseTimes{},
+					&execstats.QueryLevelStats{},
+				)
+				return ob.BuildString()
 			}
 			treeYaml, err := yaml.Marshal(ih.PlanForStats(ctx))
 			if err != nil {

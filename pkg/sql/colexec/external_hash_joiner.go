@@ -99,7 +99,7 @@ func NewExternalHashJoiner(
 		// have already spilled, so we'll use a larger limit.
 		memoryLimit = defaultMemoryLimit
 	}
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to join using in-memory hash joiner fit under the limit, so we use
 		// the same unlimited allocator for both buildSideAllocator and
@@ -115,7 +115,7 @@ func NewExternalHashJoiner(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		fdSemaphore semaphore.Semaphore,
-	) ResettableOperator {
+	) colexecbase.ResettableOperator {
 		// We need to allocate 2 FDs for reading the partitions (reused by the merge
 		// joiner) that we need to join using sort + merge join strategy, and all
 		// others are divided between the two inputs.

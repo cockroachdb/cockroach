@@ -23,7 +23,7 @@ import (
 )
 
 type defaultBuiltinFuncOperator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator           *colmem.Allocator
 	evalCtx             *tree.EvalContext
 	funcExpr            *tree.FuncExpr
@@ -40,11 +40,11 @@ type defaultBuiltinFuncOperator struct {
 var _ colexecbase.Operator = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Init() {
-	b.input.Init()
+	b.Input.Init()
 }
 
 func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
-	batch := b.input.Next(ctx)
+	batch := b.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -126,7 +126,7 @@ func NewBuiltinFunctionOperator(
 		outputType := funcExpr.ResolvedType()
 		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
-			OneInputNode:        NewOneInputNode(input),
+			OneInputNode:        colexecbase.NewOneInputNode(input),
 			allocator:           allocator,
 			evalCtx:             evalCtx,
 			funcExpr:            funcExpr,

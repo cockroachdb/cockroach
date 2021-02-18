@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -31,12 +32,12 @@ func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
-		sources  []tuples
+		sources  []colexectestutils.Tuples
 		ordering colinfo.ColumnOrdering
-		expected tuples
+		expected colexectestutils.Tuples
 	}{
 		{
-			sources: []tuples{
+			sources: []colexectestutils.Tuples{
 				{
 					{0, 1, 4},
 					{0, 1, 2},
@@ -55,7 +56,7 @@ func TestOrderedSync(t *testing.T) {
 				{ColIdx: 0, Direction: encoding.Ascending},
 				{ColIdx: 1, Direction: encoding.Ascending},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 0, 0},
 				{0, 1, 4},
 				{0, 1, 2},
@@ -66,7 +67,7 @@ func TestOrderedSync(t *testing.T) {
 			},
 		},
 		{
-			sources: []tuples{
+			sources: []colexectestutils.Tuples{
 				{
 					{1, 0, 4},
 				},
@@ -86,7 +87,7 @@ func TestOrderedSync(t *testing.T) {
 				{ColIdx: 0, Direction: encoding.Ascending},
 				{ColIdx: 2, Direction: encoding.Ascending},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{3, 4, 1},
 				{4, 4, 4},
 				{4, 4, 5},
@@ -97,7 +98,7 @@ func TestOrderedSync(t *testing.T) {
 			},
 		},
 		{
-			sources: []tuples{
+			sources: []colexectestutils.Tuples{
 				{
 					{-1},
 				},
@@ -111,14 +112,14 @@ func TestOrderedSync(t *testing.T) {
 			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{nil},
 				{-1},
 				{1},
 			},
 		},
 		{
-			sources: []tuples{
+			sources: []colexectestutils.Tuples{
 				{
 					{-1},
 				},
@@ -132,7 +133,7 @@ func TestOrderedSync(t *testing.T) {
 			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Descending},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{1},
 				{-1},
 				{nil},
@@ -145,7 +146,7 @@ func TestOrderedSync(t *testing.T) {
 		for i := range typs {
 			typs[i] = types.Int
 		}
-		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
 		})
 	}
@@ -170,10 +171,10 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	sort.Ints(randInts)
 
 	// Randomly distribute them among the inputs.
-	expected := make(tuples, inputLen)
-	sources := make([]tuples, numInputs)
+	expected := make(colexectestutils.Tuples, inputLen)
+	sources := make([]colexectestutils.Tuples, numInputs)
 	for i := range expected {
-		t := tuple{randInts[i]}
+		t := colexectestutils.Tuple{randInts[i]}
 		expected[i] = t
 		sourceIdx := rand.Int() % 3
 		if i < numInputs {
@@ -184,13 +185,13 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	}
 	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
-		inputs[i].Op = newOpTestInput(batchSize, sources[i], typs)
+		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(t, err)
 	op.Init()
-	out := newOpTestOutput(op, expected)
+	out := colexectestutils.NewOpTestOutput(op, expected)
 	if err := out.Verify(); err != nil {
 		t.Error(err)
 	}

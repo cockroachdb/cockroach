@@ -45,7 +45,7 @@ var (
 // so, it'll be redeclared because we execute that template twice. To go
 // around the problem we specify it here.
 type projConstOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
@@ -54,7 +54,7 @@ type projConstOpBase struct {
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator      *colmem.Allocator
 	col1Idx        int
 	col2Idx        int
@@ -73,7 +73,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -173,7 +173,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt16Int32Op struct {
@@ -187,7 +187,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -287,7 +287,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt16Int64Op struct {
@@ -301,7 +301,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -401,7 +401,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt32Int16Op struct {
@@ -415,7 +415,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -515,7 +515,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt32Int32Op struct {
@@ -529,7 +529,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -629,7 +629,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt32Int64Op struct {
@@ -643,7 +643,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -743,7 +743,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt64Int16Op struct {
@@ -757,7 +757,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -857,7 +857,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt64Int32Op struct {
@@ -871,7 +871,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -971,7 +971,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandInt64Int64Op struct {
@@ -985,7 +985,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1085,7 +1085,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitandDatumDatumOp struct {
@@ -1099,7 +1099,7 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1223,7 +1223,7 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitandDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt16Int16Op struct {
@@ -1237,7 +1237,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1337,7 +1337,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt16Int32Op struct {
@@ -1351,7 +1351,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1451,7 +1451,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt16Int64Op struct {
@@ -1465,7 +1465,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1565,7 +1565,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt32Int16Op struct {
@@ -1579,7 +1579,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1679,7 +1679,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt32Int32Op struct {
@@ -1693,7 +1693,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1793,7 +1793,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt32Int64Op struct {
@@ -1807,7 +1807,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1907,7 +1907,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt64Int16Op struct {
@@ -1921,7 +1921,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2021,7 +2021,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt64Int32Op struct {
@@ -2035,7 +2035,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2135,7 +2135,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorInt64Int64Op struct {
@@ -2149,7 +2149,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2249,7 +2249,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitorDatumDatumOp struct {
@@ -2263,7 +2263,7 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2387,7 +2387,7 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitorDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt16Int16Op struct {
@@ -2401,7 +2401,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2501,7 +2501,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt16Int32Op struct {
@@ -2515,7 +2515,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2615,7 +2615,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt16Int64Op struct {
@@ -2629,7 +2629,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2729,7 +2729,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt32Int16Op struct {
@@ -2743,7 +2743,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2843,7 +2843,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt32Int32Op struct {
@@ -2857,7 +2857,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2957,7 +2957,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt32Int64Op struct {
@@ -2971,7 +2971,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3071,7 +3071,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt64Int16Op struct {
@@ -3085,7 +3085,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3185,7 +3185,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt64Int32Op struct {
@@ -3199,7 +3199,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3299,7 +3299,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorInt64Int64Op struct {
@@ -3313,7 +3313,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3413,7 +3413,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projBitxorDatumDatumOp struct {
@@ -3427,7 +3427,7 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3551,7 +3551,7 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projBitxorDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDecimalInt16Op struct {
@@ -3565,7 +3565,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3693,7 +3693,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDecimalInt32Op struct {
@@ -3707,7 +3707,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3835,7 +3835,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDecimalInt64Op struct {
@@ -3849,7 +3849,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3977,7 +3977,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDecimalDecimalOp struct {
@@ -3991,7 +3991,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4115,7 +4115,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt16Int16Op struct {
@@ -4129,7 +4129,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4253,7 +4253,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt16Int32Op struct {
@@ -4267,7 +4267,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4391,7 +4391,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt16Int64Op struct {
@@ -4405,7 +4405,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4529,7 +4529,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt16DecimalOp struct {
@@ -4543,7 +4543,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4675,7 +4675,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt16DatumOp struct {
@@ -4689,7 +4689,7 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4839,7 +4839,7 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt16DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt32Int16Op struct {
@@ -4853,7 +4853,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4977,7 +4977,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt32Int32Op struct {
@@ -4991,7 +4991,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5115,7 +5115,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt32Int64Op struct {
@@ -5129,7 +5129,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5253,7 +5253,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt32DecimalOp struct {
@@ -5267,7 +5267,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5399,7 +5399,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt32DatumOp struct {
@@ -5413,7 +5413,7 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5563,7 +5563,7 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt32DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt64Int16Op struct {
@@ -5577,7 +5577,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5701,7 +5701,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt64Int32Op struct {
@@ -5715,7 +5715,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5839,7 +5839,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt64Int64Op struct {
@@ -5853,7 +5853,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5977,7 +5977,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt64DecimalOp struct {
@@ -5991,7 +5991,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6123,7 +6123,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusInt64DatumOp struct {
@@ -6137,7 +6137,7 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6287,7 +6287,7 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusInt64DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusFloat64Float64Op struct {
@@ -6301,7 +6301,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6413,7 +6413,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusTimestampIntervalOp struct {
@@ -6427,7 +6427,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6519,7 +6519,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusTimestampIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusIntervalTimestampOp struct {
@@ -6533,7 +6533,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6625,7 +6625,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusIntervalTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusIntervalIntervalOp struct {
@@ -6639,7 +6639,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6731,7 +6731,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusIntervalDatumOp struct {
@@ -6745,7 +6745,7 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6895,7 +6895,7 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusIntervalDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDatumIntervalOp struct {
@@ -6909,7 +6909,7 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7051,7 +7051,7 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDatumIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDatumInt16Op struct {
@@ -7065,7 +7065,7 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7207,7 +7207,7 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDatumInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDatumInt32Op struct {
@@ -7221,7 +7221,7 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7363,7 +7363,7 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDatumInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPlusDatumInt64Op struct {
@@ -7377,7 +7377,7 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7519,7 +7519,7 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPlusDatumInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDecimalInt16Op struct {
@@ -7533,7 +7533,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7661,7 +7661,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDecimalInt32Op struct {
@@ -7675,7 +7675,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7803,7 +7803,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDecimalInt64Op struct {
@@ -7817,7 +7817,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7945,7 +7945,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDecimalDecimalOp struct {
@@ -7959,7 +7959,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8083,7 +8083,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt16Int16Op struct {
@@ -8097,7 +8097,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8221,7 +8221,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt16Int32Op struct {
@@ -8235,7 +8235,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8359,7 +8359,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt16Int64Op struct {
@@ -8373,7 +8373,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8497,7 +8497,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt16DecimalOp struct {
@@ -8511,7 +8511,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8643,7 +8643,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt16DatumOp struct {
@@ -8657,7 +8657,7 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8807,7 +8807,7 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt16DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt32Int16Op struct {
@@ -8821,7 +8821,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8945,7 +8945,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt32Int32Op struct {
@@ -8959,7 +8959,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9083,7 +9083,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt32Int64Op struct {
@@ -9097,7 +9097,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9221,7 +9221,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt32DecimalOp struct {
@@ -9235,7 +9235,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9367,7 +9367,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt32DatumOp struct {
@@ -9381,7 +9381,7 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9531,7 +9531,7 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt32DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt64Int16Op struct {
@@ -9545,7 +9545,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9669,7 +9669,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt64Int32Op struct {
@@ -9683,7 +9683,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9807,7 +9807,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt64Int64Op struct {
@@ -9821,7 +9821,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9945,7 +9945,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt64DecimalOp struct {
@@ -9959,7 +9959,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10091,7 +10091,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusInt64DatumOp struct {
@@ -10105,7 +10105,7 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10255,7 +10255,7 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusInt64DatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusFloat64Float64Op struct {
@@ -10269,7 +10269,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10381,7 +10381,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusTimestampTimestampOp struct {
@@ -10395,7 +10395,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10499,7 +10499,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusTimestampIntervalOp struct {
@@ -10513,7 +10513,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10605,7 +10605,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusTimestampIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusIntervalIntervalOp struct {
@@ -10619,7 +10619,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10711,7 +10711,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusIntervalDatumOp struct {
@@ -10725,7 +10725,7 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10875,7 +10875,7 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusIntervalDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumDatumOp struct {
@@ -10889,7 +10889,7 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11013,7 +11013,7 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumIntervalOp struct {
@@ -11027,7 +11027,7 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11169,7 +11169,7 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumBytesOp struct {
@@ -11183,7 +11183,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11323,7 +11323,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumInt16Op struct {
@@ -11337,7 +11337,7 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11479,7 +11479,7 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumInt32Op struct {
@@ -11493,7 +11493,7 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11635,7 +11635,7 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMinusDatumInt64Op struct {
@@ -11649,7 +11649,7 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11791,7 +11791,7 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMinusDatumInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultDecimalInt16Op struct {
@@ -11805,7 +11805,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11933,7 +11933,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultDecimalInt32Op struct {
@@ -11947,7 +11947,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12075,7 +12075,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultDecimalInt64Op struct {
@@ -12089,7 +12089,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12217,7 +12217,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultDecimalDecimalOp struct {
@@ -12231,7 +12231,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12355,7 +12355,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultDecimalIntervalOp struct {
@@ -12369,7 +12369,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12481,7 +12481,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultDecimalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt16Int16Op struct {
@@ -12495,7 +12495,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12651,7 +12651,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt16Int32Op struct {
@@ -12665,7 +12665,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12821,7 +12821,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt16Int64Op struct {
@@ -12835,7 +12835,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12991,7 +12991,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt16DecimalOp struct {
@@ -13005,7 +13005,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13137,7 +13137,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt16IntervalOp struct {
@@ -13151,7 +13151,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13243,7 +13243,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt16IntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt32Int16Op struct {
@@ -13257,7 +13257,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13413,7 +13413,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt32Int32Op struct {
@@ -13427,7 +13427,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13583,7 +13583,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt32Int64Op struct {
@@ -13597,7 +13597,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13753,7 +13753,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt32DecimalOp struct {
@@ -13767,7 +13767,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13899,7 +13899,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt32IntervalOp struct {
@@ -13913,7 +13913,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14005,7 +14005,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt32IntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt64Int16Op struct {
@@ -14019,7 +14019,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14175,7 +14175,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt64Int32Op struct {
@@ -14189,7 +14189,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14345,7 +14345,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt64Int64Op struct {
@@ -14359,7 +14359,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14515,7 +14515,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt64DecimalOp struct {
@@ -14529,7 +14529,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14661,7 +14661,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultInt64IntervalOp struct {
@@ -14675,7 +14675,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14767,7 +14767,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultInt64IntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultFloat64Float64Op struct {
@@ -14781,7 +14781,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14893,7 +14893,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultFloat64IntervalOp struct {
@@ -14907,7 +14907,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14999,7 +14999,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultFloat64IntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultIntervalInt16Op struct {
@@ -15013,7 +15013,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15105,7 +15105,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultIntervalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultIntervalInt32Op struct {
@@ -15119,7 +15119,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15211,7 +15211,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultIntervalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultIntervalInt64Op struct {
@@ -15225,7 +15225,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15317,7 +15317,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultIntervalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultIntervalFloat64Op struct {
@@ -15331,7 +15331,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15423,7 +15423,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultIntervalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projMultIntervalDecimalOp struct {
@@ -15437,7 +15437,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15549,7 +15549,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projMultIntervalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivDecimalInt16Op struct {
@@ -15563,7 +15563,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15707,7 +15707,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivDecimalInt32Op struct {
@@ -15721,7 +15721,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15865,7 +15865,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivDecimalInt64Op struct {
@@ -15879,7 +15879,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16023,7 +16023,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivDecimalDecimalOp struct {
@@ -16037,7 +16037,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16177,7 +16177,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt16Int16Op struct {
@@ -16191,7 +16191,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16331,7 +16331,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt16Int32Op struct {
@@ -16345,7 +16345,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16485,7 +16485,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt16Int64Op struct {
@@ -16499,7 +16499,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16639,7 +16639,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt16DecimalOp struct {
@@ -16653,7 +16653,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16801,7 +16801,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt32Int16Op struct {
@@ -16815,7 +16815,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16955,7 +16955,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt32Int32Op struct {
@@ -16969,7 +16969,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17109,7 +17109,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt32Int64Op struct {
@@ -17123,7 +17123,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17263,7 +17263,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt32DecimalOp struct {
@@ -17277,7 +17277,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17425,7 +17425,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt64Int16Op struct {
@@ -17439,7 +17439,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17579,7 +17579,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt64Int32Op struct {
@@ -17593,7 +17593,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17733,7 +17733,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt64Int64Op struct {
@@ -17747,7 +17747,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17887,7 +17887,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivInt64DecimalOp struct {
@@ -17901,7 +17901,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18049,7 +18049,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivFloat64Float64Op struct {
@@ -18063,7 +18063,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18191,7 +18191,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivIntervalInt64Op struct {
@@ -18205,7 +18205,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18313,7 +18313,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivIntervalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projDivIntervalFloat64Op struct {
@@ -18327,7 +18327,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18435,7 +18435,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projDivIntervalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivDecimalInt16Op struct {
@@ -18449,7 +18449,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18593,7 +18593,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivDecimalInt32Op struct {
@@ -18607,7 +18607,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18751,7 +18751,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivDecimalInt64Op struct {
@@ -18765,7 +18765,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18909,7 +18909,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivDecimalDecimalOp struct {
@@ -18923,7 +18923,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19063,7 +19063,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt16Int16Op struct {
@@ -19077,7 +19077,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19197,7 +19197,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt16Int32Op struct {
@@ -19211,7 +19211,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19331,7 +19331,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt16Int64Op struct {
@@ -19345,7 +19345,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19465,7 +19465,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt16DecimalOp struct {
@@ -19479,7 +19479,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19627,7 +19627,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt32Int16Op struct {
@@ -19641,7 +19641,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19761,7 +19761,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt32Int32Op struct {
@@ -19775,7 +19775,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19895,7 +19895,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt32Int64Op struct {
@@ -19909,7 +19909,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20029,7 +20029,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt32DecimalOp struct {
@@ -20043,7 +20043,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20191,7 +20191,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt64Int16Op struct {
@@ -20205,7 +20205,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20325,7 +20325,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt64Int32Op struct {
@@ -20339,7 +20339,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20459,7 +20459,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt64Int64Op struct {
@@ -20473,7 +20473,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20593,7 +20593,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivInt64DecimalOp struct {
@@ -20607,7 +20607,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20755,7 +20755,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projFloorDivFloat64Float64Op struct {
@@ -20769,7 +20769,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20897,7 +20897,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projFloorDivFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModDecimalInt16Op struct {
@@ -20911,7 +20911,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21055,7 +21055,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModDecimalInt32Op struct {
@@ -21069,7 +21069,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21213,7 +21213,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModDecimalInt64Op struct {
@@ -21227,7 +21227,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21371,7 +21371,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModDecimalDecimalOp struct {
@@ -21385,7 +21385,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21525,7 +21525,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt16Int16Op struct {
@@ -21539,7 +21539,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21659,7 +21659,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt16Int32Op struct {
@@ -21673,7 +21673,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21793,7 +21793,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt16Int64Op struct {
@@ -21807,7 +21807,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21927,7 +21927,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt16DecimalOp struct {
@@ -21941,7 +21941,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22089,7 +22089,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt32Int16Op struct {
@@ -22103,7 +22103,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22223,7 +22223,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt32Int32Op struct {
@@ -22237,7 +22237,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22357,7 +22357,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt32Int64Op struct {
@@ -22371,7 +22371,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22491,7 +22491,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt32DecimalOp struct {
@@ -22505,7 +22505,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22653,7 +22653,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt64Int16Op struct {
@@ -22667,7 +22667,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22787,7 +22787,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt64Int32Op struct {
@@ -22801,7 +22801,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22921,7 +22921,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt64Int64Op struct {
@@ -22935,7 +22935,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23055,7 +23055,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModInt64DecimalOp struct {
@@ -23069,7 +23069,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23217,7 +23217,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projModFloat64Float64Op struct {
@@ -23231,7 +23231,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23359,7 +23359,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projModFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowDecimalInt16Op struct {
@@ -23373,7 +23373,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23501,7 +23501,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowDecimalInt32Op struct {
@@ -23515,7 +23515,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23643,7 +23643,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowDecimalInt64Op struct {
@@ -23657,7 +23657,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23785,7 +23785,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowDecimalDecimalOp struct {
@@ -23799,7 +23799,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23923,7 +23923,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt16Int16Op struct {
@@ -23937,7 +23937,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24085,7 +24085,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt16Int32Op struct {
@@ -24099,7 +24099,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24247,7 +24247,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt16Int64Op struct {
@@ -24261,7 +24261,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24409,7 +24409,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt16DecimalOp struct {
@@ -24423,7 +24423,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24555,7 +24555,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt32Int16Op struct {
@@ -24569,7 +24569,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24717,7 +24717,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt32Int32Op struct {
@@ -24731,7 +24731,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24879,7 +24879,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt32Int64Op struct {
@@ -24893,7 +24893,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25041,7 +25041,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt32DecimalOp struct {
@@ -25055,7 +25055,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25187,7 +25187,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt64Int16Op struct {
@@ -25201,7 +25201,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25349,7 +25349,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt64Int32Op struct {
@@ -25363,7 +25363,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25511,7 +25511,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt64Int64Op struct {
@@ -25525,7 +25525,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25673,7 +25673,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowInt64DecimalOp struct {
@@ -25687,7 +25687,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25819,7 +25819,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPowFloat64Float64Op struct {
@@ -25833,7 +25833,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25945,7 +25945,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPowFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projConcatBytesBytesOp struct {
@@ -25959,7 +25959,7 @@ func (p projConcatBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26075,7 +26075,7 @@ func (p projConcatBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projConcatBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projConcatDatumDatumOp struct {
@@ -26089,7 +26089,7 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26213,7 +26213,7 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projConcatDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt16Int16Op struct {
@@ -26227,7 +26227,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26351,7 +26351,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt16Int32Op struct {
@@ -26365,7 +26365,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26489,7 +26489,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt16Int64Op struct {
@@ -26503,7 +26503,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26627,7 +26627,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt32Int16Op struct {
@@ -26641,7 +26641,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26765,7 +26765,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt32Int32Op struct {
@@ -26779,7 +26779,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26903,7 +26903,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt32Int64Op struct {
@@ -26917,7 +26917,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27041,7 +27041,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt64Int16Op struct {
@@ -27055,7 +27055,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27179,7 +27179,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt64Int32Op struct {
@@ -27193,7 +27193,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27317,7 +27317,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftInt64Int64Op struct {
@@ -27331,7 +27331,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27455,7 +27455,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftDatumInt16Op struct {
@@ -27469,7 +27469,7 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27611,7 +27611,7 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftDatumInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftDatumInt32Op struct {
@@ -27625,7 +27625,7 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27767,7 +27767,7 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftDatumInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLShiftDatumInt64Op struct {
@@ -27781,7 +27781,7 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27923,7 +27923,7 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLShiftDatumInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt16Int16Op struct {
@@ -27937,7 +27937,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28061,7 +28061,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt16Int32Op struct {
@@ -28075,7 +28075,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28199,7 +28199,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt16Int64Op struct {
@@ -28213,7 +28213,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28337,7 +28337,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt32Int16Op struct {
@@ -28351,7 +28351,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28475,7 +28475,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt32Int32Op struct {
@@ -28489,7 +28489,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28613,7 +28613,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt32Int64Op struct {
@@ -28627,7 +28627,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28751,7 +28751,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt64Int16Op struct {
@@ -28765,7 +28765,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28889,7 +28889,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt64Int32Op struct {
@@ -28903,7 +28903,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29027,7 +29027,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftInt64Int64Op struct {
@@ -29041,7 +29041,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29165,7 +29165,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftDatumInt16Op struct {
@@ -29179,7 +29179,7 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29321,7 +29321,7 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftDatumInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftDatumInt32Op struct {
@@ -29335,7 +29335,7 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29477,7 +29477,7 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftDatumInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRShiftDatumInt64Op struct {
@@ -29491,7 +29491,7 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29633,7 +29633,7 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRShiftDatumInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projJSONFetchValDatumBytesOp struct {
@@ -29647,7 +29647,7 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29787,7 +29787,7 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projJSONFetchValDatumBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projJSONFetchValDatumInt16Op struct {
@@ -29801,7 +29801,7 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29943,7 +29943,7 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projJSONFetchValDatumInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projJSONFetchValDatumInt32Op struct {
@@ -29957,7 +29957,7 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30099,7 +30099,7 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projJSONFetchValDatumInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projJSONFetchValDatumInt64Op struct {
@@ -30113,7 +30113,7 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30255,7 +30255,7 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projJSONFetchValDatumInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projJSONFetchValPathDatumDatumOp struct {
@@ -30269,7 +30269,7 @@ func (p projJSONFetchValPathDatumDatumOp) Next(ctx context.Context) coldata.Batc
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30393,7 +30393,7 @@ func (p projJSONFetchValPathDatumDatumOp) Next(ctx context.Context) coldata.Batc
 }
 
 func (p projJSONFetchValPathDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQBoolBoolOp struct {
@@ -30407,7 +30407,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30555,7 +30555,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQBytesBytesOp struct {
@@ -30569,7 +30569,7 @@ func (p projEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30681,7 +30681,7 @@ func (p projEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDecimalInt16Op struct {
@@ -30695,7 +30695,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30835,7 +30835,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDecimalInt32Op struct {
@@ -30849,7 +30849,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30989,7 +30989,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDecimalInt64Op struct {
@@ -31003,7 +31003,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31143,7 +31143,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDecimalFloat64Op struct {
@@ -31157,7 +31157,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31305,7 +31305,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDecimalDecimalOp struct {
@@ -31319,7 +31319,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31435,7 +31435,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt16Int16Op struct {
@@ -31449,7 +31449,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31609,7 +31609,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt16Int32Op struct {
@@ -31623,7 +31623,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31783,7 +31783,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt16Int64Op struct {
@@ -31797,7 +31797,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31957,7 +31957,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt16Float64Op struct {
@@ -31971,7 +31971,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32163,7 +32163,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt16DecimalOp struct {
@@ -32177,7 +32177,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32317,7 +32317,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt32Int16Op struct {
@@ -32331,7 +32331,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32491,7 +32491,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt32Int32Op struct {
@@ -32505,7 +32505,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32665,7 +32665,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt32Int64Op struct {
@@ -32679,7 +32679,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32839,7 +32839,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt32Float64Op struct {
@@ -32853,7 +32853,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33045,7 +33045,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt32DecimalOp struct {
@@ -33059,7 +33059,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33199,7 +33199,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt64Int16Op struct {
@@ -33213,7 +33213,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33373,7 +33373,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt64Int32Op struct {
@@ -33387,7 +33387,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33547,7 +33547,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt64Int64Op struct {
@@ -33561,7 +33561,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33721,7 +33721,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt64Float64Op struct {
@@ -33735,7 +33735,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33927,7 +33927,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQInt64DecimalOp struct {
@@ -33941,7 +33941,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34081,7 +34081,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQFloat64Int16Op struct {
@@ -34095,7 +34095,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34287,7 +34287,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQFloat64Int32Op struct {
@@ -34301,7 +34301,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34493,7 +34493,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQFloat64Int64Op struct {
@@ -34507,7 +34507,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34699,7 +34699,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQFloat64Float64Op struct {
@@ -34713,7 +34713,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34905,7 +34905,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQFloat64DecimalOp struct {
@@ -34919,7 +34919,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35067,7 +35067,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQTimestampTimestampOp struct {
@@ -35081,7 +35081,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35225,7 +35225,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQIntervalIntervalOp struct {
@@ -35239,7 +35239,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35355,7 +35355,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projEQDatumDatumOp struct {
@@ -35369,7 +35369,7 @@ func (p projEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35489,7 +35489,7 @@ func (p projEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projEQDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEBoolBoolOp struct {
@@ -35503,7 +35503,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35651,7 +35651,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEBytesBytesOp struct {
@@ -35665,7 +35665,7 @@ func (p projNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35777,7 +35777,7 @@ func (p projNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDecimalInt16Op struct {
@@ -35791,7 +35791,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35931,7 +35931,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDecimalInt32Op struct {
@@ -35945,7 +35945,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36085,7 +36085,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDecimalInt64Op struct {
@@ -36099,7 +36099,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36239,7 +36239,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDecimalFloat64Op struct {
@@ -36253,7 +36253,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36401,7 +36401,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDecimalDecimalOp struct {
@@ -36415,7 +36415,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36531,7 +36531,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt16Int16Op struct {
@@ -36545,7 +36545,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36705,7 +36705,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt16Int32Op struct {
@@ -36719,7 +36719,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36879,7 +36879,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt16Int64Op struct {
@@ -36893,7 +36893,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37053,7 +37053,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt16Float64Op struct {
@@ -37067,7 +37067,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37259,7 +37259,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt16DecimalOp struct {
@@ -37273,7 +37273,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37413,7 +37413,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt32Int16Op struct {
@@ -37427,7 +37427,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37587,7 +37587,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt32Int32Op struct {
@@ -37601,7 +37601,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37761,7 +37761,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt32Int64Op struct {
@@ -37775,7 +37775,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37935,7 +37935,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt32Float64Op struct {
@@ -37949,7 +37949,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38141,7 +38141,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt32DecimalOp struct {
@@ -38155,7 +38155,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38295,7 +38295,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt64Int16Op struct {
@@ -38309,7 +38309,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38469,7 +38469,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt64Int32Op struct {
@@ -38483,7 +38483,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38643,7 +38643,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt64Int64Op struct {
@@ -38657,7 +38657,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38817,7 +38817,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt64Float64Op struct {
@@ -38831,7 +38831,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39023,7 +39023,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEInt64DecimalOp struct {
@@ -39037,7 +39037,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39177,7 +39177,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEFloat64Int16Op struct {
@@ -39191,7 +39191,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39383,7 +39383,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEFloat64Int32Op struct {
@@ -39397,7 +39397,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39589,7 +39589,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEFloat64Int64Op struct {
@@ -39603,7 +39603,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39795,7 +39795,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEFloat64Float64Op struct {
@@ -39809,7 +39809,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40001,7 +40001,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEFloat64DecimalOp struct {
@@ -40015,7 +40015,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40163,7 +40163,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNETimestampTimestampOp struct {
@@ -40177,7 +40177,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40321,7 +40321,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEIntervalIntervalOp struct {
@@ -40335,7 +40335,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40451,7 +40451,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNEDatumDatumOp struct {
@@ -40465,7 +40465,7 @@ func (p projNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40585,7 +40585,7 @@ func (p projNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projNEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTBoolBoolOp struct {
@@ -40599,7 +40599,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40747,7 +40747,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTBytesBytesOp struct {
@@ -40761,7 +40761,7 @@ func (p projLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40873,7 +40873,7 @@ func (p projLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDecimalInt16Op struct {
@@ -40887,7 +40887,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41027,7 +41027,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDecimalInt32Op struct {
@@ -41041,7 +41041,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41181,7 +41181,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDecimalInt64Op struct {
@@ -41195,7 +41195,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41335,7 +41335,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDecimalFloat64Op struct {
@@ -41349,7 +41349,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41497,7 +41497,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDecimalDecimalOp struct {
@@ -41511,7 +41511,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41627,7 +41627,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt16Int16Op struct {
@@ -41641,7 +41641,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41801,7 +41801,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt16Int32Op struct {
@@ -41815,7 +41815,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41975,7 +41975,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt16Int64Op struct {
@@ -41989,7 +41989,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42149,7 +42149,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt16Float64Op struct {
@@ -42163,7 +42163,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42355,7 +42355,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt16DecimalOp struct {
@@ -42369,7 +42369,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42509,7 +42509,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt32Int16Op struct {
@@ -42523,7 +42523,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42683,7 +42683,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt32Int32Op struct {
@@ -42697,7 +42697,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42857,7 +42857,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt32Int64Op struct {
@@ -42871,7 +42871,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43031,7 +43031,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt32Float64Op struct {
@@ -43045,7 +43045,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43237,7 +43237,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt32DecimalOp struct {
@@ -43251,7 +43251,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43391,7 +43391,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt64Int16Op struct {
@@ -43405,7 +43405,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43565,7 +43565,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt64Int32Op struct {
@@ -43579,7 +43579,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43739,7 +43739,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt64Int64Op struct {
@@ -43753,7 +43753,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43913,7 +43913,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt64Float64Op struct {
@@ -43927,7 +43927,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44119,7 +44119,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTInt64DecimalOp struct {
@@ -44133,7 +44133,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44273,7 +44273,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTFloat64Int16Op struct {
@@ -44287,7 +44287,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44479,7 +44479,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTFloat64Int32Op struct {
@@ -44493,7 +44493,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44685,7 +44685,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTFloat64Int64Op struct {
@@ -44699,7 +44699,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44891,7 +44891,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTFloat64Float64Op struct {
@@ -44905,7 +44905,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45097,7 +45097,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTFloat64DecimalOp struct {
@@ -45111,7 +45111,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45259,7 +45259,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTTimestampTimestampOp struct {
@@ -45273,7 +45273,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45417,7 +45417,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTIntervalIntervalOp struct {
@@ -45431,7 +45431,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45547,7 +45547,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLTDatumDatumOp struct {
@@ -45561,7 +45561,7 @@ func (p projLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45681,7 +45681,7 @@ func (p projLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLTDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEBoolBoolOp struct {
@@ -45695,7 +45695,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45843,7 +45843,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEBytesBytesOp struct {
@@ -45857,7 +45857,7 @@ func (p projLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45969,7 +45969,7 @@ func (p projLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDecimalInt16Op struct {
@@ -45983,7 +45983,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46123,7 +46123,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDecimalInt32Op struct {
@@ -46137,7 +46137,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46277,7 +46277,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDecimalInt64Op struct {
@@ -46291,7 +46291,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46431,7 +46431,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDecimalFloat64Op struct {
@@ -46445,7 +46445,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46593,7 +46593,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDecimalDecimalOp struct {
@@ -46607,7 +46607,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46723,7 +46723,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt16Int16Op struct {
@@ -46737,7 +46737,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46897,7 +46897,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt16Int32Op struct {
@@ -46911,7 +46911,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47071,7 +47071,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt16Int64Op struct {
@@ -47085,7 +47085,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47245,7 +47245,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt16Float64Op struct {
@@ -47259,7 +47259,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47451,7 +47451,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt16DecimalOp struct {
@@ -47465,7 +47465,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47605,7 +47605,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt32Int16Op struct {
@@ -47619,7 +47619,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47779,7 +47779,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt32Int32Op struct {
@@ -47793,7 +47793,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47953,7 +47953,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt32Int64Op struct {
@@ -47967,7 +47967,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48127,7 +48127,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt32Float64Op struct {
@@ -48141,7 +48141,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48333,7 +48333,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt32DecimalOp struct {
@@ -48347,7 +48347,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48487,7 +48487,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt64Int16Op struct {
@@ -48501,7 +48501,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48661,7 +48661,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt64Int32Op struct {
@@ -48675,7 +48675,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48835,7 +48835,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt64Int64Op struct {
@@ -48849,7 +48849,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49009,7 +49009,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt64Float64Op struct {
@@ -49023,7 +49023,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49215,7 +49215,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEInt64DecimalOp struct {
@@ -49229,7 +49229,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49369,7 +49369,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEFloat64Int16Op struct {
@@ -49383,7 +49383,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49575,7 +49575,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEFloat64Int32Op struct {
@@ -49589,7 +49589,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49781,7 +49781,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEFloat64Int64Op struct {
@@ -49795,7 +49795,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49987,7 +49987,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEFloat64Float64Op struct {
@@ -50001,7 +50001,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50193,7 +50193,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEFloat64DecimalOp struct {
@@ -50207,7 +50207,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50355,7 +50355,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLETimestampTimestampOp struct {
@@ -50369,7 +50369,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50513,7 +50513,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEIntervalIntervalOp struct {
@@ -50527,7 +50527,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50643,7 +50643,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projLEDatumDatumOp struct {
@@ -50657,7 +50657,7 @@ func (p projLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50777,7 +50777,7 @@ func (p projLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projLEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTBoolBoolOp struct {
@@ -50791,7 +50791,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50939,7 +50939,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTBytesBytesOp struct {
@@ -50953,7 +50953,7 @@ func (p projGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51065,7 +51065,7 @@ func (p projGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDecimalInt16Op struct {
@@ -51079,7 +51079,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51219,7 +51219,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDecimalInt32Op struct {
@@ -51233,7 +51233,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51373,7 +51373,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDecimalInt64Op struct {
@@ -51387,7 +51387,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51527,7 +51527,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDecimalFloat64Op struct {
@@ -51541,7 +51541,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51689,7 +51689,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDecimalDecimalOp struct {
@@ -51703,7 +51703,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51819,7 +51819,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt16Int16Op struct {
@@ -51833,7 +51833,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51993,7 +51993,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt16Int32Op struct {
@@ -52007,7 +52007,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52167,7 +52167,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt16Int64Op struct {
@@ -52181,7 +52181,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52341,7 +52341,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt16Float64Op struct {
@@ -52355,7 +52355,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52547,7 +52547,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt16DecimalOp struct {
@@ -52561,7 +52561,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52701,7 +52701,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt32Int16Op struct {
@@ -52715,7 +52715,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52875,7 +52875,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt32Int32Op struct {
@@ -52889,7 +52889,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53049,7 +53049,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt32Int64Op struct {
@@ -53063,7 +53063,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53223,7 +53223,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt32Float64Op struct {
@@ -53237,7 +53237,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53429,7 +53429,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt32DecimalOp struct {
@@ -53443,7 +53443,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53583,7 +53583,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt64Int16Op struct {
@@ -53597,7 +53597,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53757,7 +53757,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt64Int32Op struct {
@@ -53771,7 +53771,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53931,7 +53931,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt64Int64Op struct {
@@ -53945,7 +53945,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54105,7 +54105,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt64Float64Op struct {
@@ -54119,7 +54119,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54311,7 +54311,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTInt64DecimalOp struct {
@@ -54325,7 +54325,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54465,7 +54465,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTFloat64Int16Op struct {
@@ -54479,7 +54479,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54671,7 +54671,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTFloat64Int32Op struct {
@@ -54685,7 +54685,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54877,7 +54877,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTFloat64Int64Op struct {
@@ -54891,7 +54891,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55083,7 +55083,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTFloat64Float64Op struct {
@@ -55097,7 +55097,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55289,7 +55289,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTFloat64DecimalOp struct {
@@ -55303,7 +55303,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55451,7 +55451,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTTimestampTimestampOp struct {
@@ -55465,7 +55465,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55609,7 +55609,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTIntervalIntervalOp struct {
@@ -55623,7 +55623,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55739,7 +55739,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGTDatumDatumOp struct {
@@ -55753,7 +55753,7 @@ func (p projGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55873,7 +55873,7 @@ func (p projGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGTDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEBoolBoolOp struct {
@@ -55887,7 +55887,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56035,7 +56035,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEBytesBytesOp struct {
@@ -56049,7 +56049,7 @@ func (p projGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56161,7 +56161,7 @@ func (p projGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDecimalInt16Op struct {
@@ -56175,7 +56175,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56315,7 +56315,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDecimalInt32Op struct {
@@ -56329,7 +56329,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56469,7 +56469,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDecimalInt64Op struct {
@@ -56483,7 +56483,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56623,7 +56623,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDecimalFloat64Op struct {
@@ -56637,7 +56637,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56785,7 +56785,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDecimalDecimalOp struct {
@@ -56799,7 +56799,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56915,7 +56915,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt16Int16Op struct {
@@ -56929,7 +56929,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57089,7 +57089,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt16Int32Op struct {
@@ -57103,7 +57103,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57263,7 +57263,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt16Int64Op struct {
@@ -57277,7 +57277,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57437,7 +57437,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt16Float64Op struct {
@@ -57451,7 +57451,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57643,7 +57643,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt16DecimalOp struct {
@@ -57657,7 +57657,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57797,7 +57797,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt32Int16Op struct {
@@ -57811,7 +57811,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57971,7 +57971,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt32Int32Op struct {
@@ -57985,7 +57985,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58145,7 +58145,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt32Int64Op struct {
@@ -58159,7 +58159,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58319,7 +58319,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt32Float64Op struct {
@@ -58333,7 +58333,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58525,7 +58525,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt32DecimalOp struct {
@@ -58539,7 +58539,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58679,7 +58679,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt64Int16Op struct {
@@ -58693,7 +58693,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58853,7 +58853,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt64Int32Op struct {
@@ -58867,7 +58867,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59027,7 +59027,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt64Int64Op struct {
@@ -59041,7 +59041,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59201,7 +59201,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt64Float64Op struct {
@@ -59215,7 +59215,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59407,7 +59407,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEInt64DecimalOp struct {
@@ -59421,7 +59421,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59561,7 +59561,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEFloat64Int16Op struct {
@@ -59575,7 +59575,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59767,7 +59767,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEFloat64Int32Op struct {
@@ -59781,7 +59781,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59973,7 +59973,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEFloat64Int64Op struct {
@@ -59987,7 +59987,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60179,7 +60179,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEFloat64Float64Op struct {
@@ -60193,7 +60193,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60385,7 +60385,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEFloat64DecimalOp struct {
@@ -60399,7 +60399,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60547,7 +60547,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGETimestampTimestampOp struct {
@@ -60561,7 +60561,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60705,7 +60705,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEIntervalIntervalOp struct {
@@ -60719,7 +60719,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60835,7 +60835,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projGEDatumDatumOp struct {
@@ -60849,7 +60849,7 @@ func (p projGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60969,7 +60969,7 @@ func (p projGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projGEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // GetProjectionOperator returns the appropriate projection operator for the
@@ -60989,7 +60989,7 @@ func GetProjectionOperator(
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputNode:   NewOneInputNode(input),
+		OneInputNode:   colexecbase.NewOneInputNode(input),
 		allocator:      allocator,
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,

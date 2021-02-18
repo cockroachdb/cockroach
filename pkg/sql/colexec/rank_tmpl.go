@@ -55,7 +55,7 @@ func NewRankOperator(
 	}
 	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	initFields := rankInitFields{
-		OneInputNode:    NewOneInputNode(input),
+		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
@@ -94,7 +94,7 @@ func _UPDATE_RANK_INCREMENT() {
 // */}}
 
 type rankInitFields struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator       *colmem.Allocator
 	outputColIdx    int
@@ -155,7 +155,7 @@ type _RANK_STRINGOp struct {
 var _ colexecbase.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
-	r.Input().Init()
+	r.Input.Init()
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -164,7 +164,7 @@ func (r *_RANK_STRINGOp) Init() {
 }
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input().Next(ctx)
+	batch := r.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

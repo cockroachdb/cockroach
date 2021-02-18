@@ -24,7 +24,7 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -99,7 +99,7 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selPrefixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projPrefixBytesBytesConstOp struct {
@@ -114,7 +114,7 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -195,7 +195,7 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projPrefixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selSuffixBytesBytesConstOp struct {
@@ -212,7 +212,7 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -287,7 +287,7 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selSuffixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projSuffixBytesBytesConstOp struct {
@@ -302,7 +302,7 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -383,7 +383,7 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projSuffixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selContainsBytesBytesConstOp struct {
@@ -400,7 +400,7 @@ func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -475,7 +475,7 @@ func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selContainsBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projContainsBytesBytesConstOp struct {
@@ -490,7 +490,7 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -571,7 +571,7 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projContainsBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selRegexpBytesBytesConstOp struct {
@@ -588,7 +588,7 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -663,7 +663,7 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selRegexpBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projRegexpBytesBytesConstOp struct {
@@ -678,7 +678,7 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -759,7 +759,7 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p projRegexpBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNotPrefixBytesBytesConstOp struct {
@@ -776,7 +776,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -851,7 +851,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p *selNotPrefixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNotPrefixBytesBytesConstOp struct {
@@ -866,7 +866,7 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -947,7 +947,7 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p projNotPrefixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNotSuffixBytesBytesConstOp struct {
@@ -964,7 +964,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1039,7 +1039,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p *selNotSuffixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNotSuffixBytesBytesConstOp struct {
@@ -1054,7 +1054,7 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1135,7 +1135,7 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p projNotSuffixBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNotContainsBytesBytesConstOp struct {
@@ -1152,7 +1152,7 @@ func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1227,7 +1227,7 @@ func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 }
 
 func (p *selNotContainsBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNotContainsBytesBytesConstOp struct {
@@ -1242,7 +1242,7 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1323,7 +1323,7 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 }
 
 func (p projNotContainsBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNotRegexpBytesBytesConstOp struct {
@@ -1340,7 +1340,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1415,7 +1415,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p *selNotRegexpBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type projNotRegexpBytesBytesConstOp struct {
@@ -1430,7 +1430,7 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1511,5 +1511,5 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 }
 
 func (p projNotRegexpBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }

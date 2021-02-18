@@ -41,7 +41,7 @@ func NewTopKSorter(
 ) colexecbase.Operator {
 	return &topKSorter{
 		allocator:    allocator,
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
@@ -66,7 +66,7 @@ const (
 )
 
 type topKSorter struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
@@ -98,7 +98,7 @@ type topKSorter struct {
 }
 
 func (t *topKSorter) Init() {
-	t.input.Init()
+	t.Input.Init()
 	t.topK = newAppendOnlyBufferedBatch(t.allocator, t.inputTypes, nil /* colsToStore */)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
@@ -143,7 +143,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 // in sorted order.
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
-	t.inputBatch = t.input.Next(ctx)
+	t.inputBatch = t.Input.Next(ctx)
 	remainingRows := t.k
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		fromLength := t.inputBatch.Length()
@@ -157,7 +157,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 		})
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
-			t.inputBatch = t.input.Next(ctx)
+			t.inputBatch = t.Input.Next(ctx)
 			t.firstUnprocessedTupleIdx = 0
 		}
 	}
@@ -194,7 +194,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 				t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 			},
 		)
-		t.inputBatch = t.input.Next(ctx)
+		t.inputBatch = t.Input.Next(ctx)
 		t.firstUnprocessedTupleIdx = 0
 	}
 

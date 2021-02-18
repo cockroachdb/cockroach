@@ -55,6 +55,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 5 (40 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • group (scalar)
 │ actual row count: 1
@@ -76,6 +79,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 10 (80 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • merge join
 │ actual row count: 5

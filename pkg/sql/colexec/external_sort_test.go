@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -75,12 +76,13 @@ func TestExternalSort(t *testing.T) {
 			for _, tc := range tcs {
 				log.Infof(context.Background(), "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.description)
 				var semsToCheck []semaphore.Semaphore
-				runTestsWithTyps(
+				colexectestutils.RunTestsWithTyps(
 					t,
-					[]tuples{tc.tuples},
+					testAllocator,
+					[]colexectestutils.Tuples{tc.tuples},
 					[][]*types.T{tc.typs},
 					tc.expected,
-					orderedVerifier,
+					colexectestutils.OrderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
@@ -194,11 +196,12 @@ func TestExternalSortRandomized(t *testing.T) {
 				//  flow tracking open FDs and releasing any leftovers.
 				var semsToCheck []semaphore.Semaphore
 				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
-				runTests(
+				colexectestutils.RunTests(
 					t,
-					[]tuples{tups},
+					testAllocator,
+					[]colexectestutils.Tuples{tups},
 					expected,
-					orderedVerifier,
+					colexectestutils.OrderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
@@ -286,7 +289,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// - the remaining part is divided evenly between the sorter and the merger.
 	memoryLimit := 2*colmem.GetBatchMemSize(batch)*int64(numInMemoryBufferedBatches) + int64(queueCfg.BufferSizeBytes*numFDs)
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-	input := newFiniteBatchSource(batch, typs, numTotalBatches)
+	input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, numTotalBatches)
 
 	var spilled bool
 	sem := colexecbase.NewTestingSemaphore(numFDs)
@@ -412,7 +415,7 @@ func BenchmarkExternalSort(b *testing.B) {
 					}
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
-						source := newFiniteBatchSource(batch, typs, nBatches)
+						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var spilled bool
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
 							ctx, flowCtx, []colexecbase.Operator{source}, typs, ordCols,

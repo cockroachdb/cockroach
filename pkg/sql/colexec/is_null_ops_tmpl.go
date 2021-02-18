@@ -31,7 +31,7 @@ import (
 )
 
 type isNullProjBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -52,7 +52,7 @@ func NewIsNullProjOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
@@ -78,11 +78,11 @@ type is_KINDNullProjOp struct {
 var _ colexecbase.Operator = &is_KINDNullProjOp{}
 
 func (o *is_KINDNullProjOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *is_KINDNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+	batch := o.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -158,7 +158,7 @@ func _COMPUTE_IS_NULL(
 } // */}}
 
 type isNullSelBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	colIdx int
 	negate bool
 }
@@ -172,7 +172,7 @@ func NewIsNullSelOp(
 	input colexecbase.Operator, colIdx int, negate bool, isTupleNull bool,
 ) colexecbase.Operator {
 	base := isNullSelBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		colIdx:       colIdx,
 		negate:       negate,
 	}
@@ -194,12 +194,12 @@ type is_KINDNullSelOp struct {
 var _ colexecbase.Operator = &is_KINDNullSelOp{}
 
 func (o *is_KINDNullSelOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *is_KINDNullSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := o.input.Next(ctx)
+		batch := o.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return batch

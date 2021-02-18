@@ -13,6 +13,8 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • scan
   actual row count: 0
@@ -32,6 +34,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 3 (24 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • scan
   actual row count: 3
@@ -52,6 +57,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 7 (56 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • hash join (inner)
 │ columns: (k, v, a, b)

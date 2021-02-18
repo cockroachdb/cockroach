@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,7 +37,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				execinfrapb.AggregatorSpec_STRING_AGG,
 			},
-			input: tuples{
+			input: colexectestutils.Tuples{
 				{nil, "a", "1"},
 				{nil, "b", "2"},
 				{0, "c", "3"},
@@ -45,7 +46,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{1, "f", "6"},
 				{1, "g", "7"},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{nil, "a2b"},
 				{0, "c4d5e"},
 				{1, "f7g"},
@@ -60,7 +61,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				execinfrapb.AggregatorSpec_STRING_AGG,
 			},
-			input: tuples{
+			input: colexectestutils.Tuples{
 				{nil, "a"},
 				{nil, "b"},
 				{0, "c"},
@@ -70,7 +71,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{1, "g"},
 			},
 			constArguments: [][]execinfrapb.Expression{nil, {{Expr: "'_'"}}},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{nil, "a_b"},
 				{0, "c_d_e"},
 				{1, "f_g"},
@@ -88,7 +89,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_STRING_AGG,
 			},
 			typs: []*types.T{types.Int, types.Jsonb, types.String},
-			input: tuples{
+			input: colexectestutils.Tuples{
 				{nil, `'{"id": 1}'`, "a"},
 				{nil, `'{"id": 2}'`, "b"},
 				{0, `'{"id": 1}'`, "c"},
@@ -97,7 +98,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{1, `'{"id": 3}'`, "f"},
 			},
 			constArguments: [][]execinfrapb.Expression{nil, nil, nil, {{Expr: "'_'"}}},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{nil, `'[{"id": 1}, {"id": 2}]'`, `'["a", "b"]'`, "a_b"},
 				{0, `'[{"id": 1}, {"id": 2}, {"id": 2}]'`, `'["c", "d", "e"]'`, "c_d_e"},
 				{1, `'[{"id": 3}]'`, `'["f"]'`, "f"},
@@ -111,14 +112,14 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				execinfrapb.AggregatorSpec_XOR_AGG,
 			},
-			input: tuples{
+			input: colexectestutils.Tuples{
 				{nil, 3},
 				{nil, 1},
 				{0, -5},
 				{0, -1},
 				{0, 0},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{nil, 2},
 				{0, 4},
 			},
@@ -145,7 +146,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 					&evalCtx, &semaCtx, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)
-				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
+				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return agg.new(&colexecagg.NewAggregatorArgs{
 							Allocator:      testAllocator,

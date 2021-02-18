@@ -22,7 +22,7 @@ import (
 // CancelChecker is an Operator that checks whether query cancellation has
 // occurred. The check happens on every batch.
 type CancelChecker struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	// Number of times check() has been called since last context cancellation
@@ -32,20 +32,20 @@ type CancelChecker struct {
 
 // Init is part of the Operator interface.
 func (c *CancelChecker) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 var _ colexecbase.Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
 func NewCancelChecker(op colexecbase.Operator) *CancelChecker {
-	return &CancelChecker{OneInputNode: NewOneInputNode(op)}
+	return &CancelChecker{OneInputNode: colexecbase.NewOneInputNode(op)}
 }
 
 // Next is part of Operator interface.
 func (c *CancelChecker) Next(ctx context.Context) coldata.Batch {
 	c.checkEveryCall(ctx)
-	return c.input.Next(ctx)
+	return c.Input.Next(ctx)
 }
 
 // Interval of check() calls to wait between checks for context cancellation.

@@ -21,7 +21,7 @@ import (
 )
 
 type isNullProjBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -42,7 +42,7 @@ func NewIsNullProjOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
@@ -66,11 +66,11 @@ type isNullProjOp struct {
 var _ colexecbase.Operator = &isNullProjOp{}
 
 func (o *isNullProjOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+	batch := o.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -130,11 +130,11 @@ type isTupleNullProjOp struct {
 var _ colexecbase.Operator = &isTupleNullProjOp{}
 
 func (o *isTupleNullProjOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+	batch := o.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -198,7 +198,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type isNullSelBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	colIdx int
 	negate bool
 }
@@ -212,7 +212,7 @@ func NewIsNullSelOp(
 	input colexecbase.Operator, colIdx int, negate bool, isTupleNull bool,
 ) colexecbase.Operator {
 	base := isNullSelBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		colIdx:       colIdx,
 		negate:       negate,
 	}
@@ -232,12 +232,12 @@ type isNullSelOp struct {
 var _ colexecbase.Operator = &isNullSelOp{}
 
 func (o *isNullSelOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *isNullSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := o.input.Next(ctx)
+		batch := o.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return batch
@@ -295,12 +295,12 @@ type isTupleNullSelOp struct {
 var _ colexecbase.Operator = &isTupleNullSelOp{}
 
 func (o *isTupleNullSelOp) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *isTupleNullSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := o.input.Next(ctx)
+		batch := o.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return batch

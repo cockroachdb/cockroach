@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -119,8 +120,8 @@ func TestRandomizedCast(t *testing.T) {
 		log.Infof(ctx, "%sTo%s", c.fromTyp.String(), c.toTyp.String())
 		n := 100
 		// Make an input vector of length n.
-		input := tuples{}
-		output := tuples{}
+		input := colexectestutils.Tuples{}
+		output := colexectestutils.Tuples{}
 		for i := 0; i < n; i++ {
 			var (
 				fromDatum, toDatum tree.Datum
@@ -146,10 +147,10 @@ func TestRandomizedCast(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			input = append(input, tuple{c.fromPhysType(fromDatum)})
-			output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
+			input = append(input, colexectestutils.Tuple{c.fromPhysType(fromDatum)})
+			output = append(output, colexectestutils.Tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 		}
-		runTestsWithTyps(t, []tuples{input}, [][]*types.T{{c.fromTyp}}, output, orderedVerifier,
+		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{c.fromTyp}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
 			})

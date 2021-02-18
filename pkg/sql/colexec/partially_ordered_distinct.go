@@ -62,7 +62,7 @@ func newPartiallyOrderedDistinct(
 	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
-		distinct: distinct.(ResettableOperator),
+		distinct: distinct.(colexecbase.ResettableOperator),
 	}, nil
 }
 
@@ -72,7 +72,7 @@ func newPartiallyOrderedDistinct(
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {
 	input    *chunkerOperator
-	distinct ResettableOperator
+	distinct colexecbase.ResettableOperator
 }
 
 var _ colexecbase.Operator = &partiallyOrderedDistinct{}
@@ -102,8 +102,8 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 				// We're done, so return a zero-length batch.
 				return coldata.ZeroBatch
 			}
-			// p.distinct will reset p.input.
-			p.distinct.reset(ctx)
+			// p.distinct will reset p.Input.
+			p.distinct.Reset(ctx)
 		} else {
 			return batch
 		}
@@ -152,7 +152,7 @@ type chunkerOperator struct {
 	windowedBatch coldata.Batch
 }
 
-var _ ResettableOperator = &chunkerOperator{}
+var _ colexecbase.ResettableOperator = &chunkerOperator{}
 
 func (c *chunkerOperator) ChildCount(bool) int {
 	return 1
@@ -219,7 +219,7 @@ func (c *chunkerOperator) done() bool {
 	return c.input.done()
 }
 
-func (c *chunkerOperator) reset(_ context.Context) {
+func (c *chunkerOperator) Reset(_ context.Context) {
 	c.currentChunkFinished = false
 	if c.newChunksCol != nil {
 		if c.outputTupleStartIdx == c.numTuplesInChunks {
