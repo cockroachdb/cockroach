@@ -865,7 +865,7 @@ func (r *Replica) getTraceData(ctx context.Context) map[string]string {
 	if sp == nil {
 		return nil
 	}
-	if sp.IsBlackHole() {
+	if !sp.IsVerbose() {
 		return nil
 	}
 
