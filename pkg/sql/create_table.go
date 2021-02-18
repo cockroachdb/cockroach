@@ -1543,7 +1543,7 @@ func NewTableDesc(
 					if t.Oid() != typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID) {
 						err = pgerror.Newf(
 							pgcode.InvalidTableDefinition,
-							"cannot use column %s which has type %s in REGIONAL BY ROW AS",
+							"cannot use column %s which has type %s in REGIONAL BY ROW",
 							d.Name,
 							t.SQLString(),
 						)
@@ -1551,11 +1551,20 @@ func NewTableDesc(
 							ctx,
 							typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID),
 						); terr == nil {
-							err = errors.WithDetailf(
-								err,
-								"REGIONAL BY ROW AS must reference a column of type %s.",
-								t.Name(),
-							)
+							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
+								err = errors.WithDetailf(
+									err,
+									"REGIONAL BY ROW AS must reference a column of type %s",
+									t.Name(),
+								)
+							} else {
+								err = errors.WithDetailf(
+									err,
+									"Column %s must be of type %s",
+									t.Name(),
+									tree.RegionEnum,
+								)
+							}
 						}
 						return nil, err
 					}
@@ -1577,16 +1586,11 @@ func NewTableDesc(
 			}
 		}
 
-		if n.Locality.RegionalByRowColumn == tree.RegionalByRowRegionNotSpecifiedName {
-			// Implicitly create REGIONAL BY ROW column if no AS ... was defined.
-			if regionalByRowColExists {
-				return nil, errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						`cannot specify %s column in REGIONAL BY ROW table as the column is implicitly created by the system`,
-						regionalByRowCol.String(),
-					),
-					"Use LOCALITY REGIONAL BY ROW AS %s instead.",
+		if !regionalByRowColExists {
+			if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
+				return nil, pgerror.Newf(
+					pgcode.UndefinedColumn,
+					"column %s in REGIONAL BY ROW AS does not exist",
 					regionalByRowCol.String(),
 				)
 			}
@@ -1596,12 +1600,6 @@ func NewTableDesc(
 				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
 			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
-		} else if !regionalByRowColExists {
-			return nil, pgerror.Newf(
-				pgcode.UndefinedColumn,
-				"column %s in REGIONAL BY ROW AS does not exist",
-				regionalByRowCol.String(),
-			)
 		}
 
 		// Construct the partitioning for the PARTITION ALL BY.
