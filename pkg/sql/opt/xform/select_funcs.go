@@ -1051,6 +1051,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			indexJoin.KeyCols = pkCols
 			indexJoin.Cols = scanPrivate.Cols
 			indexJoin.LookupColsAreTableKey = true
+			indexJoin.Locking = scanPrivate.Locking
 
 			// Create the LookupJoin for the index join in the same group as the
 			// original select.
@@ -1401,6 +1402,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols
 		indexJoin.LookupColsAreTableKey = true
+		indexJoin.Locking = scanPrivate.Locking
 
 		// Create the LookupJoin for the index join in the same group as the
 		// original select.

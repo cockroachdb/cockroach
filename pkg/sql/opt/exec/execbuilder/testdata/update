@@ -491,6 +491,7 @@ vectorized: true
     │
     └── • index join
         │ table: kv3@primary
+        │ locking strength: for update
         │
         └── • scan
               missing stats
@@ -511,6 +512,7 @@ vectorized: true
 │
 └── • index join
     │ table: kv3@primary
+    │ locking strength: for update
     │
     └── • scan
           missing stats

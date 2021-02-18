@@ -166,8 +166,9 @@ func (b *indexScanBuilder) addIndexJoin(cols opt.ColSet) {
 		panic(errors.AssertionFailedf("cannot add index join after an outer filter has been added"))
 	}
 	b.indexJoinPrivate = memo.IndexJoinPrivate{
-		Table: b.tabID,
-		Cols:  cols,
+		Table:   b.tabID,
+		Cols:    cols,
+		Locking: b.scanPrivate.Locking,
 	}
 }
 

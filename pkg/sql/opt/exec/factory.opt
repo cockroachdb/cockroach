@@ -198,6 +198,7 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
+    Locking *tree.LockingItem
 }
 
 # LookupJoin performs a lookup join.
@@ -245,6 +246,7 @@ define InvertedJoin {
     OnCond tree.TypedExpr
     IsFirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
+    Locking *tree.LockingItem
 }
 
 # ZigzagJoin performs a zigzag join.

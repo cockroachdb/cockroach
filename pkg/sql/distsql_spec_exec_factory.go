@@ -614,6 +614,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: index join")
 }
@@ -646,6 +647,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: inverted join")
 }

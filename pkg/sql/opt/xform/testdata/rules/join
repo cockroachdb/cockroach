@@ -1633,7 +1633,7 @@ full-join (hash)
 memo expect=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
+memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G1: (inner-join G2 G3 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8))
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8))

@@ -535,6 +535,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
@@ -549,6 +550,10 @@ func (ef *execFactory) ConstructIndexJoin(
 	primaryIndex := tabDesc.GetPrimaryIndex()
 	tableScan.index = primaryIndex.IndexDesc()
 	tableScan.disableBatchLimit()
+	if locking != nil {
+		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
 
 	n := &indexJoinNode{
 		input:         input.(planNode),
@@ -697,6 +702,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -712,6 +718,10 @@ func (ef *execFactory) ConstructInvertedJoin(
 		return nil, err
 	}
 	tableScan.index = indexDesc
+	if locking != nil {
+		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
 
 	n := &invertedJoinNode{
 		input:                     input.(planNode),

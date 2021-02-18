@@ -1426,9 +1426,15 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 
 	cols := join.Cols
 	needed, output := b.getColumns(cols, join.Table)
+
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res := execPlan{outputCols: output}
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, res.reqOrdering(join),
+		input.root, tab, keyCols, needed, res.reqOrdering(join), locking,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1487,7 +1493,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
-	var locking *tree.LockingItem
+	locking := join.Locking
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
@@ -1598,6 +1604,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res.root, err = b.factory.ConstructInvertedJoin(
 		joinOpToJoinType(join.JoinType),
 		invertedExpr,
@@ -1609,6 +1620,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		onExpr,
 		join.IsFirstJoinInPairedJoiner,
 		res.reqOrdering(join),
+		locking,
 	)
 	if err != nil {
 		return execPlan{}, err
