@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -372,10 +370,8 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
-func (s *cloudStorageSink) getOrCreateFile(
-	topic string, schemaID descpb.DescriptorVersion,
-) *cloudStorageSinkFile {
-	key := cloudStorageSinkKey{topic, schemaID}
+func (s *cloudStorageSink) getOrCreateFile(topic TopicDescriptor) *cloudStorageSinkFile {
+	key := cloudStorageSinkKey{topic.GetName(), int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
 		return item.(*cloudStorageSinkFile)
 	}
@@ -392,13 +388,13 @@ func (s *cloudStorageSink) getOrCreateFile(
 
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
-	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	file := s.getOrCreateFile(table.GetName(), table.GetVersion())
+	file := s.getOrCreateFile(topic)
 
 	// TODO(dan): Memory monitoring for this
 	if _, err := file.Write(value); err != nil {
@@ -456,10 +452,10 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 // schema 2 file, leading to a violation of our ordering guarantees (see comment
 // on cloudStorageSink)
 func (s *cloudStorageSink) flushTopicVersions(
-	ctx context.Context, topic string, maxVersionToFlush descpb.DescriptorVersion,
+	ctx context.Context, topic string, maxVersionToFlush int64,
 ) (err error) {
-	var toRemoveAlloc [2]descpb.DescriptorVersion // generally avoid allocating
-	toRemove := toRemoveAlloc[:0]                 // schemaIDs of flushed files
+	var toRemoveAlloc [2]int64    // generally avoid allocating
+	toRemove := toRemoveAlloc[:0] // schemaIDs of flushed files
 	gte := cloudStorageSinkKey{topic: topic}
 	lt := cloudStorageSinkKey{topic: topic, schemaID: maxVersionToFlush + 1}
 	s.files.AscendRange(gte, lt, func(i btree.Item) (wantMore bool) {
@@ -541,7 +537,7 @@ func (s *cloudStorageSink) Close() error {
 
 type cloudStorageSinkKey struct {
 	topic    string
-	schemaID descpb.DescriptorVersion
+	schemaID int64
 }
 
 func (k cloudStorageSinkKey) Less(other btree.Item) bool {

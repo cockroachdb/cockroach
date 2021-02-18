@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -119,17 +122,6 @@ func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp
 var _ execinfra.Processor = &changeAggregator{}
 var _ execinfra.RowSource = &changeAggregator{}
 
-// Default frequency to flush sink.
-// See comment in newChangeAggregatorProcessor for explanation on the value.
-var defaultFlushFrequency = 5 * time.Second
-
-// TestingSetDefaultFlushFrequency changes defaultFlushFrequency for tests.
-// Returns function to restore flush frequency to its original value.
-func TestingSetDefaultFlushFrequency(f time.Duration) func() {
-	defaultFlushFrequency = f
-	return func() { defaultFlushFrequency = 5 * time.Second }
-}
-
 func newChangeAggregatorProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -148,7 +140,7 @@ func newChangeAggregatorProcessor(
 	if err := ca.Init(
 		ca,
 		post,
-		changefeedResultTypes,
+		changefeeddist.ChangefeedResultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -191,7 +183,7 @@ func newChangeAggregatorProcessor(
 			return nil, err
 		}
 	} else {
-		ca.flushFrequency = defaultFlushFrequency
+		ca.flushFrequency = changefeedbase.DefaultFlushFrequency
 	}
 	return ca, nil
 }
@@ -256,8 +248,14 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
-	ca.eventConsumer = newKVEventToRowConsumer(ctx, cfg, ca.spanFrontier, kvfeedCfg.InitialHighWater,
-		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs)
+
+	if ca.spec.Feed.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
+		ca.eventConsumer = newNativeKVConsumer(ca.sink)
+	} else {
+		ca.eventConsumer = newKVEventToRowConsumer(ctx, cfg, ca.spanFrontier, kvfeedCfg.InitialHighWater,
+			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs)
+	}
+
 	ca.startKVFeed(ctx, kvfeedCfg)
 
 	return ctx
@@ -558,6 +556,12 @@ func newKVEventToRowConsumer(
 	}
 }
 
+type tableDescriptorTopic struct {
+	catalog.TableDescriptor
+}
+
+var _ TopicDescriptor = &tableDescriptorTopic{}
+
 // ConsumeEvent implements kvEventConsumer interface
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
 	if event.Type() != kvfeed.KVEvent {
@@ -599,7 +603,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Ev
 		}
 	}
 	if err := c.sink.EmitRow(
-		ctx, r.tableDesc, keyCopy, valueCopy, r.updated,
+		ctx, tableDescriptorTopic{r.tableDesc}, keyCopy, valueCopy, r.updated,
 	); err != nil {
 		return err
 	}
@@ -720,6 +724,47 @@ func (c *kvEventToRowConsumer) eventToRow(
 	}
 
 	return r, nil
+}
+
+type nativeKVConsumer struct {
+	sink Sink
+}
+
+var _ kvEventConsumer = &nativeKVConsumer{}
+
+func newNativeKVConsumer(sink Sink) kvEventConsumer {
+	return &nativeKVConsumer{sink: sink}
+}
+
+type noTopic struct{}
+
+var _ TopicDescriptor = &noTopic{}
+
+func (n noTopic) GetName() string {
+	return ""
+}
+
+func (n noTopic) GetID() descpb.ID {
+	return 0
+}
+
+func (n noTopic) GetVersion() descpb.DescriptorVersion {
+	return 0
+}
+
+// ConsumeEvent implements kvEventConsumer interface.
+func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
+	if event.Type() != kvfeed.KVEvent {
+		return errors.AssertionFailedf("expected kv event, got %v", event.Type())
+	}
+	keyBytes := []byte(event.KV().Key)
+	val := event.KV().Value
+	valBytes, err := protoutil.Marshal(&val)
+	if err != nil {
+		return err
+	}
+
+	return c.sink.EmitRow(ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp)
 }
 
 const (
@@ -880,6 +925,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
+	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
 	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
@@ -1017,7 +1063,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 }
 
 func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
-	if err := d.EnsureDecoded(changefeedResultTypes[0], &cf.a); err != nil {
+	if err := d.EnsureDecoded(changefeeddist.ChangefeedResultTypes[0], &cf.a); err != nil {
 		return err
 	}
 	raw, ok := d.Datum.(*tree.DBytes)
