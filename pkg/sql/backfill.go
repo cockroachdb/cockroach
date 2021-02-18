@@ -342,7 +342,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	log.Infof(ctx, "completed backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	if sc.testingKnobs.RunAfterBackfill != nil {
-		if err := sc.testingKnobs.RunAfterBackfill(*sc.job.ID()); err != nil {
+		if err := sc.testingKnobs.RunAfterBackfill(sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -1382,7 +1382,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return status, nil
 			}); err != nil {
-				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*sc.job.ID()))
+				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 			}
 		}
 		return nil

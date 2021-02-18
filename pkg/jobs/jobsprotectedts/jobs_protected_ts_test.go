@@ -84,11 +84,11 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
 	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return jr.Failed(ctx, txn, *jMovedToFailed.ID(), io.ErrUnexpectedEOF)
+		return jr.Failed(ctx, txn, jMovedToFailed.ID(), io.ErrUnexpectedEOF)
 	}))
 	jFinished, recFinished := mkJobAndRecord()
 	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return jr.Succeeded(ctx, txn, *jFinished.ID())
+		return jr.Succeeded(ctx, txn, jFinished.ID())
 	}))
 	_, recRemains := mkJobAndRecord()
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
