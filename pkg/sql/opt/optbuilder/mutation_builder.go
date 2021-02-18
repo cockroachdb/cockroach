@@ -188,6 +188,9 @@ type mutationBuilder struct {
 
 	// uniqueCheckHelper is used to prevent allocating the helper separately.
 	uniqueCheckHelper uniqueCheckHelper
+
+	// arbiterHelper is used to prevent allocating the helper separately.
+	arbiterPredicateHelper arbiterPredicateHelper
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {

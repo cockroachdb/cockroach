@@ -76,10 +76,8 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		return indexes, uniqueConstraints
 	}
 
-	tabMeta := mb.md.TableMeta(mb.tabID)
-	var tableScope *scope
-	var im *partialidx.Implicator
-	var arbiterFilters memo.FiltersExpr
+	h := &mb.arbiterPredicateHelper
+	h.init(mb, arbiterPredicate)
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 
@@ -107,62 +105,18 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 			return util.MakeFastIntSet(idx), util.FastIntSet{}
 		}
 
-		// Initialize tableScope once and only if needed. We need to build a scan
-		// so we can use the logical properties of the scan to fully normalize the
-		// index predicates.
-		if tableScope == nil {
-			tableScope = mb.b.buildScan(
-				tabMeta, tableOrdinals(tabMeta.Table, columnKinds{
-					includeMutations:       false,
-					includeSystem:          false,
-					includeVirtualInverted: false,
-					includeVirtualComputed: true,
-				}),
-				nil, /* indexFlags */
-				noRowLocking,
-				mb.b.allocScope(),
-			)
-		}
-
-		// Fetch the partial index predicate which was added to tabMeta in the
-		// call to buildScan above.
-		p, _ := tabMeta.PartialIndexPredicate(idx)
-		predFilter := *p.(*memo.FiltersExpr)
-
 		// If the index is a pseudo-partial index, it can always be an arbiter.
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
-		if predFilter.IsTrue() {
+		pred := h.partialIndexPredicate(idx)
+		if pred.IsTrue() {
 			return util.MakeFastIntSet(idx), util.FastIntSet{}
 		}
 
 		// If the index is a partial index, then it can only be an arbiter if
 		// the arbiterPredicate implies it.
-		if arbiterPredicate != nil {
-
-			// Initialize the Implicator once.
-			if im == nil {
-				im = &partialidx.Implicator{}
-				im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
-			}
-
-			// Build the arbiter filters once.
-			if arbiterFilters == nil {
-				var err error
-				arbiterFilters, err = mb.b.buildPartialIndexPredicate(
-					tabMeta, tableScope, arbiterPredicate, "arbiter predicate",
-				)
-				if err != nil {
-					// The error is due to a non-immutable operator in the arbiter
-					// predicate. Continue on to see if a matching non-partial or
-					// pseudo-partial index exists.
-					continue
-				}
-			}
-
-			if _, ok := im.FiltersImplyPredicate(arbiterFilters, predFilter); ok {
-				indexes.Add(idx)
-			}
+		if h.predicateIsImpliedByArbiterPredicate(pred) {
+			indexes.Add(idx)
 		}
 	}
 
@@ -367,4 +321,118 @@ func (mb *mutationBuilder) projectPartialIndexDistinctColumn(
 	mb.outScope = projectionScope
 
 	return scopeCol
+}
+
+// arbiterPredicateHelper is used to determine if a partial index can be used as
+// an arbiter.
+type arbiterPredicateHelper struct {
+	mb               *mutationBuilder
+	tabMeta          *opt.TableMeta
+	im               *partialidx.Implicator
+	arbiterPredicate tree.Expr
+
+	// tableScopeLazy is a lazily initialized scope including all the columns of
+	// the mutation table and a scan on the table as an expression. Do NOT
+	// access it directly, use the tableScope method instead.
+	tableScopeLazy *scope
+
+	// arbiterFilters is a lazily initialized scalar expression that represents
+	// arbiterPredicate. Do NOT access it directly, use the arbiterFilters
+	// method instead.
+	arbiterFiltersLazy memo.FiltersExpr
+
+	// invalidArbiterPredicate is true if the arbiterPredicate contains
+	// non-immutable operators. Such a predicate cannot imply any filters.
+	invalidArbiterPredicate bool
+}
+
+// init initializes the helper for the given arbiter predicate.
+func (h *arbiterPredicateHelper) init(mb *mutationBuilder, arbiterPredicate tree.Expr) {
+	h.mb = mb
+	h.tabMeta = h.mb.md.TableMeta(mb.tabID)
+	h.arbiterPredicate = arbiterPredicate
+}
+
+// tableScope returns a scope that can be used to build predicate expressions.
+// The scope contains a Scan expression. The logical properties of the Scan are
+// used to fully normalize predicate expressions.
+func (h *arbiterPredicateHelper) tableScope() *scope {
+	if h.tableScopeLazy == nil {
+		h.tableScopeLazy = h.mb.b.buildScan(
+			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
+				includeMutations:       false,
+				includeSystem:          false,
+				includeVirtualInverted: false,
+				includeVirtualComputed: true,
+			}),
+			nil, /* indexFlags */
+			noRowLocking,
+			h.mb.b.allocScope(),
+		)
+
+	}
+	return h.tableScopeLazy
+}
+
+// partialIndexPredicate returns the partial index predicate of the given index.
+// Rather than build the predicate scalar expression from the tree.Expr in the
+// catalog, it fetches the predicates from the table metadata. These predicates
+// are populated when the Scan expression is built for the tableScope. This
+// eliminate unnecessarily rebuilding partial index predicate expressions.
+func (h *arbiterPredicateHelper) partialIndexPredicate(idx cat.IndexOrdinal) memo.FiltersExpr {
+	// Call tableScope to ensure that buildScan has been called to populate
+	// tabMeta with partial index predicates.
+	h.tableScope()
+
+	pred, _ := h.tabMeta.PartialIndexPredicate(idx)
+	return *pred.(*memo.FiltersExpr)
+}
+
+// arbiterFilters returns a scalar expression representing the arbiter
+// predicate. If the arbiter predicate contains non-immutable operators,
+// ok=true is returned.
+func (h *arbiterPredicateHelper) arbiterFilters() (_ memo.FiltersExpr, ok bool) {
+	// The filters have been initialized if they are non-nil or
+	// invalidArbiterPredicate has been set to true.
+	arbiterFiltersInitialized := h.arbiterFiltersLazy != nil || h.invalidArbiterPredicate
+
+	if !arbiterFiltersInitialized {
+		filters, err := h.mb.b.buildPartialIndexPredicate(
+			h.tabMeta, h.tableScope(), h.arbiterPredicate, "arbiter predicate",
+		)
+		if err == nil {
+			h.arbiterFiltersLazy = filters
+		} else {
+			// The error is due to a non-immutable operator in the arbiter
+			// predicate. Such a predicate cannot imply any filters, so we mark
+			// it as invalid.
+			h.invalidArbiterPredicate = true
+		}
+	}
+	return h.arbiterFiltersLazy, !h.invalidArbiterPredicate
+}
+
+// predicateIsImpliedByArbiterPredicate returns true if the arbiterPredicate
+// implies pred. If there is no arbiterPredicate (it is nil), or it contains
+// non-immutable operators, it cannot imply any predicate, so false is returned.
+func (h *arbiterPredicateHelper) predicateIsImpliedByArbiterPredicate(pred memo.FiltersExpr) bool {
+	if h.arbiterPredicate == nil {
+		return false
+	}
+
+	arbiterFilters, ok := h.arbiterFilters()
+	if !ok {
+		// The arbiterPredicate contains non-immutable operators and cannot
+		// imply any predicate.
+		return false
+	}
+
+	// Initialize the Implicator once.
+	if h.im == nil {
+		h.im = &partialidx.Implicator{}
+		h.im.Init(h.mb.b.factory, h.mb.md, h.mb.b.evalCtx)
+	}
+
+	_, ok = h.im.FiltersImplyPredicate(arbiterFilters, pred)
+	return ok
 }
