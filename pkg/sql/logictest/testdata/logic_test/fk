@@ -1,5 +1,11 @@
 # LogicTest: !3node-tenant(49854)
 
+# Reduce the need for ranged intent resolution, since the test environment
+# tends to accumulate lots of un-compacted intent tombstones that can slow it
+# down.
+statement ok
+SET CLUSTER SETTING kv.transaction.max_intents_bytes = "1048576"
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 

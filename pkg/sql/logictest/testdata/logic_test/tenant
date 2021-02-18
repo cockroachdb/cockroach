@@ -1,4 +1,5 @@
 # LogicTest: !3node-tenant
+
 query IBT colnames
 SELECT * FROM system.tenants ORDER BY id
 ----

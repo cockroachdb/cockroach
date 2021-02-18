@@ -141,7 +141,7 @@ func BenchmarkExportToSst(b *testing.B) {
 const numIntentKeys = 1000
 
 func setupKeysWithIntent(
-	b *testing.B, eng Engine, numVersions int, numFlushedVersions int,
+	b *testing.B, eng Engine, numVersions int, numFlushedVersions int, resolveAll bool,
 ) roachpb.LockUpdate {
 	txnIDCount := 2 * numVersions
 	val := []byte("value")
@@ -179,7 +179,7 @@ func setupKeysWithIntent(
 			Txn:    txn.TxnMeta,
 			Status: roachpb.COMMITTED,
 		}
-		if i < numVersions {
+		if i < numVersions || resolveAll {
 			batch := eng.NewBatch()
 			for j := 0; j < numIntentKeys; j++ {
 				key := makeKey(nil, j)
@@ -209,7 +209,7 @@ func BenchmarkIntentScan(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false, sep))
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions)
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false)
 							lower := makeKey(nil, 0)
 							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
@@ -258,6 +258,101 @@ func BenchmarkIntentScan(b *testing.B) {
 	}
 }
 
+func BenchmarkScanAllIntentDeleted(b *testing.B) {
+	skip.UnderShort(b, "setting up unflushed data takes too long")
+	for _, sep := range []bool{false, true} {
+		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
+			for _, numVersions := range []int{200} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, percentFlushed := range []int{0, 50, 90, 100} {
+						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
+							eng := setupMVCCInMemPebbleWithSettings(
+								b, makeSettingsForSeparatedIntents(false, sep))
+							numFlushedVersions := (percentFlushed * numVersions) / 100
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true)
+							lower := makeKey(nil, 0)
+							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+								LowerBound: lower,
+								UpperBound: makeKey(nil, numIntentKeys),
+							})
+							iter.SeekGE(MVCCKey{Key: lower})
+							var buf []byte
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								valid, err := iter.Valid()
+								if err != nil {
+									b.Fatal(err)
+								}
+								if !valid {
+									iter.SeekGE(MVCCKey{Key: lower})
+								} else {
+									// Read latest version.
+									k := iter.UnsafeKey()
+									if !k.IsValue() {
+										b.Fatalf("expected value %s", k.String())
+									}
+									// Skip to next key. This will do one Next and then Seek.
+									// iter.NextKey()
+									buf = append(buf[:0], k.Key...)
+									buf = roachpb.BytesNext(buf)
+									iter.SeekGE(MVCCKey{Key: buf})
+								}
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkNextPrevAllIntentDeleted(b *testing.B) {
+	skip.UnderShort(b, "setting up unflushed data takes too long")
+	for _, sep := range []bool{false, true} {
+		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
+			for _, numVersions := range []int{200} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, percentFlushed := range []int{0, 50, 90, 100} {
+						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
+							eng := setupMVCCInMemPebbleWithSettings(
+								b, makeSettingsForSeparatedIntents(false, sep))
+							numFlushedVersions := (percentFlushed * numVersions) / 100
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true)
+							lower := makeKey(nil, 0)
+							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+								LowerBound: lower,
+								UpperBound: makeKey(nil, numIntentKeys),
+							})
+							iter.SeekGE(MVCCKey{Key: lower})
+							iter.NextKey()
+							iter.NextKey()
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								iter.Next()
+								valid, err := iter.Valid()
+								if err != nil {
+									b.Fatal(err)
+								}
+								if !valid {
+									b.Fatal("should be valid")
+								}
+								iter.Prev()
+								valid, err = iter.Valid()
+								if err != nil {
+									b.Fatal(err)
+								}
+								if !valid {
+									b.Fatal("should be valid")
+								}
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkIntentResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	for _, sep := range []bool{false, true} {
@@ -269,7 +364,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false, sep))
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions)
+							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false)
 							keys := make([]roachpb.Key, numIntentKeys)
 							for i := range keys {
 								keys[i] = makeKey(nil, i)
@@ -309,7 +404,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false, sep))
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions)
+							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false)
 							keys := make([]roachpb.Key, numIntentKeys+1)
 							for i := range keys {
 								keys[i] = makeKey(nil, i)

@@ -565,6 +565,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 func newPebbleInMem(
 	ctx context.Context, attrs roachpb.Attributes, cacheSize int64, settings *cluster.Settings,
 ) *Pebble {
+	log.Infof(ctx, "newPebbleInMem: cacheSize %d", cacheSize)
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
 	defer opts.Cache.Unref()
