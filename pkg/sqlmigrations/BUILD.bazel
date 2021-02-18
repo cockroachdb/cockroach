@@ -14,7 +14,6 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -33,7 +32,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 

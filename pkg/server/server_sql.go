@@ -850,11 +850,6 @@ func (s *SQLServer) preStart(
 			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
 		s.sqlLivenessProvider.Start(ctx)
 	}
-	// Start the async migration to upgrade namespace entries from the old
-	// namespace table (id 2) to the new one (id 30).
-	if err := sqlmigrationsMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
-		return err
-	}
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
