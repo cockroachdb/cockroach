@@ -42,7 +42,9 @@ var requireConstMsg = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire.newAdminShutdownErr": true,
 
-	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).Error": true,
+	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).Error":                        true,
+	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).Unimplemented":                true,
+	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).UnimplementedWithIssueDetail": true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shout":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Event":     true,
