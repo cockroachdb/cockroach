@@ -126,7 +126,6 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	initLifespan time.Duration,
 	serviceName string,
 	hostname string) (err error) {
-
 	// Check if the service cert and key already exist.
 	if _, err = os.Stat(serviceCertPath); !os.IsNotExist(err) {
 		// cert exists
