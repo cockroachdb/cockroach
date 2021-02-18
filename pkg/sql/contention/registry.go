@@ -228,7 +228,8 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) error {
 // - on the middle level, all SingleKeyContention objects are ordered by their
 //   keys (achieved by using the ordered cache)
 // - on the lowest level, all SingleTxnContention objects are ordered by the
-//   frequency of the occurrence (achieved by an explicit sort).
+//   number of times that transaction was observed to contend with other
+//   transactions (achieved by an explicit sort).
 func (r *Registry) Serialize() []contentionpb.IndexContentionEvents {
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
