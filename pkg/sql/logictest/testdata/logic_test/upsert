@@ -1,5 +1,11 @@
 subtest strict
 
+# Reduce the need for ranged intent resolution, since the test environment
+# tends to accumulate lots of un-compacted intent tombstones that can slow it
+# down.
+statement ok
+SET CLUSTER SETTING kv.transaction.max_intents_bytes = "1048576"
+
 statement ok
 CREATE TABLE ex(
   foo INT PRIMARY KEY,

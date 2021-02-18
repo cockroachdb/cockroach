@@ -124,7 +124,7 @@ SUBTESTS :=
 LINTTIMEOUT := 30m
 
 ## Test timeout to use for regular tests.
-TESTTIMEOUT := 30m
+TESTTIMEOUT := 2h
 
 ## Test timeout to use for race tests.
 RACETIMEOUT := 30m
@@ -1058,10 +1058,15 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
+.PHONY: test
 test: ## Run tests.
-check test testshort testrace bench benchshort:
+test:
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "TestLogic" $(if $(BENCHES),-bench "$(BENCHES)") -cpuprofile ./artifacts/$@_logic_cpu.prof -memprofile ./artifacts/$@_logic_mem.prof -timeout $(TESTTIMEOUT) ./pkg/sql/logictest $(TESTFLAGS)
+
+.PHONY: check testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
+check testshort testrace bench benchshort:
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+
 
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
