@@ -722,6 +722,10 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+// closedTimestampPolicyRLocked returns the closed timestamp policy of the
+// range, which is updated asynchronously through gossip of zone configurations.
+// NOTE: an exported version of this method which does not require the replica
+// lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
 	if r.mu.zone.GlobalReads != nil && *r.mu.zone.GlobalReads {
 		return roachpb.LEAD_FOR_GLOBAL_READS
