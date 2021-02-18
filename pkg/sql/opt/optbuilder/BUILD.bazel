@@ -19,6 +19,7 @@ go_library(
         "locking.go",
         "misc_statements.go",
         "mutation_builder.go",
+        "mutation_builder_arbiter.go",
         "mutation_builder_fk.go",
         "mutation_builder_unique.go",
         "opaque.go",
