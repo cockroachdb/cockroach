@@ -1239,6 +1239,17 @@ func getIndexLaxKeyOrdinals(index cat.Index) util.FastIntSet {
 	return keyOrds
 }
 
+// getUniqueConstraintOrdinals returns the ordinals of all columns in the given
+// unique constraint. A column's ordinal is the ordered position of that column
+// in the owning table.
+func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) util.FastIntSet {
+	var ucOrds util.FastIntSet
+	for i, n := 0, uc.ColumnCount(); i < n; i++ {
+		ucOrds.Add(uc.ColumnOrdinal(tab, i))
+	}
+	return ucOrds
+}
+
 // getExplicitPrimaryKeyOrdinals returns the ordinals of the primary key
 // columns, excluding any implicit partitioning columns in the primary index.
 func getExplicitPrimaryKeyOrdinals(tab cat.Table) util.FastIntSet {

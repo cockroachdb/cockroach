@@ -696,15 +696,19 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 			predExpr = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
-		mb.buildAntiJoinForDoNothingArbiter(inScope, index.LaxKeyColumnCount(), func(i int) int {
-			return index.Column(i).Ordinal()
-		}, predExpr)
+		mb.buildAntiJoinForDoNothingArbiter(
+			inScope,
+			getIndexLaxKeyOrdinals(index),
+			predExpr,
+		)
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
-		mb.buildAntiJoinForDoNothingArbiter(inScope, uniqueConstraint.ColumnCount(), func(i int) int {
-			return uniqueConstraint.ColumnOrdinal(mb.tab, i)
-		}, nil /* predExpr */)
+		mb.buildAntiJoinForDoNothingArbiter(
+			inScope,
+			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
+			nil, /* predExpr */
+		)
 	})
 
 	// Loop over each arbiter index and constraint, creating an UpsertDistinctOn
@@ -722,15 +726,20 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 		if isPartial {
 			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
 		}
-		mb.buildDistinctOnForDoNothingArbiter(insertColScope, index.LaxKeyColumnCount(), func(i int) int {
-			return index.Column(i).Ordinal()
-		}, partialIndexDistinctCol)
+
+		mb.buildDistinctOnForDoNothingArbiter(
+			insertColScope,
+			getIndexLaxKeyOrdinals(index),
+			partialIndexDistinctCol,
+		)
 	})
 	arbiterConstraints.ForEach(func(uc int) {
 		uniqueConstraint := mb.tab.Unique(uc)
-		mb.buildDistinctOnForDoNothingArbiter(insertColScope, uniqueConstraint.ColumnCount(), func(i int) int {
-			return uniqueConstraint.ColumnOrdinal(mb.tab, i)
-		}, nil /* partialIndexDistinctCol */)
+		mb.buildDistinctOnForDoNothingArbiter(
+			insertColScope,
+			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
+			nil, /* partialIndexDistinctCol */
+		)
 	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())

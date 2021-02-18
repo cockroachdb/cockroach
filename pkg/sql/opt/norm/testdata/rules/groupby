@@ -2135,8 +2135,8 @@ insert a
       │    ├── columns: i:13!null s:15!null
       │    └── key: (13,15)
       └── filters
-           ├── column2:8 = s:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
-           └── column3:9 = i:13 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
+           ├── column3:9 = i:13 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
+           └── column2:8 = s:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
 
 # EnsureUpsertDistinctOn treats NULL values as distinct, so it can be eliminated.
 norm expect=EliminateDistinctOnValues
@@ -2306,14 +2306,14 @@ insert a
       │    │    ├── columns: i:19!null s:21!null
       │    │    └── key: (19,21)
       │    └── filters
-      │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
-      │         └── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+      │         ├── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+      │         └── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
       ├── scan a
       │    ├── columns: i:25!null f:26
       │    └── lax-key: (25,26)
       └── filters
-           ├── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
-           └── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+           ├── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+           └── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
 
 # DO NOTHING case where one distinct op can be removed (k), but two others
 # can't: (s, i) and (f, i).
@@ -2378,14 +2378,14 @@ insert a
       │    │    │    │    ├── columns: i:19!null s:21!null
       │    │    │    │    └── key: (19,21)
       │    │    │    └── filters
-      │    │    │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
-      │    │    │         └── column10:10 = i:19 [outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
+      │    │    │         ├── column10:10 = i:19 [outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
+      │    │    │         └── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
       │    │    ├── scan a
       │    │    │    ├── columns: i:25!null f:26
       │    │    │    └── lax-key: (25,26)
       │    │    └── filters
-      │    │         ├── column3:9 = f:26 [outer=(9,26), constraints=(/9: (/NULL - ]; /26: (/NULL - ]), fd=(9)==(26), (26)==(9)]
-      │    │         └── column10:10 = i:25 [outer=(10,25), constraints=(/10: (/NULL - ]; /25: (/NULL - ]), fd=(10)==(25), (25)==(10)]
+      │    │         ├── column10:10 = i:25 [outer=(10,25), constraints=(/10: (/NULL - ]; /25: (/NULL - ]), fd=(10)==(25), (25)==(10)]
+      │    │         └── column3:9 = f:26 [outer=(9,26), constraints=(/9: (/NULL - ]; /26: (/NULL - ]), fd=(9)==(26), (26)==(9)]
       │    └── aggregations
       │         ├── first-agg [as=column1:7, outer=(7)]
       │         │    └── column1:7
@@ -2463,14 +2463,14 @@ insert a
       │    │    │    ├── columns: i:19!null s:21!null
       │    │    │    └── key: (19,21)
       │    │    └── filters
-      │    │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
-      │    │         └── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+      │    │         ├── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+      │    │         └── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
       │    ├── scan a
       │    │    ├── columns: i:25!null f:26
       │    │    └── lax-key: (25,26)
       │    └── filters
-      │         ├── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
-      │         └── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+      │         ├── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+      │         └── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
       └── aggregations
            ├── first-agg [as=column2:8, outer=(8)]
            │    └── column2:8
