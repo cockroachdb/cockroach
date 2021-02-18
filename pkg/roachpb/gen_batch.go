@@ -123,8 +123,8 @@ func (ru *%[1]s) MustSetInner(r %[2]s) {
 `, v.msgType, v.variantType)
 	}
 
-	fmt.Fprint(w, `	default:
-		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
+	fmt.Fprintf(w, `	default:
+		panic(fmt.Sprintf("unsupported type %%T for %%T", r, ru))
 	}
 	ru.Value = union
 }
@@ -185,8 +185,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 `, v.variantType, i)
 	}
 
-	fmt.Fprint(f, `		default:
-			panic(fmt.Sprintf("unsupported request: %+v", ru))
+	fmt.Fprintf(f, `		default:
+			panic(fmt.Sprintf("unsupported request: %%+v", ru))
 		}
 	}
 	return counts
