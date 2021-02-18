@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -204,7 +205,7 @@ func (b *Builder) alterTableAddColumn(
 	// references between its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {
 		if err := b.maybeAddSequenceReferenceDependencies(
-			ctx, table.GetID(), col, defaultExpr,
+			ctx, b.evalCtx.Settings, table.GetID(), col, defaultExpr,
 		); err != nil {
 			return err
 		}
@@ -410,31 +411,63 @@ func (b *Builder) alterTableDropColumn(
 var _ = (*Builder)(nil).alterTableDropColumn
 
 func (b *Builder) maybeAddSequenceReferenceDependencies(
-	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
+	ctx context.Context,
+	st *cluster.Settings,
+	tableID descpb.ID,
+	col *descpb.ColumnDescriptor,
+	defaultExpr tree.TypedExpr,
 ) error {
-	seqNames, err := sequence.GetUsedSequenceNames(defaultExpr)
+	seqIdentifiers, err := sequence.GetUsedSequences(defaultExpr)
 	if err != nil {
 		return err
 	}
-	for _, seqName := range seqNames {
-		parsedSeqName, err := parser.ParseTableName(seqName)
-		if err != nil {
-			return err
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
+	var tn tree.TableName
+	seqNameToID := make(map[string]int64)
+	for _, seqIdentifier := range seqIdentifiers {
+		if seqIdentifier.IsByID() {
+			name, err := b.semaCtx.TableNameResolver.GetQualifiedTableNameByID(
+				ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
+			if err != nil {
+				return err
+			}
+			tn = *name
+		} else {
+			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+			if err != nil {
+				return err
+			}
+			tn = parsedSeqName.ToTableName()
 		}
-		tn := parsedSeqName.ToTableName()
+
 		seqDesc, err := resolver.ResolveExistingTableObject(ctx, b.res, &tn,
 			tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			return err
 		}
+		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.GetID())
 
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.GetID())
 		b.addNode(scpb.Target_ADD, &scpb.SequenceDependency{
 			SequenceID: seqDesc.GetID(),
 			TableID:    tableID,
 			ColumnID:   col.ID,
+			ByID:       byID,
 		})
 	}
+
+	if len(seqIdentifiers) > 0 && byID {
+		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newExpr)
+		col.DefaultExpr = &s
+	}
+
 	return nil
 }
 

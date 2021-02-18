@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"go/constant"
 	"net/url"
 	"path"
 	"sort"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -120,6 +122,38 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 	})
 	ctx.FormatNode(parsed)
 	return ctx.CloseAndGetString(), nil
+}
+
+// rewriteSequencesInExpr rewrites all sequence IDs in the input expression
+// string according to rewrites.
+func rewriteSequencesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
+	parsed, err := parser.ParseExpr(expr)
+	if err != nil {
+		return "", err
+	}
+	rewriteFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		annotateTypeExpr, id, ok := schemaexpr.GetTypeExprAndSeqID(expr)
+		if !ok {
+			return true, expr, nil
+		}
+
+		rewrite, ok := rewrites[descpb.ID(id)]
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr.Expr = tree.NewNumVal(
+			constant.MakeInt64(int64(rewrite.ID)),
+			strconv.Itoa(int(rewrite.ID)),
+			false, /* negative */
+		)
+		return false, annotateTypeExpr, nil
+	}
+
+	newExpr, err := tree.SimpleVisit(parsed, rewriteFunc)
+	if err != nil {
+		return "", err
+	}
+	return newExpr.String(), nil
 }
 
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
@@ -1008,10 +1042,16 @@ func RewriteTableDescs(
 			descriptorRewrites, table.IsTemporary())
 		table.ParentID = tableRewrite.ParentID
 
-		// Remap type IDs in all serialized expressions within the TableDescriptor.
+		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
 		if err := tabledesc.ForEachExprStringInTableDesc(table, func(expr *string) error {
 			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+			if err != nil {
+				return err
+			}
+			*expr = newExpr
+
+			newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
 			if err != nil {
 				return err
 			}

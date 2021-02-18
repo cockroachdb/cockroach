@@ -117,9 +117,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE public.serial (
-        a INT8 NOT NULL DEFAULT nextval('serial_a_seq':::STRING),
+        a INT8 NOT NULL DEFAULT nextval('test.public.serial_a_seq':::STRING::REGCLASS),
         b INT8 NULL DEFAULT 7:::INT8,
-        c INT8 NOT NULL DEFAULT nextval('serial_c_seq2':::STRING),
+        c INT8 NOT NULL DEFAULT nextval('test.public.serial_c_seq2':::STRING::REGCLASS),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
@@ -160,8 +160,8 @@ query TT
 SHOW CREATE TABLE smallbig
 ----
 smallbig  CREATE TABLE public.smallbig (
-          a INT8 NOT NULL DEFAULT nextval('smallbig_a_seq':::STRING),
-          b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq':::STRING),
+          a INT8 NOT NULL DEFAULT nextval('test.public.smallbig_a_seq':::STRING::REGCLASS),
+          b INT8 NOT NULL DEFAULT nextval('test.public.smallbig_b_seq':::STRING::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
@@ -183,9 +183,9 @@ query TT
 SHOW CREATE TABLE serials
 ----
 serials  CREATE TABLE public.serials (
-         a INT8 NOT NULL DEFAULT nextval('serials_a_seq':::STRING),
-         b INT8 NOT NULL DEFAULT nextval('serials_b_seq':::STRING),
-         c INT8 NOT NULL DEFAULT nextval('serials_c_seq':::STRING),
+         a INT8 NOT NULL DEFAULT nextval('test.public.serials_a_seq':::STRING::REGCLASS),
+         b INT8 NOT NULL DEFAULT nextval('test.public.serials_b_seq':::STRING::REGCLASS),
+         c INT8 NOT NULL DEFAULT nextval('test.public.serials_c_seq':::STRING::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
@@ -222,9 +222,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE public.serial (
-        a INT8 NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
+        a INT8 NOT NULL DEFAULT nextval('test.public.serial_a_seq1':::STRING::REGCLASS),
         b INT8 NULL DEFAULT 7:::INT8,
-        c INT8 NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
+        c INT8 NOT NULL DEFAULT nextval('test.public.serial_c_seq3':::STRING::REGCLASS),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
@@ -278,9 +278,9 @@ query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
 "serial_MixedCase"  CREATE TABLE public."serial_MixedCase" (
-                    a INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_a_seq"':::STRING),
+                    a INT8 NOT NULL DEFAULT nextval('test.public."serial_MixedCase_a_seq"':::STRING::REGCLASS),
                     b INT8 NULL DEFAULT 7:::INT8,
-                    c INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_c_seq"':::STRING),
+                    c INT8 NOT NULL DEFAULT nextval('test.public."serial_MixedCase_c_seq"':::STRING::REGCLASS),
                     CONSTRAINT "primary" PRIMARY KEY (a ASC),
                     UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
                     FAMILY "primary" (a, b, c)
@@ -305,8 +305,8 @@ query TT
 SHOW CREATE TABLE smallbig
 ----
 smallbig  CREATE TABLE public.smallbig (
-          a INT2 NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
-          b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
+          a INT2 NOT NULL DEFAULT nextval('test.public.smallbig_a_seq1':::STRING::REGCLASS),
+          b INT8 NOT NULL DEFAULT nextval('test.public.smallbig_b_seq1':::STRING::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
@@ -328,9 +328,9 @@ query TT
 SHOW CREATE TABLE serials
 ----
 serials  CREATE TABLE public.serials (
-         a INT2 NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
-         b INT4 NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
-         c INT8 NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
+         a INT2 NOT NULL DEFAULT nextval('test.public.serials_a_seq1':::STRING::REGCLASS),
+         b INT4 NOT NULL DEFAULT nextval('test.public.serials_b_seq1':::STRING::REGCLASS),
+         c INT8 NOT NULL DEFAULT nextval('test.public.serials_c_seq1':::STRING::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),

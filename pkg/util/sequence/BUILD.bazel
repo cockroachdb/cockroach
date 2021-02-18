@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sequence",
@@ -11,5 +11,17 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+    ],
+)
+
+go_test(
+    name = "sequence_test",
+    srcs = ["sequence_test.go"],
+    embed = [":sequence"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
     ],
 )

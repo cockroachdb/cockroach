@@ -140,6 +140,7 @@ type CellInfoAnnotation struct {
 
 	// Annotations for next_val().
 	seqNameToMetadata map[string]*SequenceMetadata
+	seqIDToMetadata   map[descpb.ID]*SequenceMetadata
 	seqChunkProvider  *SeqChunkProvider
 }
 
@@ -436,6 +437,22 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	if !ok {
 		return nil, errors.Newf("sequence %s not found in annotation", seqName)
 	}
+	return importNextValHelper(evalCtx, c, seqMetadata)
+}
+
+func importNextValByID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	oid := tree.MustBeDOid(args[0])
+	seqMetadata, ok := c.seqIDToMetadata[descpb.ID(oid.DInt)]
+	if !ok {
+		return nil, errors.Newf("sequence with ID %v not found in annotation", oid)
+	}
+	return importNextValHelper(evalCtx, c, seqMetadata)
+}
+
+func importNextValHelper(
+	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+) (tree.Datum, error) {
 	if c.seqChunkProvider == nil {
 		return nil, errors.New("no sequence chunk provider configured for the import job")
 	}
@@ -538,14 +555,21 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		visitorSideEffect: func(annot *tree.Annotations, fn *tree.FuncExpr) error {
 			// Get sequence name so that we can update the annotation with the number
 			// of nextval calls to this sequence in a row.
-			seqName, err := sequence.GetSequenceFromFunc(fn)
+			seqIdentifier, err := sequence.GetSequenceFromFunc(fn)
 			if err != nil {
 				return err
 			}
+
 			var sequenceMetadata *SequenceMetadata
 			var ok bool
-			if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[*seqName]; !ok {
-				return errors.Newf("sequence %s not found in annotation", *seqName)
+			if seqIdentifier.IsByID() {
+				if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqIDToMetadata[descpb.ID(seqIdentifier.SeqID)]; !ok {
+					return errors.Newf("sequence with ID %s not found in annotation", seqIdentifier.SeqID)
+				}
+			} else {
+				if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[seqIdentifier.SeqName]; !ok {
+					return errors.Newf("sequence %s not found in annotation", seqIdentifier.SeqName)
+				}
 			}
 			sequenceMetadata.instancesPerRow++
 			return nil
@@ -557,6 +581,12 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextVal,
+			},
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.RegClass}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Info:       "Advances the value of the sequence and returns the final value.",
+				Fn:         importNextValByID,
 			},
 		),
 	},

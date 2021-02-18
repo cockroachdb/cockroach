@@ -261,6 +261,12 @@ type ObjectNameExistingResolver interface {
 	)
 }
 
+// QualifiedNameResolver is the helper interface to resolve qualified
+// table names given an ID and the required table kind.
+type QualifiedNameResolver interface {
+	GetQualifiedTableNameByID(ctx context.Context, id int64, requiredType RequiredTableKind) (*TableName, error)
+}
+
 // NameResolutionResult is an opaque reference returned by LookupObject().
 type NameResolutionResult interface {
 	// NameResolutionResult is the interface anchor.
