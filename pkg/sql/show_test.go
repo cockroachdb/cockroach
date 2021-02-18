@@ -21,56 +21,26 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func TestShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	params.Locality.Tiers = []roachpb.Tier{
-		{Key: "region", Value: "us-west1"},
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := sqlDB.Exec(`
-    SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
-		SET experimental_enable_hash_sharded_indexes = TRUE;
-		CREATE DATABASE d;
-		CREATE DATABASE mrdb PRIMARY REGION = "us-west1";
-		USE d;
-		CREATE TABLE items (
-			a int8,
-			b int8,
-			c int8 unique,
-			primary key (a, b)
-		);
-		CREATE DATABASE o;
-		CREATE TABLE o.foo(x int primary key);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		stmt     string
-		expect   string // empty means identical to stmt
-		database string // empty means to use database "d"
-	}{
+	testCases := []sqltestutils.ShowCreateTableTestCase{
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i INT8,
 	s STRING NULL,
 	v FLOAT NOT NULL,
@@ -79,7 +49,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -92,7 +62,7 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i INT8 CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
@@ -100,7 +70,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -113,14 +83,14 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i INT8 NULL,
 	s STRING NULL,
 	CONSTRAINT ck CHECK (i > 0),
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -131,24 +101,24 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i INT8 PRIMARY KEY
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 )`,
 		},
 		{
-			stmt: `
+			CreateStatement: `
 				CREATE TABLE %s (i INT8, f FLOAT, s STRING, d DATE,
 				  FAMILY "primary" (i, f, d, rowid),
 				  FAMILY fam_1_s (s));
 				CREATE INDEX idx_if on %[1]s (f, i) STORING (s, d);
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
@@ -162,24 +132,24 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	"te""st" INT8 NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
 	FAMILY "primary" ("te""st")
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	"te""st" INT8 NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
 	FAMILY "primary" ("te""st")
 )`,
 		},
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	a int8,
 	b int8,
 	index c(a asc, b desc)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	a INT8 NULL,
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -191,13 +161,13 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that FK dependencies inside the current database
 		// have their db name omitted.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i int8,
 	j int8,
 	FOREIGN KEY (i, j) REFERENCES items (a, b),
 	k int REFERENCES items (c)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
@@ -211,13 +181,13 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that FK dependencies using MATCH FULL on a non-composite key still
 		// show
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i int8,
 	j int8,
 	k int REFERENCES items (c) MATCH FULL,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
@@ -231,11 +201,11 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that FK dependencies outside of the current database
 		// have their db name prefixed.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	x INT8,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	x INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
@@ -246,13 +216,13 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that FK dependencies using SET NULL or SET DEFAULT
 		// are pretty-printed properly. Regression test for #32529.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i int8 DEFAULT 123,
 	j int8 DEFAULT 123,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
 	k int8 REFERENCES items (c) ON DELETE SET NULL
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
@@ -266,12 +236,12 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that INTERLEAVE dependencies inside the current database
 		// have their db name omitted.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	a INT8,
 	b INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
@@ -281,10 +251,10 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that INTERLEAVE dependencies outside of the current
 		// database are prefixed by their db name.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	x INT8 PRIMARY KEY
 ) INTERLEAVE IN PARENT o.foo (x)`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	x INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC),
 	FAMILY "primary" (x)
@@ -293,7 +263,7 @@ func TestShowCreateTable(t *testing.T) {
 		// Check that FK dependencies using MATCH FULL and MATCH SIMPLE are both
 		// pretty-printed properly.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 	i int DEFAULT 1,
 	j int DEFAULT 2,
 	k int DEFAULT 3,
@@ -301,7 +271,7 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
 	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
 )`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	i INT8 NULL DEFAULT 1:::INT8,
 	j INT8 NULL DEFAULT 2:::INT8,
 	k INT8 NULL DEFAULT 3:::INT8,
@@ -315,11 +285,11 @@ func TestShowCreateTable(t *testing.T) {
 		},
 		// Check hash sharded indexes are round trippable.
 		{
-			stmt: `CREATE TABLE %s (
+			CreateStatement: `CREATE TABLE %s (
 				a INT,
 				INDEX (a) USING HASH WITH BUCKET_COUNT = 8
 			)`,
-			expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%s (
 	a INT8 NULL,
 	crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 8:::INT8)) STORED,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -328,94 +298,8 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (a, crdb_internal_a_shard_8, rowid)
 )`,
 		},
-		// Check GLOBAL tables are round trippable.
-		{
-			stmt: `CREATE TABLE %s (
-				a INT
-			) LOCALITY GLOBAL`,
-			expect: `CREATE TABLE public.%s (
-	a INT8 NULL,
-	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
-) LOCALITY GLOBAL`,
-			database: "mrdb",
-		},
-		// Check REGIONAL BY TABLE tables are round trippable.
-		{
-			stmt: `CREATE TABLE %s (
-				a INT
-			) LOCALITY REGIONAL BY TABLE`,
-			expect: `CREATE TABLE public.%s (
-	a INT8 NULL,
-	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
-			database: "mrdb",
-		},
-		{
-			stmt: `CREATE TABLE %s (
-				a INT
-			) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
-			expect: `CREATE TABLE public.%s (
-	a INT8 NULL,
-	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
-) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
-			database: "mrdb",
-		},
 	}
-	for i, test := range tests {
-		name := fmt.Sprintf("t%d", i)
-		t.Run(name, func(t *testing.T) {
-			if test.expect == "" {
-				test.expect = test.stmt
-			}
-			db := test.database
-			if db == "" {
-				db = "d"
-			}
-			_, err := sqlDB.Exec("USE $1", db)
-			require.NoError(t, err)
-			stmt := fmt.Sprintf(test.stmt, name)
-			expect := fmt.Sprintf(test.expect, name)
-			if _, err := sqlDB.Exec(stmt); err != nil {
-				t.Fatal(err)
-			}
-			row := sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", name))
-			var scanName, create string
-			if err := row.Scan(&scanName, &create); err != nil {
-				t.Fatal(err)
-			}
-			if scanName != name {
-				t.Fatalf("expected table name %s, got %s", name, scanName)
-			}
-			if create != expect {
-				t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
-			}
-			if _, err := sqlDB.Exec(fmt.Sprintf("DROP TABLE %s", name)); err != nil {
-				t.Fatal(err)
-			}
-			// Re-insert to make sure it's round-trippable.
-			name += "_2"
-			expect = fmt.Sprintf(test.expect, name)
-			if _, err := sqlDB.Exec(expect); err != nil {
-				t.Fatalf("reinsert failure: %s: %s", expect, err)
-			}
-			row = sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", name))
-			if err := row.Scan(&scanName, &create); err != nil {
-				t.Fatal(err)
-			}
-			if create != expect {
-				t.Fatalf("round trip statement: %s\ngot: %s", expect, create)
-			}
-			if _, err := sqlDB.Exec(fmt.Sprintf("DROP TABLE %s", name)); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
+	sqltestutils.ShowCreateTableTest(t, testCases)
 }
 
 func TestShowCreateView(t *testing.T) {

@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "sqltestutils",
-    srcs = ["sql_test_utils.go"],
+    srcs = [
+        "show_create_table.go",
+        "sql_test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqltestutils",
     visibility = ["//visibility:public"],
     deps = [
@@ -10,8 +13,11 @@ go_library(
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
