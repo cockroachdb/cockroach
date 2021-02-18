@@ -63,7 +63,7 @@ func TestStreamIngestionJobRollBack(t *testing.T) {
 		},
 		Progress: jobspb.StreamIngestionProgress{},
 	}
-	j, err := registry.CreateAndStartJob(ctx, nil, streamIngestJobRecord)
+	j, err := registry.TestingCreateAndStartJob(ctx, nil, streamIngestJobRecord)
 	require.NoError(t, err)
 
 	// Insert more data in the table. These changes should be rollback during job
