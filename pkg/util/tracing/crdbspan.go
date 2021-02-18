@@ -96,9 +96,7 @@ func (s *crdbSpan) recordingType() RecordingType {
 // child spans will be stored.
 //
 // If parent != nil, the Span will be registered as a child of the respective
-// parent.
-// If separate recording is specified, the child is not registered with the
-// parent. Thus, the parent's recording will not include this child.
+// parent. If nil, the parent's recording will not include this child.
 func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if parent != nil {
 		parent.addChild(s)
@@ -113,9 +111,17 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if recType == RecordingVerbose {
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
-	// Clear any previously recorded info. This is needed by SQL SessionTracing,
-	// who likes to start and stop recording repeatedly on the same Span, and
-	// collect the (separate) recordings every time.
+}
+
+// resetRecording clears any previously recorded info.
+//
+// NB: This is needed by SQL SessionTracing, who likes to start and stop
+// recording repeatedly on the same Span, and collect the (separate) recordings
+// every time.
+func (s *crdbSpan) resetRecording() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.mu.recording.recordedLogs = nil
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
