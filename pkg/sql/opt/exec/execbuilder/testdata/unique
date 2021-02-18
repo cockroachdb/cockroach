@@ -1120,29 +1120,29 @@ vectorized: true
 │           │ estimated row count: 0 (missing stats)
 │           │
 │           └── • distinct
-│               │ columns: (upsert_partial_constraint_distinct1, column1, column2, column3)
+│               │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
 │               │ estimated row count: 0 (missing stats)
-│               │ distinct on: upsert_partial_constraint_distinct1
+│               │ distinct on: arbiter_unique_b_distinct
 │               │ nulls are distinct
 │               │
 │               └── • render
-│                   │ columns: (upsert_partial_constraint_distinct1, column1, column2, column3)
+│                   │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
 │                   │ estimated row count: 0 (missing stats)
-│                   │ render upsert_partial_constraint_distinct1: (column3 > 0) OR CAST(NULL AS BOOL)
+│                   │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render column3: column3
 │                   │
 │                   └── • distinct
-│                       │ columns: (upsert_partial_constraint_distinct0, column1, column2, column3)
+│                       │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
 │                       │ estimated row count: 0 (missing stats)
-│                       │ distinct on: upsert_partial_constraint_distinct0
+│                       │ distinct on: arbiter_unique_a_distinct
 │                       │ nulls are distinct
 │                       │
 │                       └── • render
-│                           │ columns: (upsert_partial_constraint_distinct0, column1, column2, column3)
+│                           │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
 │                           │ estimated row count: 0 (missing stats)
-│                           │ render upsert_partial_constraint_distinct0: (column3 > 0) OR CAST(NULL AS BOOL)
+│                           │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
 │                           │ render column1: column1
 │                           │ render column2: column2
 │                           │ render column3: column3
@@ -1498,15 +1498,15 @@ vectorized: true
 │           │ render column3: column3
 │           │
 │           └── • distinct
-│               │ columns: (upsert_partial_constraint_distinct0, column1, column2, column3)
+│               │ columns: (arbiter_unique_i_distinct, column1, column2, column3)
 │               │ estimated row count: 0 (missing stats)
-│               │ distinct on: upsert_partial_constraint_distinct0, column2
+│               │ distinct on: arbiter_unique_i_distinct, column2
 │               │ nulls are distinct
 │               │
 │               └── • render
-│                   │ columns: (upsert_partial_constraint_distinct0, column1, column2, column3)
+│                   │ columns: (arbiter_unique_i_distinct, column1, column2, column3)
 │                   │ estimated row count: 0 (missing stats)
-│                   │ render upsert_partial_constraint_distinct0: (column3 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
+│                   │ render arbiter_unique_i_distinct: (column3 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render column3: column3
