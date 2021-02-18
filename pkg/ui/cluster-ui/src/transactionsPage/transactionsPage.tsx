@@ -26,6 +26,7 @@ import { Search } from "../search";
 import { Filter } from "./filter";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
+type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 
 export interface Filters {
   app?: string;
@@ -48,6 +49,7 @@ interface TState {
   search?: string;
   filters?: Filters;
   statementIds: Long[] | null;
+  transactionStats: TransactionStats | null;
 }
 
 interface TransactionsPageProps {
@@ -78,6 +80,7 @@ export class TransactionsPage extends React.Component<
       timeUnit: this.trxSearchParams("timeUnit", defaultFilters.timeUnit),
     },
     statementIds: null,
+    transactionStats: null,
   };
 
   componentDidMount() {
@@ -173,8 +176,11 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  handleDetails = (statementIds: Long[] | null) => {
-    this.setState({ statementIds });
+  handleDetails = (
+    statementIds: Long[] | null,
+    transactionStats: TransactionStats,
+  ) => {
+    this.setState({ statementIds, transactionStats });
   };
 
   lastReset = () => {
@@ -286,6 +292,7 @@ export class TransactionsPage extends React.Component<
     return (
       <TransactionDetails
         statements={transactionDetails}
+        transactionStats={this.state.transactionStats}
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}
         error={this.props.error}

@@ -1,3 +1,4 @@
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import React from "react";
 import { getHighlightedText } from "src/highlightedText";
 import { Anchor } from "src/anchor";
@@ -21,16 +22,23 @@ const overlayClassName = statementsCx(
 const textWrapper = ownCellStyles("text-wrapper");
 const hoverAreaClassName = ownCellStyles("hover-area");
 
+type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
+
 interface TextCellProps {
   transactionText: string;
   transactionIds: Long[];
-  handleDetails: (transactionIds: Long[]) => void;
+  transactionStats: TransactionStats;
+  handleDetails: (
+    transactionIds: Long[],
+    transactionStats: TransactionStats,
+  ) => void;
   search: string;
 }
 
 export const textCell = ({
   transactionText,
   transactionIds,
+  transactionStats,
   handleDetails,
   search,
 }: TextCellProps) => {
@@ -48,7 +56,7 @@ export const textCell = ({
       >
         <div className={textWrapper}>
           <div
-            onClick={() => handleDetails(transactionIds)}
+            onClick={() => handleDetails(transactionIds, transactionStats)}
             className={hoverAreaClassName}
           >
             {getHighlightedText(
