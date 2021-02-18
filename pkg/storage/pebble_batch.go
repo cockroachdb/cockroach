@@ -141,11 +141,11 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
-	if r, wrapped := tryWrapReader(p, MVCCKeyAndIntentsIterKind); wrapped {
-		return r.MVCCGet(key)
-	}
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	return p.rawGet(p.buf)
+	r := wrapReader(p)
+	// Doing defer r.Free() does not inline.
+	v, err := r.MVCCGet(key)
+	r.Free()
+	return v, err
 }
 
 func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
@@ -181,8 +181,14 @@ func (p *pebbleBatch) MVCCGetProto(
 func (p *pebbleBatch) MVCCIterate(
 	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
 ) error {
-	r, _ := tryWrapReader(p, iterKind)
-	return iterateOnReader(r, start, end, iterKind, f)
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		err := iterateOnReader(r, start, end, iterKind, f)
+		r.Free()
+		return err
+	}
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
 // NewMVCCIterator implements the Batch interface.
@@ -196,9 +202,11 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
-		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
-			return r.NewMVCCIterator(iterKind, opts)
-		}
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		iter := r.NewMVCCIterator(iterKind, opts)
+		r.Free()
+		return iter
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {

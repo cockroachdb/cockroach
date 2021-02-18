@@ -87,6 +87,12 @@ func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
 }
 
+// SeekIntentGE is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+	i.i.SeekIntentGE(key, txnUUID)
+	i.checkAllowed(roachpb.Span{Key: key}, true)
+}
+
 // SeekLT is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 	i.i.SeekLT(key)
