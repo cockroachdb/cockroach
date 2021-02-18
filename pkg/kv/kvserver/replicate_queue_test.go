@@ -161,11 +161,12 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	}
 }
 
-// Test that up-replication only proceeds if there are a good number of
-// candidates to up-replicate to. Specifically, we won't up-replicate to an
-// even number of replicas unless there is an additional candidate that will
-// allow a subsequent up-replication to an odd number.
-func TestReplicateQueueUpReplicate(t *testing.T) {
+// TestReplicateQueueUpReplicateOddVoters tests that up-replication only
+// proceeds if there are a good number of candidates to up-replicate to.
+// Specifically, we won't up-replicate to an even number of replicas unless
+// there is an additional candidate that will allow a subsequent up-replication
+// to an odd number.
+func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderRaceWithIssue(t, 57144, "flaky under race")
 	defer log.Scope(t).Close(t)
@@ -298,6 +299,71 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	if len(infos) < 1 {
 		t.Fatalf("found no downreplication due to over-replication in the range logs")
 	}
+}
+
+// TestReplicateQueueUpAndDownReplicateNonVoters is an end-to-end test ensuring
+// that the replicateQueue will add or remove non-voter(s) to a range based on
+// updates to its zone configuration.
+func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t)
+	defer log.Scope(t).Close(t)
+
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+
+	// Since we started the TestCluster with 1 node, that first node should have
+	// 1 voting replica.
+	require.Len(t, scratchRange.Replicas().VoterDescriptors(), 1)
+	// Set up the default zone configs such that every range should have 1 voting
+	// replica and 2 non-voting replicas.
+	_, err := tc.ServerConn(0).Exec(
+		`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
+	)
+	require.NoError(t, err)
+
+	// Add two new servers and expect that 2 non-voters are added to the range.
+	tc.AddAndStartServer(t, base.TestServerArgs{})
+	tc.AddAndStartServer(t, base.TestServerArgs{})
+	store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(
+		tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	get := func() int {
+		// Nudge the replicateQueue to up/down-replicate our scratch range.
+		if err := store.ForceReplicationScanAndProcess(); err != nil {
+			t.Fatal(err)
+		}
+		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+		return len(scratchRange.Replicas().NonVoterDescriptors())
+	}
+
+	var expectedNonVoterCount = 2
+	testutils.SucceedsSoon(t, func() error {
+		if found := get(); found != expectedNonVoterCount {
+			return errors.Errorf("expected upreplication to %d non-voters; found %d",
+				expectedNonVoterCount, found)
+		}
+		return nil
+	})
+
+	// Now remove all non-voting replicas and expect that the range will
+	// down-replicate to having just 1 voting replica.
+	_, err = tc.ServerConn(0).Exec(`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 1`)
+	require.NoError(t, err)
+	expectedNonVoterCount = 0
+	testutils.SucceedsSoon(t, func() error {
+		if found := get(); found != expectedNonVoterCount {
+			return errors.Errorf("expected downreplication to %d non-voters; found %d",
+				expectedNonVoterCount, found)
+		}
+		return nil
+	})
 }
 
 // queryRangeLog queries the range log. The query must be of type:

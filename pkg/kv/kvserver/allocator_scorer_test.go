@@ -918,7 +918,8 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := constraint.AnalyzeConstraints(
-				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), zone)
+				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing),
+				*zone.NumReplicas, zone.Constraints)
 			for _, s := range testStores {
 				valid, necessary := allocateConstraintsCheck(s, analyzed)
 				if e, a := tc.expectedValid[s.StoreID], valid; e != a {
@@ -1052,7 +1053,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := constraint.AnalyzeConstraints(
-				context.Background(), getTestStoreDesc, existing, zone)
+				context.Background(), getTestStoreDesc, existing, *zone.NumReplicas, zone.Constraints)
 			for storeID, expected := range tc.expected {
 				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
 				if e, a := expected.valid, valid; e != a {

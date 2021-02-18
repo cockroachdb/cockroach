@@ -131,8 +131,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			TestingKnobs: execinfra.TestingKnobs{
-				ForceDiskSpill:   true,
-				MemoryLimitBytes: 1,
+				ForceDiskSpill: true,
 			},
 			DiskMonitor: testDiskMonitor,
 		},

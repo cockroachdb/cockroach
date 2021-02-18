@@ -244,7 +244,14 @@ func newHashBasedPartitioner(
 	}
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
 	diskQueuesMemUsed := maxNumberActivePartitions * diskQueueCfg.BufferSizeBytes
-	maxPartitionSizeToProcessUsingMain := execinfra.GetWorkMemLimit(flowCtx.Cfg) - int64(diskQueuesMemUsed)
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	if memoryLimit == 1 {
+		// If memory limit is 1, we're likely in a "force disk spill"
+		// scenario, but we don't want to artificially limit batches when we
+		// have already spilled, so we'll use a larger limit.
+		memoryLimit = defaultMemoryLimit
+	}
+	maxPartitionSizeToProcessUsingMain := memoryLimit - int64(diskQueuesMemUsed)
 	if maxPartitionSizeToProcessUsingMain < hbpMinimalMaxPartitionSizeForMain {
 		maxPartitionSizeToProcessUsingMain = hbpMinimalMaxPartitionSizeForMain
 	}

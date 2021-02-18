@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -190,14 +191,18 @@ type TestingKnobs struct {
 
 	// ForceDiskSpill forces any processors/operators that can fall back to disk
 	// to fall back to disk immediately.
+	//
+	// Cannot be set together with MemoryLimitBytes.
 	ForceDiskSpill bool
 
 	// MemoryLimitBytes specifies a maximum amount of working memory that a
 	// processor that supports falling back to disk can use. Must be >= 1 to
 	// enable. This is a more fine-grained knob than ForceDiskSpill when the
-	// available memory needs to be controlled. Once this limit is hit, processors
-	// employ their on-disk implementation regardless of applicable cluster
-	// settings.
+	// available memory needs to be controlled. Once this limit is hit,
+	// processors employ their on-disk implementation regardless of applicable
+	// cluster settings.
+	//
+	// Cannot be set together with ForceDiskSpill.
 	MemoryLimitBytes int64
 
 	// DrainFast, if enabled, causes the server to not wait for any currently
@@ -257,9 +262,13 @@ func (*TestingKnobs) ModuleTestingKnobs() {}
 // GetWorkMemLimit returns the number of bytes determining the amount of RAM
 // available to a single processor or operator.
 func GetWorkMemLimit(config *ServerConfig) int64 {
-	limit := config.TestingKnobs.MemoryLimitBytes
-	if limit <= 0 {
-		limit = SettingWorkMemBytes.Get(&config.Settings.SV)
+	if config.TestingKnobs.ForceDiskSpill && config.TestingKnobs.MemoryLimitBytes != 0 {
+		panic(errors.AssertionFailedf("both ForceDiskSpill and MemoryLimitBytes set"))
 	}
-	return limit
+	if config.TestingKnobs.ForceDiskSpill {
+		return 1
+	} else if config.TestingKnobs.MemoryLimitBytes != 0 {
+		return config.TestingKnobs.MemoryLimitBytes
+	}
+	return SettingWorkMemBytes.Get(&config.Settings.SV)
 }

@@ -963,13 +963,7 @@ func NewColOperator(
 			rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
 
-			// TODO(yuzefovich): audit all usages of GetWorkMemLimit to see
-			// whether we should be paying attention to ForceDiskSpill knob
-			// there too.
 			memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
-			if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-				memoryLimit = 1
-			}
 			if len(core.HashJoiner.LeftEqColumns) == 0 {
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.

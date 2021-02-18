@@ -100,6 +100,14 @@ func NewRelativeRankOperator(
 	}
 }
 
+// relativeRankNumRequiredFDs is the minimum number of file descriptors that
+// might be needed for the machinery of the relative rank operators: the maximum
+// number is needed when CUME_DIST function with either PARTITION BY or ORDER BY
+// clause (or both) is used - we need 3 FDs for each of the spilling queues used
+// by the operator directly plus we use an external sort to handle PARTITION BY
+// and/or ORDER BY clauses.
+const relativeRankNumRequiredFDs = 3 + ExternalSorterMinPartitions
+
 // NOTE: in the context of window functions "partitions" mean a different thing
 // from "partition" in the context of external algorithms and some disk
 // infrastructure: here, "partitions" are sets of tuples that are not distinct

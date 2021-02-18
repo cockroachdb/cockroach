@@ -63,12 +63,12 @@ func TestExternalSort(t *testing.T) {
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
-		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		if spillForced {
-			// In order to increase test coverage of recursive merging, we have the
-			// lowest possible memory limit - this will force creating partitions
+			// In order to increase test coverage of recursive merging, we have
+			// the lowest possible memory limit (that will not be overridden by
+			// the external sorter) - this will force creating partitions
 			// consisting of a single batch.
-			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 2
 		} else {
 			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
 		}

@@ -211,7 +211,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					}
 				} else {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
-					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
+					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
 				}
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
