@@ -134,7 +134,8 @@ func (sp *Span) SetVerbose(to bool) {
 	sp.i.SetVerbose(to)
 }
 
-// ResetRecording clears any previously recorded information.
+// ResetRecording clears any previously recorded information. This doesn't
+// affect any auxiliary trace sinks such as net/trace or zipkin.
 func (sp *Span) ResetRecording() {
 	sp.i.ResetRecording()
 }

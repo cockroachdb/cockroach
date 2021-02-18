@@ -79,12 +79,12 @@ func TestTrace(t *testing.T) {
 	sp.Finish()
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
-		Span s:
-		  tags: _verbose=1
-		  event: test1
-		  event: test2
-		  event: testerr
-		  event: log
+		span: s
+			tags: _verbose=1
+			event: test1
+			event: test2
+			event: testerr
+			event: log
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -106,12 +106,12 @@ func TestTraceWithTags(t *testing.T) {
 
 	sp.Finish()
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
-		Span s:
-		  tags: _verbose=1
-		  event: [tag=1] test1
-		  event: [tag=1] test2
-		  event: [tag=1] testerr
-		  event: [tag=1] log
+		span: s
+			tags: _verbose=1
+			event: [tag=1] test1
+			event: [tag=1] test2
+			event: [tag=1] testerr
+			event: [tag=1] log
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -197,11 +197,11 @@ func TestEventLogAndTrace(t *testing.T) {
 	el.Finish()
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
-		Span s:
-		  tags: _verbose=1
-		  event: test3
-		  event: test4
-		  event: test5err
+		span: s
+			tags: _verbose=1
+			event: test3
+			event: test4
+			event: test5err
 	`); err != nil {
 		t.Fatal(err)
 	}
