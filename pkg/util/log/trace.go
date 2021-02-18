@@ -92,7 +92,7 @@ func FinishEventLog(ctx context.Context) {
 // false.
 func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if sp.IsBlackHole() {
+		if !sp.IsVerbose() {
 			return nil, nil, false
 		}
 		return sp, nil, true

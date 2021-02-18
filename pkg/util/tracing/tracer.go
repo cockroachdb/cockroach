@@ -183,7 +183,9 @@ func NewTracer() *Tracer {
 	t := &Tracer{}
 	t.activeSpans.m = make(map[uint64]*Span)
 	t.TracingVerbosityIndependentSemanticsIsActive = func() bool { return true }
-	t.noopSpan = &Span{tracer: t}
+	// The noop span is marked as finished so that even in the case of a bug,
+	// it won't soak up data.
+	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
 	return t
 }
 
@@ -305,12 +307,12 @@ func (t *Tracer) startSpanGeneric(
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
-	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.isNoop() {
+	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
 		// If no log tags are specified in the options, use the parent
 		// span's, if any. This behavior is the reason logTags are
 		// fundamentally different from tags, which are strictly per span,
 		// for better or worse.
-		opts.LogTags = opts.Parent.crdb.logTags
+		opts.LogTags = opts.Parent.i.crdb.logTags
 	}
 
 	startTime := time.Now()
@@ -332,8 +334,8 @@ func (t *Tracer) startSpanGeneric(
 		// two underlying tracers.
 		if ok2 && (!ok1 || typ1 == typ2) {
 			var shadowCtx opentracing.SpanContext
-			if opts.Parent != nil && opts.Parent.ot.shadowSpan != nil {
-				shadowCtx = opts.Parent.ot.shadowSpan.Context()
+			if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
+				shadowCtx = opts.Parent.i.ot.shadowSpan.Context()
 			}
 			ot = makeShadowSpan(shadowTr, shadowCtx, opts.RefType, opName, startTime)
 			// If LogTags are given, pass them as tags to the shadow span.
@@ -396,7 +398,7 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 		},
 	}
-	helper.span = Span{
+	helper.span.i = spanInner{
 		tracer: t,
 		crdb:   &helper.crdbSpan,
 		ot:     ot,
@@ -412,9 +414,9 @@ func (t *Tracer) startSpanGeneric(
 		// over the remote parent, if any. If neither are specified, we're not recording.
 		var p *crdbSpan
 		if opts.Parent != nil {
-			p = opts.Parent.crdb
+			p = opts.Parent.i.crdb
 		}
-		s.crdb.enableRecording(p, opts.recordingType())
+		s.i.crdb.enableRecording(p, opts.recordingType())
 	}
 
 	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
@@ -430,13 +432,13 @@ func (t *Tracer) startSpanGeneric(
 	//
 	// NB: this could be optimized.
 	if opts.Parent != nil {
-		if !opts.Parent.isNoop() {
-			opts.Parent.crdb.mu.Lock()
-			m := opts.Parent.crdb.mu.baggage
+		if !opts.Parent.i.isNoop() {
+			opts.Parent.i.crdb.mu.Lock()
+			m := opts.Parent.i.crdb.mu.baggage
 			for k, v := range m {
 				s.SetBaggageItem(k, v)
 			}
-			opts.Parent.crdb.mu.Unlock()
+			opts.Parent.i.crdb.mu.Unlock()
 		}
 	} else {
 		if !opts.BypassRegistry {

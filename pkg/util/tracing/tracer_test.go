@@ -30,18 +30,18 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	nilMeta := tr.noopSpan.Meta()
 	require.Nil(t, nilMeta)
 	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
-	require.False(t, sp.IsBlackHole())
-	require.False(t, sp.isNoop())
+	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
+	require.False(t, sp.i.isNoop())
 	sp = tr.StartSpan("foo", WithParentAndAutoCollection(tr.noopSpan))
-	require.False(t, sp.IsBlackHole())
-	require.False(t, sp.isNoop())
+	require.False(t, sp.IsVerbose()) // parent was not verbose
+	require.False(t, sp.i.isNoop())
 }
 
 func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.isNoop() {
+	if !noop1.i.isNoop() {
 		t.Error("expected noop Span")
 	}
 	noop1.Record("hello")
@@ -50,18 +50,18 @@ func TestTracerRecording(t *testing.T) {
 	require.Equal(t, Recording(nil), noop1.GetRecording())
 
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
-	if !noop2.isNoop() {
+	if !noop2.i.isNoop() {
 		t.Error("expected noop child Span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", WithForceRealSpan())
-	if s1.isNoop() {
+	if s1.i.isNoop() {
 		t.Error("WithForceRealSpan (but not recording) Span should not be noop")
 	}
-	if !s1.IsBlackHole() {
-		t.Error("WithForceRealSpan Span should be black hole")
+	if s1.IsVerbose() {
+		t.Error("WithForceRealSpan Span should not be verbose")
 	}
 
 	// Initial recording of this fresh (real) span.
@@ -74,7 +74,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Real parent --> real child.
 	real3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
-	if real3.isNoop() {
+	if real3.i.isNoop() {
 		t.Error("expected real child Span")
 	}
 	real3.Finish()
@@ -83,8 +83,8 @@ func TestTracerRecording(t *testing.T) {
 	s1.SetVerbose(true)
 	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
-	if s2.IsBlackHole() {
-		t.Error("recording Span should not be black hole")
+	if !s2.IsVerbose() {
+		t.Error("recording Span should be verbose")
 	}
 	s2.Recordf("x=%d", 3)
 
@@ -126,7 +126,7 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	s3.Finish()
+	defer s3.Finish()
 	expS1v := `
 		Span a:
       tags: _unfinished=1 _verbose=1
@@ -135,7 +135,7 @@ func TestTracerRecording(t *testing.T) {
       tags: _verbose=1
 			event: x=3
 		Span c:
-			tags: _verbose=1 tag=val
+			tags: _unfinished=1 _verbose=1 tag=val
 			event: x=4
 	`
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), expS1v); err != nil {
@@ -151,7 +151,7 @@ func TestTracerRecording(t *testing.T) {
       tags: _verbose=1
 			event: x=3
 		Span c:
-			tags: _verbose=1 tag=val
+			tags: _unfinished=1 _verbose=1 tag=val
 			event: x=4
 	`
 	s1.SetVerbose(false)
@@ -164,7 +164,7 @@ func TestTracerRecording(t *testing.T) {
 	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
-			tags: _verbose=1 tag=val
+			tags: _unfinished=1 _verbose=1 tag=val
 			event: x=4
 			event: x=5
 	`); err != nil {
@@ -233,7 +233,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.isNoop() {
+	if !noop1.i.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := metadataCarrier{metadata.MD{}}
@@ -252,7 +252,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Errorf("expected noop context: %v", wireSpanMeta)
 	}
 	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
-	if !noop2.isNoop() {
+	if !noop2.i.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
 	noop1.Finish()
@@ -335,7 +335,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	require.True(t, spanInclusionFuncForServer(tr2, meta))
 	sp2 := tr2.StartSpan("tr2.child", WithParentAndManualCollection(meta))
 	defer sp2.Finish()
-	require.NotZero(t, sp2.crdb.spanID)
+	require.NotZero(t, sp2.i.crdb.spanID)
 }
 
 func TestLightstepContext(t *testing.T) {
@@ -369,7 +369,7 @@ func TestLightstepContext(t *testing.T) {
 	}
 
 	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
-	s2Ctx := s2.ot.shadowSpan.Context()
+	s2Ctx := s2.i.ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.
@@ -514,24 +514,31 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.True(t, spanOpsWithFinished["root.child.child"])
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
 
-	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
-	// Only child and childChild should appear to have finished.
+	// Only childChild should appear to have finished.
 	require.False(t, spanOpsWithFinished["root"])
-	require.True(t, spanOpsWithFinished["root.child"])
+	require.False(t, spanOpsWithFinished["root.child"])
 	require.True(t, spanOpsWithFinished["root.child.child"])
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
 
+	remoteChildChild.SetOperationName("root.child.remotechild-reimport")
 	remoteChildChild.Finish()
+	// NB: importing a span twice is essentially a bad idea. It's ok in
+	// this test though.
 	require.NoError(t, child.ImportRemoteSpans(remoteChildChild.GetRecording()))
+	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
 	// Only child, childChild, and remoteChildChild should appear to have finished.
 	require.False(t, spanOpsWithFinished["root"])
 	require.True(t, spanOpsWithFinished["root.child"])
 	require.True(t, spanOpsWithFinished["root.child.child"])
-	require.True(t, spanOpsWithFinished["root.child.remotechild"])
+	// The original remotechild import is still unfinished, as it was imported from
+	// unfinished span.
+	require.False(t, spanOpsWithFinished["root.child.remotechild"])
+	// The re-imported remotechild (after it had finished) is finished, though.
+	require.True(t, spanOpsWithFinished["root.child.remotechild-reimport"])
 
 	root.Finish()
 	// Nothing is tracked anymore.
