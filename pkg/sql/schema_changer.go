@@ -1038,11 +1038,6 @@ func WaitToUpdateLeasesMultiple(
 // It also kicks off GC jobs as needed.
 func (sc *SchemaChanger) done(ctx context.Context) error {
 
-	// Get the other tables whose foreign key backreferences need to be removed.
-	// We also have to handle the situation to add Foreign Key backreferences.
-	var fksByBackrefTable map[descpb.ID][]*descpb.ConstraintToUpdate
-	var interleaveParents map[descpb.ID]struct{}
-	var referencedTypeIDs []descpb.ID
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
 	var childJobs []*jobs.StartableJob
@@ -1051,8 +1046,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		childJobs = nil
-		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
-		interleaveParents = make(map[descpb.ID]struct{})
 
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
@@ -1068,7 +1061,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(dbDesc,
+		referencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
@@ -1080,39 +1073,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 		b := txn.NewBatch()
-		for _, mutation := range scTable.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				break
-			}
-			if constraint := mutation.GetConstraint(); constraint != nil &&
-				constraint.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
-				mutation.Direction == descpb.DescriptorMutation_ADD &&
-				constraint.ForeignKey.Validity == descpb.ConstraintValidity_Unvalidated {
-				// Add backref table to referenced table with an unvalidated foreign key constraint
-				fk := &constraint.ForeignKey
-				if fk.ReferencedTableID != scTable.ID {
-					fksByBackrefTable[constraint.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[constraint.ForeignKey.ReferencedTableID], constraint)
-				}
-			} else if swap := mutation.GetPrimaryKeySwap(); swap != nil {
-				// If any old indexes (including the old primary index) being rewritten are interleaved
-				// children, we will have to update their parents as well.
-				for _, idxID := range append([]descpb.IndexID{swap.OldPrimaryIndexId}, swap.OldIndexes...) {
-					oldIndex, err := scTable.FindIndexWithID(idxID)
-					if err != nil {
-						return err
-					}
-					if oldIndex.NumInterleaveAncestors() != 0 {
-						ancestor := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
-						if ancestor.TableID != scTable.ID {
-							interleaveParents[ancestor.TableID] = struct{}{}
-						}
-					}
-				}
-				// Because we are not currently supporting primary key changes on tables/indexes
-				// that are interleaved parents, we don't check oldPrimaryIndex.InterleavedBy.
-			}
-		}
-
 		const kvTrace = true
 
 		var i int           // set to determine whether there is a mutation

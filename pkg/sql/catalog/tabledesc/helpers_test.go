@@ -22,7 +22,7 @@ func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
 	if !ok {
 		return errors.Errorf("expected immutable descriptor")
 	}
-	return imm.ValidateTable(ctx)
+	return imm.ValidateSelf(ctx)
 }
 
 func ValidateCrossReferences(

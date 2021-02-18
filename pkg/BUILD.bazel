@@ -19,6 +19,7 @@ ALL_TESTS = [
     "//pkg/ccl/kvccl/kvfollowerreadsccl:kvfollowerreadsccl_test",
     "//pkg/ccl/kvccl/kvtenantccl:kvtenantccl_test",
     "//pkg/ccl/logictestccl:logictestccl_test",
+    "//pkg/ccl/multiregionccl:multiregionccl_test",
     "//pkg/ccl/oidcccl:oidcccl_test",
     "//pkg/ccl/partitionccl:partitionccl_test",
     "//pkg/ccl/serverccl:serverccl_test",

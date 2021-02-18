@@ -945,7 +945,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := desc.ValidateTable(ctx)
+	err := desc.ValidateSelf(ctx)
 	desc.ID = savedID
 	return err
 }
@@ -1258,17 +1258,39 @@ type testingDescriptorValidation bool
 // ensure testing specific descriptor validation happens.
 var PerformTestingDescriptorValidation testingDescriptorValidation = true
 
-// Validate validates that the table descriptor is well formed. Checks include
-// both single table and cross table invariants.
-func (desc *wrapper) Validate(ctx context.Context, dg catalog.DescGetter) error {
-	err := desc.ValidateTable(ctx)
-	if err != nil {
+// Validate performs ValidateSelf and then validates that
+// each reference to another table is resolvable and that the necessary back
+// references exist.
+func (desc *wrapper) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
+	if err := desc.ValidateSelf(ctx); err != nil {
+		return err
+	}
+	if desc.Dropped() || descGetter == nil {
+		return nil
+	}
+
+	return errors.Wrapf(desc.validateCrossReferences(ctx, descGetter), "desc %d", desc.GetID())
+}
+
+// ValidateTxnCommit performs Validate and then performs additional
+// pre-transaction-commit checks.
+func (desc *wrapper) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
+	if err := desc.Validate(ctx, descGetter); err != nil {
 		return err
 	}
 	if desc.Dropped() {
 		return nil
 	}
-	return errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID())
+	// Pre-transaction commit table validations.
+
+	// Check that primary key exists.
+	if !desc.HasPrimaryKey() {
+		return unimplemented.NewWithIssuef(48026,
+			"primary key of table %s dropped without subsequent addition of new primary key",
+			desc.GetName())
+	}
+
+	return nil
 }
 
 // validateTableIfTesting is similar to validateTable, except it is only invoked
@@ -1823,13 +1845,13 @@ func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
 	return nil
 }
 
-// ValidateTable validates that the table descriptor is well formed. Checks
+// ValidateSelf validates that the table descriptor is well formed. Checks
 // include validating the table, column and index names, verifying that column
 // names and index names are unique and verifying that column IDs and index IDs
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func (desc *wrapper) ValidateTable(ctx context.Context) error {
+func (desc *wrapper) ValidateSelf(ctx context.Context) error {
 	if err := catalog.ValidateName(desc.Name, "table"); err != nil {
 		return err
 	}

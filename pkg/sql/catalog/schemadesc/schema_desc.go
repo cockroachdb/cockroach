@@ -11,6 +11,8 @@
 package schemadesc
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -163,6 +166,77 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 			Schema: &desc.SchemaDescriptor,
 		},
 	}
+}
+
+// ValidateSelf implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateSelf(_ context.Context) error {
+	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
+		return err
+	}
+	if desc.GetID() == 0 {
+		return fmt.Errorf("invalid schema ID %d", desc.GetID())
+	}
+	// Validate the privilege descriptor.
+	return desc.Privileges.Validate(desc.GetID(), privilege.Schema)
+}
+
+// Validate implements the catalog.Descriptor interface.
+func (desc *Immutable) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
+	if err := desc.ValidateSelf(ctx); err != nil {
+		return err
+	}
+	// Don't validate cross-references for dropped schemas.
+	if desc.Dropped() || descGetter == nil {
+		return nil
+	}
+
+	// Check schema parent reference.
+	foundDesc, err := descGetter.GetDesc(ctx, desc.GetParentID())
+	if err != nil {
+		return err
+	}
+	db, isDB := foundDesc.(catalog.DatabaseDescriptor)
+	if !isDB {
+		return errors.AssertionFailedf("parent database ID %d does not exist", errors.Safe(desc.GetParentID()))
+	}
+
+	// Check that parent has correct entry in schemas mapping.
+	isInDBSchemas := false
+	err = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
+		if id == desc.GetID() {
+			if isDropped {
+				if name == desc.GetName() {
+					return errors.AssertionFailedf("present in parent database [%d] schemas mapping but marked as dropped",
+						errors.Safe(desc.GetParentID()))
+				}
+				return nil
+			}
+			if name != desc.GetName() {
+				return errors.AssertionFailedf("present in parent database [%d] schemas mapping but under name %q",
+					errors.Safe(desc.GetParentID()), errors.Safe(name))
+			}
+			isInDBSchemas = true
+			return nil
+		}
+		if !isDropped && name == desc.GetName() {
+			return errors.AssertionFailedf("present in parent database [%d] schemas mapping but name maps to other schema [%d]",
+				errors.Safe(desc.GetParentID()), errors.Safe(id))
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !isInDBSchemas {
+		return errors.AssertionFailedf("not present in parent database [%d] schemas mapping",
+			errors.Safe(desc.GetParentID()))
+	}
+	return nil
+}
+
+// ValidateTxnCommit punts to Validate.
+func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
+	return desc.Validate(ctx, descGetter)
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.

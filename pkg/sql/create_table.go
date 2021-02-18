@@ -1543,7 +1543,7 @@ func NewTableDesc(
 					if t.Oid() != typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID) {
 						err = pgerror.Newf(
 							pgcode.InvalidTableDefinition,
-							"cannot use column %s which has type %s in REGIONAL BY ROW AS",
+							"cannot use column %s which has type %s in REGIONAL BY ROW",
 							d.Name,
 							t.SQLString(),
 						)
@@ -1551,11 +1551,24 @@ func NewTableDesc(
 							ctx,
 							typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID),
 						); terr == nil {
-							err = errors.WithDetailf(
-								err,
-								"REGIONAL BY ROW AS must reference a column of type %s.",
-								t.Name(),
-							)
+							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
+								// In this case, someone used REGIONAL BY ROW AS <col> where
+								// col has a non crdb_internal_region type.
+								err = errors.WithDetailf(
+									err,
+									"REGIONAL BY ROW AS must reference a column of type %s",
+									t.Name(),
+								)
+							} else {
+								// In this case, someone used REGIONAL BY ROW but also specified
+								// a crdb_region column that does not have a crdb_internal_region type.
+								err = errors.WithDetailf(
+									err,
+									"Column %s must be of type %s",
+									t.Name(),
+									tree.RegionEnum,
+								)
+							}
 						}
 						return nil, err
 					}
@@ -1577,16 +1590,11 @@ func NewTableDesc(
 			}
 		}
 
-		if n.Locality.RegionalByRowColumn == tree.RegionalByRowRegionNotSpecifiedName {
-			// Implicitly create REGIONAL BY ROW column if no AS ... was defined.
-			if regionalByRowColExists {
-				return nil, errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						`cannot specify %s column in REGIONAL BY ROW table as the column is implicitly created by the system`,
-						regionalByRowCol.String(),
-					),
-					"Use LOCALITY REGIONAL BY ROW AS %s instead.",
+		if !regionalByRowColExists {
+			if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
+				return nil, pgerror.Newf(
+					pgcode.UndefinedColumn,
+					"column %s in REGIONAL BY ROW AS does not exist",
 					regionalByRowCol.String(),
 				)
 			}
@@ -1596,12 +1604,6 @@ func NewTableDesc(
 				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
 			)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
-		} else if !regionalByRowColExists {
-			return nil, pgerror.Newf(
-				pgcode.UndefinedColumn,
-				"column %s in REGIONAL BY ROW AS does not exist",
-				regionalByRowCol.String(),
-			)
 		}
 
 		// Construct the partitioning for the PARTITION ALL BY.
@@ -1946,7 +1948,17 @@ func NewTableDesc(
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return nil, err
 			}
-			if d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy {
+			// Specifying a partitioning on a PRIMARY KEY constraint should be disallowed by the
+			// syntax, but do a sanity check.
+			if d.PrimaryKey && d.PartitionByIndex.ContainsPartitioningClause() {
+				return nil, errors.AssertionFailedf(
+					"PRIMARY KEY partitioning should be defined at table level",
+				)
+			}
+			// We should only do partitioning of non-primary indexes at this point -
+			// the PRIMARY KEY CreatePartitioning is done at the of CreateTable, so
+			// avoid the duplicate work.
+			if !d.PrimaryKey && (d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy) {
 				partitionBy := partitionAllBy
 				if !desc.PartitionAllBy {
 					if d.PartitionByIndex.ContainsPartitions() {
@@ -2093,7 +2105,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			// During CreatePartitioning, implicitly partitioned columns may be
-			// created. AllocateIDs which allocates ExtraColumnIDs to each index
+			// created. AllocateIDs which allocates column IDs to each index
 			// needs to be called before CreatePartitioning as CreatePartitioning
 			// requires IDs to be allocated.
 			//

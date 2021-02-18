@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -1342,13 +1343,25 @@ func (tc *Collection) addUncommittedDescriptor(
 	return ud, nil
 }
 
+// validateOnWriteEnabled is the cluster setting used to enable or disable
+// validating descriptors prior to writing.
+var validateOnWriteEnabled = settings.RegisterBoolSetting(
+	"sql.catalog.descs.validate_on_write.enabled",
+	"set to true to validate descriptors prior to writing, false to disable; default is true",
+	true, /* defaultValue */
+)
+
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	// TODO(ajwerner): Add validation here.
+	if validateOnWriteEnabled.Get(&tc.settings.SV) {
+		if err := desc.ValidateSelf(ctx); err != nil {
+			return err
+		}
+	}
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
@@ -1390,6 +1403,43 @@ func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) 
 		}
 	}
 	return tables
+}
+
+type collectionDescGetter struct {
+	tc  *Collection
+	txn *kv.Txn
+}
+
+var _ catalog.DescGetter = collectionDescGetter{}
+
+func (cdg collectionDescGetter) GetDesc(
+	ctx context.Context, id descpb.ID,
+) (catalog.Descriptor, error) {
+	flags := tree.CommonLookupFlags{
+		Required: true,
+		// Include everything, we want to cast the net as wide as we can.
+		IncludeOffline: true,
+		IncludeDropped: true,
+		// Avoid leased descriptors, if we're leasing the previous version then this
+		// older version may be returned and this may cause validation to fail.
+		AvoidCached: true,
+	}
+	return cdg.tc.getDescriptorByID(ctx, cdg.txn, id, flags, false /* mutable */)
+}
+
+// ValidateUncommittedDescriptors validates all uncommitted descriptors
+func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
+	if !validateOnWriteEnabled.Get(&tc.settings.SV) {
+		return nil
+	}
+	cdg := collectionDescGetter{tc: tc, txn: txn}
+	for i, n := 0, len(tc.uncommittedDescriptors); i < n; i++ {
+		desc := tc.uncommittedDescriptors[i].immutable
+		if err := desc.ValidateTxnCommit(ctx, cdg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // User defined type accessors.
