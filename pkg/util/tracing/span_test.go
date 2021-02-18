@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ func TestRecordingString(t *testing.T) {
 	root.SetVerbose(true)
 	root.Record("root 1")
 	// Hackily fix the timing on the first log message, so that we can check it later.
-	root.crdb.mu.recording.recordedLogs[0].Timestamp = root.crdb.startTime.Add(time.Millisecond)
+	root.i.crdb.mu.recording.recordedLogs[0].Timestamp = root.i.crdb.startTime.Add(time.Millisecond)
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
@@ -50,7 +51,6 @@ func TestRecordingString(t *testing.T) {
 
 	remoteRec := remoteChild.GetRecording()
 	require.NoError(t, root.ImportRemoteSpans(remoteRec))
-	root.Finish()
 
 	root.Record("root 3")
 
@@ -226,8 +226,8 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp), WithForceRealSpan())
 	defer ch.Finish()
-	require.Len(t, sp.crdb.mu.recording.children, 1)
-	require.Equal(t, ch.crdb, sp.crdb.mu.recording.children[0])
+	require.Len(t, sp.i.crdb.mu.recording.children, 1)
+	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children[0])
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
@@ -248,28 +248,66 @@ func TestSpanMaxChildren(t *testing.T) {
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
-		require.Len(t, sp.crdb.mu.recording.children, exp)
+		require.Len(t, sp.i.crdb.mu.recording.children, exp)
 	}
 }
 
-type countingNetTrace struct {
+type explodyNetTr struct {
 	trace.Trace
-	n int
 }
 
-func (nt *countingNetTrace) Finish() {
-	nt.n++
-	nt.Trace.Finish()
+func (tr *explodyNetTr) Finish() {
+	if tr.Trace == nil {
+		panic("(*trace.Trace).Finish called twice")
+	}
+	tr.Trace.Finish()
+	tr.Trace = nil
 }
 
-func TestSpan_FinishTwice(t *testing.T) {
+// TestSpan_UseAfterFinish finishes a Span multiple times and
+// calls all of its methods multiple times as well. This is
+// to check that `Span.done` is called in the right places,
+// and serves as a regression test for issues such as:
+//
+// https://github.com/cockroachdb/cockroach/issues/58489#issuecomment-781263005
+func TestSpan_UseAfterFinish(t *testing.T) {
 	tr := NewTracer()
 	tr._useNetTrace = 1
 	sp := tr.StartSpan("foo", WithForceRealSpan())
-	require.NotNil(t, sp.netTr)
-	nt := &countingNetTrace{Trace: sp.netTr}
-	sp.netTr = nt
+	require.NotNil(t, sp.i.netTr)
+	// Set up netTr to reliably explode if Finish'ed twice. We
+	// expect `sp.Finish` to not let it come to that.
+	sp.i.netTr = &explodyNetTr{Trace: sp.i.netTr}
 	sp.Finish()
+	require.True(t, sp.done())
 	sp.Finish()
-	require.Equal(t, 1, nt.n)
+	require.EqualValues(t, 2, sp.numFinishCalled)
+
+	netTrT := reflect.TypeOf(sp)
+	for i := 0; i < netTrT.NumMethod(); i++ {
+		f := netTrT.Method(i)
+		t.Run(f.Name, func(t *testing.T) {
+			// The receiver is the first argument.
+			args := []reflect.Value{reflect.ValueOf(sp)}
+			for i := 1; i < f.Type.NumIn(); i++ {
+				// Zeroes for the rest. It would be nice to do something
+				// like `quick.Check` here (or even just call quick.Check!)
+				// but that's for another day. It should be doable!
+				args = append(args, reflect.Zero(f.Type.In(i)))
+			}
+			// NB: on an impl of Span that calls through to `trace.Trace.Finish`, and
+			// on my machine, and at the time of writing, `tr.Finish` would reliably
+			// deadlock on exactly the 10th call. This motivates the choice of 20
+			// below.
+			for i := 0; i < 20; i++ {
+				t.Run("invoke", func(t *testing.T) {
+					if i == 9 {
+						f.Func.Call(args)
+					} else {
+						f.Func.Call(args)
+					}
+				})
+			}
+		})
+	}
 }

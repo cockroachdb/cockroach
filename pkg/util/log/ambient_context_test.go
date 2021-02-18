@@ -79,7 +79,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
 	require.NotNil(t, sp)
-	require.True(t, sp.IsBlackHole())
+	require.False(t, sp.IsVerbose())
 }
 
 func TestAnnotateCtxNodeStoreReplica(t *testing.T) {

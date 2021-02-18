@@ -30,8 +30,8 @@ type spanOptions struct {
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
-	if opts.Parent != nil && !opts.Parent.isNoop() {
-		return opts.Parent.crdb.traceID
+	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+		return opts.Parent.i.crdb.traceID
 	} else if opts.RemoteParent != nil {
 		return opts.RemoteParent.traceID
 	}
@@ -39,8 +39,8 @@ func (opts *spanOptions) parentTraceID() uint64 {
 }
 
 func (opts *spanOptions) parentSpanID() uint64 {
-	if opts.Parent != nil && !opts.Parent.isNoop() {
-		return opts.Parent.crdb.spanID
+	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+		return opts.Parent.i.crdb.spanID
 	} else if opts.RemoteParent != nil {
 		return opts.RemoteParent.spanID
 	}
@@ -49,8 +49,8 @@ func (opts *spanOptions) parentSpanID() uint64 {
 
 func (opts *spanOptions) recordingType() RecordingType {
 	recordingType := RecordingOff
-	if opts.Parent != nil && !opts.Parent.isNoop() {
-		recordingType = opts.Parent.crdb.recordingType()
+	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if opts.RemoteParent != nil {
 		recordingType = opts.RemoteParent.recordingType
 	}
@@ -59,7 +59,7 @@ func (opts *spanOptions) recordingType() RecordingType {
 
 func (opts *spanOptions) shadowTrTyp() (string, bool) {
 	if opts.Parent != nil {
-		return opts.Parent.ot.shadowTr.Type()
+		return opts.Parent.i.ot.shadowTr.Type()
 	} else if opts.RemoteParent != nil {
 		s := opts.RemoteParent.shadowTracerType
 		return s, s != ""

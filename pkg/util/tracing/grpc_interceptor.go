@@ -208,7 +208,7 @@ func (ss *tracingServerStream) Context() context.Context {
 //
 // See #17177.
 func spanInclusionFuncForClient(parent *Span) bool {
-	return parent != nil && !parent.isNoop()
+	return parent != nil && !parent.i.isNoop()
 }
 
 func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
