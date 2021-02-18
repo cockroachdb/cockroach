@@ -108,8 +108,8 @@ func CreateCACertAndKey(lifespan time.Duration, service string) (certPEM []byte,
 // This is a utility function to help with cluster auto certificate generation.
 func CreateServiceCertAndKey(lifespan time.Duration, service, hostname string, caCertPEM []byte, caKeyPEM []byte) (certPEM []byte, keyPEM []byte, err error) {
 
-	notBefore := time.Now()
-	notAfter := time.Now().Add(lifespan)
+	notBefore := timeutil.Now().Add(-notBeforeMargin)
+	notAfter := timeutil.Now().Add(lifespan)
 
 	// Create random serial number for CA.
 	serialNumber, err := createCertificateSerialNumber()
