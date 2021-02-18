@@ -319,7 +319,8 @@ func GCTenantJob(
 		Progress:      jobspb.SchemaChangeGCProgress{},
 		NonCancelable: true,
 	}
-	if _, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+	if _, err := execCfg.JobRegistry.CreateJobWithTxn(
+		ctx, gcJobRecord, execCfg.JobRegistry.MakeJobID(), txn); err != nil {
 		return err
 	}
 	return nil

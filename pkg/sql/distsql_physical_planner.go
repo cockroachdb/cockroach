@@ -2728,7 +2728,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			if err != nil {
 				return nil, err
 			}
-			job := n.p.ExecCfg().JobRegistry.NewJob(*record)
+			job := n.p.ExecCfg().JobRegistry.NewJob(*record, 0)
 			plan, err = dsp.createPlanForCreateStats(planCtx, job)
 		}
 
