@@ -84,6 +84,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptprovider",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/reports",
+        "//pkg/migration",
         "//pkg/migration/migrationcluster",
         "//pkg/migration/migrationmanager",
         "//pkg/roachpb",
