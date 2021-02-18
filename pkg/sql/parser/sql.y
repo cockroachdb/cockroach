@@ -6323,7 +6323,7 @@ col_qualification_elem:
  }
 | generated_as error
  {
-    sqllex.Error("use AS ( <expr> ) STORED")
+    sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
     return 1
  }
 

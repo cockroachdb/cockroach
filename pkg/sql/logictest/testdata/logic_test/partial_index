@@ -1346,9 +1346,6 @@ SELECT * FROM prune@idx WHERE c > 0
 subtest virtual
 
 statement ok
-SET experimental_enable_virtual_columns = true
-
-statement ok
 CREATE TABLE virt (
     a INT PRIMARY KEY,
     b INT,
