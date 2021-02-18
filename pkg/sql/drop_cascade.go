@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -192,12 +193,14 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		var cascadedObjects []string
 		var err error
 		if desc.IsView() {
-			// TODO(knz): The names of dependent dropped views should be qualified here.
 			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
 		} else if desc.IsSequence() {
+			err = dropDefaultValues(ctx, p, desc)
+			if err != nil {
+				return err
+			}
 			err = p.dropSequenceImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
 		} else {
-			// TODO(knz): The names of dependent dropped tables should be qualified here.
 			cascadedObjects, err = p.dropTableImpl(ctx, desc, true /* droppingParent */, "")
 		}
 		if err != nil {
@@ -263,4 +266,63 @@ func (d *dropCascadeState) getDroppedTableDetails() []jobspb.DroppedTableDetails
 		}
 	}
 	return res
+}
+
+// dropDefaultValues drops the default values of any columns that depend on the
+// given sequence descriptor being dropped.
+func dropDefaultValues(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
+	for _, dependent := range seqDesc.DependedOnBy {
+		desc, err := p.Descriptors().GetImmutableTableByID(
+			ctx, p.txn, dependent.ID, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					IncludeOffline: true,
+					IncludeDropped: true,
+				},
+			})
+		if err != nil {
+			return err
+		}
+
+		tblName, err := p.getQualifiedTableName(ctx, desc)
+		if err != nil {
+			return err
+		}
+		tblDesc, err := p.ResolveMutableTableDescriptor(
+			ctx, tblName, false /*required*/, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return err
+		}
+		// If the object doesn't exist, it implies the table and sequence
+		// were both in the database/schema being dropped and the table
+		// has been dropped already, so skip.
+		if tblDesc == nil {
+			continue
+		}
+
+		// Set of column IDs which will have their default values dropped.
+		colsToDropDefault := make(map[descpb.ColumnID]struct{})
+		for _, colID := range dependent.ColumnIDs {
+			colsToDropDefault[colID] = struct{}{}
+		}
+
+		// Iterate over all columns in the table and drop affected columns' default values.
+		for idx := range tblDesc.Columns {
+			column := &tblDesc.Columns[idx]
+			if _, ok := colsToDropDefault[column.ID]; ok {
+				column.DefaultExpr = nil
+			}
+		}
+
+		jobDesc := fmt.Sprintf(
+			"removing default expressions using sequence %q since it is being dropped",
+			seqDesc.Name,
+		)
+		if err := p.writeSchemaChange(
+			ctx, tblDesc, descpb.InvalidMutationID, jobDesc,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }

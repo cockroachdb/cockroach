@@ -14,3 +14,98 @@ CREATE SEQUENCE drop_if_exists_test
 
 statement ok
 DROP SEQUENCE IF EXISTS drop_if_exists_test
+
+
+# Test that if a database is dropped and it contains a sequence,
+# any DEFAULT expressions using that sequence will also be dropped.
+subtest drop_database
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE SEQUENCE other_db.s
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE TABLE foo (
+  i INT NOT NULL DEFAULT nextval('other_db.s'),
+  j INT NOT NULL DEFAULT nextval('s'),
+  FAMILY (i, j)
+)
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL DEFAULT nextval('other_db.public.s':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+statement ok
+DROP DATABASE other_db CASCADE
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+statement ok
+INSERT INTO foo VALUES (1, default)
+
+
+# Test that if a schema is dropped and it contains a sequence,
+# any DEFAULT expressions using that sequence will also be dropped.
+subtest drop_schema
+
+statement ok
+CREATE SCHEMA other_sc
+
+statement ok
+CREATE SEQUENCE other_sc.s
+
+statement ok
+CREATE TABLE bar (
+  i INT NOT NULL DEFAULT nextval('other_sc.s'),
+  j INT NOT NULL DEFAULT nextval('s'),
+  FAMILY (i, j)
+)
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL DEFAULT nextval('test.other_sc.s':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+statement ok
+DROP SCHEMA other_sc CASCADE
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+statement ok
+INSERT INTO bar VALUES (1, default)
