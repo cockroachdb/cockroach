@@ -8,6 +8,7 @@ go_library(
         "cert.go",
         "cli.go",
         "client_url.go",
+        "connect.go",
         "context.go",
         "cpuprofile.go",
         "debug.go",
