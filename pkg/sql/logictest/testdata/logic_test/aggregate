@@ -892,9 +892,15 @@ CREATE TABLE mnop (
   p BIGINT
 )
 
+# TODO(sumeer): increase this series back to 2e4 once we have more performance
+# improvements to ranged intent resolution. This test is somewhat artificial
+# in that it accumulates a large number of deletion markers for intents for
+# each key, in the LSM memtable, without them being flushed to ssts. This
+# slows down ranged intent resolution. With 1e4 keys, the txn tracks each
+# intent individually, and intent resolution is fast.
 statement ok
 INSERT INTO mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
-  generate_series(1, 2e4) AS i(i)
+  generate_series(1, 5e3) AS i(i)
 
 statement ok
 UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
@@ -902,22 +908,22 @@ UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
 query RRR
 SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mnop
 ----
-0.08 0.08 8
+0.01  0.01  1
 
 query RRR
 SELECT round(var_pop(n), 2), round(var_pop(n), 2), round(var_pop(p)) FROM mnop
 ----
-0.08 0.08 8
+0.01  0.01  1
 
 query RRR
 SELECT round(stddev_samp(n), 2), round(stddev(n), 2), round(stddev_samp(p)) FROM mnop
 ----
-0.29 0.29 3
+0.07  0.07  1
 
 query RRR
 SELECT round(stddev_pop(n), 2), round(stddev_pop(n), 2), round(stddev_pop(p)) FROM mnop
 ----
-0.29 0.29 3
+0.07  0.07  1
 
 query RRR
 SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
