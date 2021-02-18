@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -864,4 +865,73 @@ func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) M
 		panic("couldn't create a new iterator")
 	}
 	return it
+}
+
+// unsageMVCCIterator is used in RaceEnabled test builds to randomly inject
+// changes to unsafe keys retrieved from MVCCIterators.
+type unsafeMVCCIterator struct {
+	MVCCIterator
+	keyBuf        []byte
+	rawKeyBuf     []byte
+	rawMVCCKeyBuf []byte
+}
+
+func wrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
+	return &unsafeMVCCIterator{MVCCIterator: iter}
+}
+
+var _ MVCCIterator = &unsafeMVCCIterator{}
+
+func (i *unsafeMVCCIterator) SeekGE(key MVCCKey) {
+	i.mangleBufs()
+	i.MVCCIterator.SeekGE(key)
+}
+
+func (i *unsafeMVCCIterator) Next() {
+	i.mangleBufs()
+	i.MVCCIterator.Next()
+}
+
+func (i *unsafeMVCCIterator) NextKey() {
+	i.mangleBufs()
+	i.MVCCIterator.NextKey()
+}
+
+func (i *unsafeMVCCIterator) SeekLT(key MVCCKey) {
+	i.mangleBufs()
+	i.MVCCIterator.SeekLT(key)
+}
+
+func (i *unsafeMVCCIterator) Prev() {
+	i.mangleBufs()
+	i.MVCCIterator.Prev()
+}
+
+func (i *unsafeMVCCIterator) UnsafeKey() MVCCKey {
+	rv := i.MVCCIterator.UnsafeKey()
+	i.keyBuf = append(i.keyBuf[:0], rv.Key...)
+	rv.Key = i.keyBuf
+	return rv
+}
+
+func (i *unsafeMVCCIterator) UnsafeRawKey() []byte {
+	rv := i.MVCCIterator.UnsafeRawKey()
+	i.rawKeyBuf = append(i.rawKeyBuf[:0], rv...)
+	return i.rawKeyBuf
+}
+
+func (i *unsafeMVCCIterator) UnsafeRawMVCCKey() []byte {
+	rv := i.MVCCIterator.UnsafeRawMVCCKey()
+	i.rawMVCCKeyBuf = append(i.rawMVCCKeyBuf[:0], rv...)
+	return i.rawMVCCKeyBuf
+}
+
+func (i *unsafeMVCCIterator) mangleBufs() {
+	if rand.Intn(2) == 0 {
+		for _, b := range [3][]byte{i.keyBuf, i.rawKeyBuf, i.rawMVCCKeyBuf} {
+			for i := range b {
+				b[i] = 0
+			}
+		}
+	}
 }

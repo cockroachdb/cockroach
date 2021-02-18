@@ -2076,6 +2076,11 @@ func MVCCMerge(
 // buffer of keys selected for deletion but not yet flushed (as done to detect
 // long runs for cleaning in a single ClearRange).
 //
+// Limiting the number of keys or ranges of keys processed can still cause a
+// batch that is too large -- in number of bytes -- for raft to replicate if the
+// keys are very large. So if the total length of the keys or key spans cleared
+// exceeds maxBatchByteSize it will also stop and return a resume span.
+//
 // This function handles the stats computations to determine the correct
 // incremental deltas of clearing these keys (and correctly determining if it
 // does or not not change the live and gc keys).
@@ -2088,10 +2093,11 @@ func MVCCClearTimeRange(
 	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
-	maxBatchSize int64,
+	maxBatchSize, maxBatchByteSize int64,
 	useTBI bool,
 ) (*roachpb.Span, error) {
 	var batchSize int64
+	var batchByteSize int64
 	var resume *roachpb.Span
 
 	// When iterating, instead of immediately clearing a matching key we can
@@ -2115,7 +2121,6 @@ func MVCCClearTimeRange(
 			"MVCCStats passed in to MVCCClearTimeRange must be non-nil to ensure proper stats" +
 				" computation during Clear operations")
 	}
-
 	clearMatchingKey := func(k MVCCKey) {
 		if len(clearRangeStart.Key) == 0 {
 			// Currently buffering keys to clear one-by-one.
@@ -2138,23 +2143,40 @@ func MVCCClearTimeRange(
 			if err := rw.ClearMVCCRange(clearRangeStart, nonMatch); err != nil {
 				return err
 			}
+			batchByteSize += int64(clearRangeStart.EncodedSize() + nonMatch.EncodedSize())
 			batchSize++
 			clearRangeStart = MVCCKey{}
 		} else if bufSize > 0 {
+			var encodedBufSize int64
 			for i := 0; i < bufSize; i++ {
-				if buf[i].Timestamp.IsEmpty() {
-					// Inline metadata. Not an intent because iteration below fails
-					// if it sees an intent.
-					if err := rw.ClearUnversioned(buf[i].Key); err != nil {
-						return err
-					}
-				} else {
-					if err := rw.ClearMVCC(buf[i]); err != nil {
-						return err
+				encodedBufSize += int64(buf[i].EncodedSize())
+			}
+			// Even though we didn't get a large enough number of keys to switch to
+			// clearrange, the byte size of the keys we did get is now too large to
+			// encode them all within the byte size limit, so use clearrange anyway.
+			if batchByteSize+encodedBufSize >= maxBatchByteSize {
+				if err := rw.ClearMVCCRange(buf[0], nonMatch); err != nil {
+					return err
+				}
+				batchByteSize += int64(buf[0].EncodedSize() + nonMatch.EncodedSize())
+				batchSize++
+			} else {
+				for i := 0; i < bufSize; i++ {
+					if buf[i].Timestamp.IsEmpty() {
+						// Inline metadata. Not an intent because iteration below fails
+						// if it sees an intent.
+						if err := rw.ClearUnversioned(buf[i].Key); err != nil {
+							return err
+						}
+					} else {
+						if err := rw.ClearMVCC(buf[i]); err != nil {
+							return err
+						}
 					}
 				}
+				batchByteSize += encodedBufSize
+				batchSize += int64(bufSize)
 			}
-			batchSize += int64(bufSize)
 			bufSize = 0
 		}
 		return nil
@@ -2221,6 +2243,10 @@ func MVCCClearTimeRange(
 
 		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
 			if batchSize >= maxBatchSize {
+				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
+				break
+			}
+			if batchByteSize > maxBatchByteSize {
 				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
 				break
 			}

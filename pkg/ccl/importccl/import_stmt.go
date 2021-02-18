@@ -9,6 +9,7 @@
 package importccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -100,6 +101,12 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
+	pgDumpIgnoreAllUnsupported     = "ignore_unsupported"
+	pgDumpIgnoreShuntFileDest      = "ignored_stmt_log"
+	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
+	pgDumpUnsupportedDataStmtLog   = "unsupported_data-_stmts"
+	pgDumpMaxLoggedStmts           = 10
+
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
 	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
@@ -135,6 +142,9 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	avroRecordsSeparatedBy: sql.KVStringOptRequireValue,
 	avroBinRecords:         sql.KVStringOptRequireNoValue,
 	avroJSONRecords:        sql.KVStringOptRequireNoValue,
+
+	pgDumpIgnoreAllUnsupported: sql.KVStringOptRequireNoValue,
+	pgDumpIgnoreShuntFileDest:  sql.KVStringOptRequireValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -164,7 +174,8 @@ var mysqlOutAllowedOptions = makeStringSet(
 )
 var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit)
+var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
+	pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -615,6 +626,16 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgDump.MaxRowSize = maxRowSize
+			if _, ok := opts[pgDumpIgnoreAllUnsupported]; ok {
+				format.PgDump.IgnoreUnsupported = true
+			}
+
+			if dest, ok := opts[pgDumpIgnoreShuntFileDest]; ok {
+				if !format.PgDump.IgnoreUnsupported {
+					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported` option")
+				}
+				format.PgDump.IgnoreUnsupportedLog = dest
+			}
 
 			if override, ok := opts[csvRowLimit]; ok {
 				rowLimit, err := strconv.Atoi(override)
@@ -1295,6 +1316,102 @@ func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}
 }
 
+type loggerKind int
+
+const (
+	schemaParsing loggerKind = iota
+	dataIngestion
+)
+
+// unsupportedStmtLogger is responsible for handling unsupported PGDUMP SQL
+// statements seen during the import.
+type unsupportedStmtLogger struct {
+	// Values are initialized based on the options specified in the IMPORT PGDUMP
+	// stmt.
+	ignoreUnsupported        bool
+	ignoreUnsupportedLogDest string
+	externalStorage          cloud.ExternalStorageFactory
+
+	// logBuffer holds the string to be flushed to the ignoreUnsupportedLogDest.
+	logBuffer       *bytes.Buffer
+	numIgnoredStmts int
+
+	loggerType loggerKind
+}
+
+func makeUnsupportedStmtLogger(
+	ignoreUnsupported bool,
+	unsupportedLogDest string,
+	loggerType loggerKind,
+	externalStorage cloud.ExternalStorageFactory,
+) *unsupportedStmtLogger {
+	l := &unsupportedStmtLogger{
+		ignoreUnsupported:        ignoreUnsupported,
+		ignoreUnsupportedLogDest: unsupportedLogDest,
+		loggerType:               loggerType,
+		logBuffer:                new(bytes.Buffer),
+		externalStorage:          externalStorage,
+	}
+	header := "Unsupported statements during schema parse phase:\n\n"
+	if loggerType == dataIngestion {
+		header = "Unsupported statements during data ingestion phase:\n\n"
+	}
+	l.logBuffer.WriteString(header)
+	return l
+}
+
+func (u *unsupportedStmtLogger) log(logLine string, isParseError bool) {
+	// We have already logged parse errors during the schema ingestion phase, so
+	// skip them to avoid duplicate entries.
+	skipLoggingParseErr := isParseError && u.loggerType == dataIngestion
+	if u.ignoreUnsupportedLogDest == "" || skipLoggingParseErr {
+		return
+	}
+
+	if u.numIgnoredStmts < pgDumpMaxLoggedStmts {
+		if isParseError {
+			logLine = fmt.Sprintf("%s: could not be parsed\n", logLine)
+		} else {
+			logLine = fmt.Sprintf("%s: unsupported by IMPORT\n", logLine)
+		}
+		u.logBuffer.Write([]byte(logLine))
+	}
+	u.numIgnoredStmts++
+}
+
+func (u *unsupportedStmtLogger) flush(ctx context.Context, user security.SQLUsername) error {
+	if u.ignoreUnsupportedLogDest == "" {
+		return nil
+	}
+
+	numLoggedStmts := pgDumpMaxLoggedStmts
+	if u.numIgnoredStmts < pgDumpMaxLoggedStmts {
+		numLoggedStmts = u.numIgnoredStmts
+	}
+	u.logBuffer.WriteString(fmt.Sprintf("\nLogging %d out of %d ignored statements.\n",
+		numLoggedStmts, u.numIgnoredStmts))
+
+	conf, err := cloudimpl.ExternalStorageConfFromURI(u.ignoreUnsupportedLogDest, user)
+	if err != nil {
+		return errors.Wrap(err, "failed to log unsupported stmts during IMPORT PGDUMP")
+	}
+	var s cloud.ExternalStorage
+	if s, err = u.externalStorage(ctx, conf); err != nil {
+		return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
+	}
+	defer s.Close()
+
+	logFileName := pgDumpUnsupportedSchemaStmtLog
+	if u.loggerType == dataIngestion {
+		logFileName = pgDumpUnsupportedDataStmtLog
+	}
+	err = s.WriteFile(ctx, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
+	if err != nil {
+		return errors.Wrap(err, "failed to log unsupported stmts to log during IMPORT PGDUMP")
+	}
+	return nil
+}
+
 // parseAndCreateBundleTableDescs parses and creates the table
 // descriptors for bundle formats.
 func parseAndCreateBundleTableDescs(
@@ -1344,7 +1461,19 @@ func parseAndCreateBundleTableDescs(
 		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
+
+		// Setup a logger to handle unsupported DDL statements in the PGDUMP file.
+		unsupportedStmtLogger := makeUnsupportedStmtLogger(format.PgDump.IgnoreUnsupported,
+			format.PgDump.IgnoreUnsupportedLog, schemaParsing, p.ExecCfg().DistSQLSrv.ExternalStorage)
+
+		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID,
+			walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
+
+		logErr := unsupportedStmtLogger.flush(ctx, p.User())
+		if logErr != nil {
+			return nil, logErr
+		}
+
 	default:
 		return tableDescs, errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 	}

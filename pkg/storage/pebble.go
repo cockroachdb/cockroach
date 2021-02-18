@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -720,11 +721,17 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
 		return iter
 	}
-	iter := newPebbleIterator(p.db, nil, opts)
+	iter := MVCCIterator(newPebbleIterator(p.db, nil, opts))
 	if iter == nil {
 		panic("couldn't create a new iterator")
+	}
+	if util.RaceEnabled {
+		iter = wrapInUnsafeIter(iter)
 	}
 	return iter
 }
@@ -1339,12 +1346,19 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
 		return iter
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.parent.db, nil, opts)
+		iter := MVCCIterator(newPebbleIterator(p.parent.db, nil, opts))
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
+		return iter
 	}
 
 	iter := &p.normalIter
@@ -1369,7 +1383,11 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter.inuse = true
-	return iter
+	var rv MVCCIterator = iter
+	if util.RaceEnabled {
+		rv = wrapInUnsafeIter(rv)
+	}
+	return rv
 }
 
 // NewEngineIterator implements the Engine interface.
@@ -1582,9 +1600,16 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
 		return iter
 	}
-	return newPebbleIterator(p.snapshot, nil, opts)
+	iter := MVCCIterator(newPebbleIterator(p.snapshot, nil, opts))
+	if util.RaceEnabled {
+		iter = wrapInUnsafeIter(iter)
+	}
+	return iter
 }
 
 // NewEngineIterator implements the Reader interface.

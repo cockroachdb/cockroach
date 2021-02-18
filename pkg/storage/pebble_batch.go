@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -206,12 +207,19 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
 		return iter
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.batch, nil, opts)
+		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts))
+		if util.RaceEnabled {
+			iter = wrapInUnsafeIter(iter)
+		}
+		return iter
 	}
 
 	iter := &p.normalIter
@@ -239,7 +247,11 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 
 	iter.inuse = true
-	return iter
+	var rv MVCCIterator = iter
+	if util.RaceEnabled {
+		rv = wrapInUnsafeIter(rv)
+	}
+	return rv
 }
 
 // NewEngineIterator implements the Batch interface.
