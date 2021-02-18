@@ -291,10 +291,12 @@ func newInvertedJoiner(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			LockTimeout: flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:       &ij.alloc,
-			MemMonitor:  flowCtx.EvalCtx.Mon,
-			Spec:        &spec.FetchSpec,
+			LockStrength:   spec.LockingStrength,
+			LockWaitPolicy: spec.LockingWaitPolicy,
+			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:          &ij.alloc,
+			MemMonitor:     flowCtx.EvalCtx.Mon,
+			Spec:           &spec.FetchSpec,
 		},
 	); err != nil {
 		return nil, err
