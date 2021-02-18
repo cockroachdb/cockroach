@@ -60,6 +60,7 @@ type ScanParams struct {
 	// scanned. It should not be set if there is a hard or soft limit.
 	Parallelize bool
 
+	// Row-level locking properties.
 	Locking opt.Locking
 
 	EstimatedRowCount float64
