@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/settingswatcher",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
     ],
