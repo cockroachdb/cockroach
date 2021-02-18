@@ -2146,12 +2146,12 @@ func TestJobStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.JobId = *job.ID()
+	request.JobId = job.ID()
 	response, err = client.JobStatus(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	require.Equal(t, *job.ID(), response.Job.Id)
+	require.Equal(t, job.ID(), response.Job.Id)
 	require.Equal(t, job.Payload(), *response.Job.Payload)
 	require.Equal(t, job.Progress(), *response.Job.Progress)
 }

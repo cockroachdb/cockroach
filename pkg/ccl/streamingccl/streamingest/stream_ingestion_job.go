@@ -85,7 +85,7 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	p := execCtx.(sql.JobExecContext)
 
 	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
-		*s.job.ID())
+		s.job.ID())
 	if err != nil {
 		return err
 	}

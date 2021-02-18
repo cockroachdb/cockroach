@@ -1441,7 +1441,7 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	case <-ctx.Done():
 		return ctx.Err()
 	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDInt(tree.DInt(r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),

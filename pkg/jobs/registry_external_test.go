@@ -160,7 +160,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 				case <-done:
 				}
 				lock.Lock()
-				resumeCounts[*job.ID()]++
+				resumeCounts[job.ID()]++
 				lock.Unlock()
 				select {
 				case <-ctx.Done():
@@ -185,7 +185,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		// Wait until the job is running.
 		<-resumeCalled
 		lock.Lock()
-		jobMap[nodeid] = *job.ID()
+		jobMap[nodeid] = job.ID()
 		lock.Unlock()
 	}
 
@@ -272,7 +272,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case resumeCh <- *job.ID():
+				case resumeCh <- job.ID():
 					return nil
 				}
 			},

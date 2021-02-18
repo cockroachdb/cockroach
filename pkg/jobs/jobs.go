@@ -43,7 +43,7 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id        *int64
+	id        int64
 	createdBy *CreatedByInfo
 	sessionID sqlliveness.SessionID
 	mu        struct {
@@ -201,9 +201,8 @@ func SimplifyInvalidStatusError(err error) error {
 	return err
 }
 
-// ID returns the ID of the job that this Job is currently tracking. This will
-// be nil if Created has not yet been called.
-func (j *Job) ID() *int64 {
+// ID returns the ID of the job.
+func (j *Job) ID() int64 {
 	return j.id
 }
 
@@ -216,7 +215,7 @@ func (j *Job) CreatedBy() *CreatedByInfo {
 // taskName is the name for the async task on the registry stopper that will
 // execute this job.
 func (j *Job) taskName() string {
-	return fmt.Sprintf(`job-%d`, *j.ID())
+	return fmt.Sprintf(`job-%d`, j.ID())
 }
 
 // Started marks the tracked job as started.
@@ -337,7 +336,7 @@ func (j *Job) FractionProgressed(
 		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 			return errors.Errorf(
 				"job %d: fractionCompleted %f is outside allowable range [0.0, 1.0]",
-				*j.ID(), fractionCompleted,
+				j.ID(), fractionCompleted,
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -365,7 +364,7 @@ func (j *Job) HighWaterProgressed(
 		if highWater.Less(hlc.Timestamp{}) {
 			return errors.Errorf(
 				"job %d: high-water %s is outside allowable range > 0.0",
-				*j.ID(), highWater,
+				j.ID(), highWater,
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_HighWater{
@@ -452,7 +451,7 @@ func (j *Job) cancelRequested(
 		}
 
 		if md.Payload.Noncancelable {
-			return errors.Newf("job %d: not cancelable", *j.ID())
+			return errors.Newf("job %d: not cancelable", j.ID())
 		}
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
@@ -462,7 +461,7 @@ func (j *Job) cancelRequested(
 		}
 		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
 			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
-			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", *j.ID(), decodedErr.Error())
+			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", j.ID(), decodedErr.Error())
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
@@ -517,7 +516,7 @@ func (j *Job) pauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequest
 			ju.UpdateProgress(md.Progress)
 		}
 		ju.UpdateStatus(StatusPauseRequested)
-		log.Infof(ctx, "job %d: pause requested recorded", *j.ID())
+		log.Infof(ctx, "job %d: pause requested recorded", j.ID())
 		return nil
 	})
 }
@@ -730,12 +729,12 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 		}
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt, *j.ID())
+			stmt, j.ID())
 		if err != nil {
 			return err
 		}
 		if row == nil {
-			return &JobNotFoundError{jobID: *j.ID()}
+			return &JobNotFoundError{jobID: j.ID()}
 		}
 		payload, err = UnmarshalPayload(row[0])
 		if err != nil {
@@ -808,18 +807,15 @@ func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, 
 
 // CurrentStatus returns the current job status from the jobs table or error.
 func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
-	if j.id == nil {
-		return "", errors.New("job has not been created")
-	}
 	var statusString tree.DString
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, *j.ID())
+		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, j.ID())
 		if err != nil {
-			return errors.Wrapf(err, "job %d: can't query system.jobs", *j.ID())
+			return errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
 		}
 		if row == nil {
-			return errors.Errorf("job %d: not found in system.jobs", *j.ID())
+			return errors.Errorf("job %d: not found in system.jobs", j.ID())
 		}
 
 		statusString = tree.MustBeDString(row[0])
@@ -837,17 +833,17 @@ func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
 func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	if starts := atomic.AddInt64(&sj.starts, 1); starts != 1 {
 		return errors.AssertionFailedf(
-			"StartableJob %d cannot be started more than once", *sj.ID())
+			"StartableJob %d cannot be started more than once", sj.ID())
 	}
 
 	if sj.registry.startUsingSQLLivenessAdoption(ctx) && sj.sessionID == "" {
 		return errors.AssertionFailedf(
-			"StartableJob %d cannot be started without sqlliveness session", *sj.ID())
+			"StartableJob %d cannot be started without sqlliveness session", sj.ID())
 	}
 
 	defer func() {
 		if err != nil {
-			sj.registry.unregister(*sj.ID())
+			sj.registry.unregister(sj.ID())
 		}
 	}()
 	if !sj.txn.IsCommitted() {
@@ -914,7 +910,7 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 		return errors.AssertionFailedf(
 			"cannot call CleanupOnRollback for a StartableJob with a non-finalized transaction")
 	}
-	sj.registry.unregister(*sj.ID())
+	sj.registry.unregister(sj.ID())
 	if sj.span != nil {
 		sj.span.Finish()
 	}
@@ -927,6 +923,6 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 // Cancel will mark the job as canceled and release its resources in the
 // Registry.
 func (sj *StartableJob) Cancel(ctx context.Context) error {
-	defer sj.registry.unregister(*sj.ID())
-	return sj.registry.CancelRequested(ctx, nil, *sj.ID())
+	defer sj.registry.unregister(sj.ID())
+	return sj.registry.CancelRequested(ctx, nil, sj.ID())
 }
