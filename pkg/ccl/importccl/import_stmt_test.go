@@ -4752,7 +4752,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 			rootJob := startLeasedJob(t, rootJobRecord)
 
 			// Test root can control root job.
-			rootDB.Exec(t, tc.controlQuery, *rootJob.ID())
+			rootDB.Exec(t, tc.controlQuery, rootJob.ID())
 			require.NoError(t, err)
 
 			// Start import job as non-admin user.
@@ -4761,7 +4761,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 			userJob := startLeasedJob(t, nonAdminJobRecord)
 
 			// Test testuser can control testuser job.
-			_, err := testuser.Exec(tc.controlQuery, *userJob.ID())
+			_, err := testuser.Exec(tc.controlQuery, userJob.ID())
 			require.NoError(t, err)
 
 			// Start second import job as root.
@@ -4771,11 +4771,11 @@ func TestImportControlJobRBAC(t *testing.T) {
 			userJob2 := startLeasedJob(t, nonAdminJobRecord)
 
 			// Test root can control testuser job.
-			rootDB.Exec(t, tc.controlQuery, *userJob2.ID())
+			rootDB.Exec(t, tc.controlQuery, userJob2.ID())
 			require.NoError(t, err)
 
 			// Test testuser CANNOT control root job.
-			_, err = testuser.Exec(tc.controlQuery, *rootJob2.ID())
+			_, err = testuser.Exec(tc.controlQuery, rootJob2.ID())
 			require.True(t, testutils.IsError(err, "only admins can control jobs owned by other admins"))
 		})
 	}

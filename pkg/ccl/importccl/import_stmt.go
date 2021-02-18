@@ -1304,7 +1304,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	select {
 	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDInt(tree.DInt(r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(r.res.Rows)),
@@ -1505,7 +1505,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*r.job.ID()))
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 
 		var tableDescs []*tabledesc.Mutable

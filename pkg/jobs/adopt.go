@@ -190,7 +190,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	if err != nil {
 		return err
 	}
-	job := &Job{id: &jobID, registry: r}
+	job := &Job{id: jobID, registry: r}
 	job.mu.payload = *payload
 	job.mu.progress = *progress
 	job.sessionID = s.ID()
@@ -241,7 +241,7 @@ func (r *Registry) runJob(
 	// Bookkeeping.
 	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
-	spanName := fmt.Sprintf(`%s-%d`, typ, *job.ID())
+	spanName := fmt.Sprintf(`%s-%d`, typ, job.ID())
 	var span *tracing.Span
 	ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 	defer span.Finish()
@@ -252,9 +252,9 @@ func (r *Registry) runJob(
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
-		log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
+		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
-	r.unregister(*job.ID())
+	r.unregister(job.ID())
 	return err
 }
 
@@ -294,7 +294,7 @@ RETURNING id, status`,
 		}
 		for _, row := range rows {
 			id := int64(*row[0].(*tree.DInt))
-			job := &Job{id: &id, registry: r}
+			job := &Job{id: id, registry: r}
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:

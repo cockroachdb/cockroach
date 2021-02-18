@@ -602,7 +602,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
 	var jobID int64
 	if job != nil {
-		jobID = *job.ID()
+		jobID = job.ID()
 	}
 	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
 

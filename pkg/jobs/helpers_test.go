@@ -68,7 +68,7 @@ func (j *Job) Started(ctx context.Context) error {
 
 // Created is a test only function that inserts a new jobs table row.
 func (j *Job) Created(ctx context.Context) error {
-	return j.deprecatedInsert(ctx, nil /* txn */, *j.ID(), nil /* lease */, nil /* session */)
+	return j.deprecatedInsert(ctx, nil /* txn */, j.ID(), nil /* lease */, nil /* session */)
 }
 
 // Paused is a wrapper around the internal function that moves a job to the

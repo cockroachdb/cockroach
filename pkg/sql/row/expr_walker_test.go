@@ -190,7 +190,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			job := createMockImportJob(ctx, t, registry, test.allocatedChunks, test.resumePos)
-			j := &SeqChunkProvider{Registry: registry, JobID: *job.ID()}
+			j := &SeqChunkProvider{Registry: registry, JobID: job.ID()}
 			annot := &CellInfoAnnotation{
 				sourceID: 0,
 				rowID:    test.rowID,
@@ -210,7 +210,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 				getJobProgressQuery := `SELECT progress FROM system.jobs J WHERE J.id = $1`
 
 				var progressBytes []byte
-				require.NoError(t, sqlDB.QueryRow(getJobProgressQuery, *job.ID()).Scan(&progressBytes))
+				require.NoError(t, sqlDB.QueryRow(getJobProgressQuery, job.ID()).Scan(&progressBytes))
 				var progress jobspb.Progress
 				require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 				chunks := progress.GetImport().SequenceDetails[0].SeqIdToChunks[int32(id)].Chunks

@@ -99,10 +99,6 @@ func (ju *JobUpdater) hasUpdates() bool {
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
 func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error {
-	if j.id == nil {
-		return errors.New("job: cannot update: job not created")
-	}
-
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
@@ -115,31 +111,31 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
 			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt, *j.id,
+			stmt, j.ID(),
 		)
 		if err != nil {
 			return err
 		}
 		if row == nil {
-			return errors.Errorf("job %d: not found in system.jobs table", *j.ID())
+			return errors.Errorf("job %d: not found in system.jobs table", j.ID())
 		}
 
 		statusString, ok := row[0].(*tree.DString)
 		if !ok {
-			return errors.AssertionFailedf("job %d: expected string status, but got %T", *j.id, statusString)
+			return errors.AssertionFailedf("job %d: expected string status, but got %T", j.ID(), statusString)
 		}
 
 		if j.sessionID != "" {
 			if row[3] == tree.DNull {
 				return errors.Errorf(
 					"job %d: with status '%s': expected session '%s' but found NULL",
-					*j.ID(), statusString, j.sessionID)
+					j.ID(), statusString, j.sessionID)
 			}
 			storedSession := []byte(*row[3].(*tree.DBytes))
 			if !bytes.Equal(storedSession, j.sessionID.UnsafeBytes()) {
 				return errors.Errorf(
 					"job %d: with status '%s': expected session '%s' but found '%s'",
-					*j.ID(), statusString, j.sessionID, storedSession)
+					j.ID(), statusString, j.sessionID, storedSession)
 			}
 		}
 
@@ -152,7 +148,7 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 		}
 
 		md := JobMetadata{
-			ID:       *j.id,
+			ID:       j.ID(),
 			Status:   status,
 			Payload:  payload,
 			Progress: progress,
@@ -182,7 +178,7 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 		//     id = $1
 
 		var setters []string
-		params := []interface{}{*j.id} // $1 is always the job ID.
+		params := []interface{}{j.ID()} // $1 is always the job ID.
 		addSetter := func(column string, value interface{}) {
 			params = append(params, value)
 			setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
@@ -221,7 +217,7 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 		}
 		if n != 1 {
 			return errors.Errorf(
-				"job %d: expected exactly one row affected, but %d rows affected by job update", *j.id, n,
+				"job %d: expected exactly one row affected, but %d rows affected by job update", j.ID(), n,
 			)
 		}
 		return nil

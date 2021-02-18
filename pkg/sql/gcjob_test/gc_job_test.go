@@ -203,7 +203,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			// Check that the job started.
-			jobIDStr := strconv.Itoa(int(*job.ID()))
+			jobIDStr := strconv.Itoa(int(job.ID()))
 			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
@@ -367,7 +367,7 @@ func TestGCResumer(t *testing.T) {
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
-		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
 
-		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
