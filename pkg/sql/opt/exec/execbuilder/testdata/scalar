@@ -1058,7 +1058,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)
+  columns: (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing)
   estimated row count: 10 (missing stats)
   table: pg_attribute@pg_attribute_attrelid_idx
   spans: [/t - /t]
