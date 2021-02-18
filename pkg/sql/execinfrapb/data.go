@@ -12,11 +12,13 @@ package execinfrapb
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -308,10 +310,12 @@ func LocalMetaToRemoteProducerMeta(
 		rpm.Value = &RemoteProducerMetadata_Metrics_{
 			Metrics: meta.Metrics,
 		}
-	} else {
+	} else if meta.Err != nil {
 		rpm.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(ctx, meta.Err),
 		}
+	} else if util.CrdbTestBuild {
+		panic(fmt.Sprintf("unhandled field in local meta or all fields are nil"))
 	}
 	return rpm
 }
