@@ -55,12 +55,6 @@ func TestWindowFunctions(t *testing.T) {
 			DiskMonitor: testDiskMonitor,
 		},
 	}
-	// All supported window function operators will use from 0 to 3 disk queues
-	// with each using a single FD at any point in time. Additionally, the
-	// disk-backed sorter (that will be planned depending on PARTITION BY and
-	// ORDER BY combinations) will be limited to this number using a testing
-	// knob, so 3 is necessary and sufficient.
-	const maxNumberFDs = 3
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
@@ -300,7 +294,9 @@ func TestWindowFunctions(t *testing.T) {
 					},
 					ResultTypes: append(ct, resultType),
 				}
-				sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
+				// Relative rank operators currently require the most number of
+				// FDs.
+				sem := colexecbase.NewTestingSemaphore(relativeRankNumRequiredFDs)
 				args := &NewColOperatorArgs{
 					Spec:                spec,
 					Inputs:              inputs,
@@ -310,7 +306,6 @@ func TestWindowFunctions(t *testing.T) {
 				}
 				semsToCheck = append(semsToCheck, sem)
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				args.TestingKnobs.NumForcedRepartitions = maxNumberFDs
 				result, err := TestNewColOperator(ctx, flowCtx, args)
 				accounts = append(accounts, result.OpAccounts...)
 				monitors = append(monitors, result.OpMonitors...)

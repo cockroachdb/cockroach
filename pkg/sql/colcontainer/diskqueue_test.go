@@ -178,7 +178,7 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 	defer cleanup()
 
 	serverCfg := &execinfra.ServerConfig{}
-	serverCfg.TestingKnobs.MemoryLimitBytes = 1
+	serverCfg.TestingKnobs.ForceDiskSpill = true
 	diskMon := execinfra.NewLimitedMonitor(ctx, testDiskMonitor, serverCfg, t.Name())
 	defer diskMon.Stop(ctx)
 	diskAcc := diskMon.MakeBoundAccount()

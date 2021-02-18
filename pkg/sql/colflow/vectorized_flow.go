@@ -714,12 +714,12 @@ func (s *vectorizedFlowCreator) setupRouter(
 		allocators[i] = colmem.NewAllocator(ctx, &acc, factory)
 		s.accounts = append(s.accounts, &acc)
 	}
-	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
-	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-		limit = 1
-	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
-	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts, metadataSourcesQueue, toClose)
+	router, outputs := colexec.NewHashRouter(
+		allocators, input, outputTyps, output.HashColumns,
+		execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore,
+		diskAccounts, metadataSourcesQueue, toClose,
+	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
 	}

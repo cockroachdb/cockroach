@@ -3483,6 +3483,9 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 func verifyMerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {
 	t.Helper()
 	repl := store.LookupReplica(rhsStartKey)
+	if repl == nil {
+		t.Fatal("replica doesn't exist")
+	}
 	if !repl.Desc().StartKey.Equal(lhsStartKey) {
 		t.Fatalf("ranges unexpectedly unmerged expected startKey %s, but got %s", lhsStartKey, repl.Desc().StartKey)
 	}
@@ -3491,6 +3494,9 @@ func verifyMerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey 
 func verifyUnmerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {
 	t.Helper()
 	repl := store.LookupReplica(rhsStartKey)
+	if repl == nil {
+		t.Fatal("replica doesn't exist")
+	}
 	if repl.Desc().StartKey.Equal(lhsStartKey) {
 		t.Fatalf("ranges unexpectedly merged")
 	}

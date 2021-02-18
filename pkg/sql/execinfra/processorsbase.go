@@ -923,11 +923,7 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 func NewLimitedMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
 ) *mon.BytesMonitor {
-	limit := GetWorkMemLimit(config)
-	if config.TestingKnobs.ForceDiskSpill {
-		limit = 1
-	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, limit, parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(config), parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return limitedMon
 }
