@@ -546,17 +546,31 @@ func allocateDescriptorRewrites(
 				}
 
 				// Check privileges.
-				{
-					parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
-					if err != nil {
-						return errors.Wrapf(err,
-							"failed to lookup parent DB %d", errors.Safe(parentID))
-					}
-
-					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
-						return err
-					}
+				parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
+				if err != nil {
+					return errors.Wrapf(err,
+						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
+				if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+					return err
+				}
+
+				// We're restoring a table and not its parent database.  If the
+				// new database we're placing the table in is a multi-region database,
+				// block the restore. We do this because we currently have no way to
+				// modify this table and make it multi-region friendly. Long-term we'd
+				// want to modify the table so that it can exist in the multi-region
+				// database.
+				// https://github.com/cockroachdb/cockroach/issues/59804
+				if parentDB.GetRegionConfig() != nil {
+					return errors.WithDetail(errors.Newf("restoring table %d into a multi-region database %d",
+						table.GetID(),
+						parentDB.GetID(),
+					),
+						"cannot restore individual tables into a multi-region database",
+					)
+				}
+
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
 				descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
