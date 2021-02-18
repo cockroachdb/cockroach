@@ -356,6 +356,14 @@ func createPartitioning(
 		return indexDesc, err
 	}
 
+	// Truncate existing implicitly partitioned columns.
+	oldNumImplicitColumns := int(indexDesc.Partitioning.NumImplicitColumns)
+	oldImplicitColumnIDs := indexDesc.ColumnIDs[:oldNumImplicitColumns]
+
+	indexDesc.ColumnIDs = indexDesc.ColumnIDs[oldNumImplicitColumns:]
+	indexDesc.ColumnNames = indexDesc.ColumnNames[oldNumImplicitColumns:]
+	indexDesc.ColumnDirections = indexDesc.ColumnDirections[oldNumImplicitColumns:]
+
 	var numImplicitColumns int
 	var err error
 	if allowImplicitPartitioning {
@@ -368,6 +376,25 @@ func createPartitioning(
 		)
 		if err != nil {
 			return indexDesc, err
+		}
+	}
+
+	// If we had implicit column partitioning beforehand, check we have the
+	// same implicitly partitioned columns.
+	// Having different implicitly partitioned columns requires rewrites,
+	// which is outside the scope of createPartitioning.
+	if oldNumImplicitColumns > 0 {
+		if numImplicitColumns != oldNumImplicitColumns {
+			return indexDesc, errors.AssertionFailedf(
+				"mismatching number of implicit columns: old %d vs new %d",
+				oldNumImplicitColumns,
+				numImplicitColumns,
+			)
+		}
+		for i, oldColID := range oldImplicitColumnIDs {
+			if oldColID != indexDesc.ColumnIDs[i] {
+				return indexDesc, errors.AssertionFailedf("found new implicit partitioning at index %d", i)
+			}
 		}
 	}
 

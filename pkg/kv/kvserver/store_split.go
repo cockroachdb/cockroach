@@ -259,7 +259,10 @@ func prepareRightReplicaForSplit(
 	// Invoke the leasePostApplyLocked method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables the
 	// txnWaitQueue.
-	rightRepl.leasePostApplyLocked(ctx, *rightRepl.mu.state.Lease, false /* permitJump */)
+	rightRepl.leasePostApplyLocked(ctx,
+		rightRepl.mu.state.Lease, /* prevLease */
+		rightRepl.mu.state.Lease, /* newLease - same as prevLease */
+		assertNoLeaseJump)
 
 	// We need to explicitly wake up the Raft group on the right-hand range or
 	// else the range could be underreplicated for an indefinite period of time.
