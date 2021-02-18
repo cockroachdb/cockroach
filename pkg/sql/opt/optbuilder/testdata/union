@@ -874,3 +874,128 @@ except
       │                   │         └── 1 [as="?column?":6]
       │                   └── 1
       └── (1,)
+
+# Verify that we add casts for equivalent, but not identical types.
+exec-ddl
+CREATE TABLE ab (i8 INT8, i4 INT4, f8 FLOAT, f4 FLOAT4, d DECIMAL)
+----
+
+build
+SELECT i4 FROM ab UNION SELECT i8 FROM ab
+----
+union
+ ├── columns: i4:16
+ ├── left columns: i4:15
+ ├── right columns: i8:8
+ ├── project
+ │    ├── columns: i4:15
+ │    ├── project
+ │    │    ├── columns: ab.i4:2
+ │    │    └── scan ab
+ │    │         └── columns: i8:1 ab.i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ │    └── projections
+ │         └── ab.i4:2::INT8 [as=i4:15]
+ └── project
+      ├── columns: i8:8
+      └── scan ab
+           └── columns: i8:8 ab.i4:9 f8:10 f4:11 d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+
+build
+SELECT i8 FROM ab UNION SELECT i4 FROM ab
+----
+union
+ ├── columns: i8:16
+ ├── left columns: ab.i8:1
+ ├── right columns: i4:15
+ ├── project
+ │    ├── columns: ab.i8:1
+ │    └── scan ab
+ │         └── columns: ab.i8:1 ab.i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ └── project
+      ├── columns: i4:15
+      ├── project
+      │    ├── columns: ab.i4:9
+      │    └── scan ab
+      │         └── columns: ab.i8:8 ab.i4:9 f8:10 f4:11 d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      └── projections
+           └── ab.i4:9::INT8 [as=i4:15]
+
+build
+SELECT f4 FROM ab UNION SELECT f8 FROM ab
+----
+union
+ ├── columns: f4:16
+ ├── left columns: f4:15
+ ├── right columns: f8:10
+ ├── project
+ │    ├── columns: f4:15
+ │    ├── project
+ │    │    ├── columns: ab.f4:4
+ │    │    └── scan ab
+ │    │         └── columns: i8:1 i4:2 f8:3 ab.f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ │    └── projections
+ │         └── ab.f4:4::FLOAT8 [as=f4:15]
+ └── project
+      ├── columns: f8:10
+      └── scan ab
+           └── columns: i8:8 i4:9 f8:10 ab.f4:11 d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+
+build
+SELECT i8 FROM ab UNION SELECT f4 FROM ab
+----
+union
+ ├── columns: i8:16
+ ├── left columns: i8:15
+ ├── right columns: f4:11
+ ├── project
+ │    ├── columns: i8:15
+ │    ├── project
+ │    │    ├── columns: ab.i8:1
+ │    │    └── scan ab
+ │    │         └── columns: ab.i8:1 i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ │    └── projections
+ │         └── ab.i8:1::FLOAT4 [as=i8:15]
+ └── project
+      ├── columns: f4:11
+      └── scan ab
+           └── columns: ab.i8:8 i4:9 f8:10 f4:11 d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+
+build
+SELECT i8 FROM ab UNION SELECT d FROM ab
+----
+union
+ ├── columns: i8:16
+ ├── left columns: i8:15
+ ├── right columns: d:12
+ ├── project
+ │    ├── columns: i8:15
+ │    ├── project
+ │    │    ├── columns: ab.i8:1
+ │    │    └── scan ab
+ │    │         └── columns: ab.i8:1 i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ │    └── projections
+ │         └── ab.i8:1::DECIMAL [as=i8:15]
+ └── project
+      ├── columns: d:12
+      └── scan ab
+           └── columns: ab.i8:8 i4:9 f8:10 f4:11 d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+
+build
+SELECT d FROM ab UNION SELECT f8 FROM ab
+----
+union
+ ├── columns: d:16
+ ├── left columns: ab.d:5
+ ├── right columns: f8:15
+ ├── project
+ │    ├── columns: ab.d:5
+ │    └── scan ab
+ │         └── columns: i8:1 i4:2 ab.f8:3 f4:4 ab.d:5 rowid:6!null crdb_internal_mvcc_timestamp:7
+ └── project
+      ├── columns: f8:15
+      ├── project
+      │    ├── columns: ab.f8:10
+      │    └── scan ab
+      │         └── columns: i8:8 i4:9 ab.f8:10 f4:11 ab.d:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      └── projections
+           └── ab.f8:10::DECIMAL [as=f8:15]

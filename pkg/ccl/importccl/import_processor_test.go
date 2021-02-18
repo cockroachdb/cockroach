@@ -116,8 +116,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh,
-					nil /* seqChunkProvider */)
+				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh, nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
@@ -953,7 +952,8 @@ func pgDumpFormat() roachpb.IOFileFormat {
 	return roachpb.IOFileFormat{
 		Format: roachpb.IOFileFormat_PgDump,
 		PgDump: roachpb.PgDumpOptions{
-			MaxRowSize: 64 * 1024,
+			MaxRowSize:        64 * 1024,
+			IgnoreUnsupported: true,
 		},
 	}
 }

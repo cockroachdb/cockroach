@@ -153,24 +153,6 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 	}
 }
 
-// Unimplemented wraps Error, setting lastUnimplementedError.
-func (l *lexer) Unimplemented(feature string) {
-	l.lastError = unimp.New(feature, "this syntax")
-	l.populateErrorDetails()
-}
-
-// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
-func (l *lexer) UnimplementedWithIssue(issue int) {
-	l.lastError = unimp.NewWithIssue(issue, "this syntax")
-	l.populateErrorDetails()
-}
-
-// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
-func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
-	l.populateErrorDetails()
-}
-
 // PurposelyUnimplemented wraps Error, setting lastUnimplementedError.
 func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 	// We purposely do not use unimp here, as it appends hints to suggest that
@@ -183,6 +165,40 @@ func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 		reason,
 	)
 	l.populateErrorDetails()
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: feature,
+	}
+}
+
+// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
+func (l *lexer) UnimplementedWithIssue(issue int) {
+	l.lastError = unimp.NewWithIssue(issue, "this syntax")
+	l.populateErrorDetails()
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue),
+	}
+}
+
+// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
+func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
+	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
+	l.populateErrorDetails()
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: detail,
+	}
+}
+
+// Unimplemented wraps Error, setting lastUnimplementedError.
+func (l *lexer) Unimplemented(feature string) {
+	l.lastError = unimp.New(feature, "this syntax")
+	l.populateErrorDetails()
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: feature,
+	}
 }
 
 // setErr is called from parsing action rules to register an error observed

@@ -454,11 +454,10 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 	}
 }
 
-// isRegionalByRowPlaceholderZoneConfig returns whether a given zone config
-// should be marked as a placeholder config if the zone config belongs to
-// a REGIONAL BY ROW table.
+// isPlaceholderZoneConfigForMultiRegion returns whether a given zone config
+// should be marked as a placeholder config for a multi-region object.
 // See zonepb.IsSubzonePlaceholder for why this is necessary.
-func isRegionalByRowPlaceholderZoneConfig(zc zonepb.ZoneConfig) bool {
+func isPlaceholderZoneConfigForMultiRegion(zc zonepb.ZoneConfig) bool {
 	// Strip Subzones / SubzoneSpans, as these may contain items if migrating
 	// from one REGIONAL BY ROW table to another.
 	strippedZC := zc
@@ -484,11 +483,6 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 			return false, zonepb.ZoneConfig{}, err
 		}
 		zc.CopyFromZone(*localityZoneConfig, multiRegionZoneConfigFields)
-		if newConfig.GetRegionalByRow() != nil {
-			if isRegionalByRowPlaceholderZoneConfig(zc) {
-				zc.NumReplicas = proto.Int32(0)
-			}
-		}
 		return false, zc, nil
 	}
 }
@@ -513,10 +507,6 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
 	if hasNewSubzones {
-		if isRegionalByRowPlaceholderZoneConfig(zc) {
-			zc.NumReplicas = proto.Int32(0)
-		}
-
 		for _, region := range regionConfig.Regions {
 			subzoneConfig, err := zoneConfigForMultiRegionPartition(region, regionConfig)
 			if err != nil {
@@ -566,6 +556,14 @@ func ApplyZoneConfigForMultiRegionTable(
 		}
 		hasNewSubzones = newHasNewSubzones || hasNewSubzones
 		zoneConfig = newZoneConfig
+	}
+
+	// Mark the NumReplicas as 0 if we have subzones but no other features
+	// in the zone config. This signifies a placeholder.
+	// Note we do not use hasNewSubzones here as there may be existing subzones
+	// on the zone config which may still be a placeholder.
+	if len(zoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(zoneConfig) {
+		zoneConfig.NumReplicas = proto.Int32(0)
 	}
 
 	if !zoneConfig.Equal(zonepb.NewZoneConfig()) {

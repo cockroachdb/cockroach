@@ -82,6 +82,7 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "union_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
@@ -96,6 +97,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",

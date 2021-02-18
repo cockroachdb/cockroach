@@ -18,12 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
@@ -126,4 +129,78 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestDroppingPrimaryRegionAsyncJobFailure drops the primary region of the
+// database, which results in dropping the multi-region type descriptor. Then,
+// it errors out the async job associated with the type descriptor cleanup and
+// ensures the namespace entry is reclaimed back despite the injected error.
+// We rely on this behavior to be able to add multi-region capability in the
+// future.
+func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Locality.Tiers = []roachpb.Tier{
+		{Key: "region", Value: "us-east-1"},
+	}
+
+	// Protects expectedCleanupRuns
+	var mu syncutil.Mutex
+	// We need to cleanup 2 times, once for the multi-region type descriptor and
+	// once for the array alias of the multi-region type descriptor.
+	haveWePerformedFirstRoundOfCleanup := false
+	cleanupFinished := make(chan struct{})
+	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
+		RunBeforeExec: func() error {
+			return errors.New("yikes")
+		},
+		RunAfterOnFailOrCancel: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			if haveWePerformedFirstRoundOfCleanup {
+				close(cleanupFinished)
+			}
+			haveWePerformedFirstRoundOfCleanup = true
+			return nil
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Setup the test.
+	_, err := sqlDB.Exec(`
+CREATE DATABASE db WITH PRIMARY REGION "us-east-1"; 
+CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east-1"`)
+	testutils.IsError(err, "yikes")
+
+	<-cleanupFinished
+
+	rows := sqlDB.QueryRow(`SELECT count(*) FROM system.namespace WHERE name = 'crdb_internal_region'`)
+	var count int
+	err = rows.Scan(&count)
+	require.NoError(t, err)
+	if count != 0 {
+		t.Fatal("expected crdb_internal_region not to be present in system.namespace")
+	}
+
+	_, err = sqlDB.Exec(`ALTER DATABASE db PRIMARY REGION "us-east-1"`)
+	require.NoError(t, err)
+
+	rows = sqlDB.QueryRow(`SELECT count(*) FROM system.namespace WHERE name = 'crdb_internal_region'`)
+	err = rows.Scan(&count)
+	require.NoError(t, err)
+	if count != 1 {
+		t.Fatal("expected crdb_internal_region to be present in system.namespace")
+	}
 }

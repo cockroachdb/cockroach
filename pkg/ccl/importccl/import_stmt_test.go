@@ -819,6 +819,7 @@ END;
 			name: "fk",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
+			with: "WITH ignore_unsupported",
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -897,7 +898,7 @@ END;
 			name: "fk-skip",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys`,
+			with: `WITH skip_foreign_keys, ignore_unsupported`,
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -912,13 +913,14 @@ END;
 			name: "fk unreferenced",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
+			with: "WITH ignore_unsupported",
 			err:  `table "cities" not found`,
 		},
 		{
 			name: "fk unreferenced skipped",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys`,
+			with: `WITH skip_foreign_keys, ignore_unsupported`,
 			query: map[string][][]string{
 				getTablesQuery: {{"public", "weather", "table"}},
 			},
@@ -937,6 +939,7 @@ END;
 		{
 			name: "sequence",
 			typ:  "PGDUMP",
+			with: "WITH ignore_unsupported",
 			data: `
 					CREATE TABLE t (a INT8);
 					CREATE SEQUENCE public.i_seq
@@ -965,6 +968,7 @@ END;
 					INSERT INTO "bob" ("c", "b") VALUES (3, 2);
 					COMMIT
 			`,
+			with: `WITH ignore_unsupported`,
 			query: map[string][][]string{
 				`SELECT * FROM bob`: {
 					{"1", "NULL", "2"},
@@ -1020,29 +1024,6 @@ END;
 			typ:  "PGDUMP",
 			data: "create table s.t (i INT8)",
 			err:  `non-public schemas unsupported: s`,
-		},
-		{
-			name: "various create ignores",
-			typ:  "PGDUMP",
-			data: `
-				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
-				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
-				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
-
-				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
-				    LANGUAGE sql
-				    AS $_$
-				SELECT $1 ~ '^[0-9]+$'
-				$_$;
-				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
-
-				CREATE TABLE t (i INT8);
-			`,
-			query: map[string][][]string{
-				getTablesQuery: {{"public", "t", "table"}},
-			},
 		},
 		{
 			name: "many tables",
@@ -1600,7 +1581,8 @@ func TestImportRowLimit(t *testing.T) {
 		expectedRowLimit := 4
 
 		// Import a single table `second` and verify number of rows imported.
-		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`,
+			expectedRowLimit)
 		sqlDB.Exec(t, importQuery, second...)
 
 		var numRows int
@@ -1611,7 +1593,7 @@ func TestImportRowLimit(t *testing.T) {
 
 		// Import multiple tables including `simple` and `second`.
 		expectedRowLimit = 3
-		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`, expectedRowLimit)
 		sqlDB.Exec(t, importQuery, multitable...)
 		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
 		require.Equal(t, expectedRowLimit, numRows)
@@ -5534,14 +5516,14 @@ func TestImportPgDump(t *testing.T) {
 				CONSTRAINT simple_pkey PRIMARY KEY (i),
 				UNIQUE INDEX simple_b_s_idx (b, s),
 				INDEX simple_s_idx (s)
-			) PGDUMP DATA ($1)`,
+			) PGDUMP DATA ($1) WITH ignore_unsupported`,
 			simple,
 		},
-		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, simple},
-		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, second},
-		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, multitable},
-		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, multitable},
-		{`all from multi`, expectAll, `IMPORT PGDUMP ($1)`, multitable},
+		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, simple},
+		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, second},
+		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
+		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
+		{`all from multi`, expectAll, `IMPORT PGDUMP ($1) WITH ignore_unsupported`, multitable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
@@ -5681,6 +5663,137 @@ func TestImportPgDump(t *testing.T) {
 	})
 }
 
+func TestImportPgDumpIgnoredStmts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	data := `
+				-- Statements that CRDB cannot parse.
+				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
+
+				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
+				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
+
+				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+				-- Valid statement.
+				CREATE TABLE foo (id INT);
+
+				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
+				    LANGUAGE sql
+				    AS $_$
+				SELECT $1 ~ '^[0-9]+$'
+				$_$;
+				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
+
+				-- Valid statements.
+				INSERT INTO foo VALUES (1), (2), (3);
+				CREATE TABLE t (i INT8);
+
+				-- Statements that CRDB can parse, but IMPORT does not support.
+				-- These are processed during the schema pass of IMPORT.
+				COMMENT ON TABLE t IS 'This should be skipped';
+				COMMENT ON DATABASE t IS 'This should be skipped';
+				COMMENT ON COLUMN t IS 'This should be skipped';
+
+
+				-- Statements that CRDB can parse, but IMPORT does not support.
+				-- These are processed during the data ingestion pass of IMPORT.
+				SELECT pg_catalog.set_config('search_path', '', false);
+				DELETE FROM geometry_columns WHERE f_table_name = 'nyc_census_blocks' AND f_table_schema = 'public';
+			`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	t.Run("ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo; USE foo;")
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", srv.URL)
+		// Check that statements which are not expected to be ignored, are still
+		// processed.
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
+	})
+
+	t.Run("dont-ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo1; USE foo1;")
+		sqlDB.ExpectErr(t, "syntax error", "IMPORT PGDUMP ($1)", srv.URL)
+	})
+
+	t.Run("require-both-unsupported-options", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo2; USE foo2;")
+		ignoredLog := `userfile:///ignore.log`
+		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported` option",
+			"IMPORT PGDUMP ($1) WITH ignored_stmt_log=$2", srv.URL, ignoredLog)
+	})
+
+	t.Run("log-unsupported-stmts", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE foo3; USE foo3;")
+		ignoredLog := `userfile:///ignore.log`
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported, ignored_stmt_log=$2",
+			srv.URL, ignoredLog)
+		// Check that statements which are not expected to be ignored, are still
+		// processed.
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
+
+		// Read the unsupported log and verify its contents.
+		store, err := cloudimpl.ExternalStorageFromURI(ctx, ignoredLog,
+			base.ExternalIODirConfig{},
+			tc.Servers[0].ClusterSettings(),
+			blobs.TestEmptyBlobClientFactory,
+			security.RootUserName(),
+			tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
+		require.NoError(t, err)
+		defer store.Close()
+		content, err := store.ReadFile(ctx, pgDumpUnsupportedSchemaStmtLog)
+		require.NoError(t, err)
+		descBytes, err := ioutil.ReadAll(content)
+		require.NoError(t, err)
+		expectedSchemaLog := `Unsupported statements during schema parse phase:
+
+create trigger: could not be parsed
+revoke privileges on sequence: could not be parsed
+revoke privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+grant privileges on sequence: could not be parsed
+comment on extension: could not be parsed
+create extension if not exists with: could not be parsed
+create function: could not be parsed
+alter function: could not be parsed
+COMMENT ON TABLE t IS 'This should be skipped': unsupported by IMPORT
+
+Logging 10 out of 13 ignored statements.
+`
+		require.Equal(t, []byte(expectedSchemaLog), descBytes)
+
+		expectedDataLog := `Unsupported statements during data ingestion phase:
+
+unsupported 3 fn args in select: ['search_path' '' false]: unsupported by IMPORT
+unsupported *tree.Delete statement: DELETE FROM geometry_columns WHERE (f_table_name = 'nyc_census_blocks') AND (f_table_schema = 'public'): unsupported by IMPORT
+
+Logging 2 out of 2 ignored statements.
+`
+
+		content, err = store.ReadFile(ctx, pgDumpUnsupportedDataStmtLog)
+		require.NoError(t, err)
+		descBytes, err = ioutil.ReadAll(content)
+		require.NoError(t, err)
+		require.Equal(t, []byte(expectedDataLog), descBytes)
+	})
+}
+
 // TestImportPgDumpGeo tests that a file with SQLFn classes can be
 // imported. These are functions like AddGeometryColumn which create and
 // execute SQL when called (!). They are, for example, used by shp2pgsql
@@ -5701,7 +5814,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql'")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql' WITH ignore_unsupported")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
@@ -5744,7 +5857,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql'")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql' WITH ignore_unsupported")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
@@ -5861,7 +5974,7 @@ func TestImportCockroachDump(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY i", [][]string{
 		{"1", "test"},
 		{"2", "other"},
@@ -5917,7 +6030,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
 	sqlDB.CheckQueryResultsRetry(t,
