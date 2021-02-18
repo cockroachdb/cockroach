@@ -18,15 +18,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/logtags"
 )
 
 // SQLDeps are the dependencies of migrations which perform actions at the
 // SQL layer.
 type SQLDeps struct {
-	DB       *kv.DB
-	Codec    keys.SQLCodec
-	Settings *cluster.Settings
+	DB               *kv.DB
+	Codec            keys.SQLCodec
+	Settings         *cluster.Settings
+	LeaseManager     *lease.Manager
+	InternalExecutor sqlutil.InternalExecutor
 }
 
 // SQLMigrationFn is used to perform sql-level migrations. It may be run from

@@ -17,6 +17,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "@com_github_cockroachdb_logtags//:logtags",
     ],
