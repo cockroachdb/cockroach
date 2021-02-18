@@ -80,7 +80,7 @@ func ingestionPlanHook(
 		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: streamingccl.StreamAddress(from[0]),
-			Span:          roachpb.Span{Key: prefix, EndKey: prefix.Next()},
+			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			// TODO: Figure out what the initial ts should be.
 			StartTime: hlc.Timestamp{},
 		}
@@ -110,7 +110,10 @@ func ingestionPlanHook(
 			return err
 		}
 
-		return sj.Start(ctx)
+		if err := sj.Start(ctx); err != nil {
+			return err
+		}
+		return sj.AwaitCompletion(ctx)
 	}
 
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil

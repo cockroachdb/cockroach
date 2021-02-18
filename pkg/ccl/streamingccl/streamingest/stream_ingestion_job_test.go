@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStreamIngestionJobRollBack tests that the job rollsback the data to the
+// TestStreamIngestionJobRollBack tests that the job rolls back the data to the
 // start time if there are no progress updates. This test should be expanded
 // after the job's progress field is updated as the job runs.
 func TestStreamIngestionJobRollBack(t *testing.T) {

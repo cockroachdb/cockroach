@@ -33,65 +33,13 @@ type Validator interface {
 	Failures() []string
 }
 
-// StreamClientValidatorWrapper wraps a Validator and exposes additional methods
-// used by stream ingestion to check for correctness.
-type StreamClientValidatorWrapper interface {
-	GetValuesForKeyBelowTimestamp(key string, timestamp hlc.Timestamp) ([]roachpb.KeyValue, error)
-	GetValidator() Validator
-}
-
-type streamValidator struct {
+// StreamValidator wraps a Validator and exposes additional methods for
+// introspection.
+type StreamValidator interface {
 	Validator
-}
-
-var _ StreamClientValidatorWrapper = &streamValidator{}
-
-// NewStreamClientValidatorWrapper returns a wrapped Validator, that can be used
-// to validate the events emitted by the cluster to cluster streaming client.
-// The wrapper currently only "wraps" an orderValidator, but can be built out
-// to utilize other Validator's.
-// The wrapper also allows querying the orderValidator to retrieve streamed
-// events from an in-memory store.
-func NewStreamClientValidatorWrapper() StreamClientValidatorWrapper {
-	ov := NewOrderValidator("unusedC2C")
-	return &streamValidator{
-		ov,
-	}
-}
-
-// GetValidator implements the StreamClientValidatorWrapper interface.
-func (sv *streamValidator) GetValidator() Validator {
-	return sv.Validator
-}
-
-// GetValuesForKeyBelowTimestamp implements the StreamClientValidatorWrapper
-// interface.
-// It returns the streamed KV updates for `key` with a ts less than equal to
-// `timestamp`.
-func (sv *streamValidator) GetValuesForKeyBelowTimestamp(
-	key string, timestamp hlc.Timestamp,
-) ([]roachpb.KeyValue, error) {
-	orderValidator, ok := sv.GetValidator().(*orderValidator)
-	if !ok {
-		return nil, errors.Newf("unknown validator %T: ", sv.GetValidator())
-	}
-	timestampValueTuples := orderValidator.keyTimestampAndValues[key]
-	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
-		return timestamp.Less(timestampValueTuples[i].ts)
-	})
-	var kv []roachpb.KeyValue
-	for _, tsValue := range timestampValueTuples[:timestampsIdx] {
-		byteRep := []byte(key)
-		kv = append(kv, roachpb.KeyValue{
-			Key: byteRep,
-			Value: roachpb.Value{
-				RawBytes:  []byte(tsValue.value),
-				Timestamp: tsValue.ts,
-			},
-		})
-	}
-
-	return kv, nil
+	// GetValuesForKeyBelowTimestamp returns the streamed KV updates for `key`
+	// with a ts less than equal to timestamp`.
+	GetValuesForKeyBelowTimestamp(key string, timestamp hlc.Timestamp) ([]roachpb.KeyValue, error)
 }
 
 type timestampValue struct {
@@ -109,6 +57,7 @@ type orderValidator struct {
 }
 
 var _ Validator = &orderValidator{}
+var _ StreamValidator = &orderValidator{}
 
 // NewOrderValidator returns a Validator that checks the row and resolved
 // timestamp ordering guarantees. It also asserts that keys have an affinity to
@@ -126,6 +75,40 @@ func NewOrderValidator(topic string) Validator {
 		keyTimestampAndValues: make(map[string][]timestampValue),
 		resolved:              make(map[string]hlc.Timestamp),
 	}
+}
+
+// NewStreamOrderValidator wraps and orderValidator as described above, and
+// exposes additional methods for introspection.
+func NewStreamOrderValidator() StreamValidator {
+	return &orderValidator{
+		topic:                 "unused",
+		partitionForKey:       make(map[string]string),
+		keyTimestampAndValues: make(map[string][]timestampValue),
+		resolved:              make(map[string]hlc.Timestamp),
+	}
+}
+
+// GetValuesForKeyBelowTimestamp implements the StreamValidator interface.
+func (v *orderValidator) GetValuesForKeyBelowTimestamp(
+	key string, timestamp hlc.Timestamp,
+) ([]roachpb.KeyValue, error) {
+	timestampValueTuples := v.keyTimestampAndValues[key]
+	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
+		return timestamp.Less(timestampValueTuples[i].ts)
+	})
+	var kv []roachpb.KeyValue
+	for _, tsValue := range timestampValueTuples[:timestampsIdx] {
+		byteRep := []byte(key)
+		kv = append(kv, roachpb.KeyValue{
+			Key: byteRep,
+			Value: roachpb.Value{
+				RawBytes:  []byte(tsValue.value),
+				Timestamp: tsValue.ts,
+			},
+		})
+	}
+
+	return kv, nil
 }
 
 // NoteRow implements the Validator interface.

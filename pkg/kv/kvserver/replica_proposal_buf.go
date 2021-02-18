@@ -208,6 +208,7 @@ type proposerRaft interface {
 func (b *propBuf) Init(p proposer) {
 	b.p = p
 	b.full.L = p.rlocker()
+	b.liBase = p.leaseAppliedIndex()
 }
 
 // Len returns the number of proposals currently in the buffer.

@@ -1730,6 +1730,14 @@ func TestParse(t *testing.T) {
 		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'`},
 		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1`},
 
+		// Currently, we only support TENANT as a target. We have grammar rules for
+		// all targets supported by RESTORE but these will error out during the
+		// planning phase.
+		{`RESTORE TABLE foo FROM REPLICATION STREAM FROM 'bar'`},
+		{`RESTORE TABLE foo FROM REPLICATION STREAM FROM $1`},
+		{`RESTORE DATABASE foodb FROM REPLICATION STREAM FROM 'baz'`},
+		{`RESTORE DATABASE foodb FROM REPLICATION STREAM FROM $1`},
+
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
 		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached`},
 
