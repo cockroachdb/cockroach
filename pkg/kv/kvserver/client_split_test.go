@@ -3545,3 +3545,60 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 	}
 	require.Nil(t, g.Wait())
 }
+
+// TestStoreRangeSplitAndMergeWithGlobalReads tests that a range configured to
+// serve global reads can be split and merged. In essence, this tests whether
+// the split and merge transactions can handle having their timestamp bumped by
+// the closed timestamp on the ranges they're operating on.
+func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	config.TestingSetupZoneConfigHook(s.Stopper())
+
+	// Set global reads.
+	descID := uint32(keys.MinUserDescID)
+	descKey := keys.SystemSQLCodec.TablePrefix(descID)
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GlobalReads = proto.Bool(true)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
+
+	// Trigger gossip callback and wait for propagation
+	require.NoError(t, store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0))
+	testutils.SucceedsSoon(t, func() error {
+		repl := store.LookupReplica(roachpb.RKey(descKey))
+		if repl.ClosedTimestampPolicy() != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.Errorf("expected LEAD_FOR_GLOBAL_READS policy")
+		}
+		return nil
+	})
+
+	// Split the range. Should succeed.
+	splitKey := append(descKey, []byte("split")...)
+	splitArgs := adminSplitArgs(splitKey)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
+	require.Nil(t, pErr)
+
+	repl := store.LookupReplica(roachpb.RKey(splitKey))
+	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
+
+	// Merge the range. Should succeed.
+	mergeArgs := adminMergeArgs(descKey)
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
+	require.Nil(t, pErr)
+
+	repl = store.LookupReplica(roachpb.RKey(splitKey))
+	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())
+}
