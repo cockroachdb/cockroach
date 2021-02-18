@@ -13,6 +13,7 @@ package tracing
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -51,6 +52,164 @@ const (
 // and restarting its data collection (see Span.StartRecording), and this is
 // used extensively in SQL session tracing.
 type Span struct {
+	// Span itself is a very thin wrapper around spanInner whose only job is
+	// to guard spanInner against use-after-Finish.
+	i               spanInner
+	numFinishCalled int32 // atomic
+}
+
+func (sp *Span) done() bool {
+	if sp == nil {
+		return true
+	}
+	return atomic.LoadInt32(&sp.numFinishCalled) != 0
+}
+
+// Tracer exports the tracer this span was created using.
+func (sp *Span) Tracer() *Tracer {
+	return sp.i.Tracer()
+}
+
+// SetOperationName sets the name of the operation.
+func (sp *Span) SetOperationName(operationName string) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetOperationName(operationName)
+}
+
+// Finish idempotently marks the Span as completed (at which point it will
+// silently drop any new data added to it). Finishing a nil *Span is a noop.
+func (sp *Span) Finish() {
+	if sp == nil || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+		return
+	}
+	sp.i.Finish()
+}
+
+// GetRecording retrieves the current recording, if the Span has recording
+// enabled. This can be called while spans that are part of the recording are
+// still open; it can run concurrently with operations on those spans.
+func (sp *Span) GetRecording() Recording {
+	// It's always valid to get the recording, even for a finished span.
+	return sp.i.GetRecording()
+}
+
+// ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
+// these spans will be part of the result of GetRecording. Used to import
+// recorded traces from other nodes.
+func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+	if sp.done() {
+		return nil
+	}
+	return sp.i.ImportRemoteSpans(remoteSpans)
+}
+
+// Meta returns the information which needs to be propagated across process
+// boundaries in order to derive child spans from this Span. This may return
+// nil, which is a valid input to `WithParentAndManualCollection`, if the Span
+// has been optimized out.
+func (sp *Span) Meta() *SpanMeta {
+	// It shouldn't be done in practice, but it is allowed to call Meta on
+	// a finished span.
+	return sp.i.Meta()
+}
+
+// SetVerbose toggles verbose recording on the Span, which must not be a noop
+// span (see the WithForceRealSpan option).
+//
+// With 'true', future calls to Record are actually recorded, and any future
+// descendants of this Span will do so automatically as well. This does not
+// apply to past derived Spans, which may in fact be noop spans.
+//
+// As a side effect, calls to `SetVerbose(true)` on a span that was not already
+// verbose will reset any past recording stored on this Span.
+//
+// When set to 'false', Record will cede to add data to the recording (though
+// they may still be collected, should the Span have been set up with an
+// auxiliary trace sink). This does not apply to Spans derived from this one
+// when it was verbose.
+func (sp *Span) SetVerbose(to bool) {
+	// We allow toggling verbosity on and off for a finished span. This shouldn't
+	// matter either way as a finished span drops all new data, but if we
+	// prevented the toggling we could end up in weird states since IsVerbose()
+	// won't reflect what the caller asked for.
+	sp.i.SetVerbose(to)
+}
+
+// IsVerbose returns true if the Span is verbose. See SetVerbose for details.
+func (sp *Span) IsVerbose() bool {
+	return sp.i.IsVerbose()
+}
+
+// Record provides a way to record free-form text into verbose spans.
+//
+// TODO(irfansharif): We don't currently have redactability with trace
+// recordings (both here, and using RecordStructured above). We'll want to do this
+// soon.
+func (sp *Span) Record(msg string) {
+	if sp.done() {
+		return
+	}
+	sp.i.Record(msg)
+}
+
+// Recordf is like Record, but accepts a format specifier.
+func (sp *Span) Recordf(format string, args ...interface{}) {
+	if sp.done() {
+		return
+	}
+	sp.i.Recordf(format, args...)
+}
+
+// RecordStructured adds a Structured payload to the Span. It will be added to
+// the recording even if the Span is not verbose; however it will be discarded
+// if the underlying Span has been optimized out (i.e. is a noop span).
+//
+// The caller must not mutate the item once RecordStructured has been called.
+func (sp *Span) RecordStructured(item Structured) {
+	if sp.done() {
+		return
+	}
+	sp.i.RecordStructured(item)
+}
+
+// SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
+// the Span tags.
+//
+// This is deprecated. Use RecordStructured instead.
+//
+// TODO(tbg): remove this in the 21.2 cycle.
+func (sp *Span) SetSpanStats(stats SpanStats) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetSpanStats(stats)
+}
+
+// SetTag adds a tag to the span. If there is a pre-existing tag set for the
+// key, it is overwritten.
+func (sp *Span) SetTag(key string, value interface{}) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetTag(key, value)
+}
+
+// SetBaggageItem attaches "baggage" to this span, a key:value pair that's
+// propagated to all future descendants of this Span. Any attached baggage
+// crosses RPC boundaries, and is copied transitively for every remote
+// descendant.
+func (sp *Span) SetBaggageItem(restrictedKey, value string) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetBaggageItem(restrictedKey, value)
+}
+
+// TODO(tbg): move spanInner and its methods into a separate file.
+
+type spanInner struct {
 	tracer *Tracer // never nil
 
 	// Internal trace Span; nil if not tracing to crdb.
@@ -102,30 +261,15 @@ func (sm *SpanMeta) String() string {
 	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
 }
 
-func (s *Span) isNoop() bool {
+func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }
 
-// IsVerbose returns true if the Span is verbose. See SetVerbose for details.
-func (s *Span) IsVerbose() bool {
+func (s *spanInner) IsVerbose() bool {
 	return s.crdb.recordingType() == RecordingVerbose
 }
 
-// SetVerbose toggles verbose recording on the Span, which must not be a noop
-// span (see the WithForceRealSpan option).
-//
-// With 'true', future calls to Record are actually recorded, and any future
-// descendants of this Span will do so automatically as well. This does not
-// apply to past derived Spans, which may in fact be noop spans.
-//
-// As a side effect, calls to `SetVerbose(true)` on a span that was not already
-// verbose will reset any past recording stored on this Span.
-//
-// When set to 'false', Record will cede to add data to the recording (though
-// they may still be collected, should the Span have been set up with an
-// auxiliary trace sink). This does not apply to Spans derived from this one
-// when it was verbose.
-func (s *Span) SetVerbose(to bool) {
+func (s *spanInner) SetVerbose(to bool) {
 	// TODO(tbg): when always-on tracing is firmly established, we can remove the ugly
 	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
 	// noop span.
@@ -145,30 +289,12 @@ func (s *Span) SetVerbose(to bool) {
 	}
 }
 
-// GetRecording retrieves the current recording, if the Span has recording
-// enabled. This can be called while spans that are part of the recording are
-// still open; it can run concurrently with operations on those spans.
-func (s *Span) GetRecording() Recording {
+func (s *spanInner) GetRecording() Recording {
 	return s.crdb.getRecording(s.tracer.mode(), s.tracer.TracingVerbosityIndependentSemanticsIsActive())
 }
 
-// ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
-// these spans will be part of the result of GetRecording. Used to import
-// recorded traces from other nodes.
-func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 	return s.crdb.importRemoteSpans(remoteSpans)
-}
-
-// IsBlackHole returns true if events for this Span are just dropped. This
-// is the case when the Span is not recording and no external tracer is configured.
-// Tracing clients can use this method to figure out if they can short-circuit some
-// tracing-related work that would be discarded anyway.
-//
-// The child of a blackhole Span is a non-recordable blackhole Span[*]. These incur
-// only minimal overhead. It is therefore not worth it to call this method to avoid
-// starting spans.
-func (s *Span) IsBlackHole() bool {
-	return s.crdb.recordingType() == RecordingOff && s.netTr == nil && s.ot == (otSpan{})
 }
 
 // SpanStats are stats that can be added to a Span.
@@ -180,13 +306,7 @@ type SpanStats interface {
 	StatsTags() map[string]string
 }
 
-// SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
-// the Span tags.
-//
-// This is deprecated. Use RecordStructured instead.
-//
-// TODO(tbg): remove this in the 21.2 cycle.
-func (s *Span) SetSpanStats(stats SpanStats) {
+func (s *spanInner) SetSpanStats(stats SpanStats) {
 	if s.isNoop() {
 		return
 	}
@@ -199,8 +319,7 @@ func (s *Span) SetSpanStats(stats SpanStats) {
 	s.crdb.mu.Unlock()
 }
 
-// Finish marks the Span as completed. Finishing a nil *Span is a noop.
-func (s *Span) Finish() {
+func (s *spanInner) Finish() {
 	if s == nil {
 		return
 	}
@@ -234,11 +353,7 @@ func (s *Span) Finish() {
 	s.tracer.activeSpans.Unlock()
 }
 
-// Meta returns the information which needs to be propagated across process
-// boundaries in order to derive child spans from this Span. This may return
-// nil, which is a valid input to `WithParentAndManualCollection`, if the Span
-// has been optimized out.
-func (s *Span) Meta() *SpanMeta {
+func (s *spanInner) Meta() *SpanMeta {
 	var traceID uint64
 	var spanID uint64
 	var recordingType RecordingType
@@ -284,8 +399,7 @@ func (s *Span) Meta() *SpanMeta {
 	}
 }
 
-// SetOperationName sets the name of the operation.
-func (s *Span) SetOperationName(operationName string) *Span {
+func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	if s.isNoop() {
 		return s
 	}
@@ -296,16 +410,14 @@ func (s *Span) SetOperationName(operationName string) *Span {
 	return s
 }
 
-// SetTag adds a tag to the span. If there is a pre-existing tag set for the
-// key, it is overwritten.
-func (s *Span) SetTag(key string, value interface{}) *Span {
+func (s *spanInner) SetTag(key string, value interface{}) *spanInner {
 	if s.isNoop() {
 		return s
 	}
 	return s.setTagInner(key, value, false /* locked */)
 }
 
-func (s *Span) setTagInner(key string, value interface{}, locked bool) *Span {
+func (s *spanInner) setTagInner(key string, value interface{}, locked bool) *spanInner {
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetTag(key, value)
 	}
@@ -328,12 +440,7 @@ type Structured interface {
 	protoutil.Message
 }
 
-// RecordStructured adds a Structured payload to the Span. It will be added to
-// the recording even if the Span is not verbose; however it will be discarded
-// if the underlying Span has been optimized out (i.e. is a noop span).
-//
-// The caller must not mutate the item once RecordStructured has been called.
-func (s *Span) RecordStructured(item Structured) {
+func (s *spanInner) RecordStructured(item Structured) {
 	if s.isNoop() {
 		return
 	}
@@ -345,17 +452,11 @@ func (s *Span) RecordStructured(item Structured) {
 	}
 }
 
-// Record provides a way to record free-form text into verbose spans.
-//
-// TODO(irfansharif): We don't currently have redactability with trace
-// recordings (both here, and using RecordStructured above). We'll want to do this
-// soon.
-func (s *Span) Record(msg string) {
+func (s *spanInner) Record(msg string) {
 	s.Recordf("%s", msg)
 }
 
-// Recordf is like Record, but accepts a format specifier.
-func (s *Span) Recordf(format string, args ...interface{}) {
+func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
@@ -371,18 +472,14 @@ func (s *Span) Recordf(format string, args ...interface{}) {
 
 // hasVerboseSink returns false if there is no reason to even evaluate Record
 // because the result wouldn't be used for anything.
-func (s *Span) hasVerboseSink() bool {
+func (s *spanInner) hasVerboseSink() bool {
 	if s.netTr == nil && s.ot == (otSpan{}) && !s.IsVerbose() {
 		return false
 	}
 	return true
 }
 
-// SetBaggageItem attaches "baggage" to this span, a key:value pair that's
-// propagated to all future descendants of this Span. Any attached baggage
-// crosses RPC boundaries, and is copied transitively for every remote
-// descendant.
-func (s *Span) SetBaggageItem(restrictedKey, value string) *Span {
+func (s *spanInner) SetBaggageItem(restrictedKey, value string) *spanInner {
 	if s.isNoop() {
 		return s
 	}
@@ -397,6 +494,6 @@ func (s *Span) SetBaggageItem(restrictedKey, value string) *Span {
 }
 
 // Tracer exports the tracer this span was created using.
-func (s *Span) Tracer() *Tracer {
+func (s *spanInner) Tracer() *Tracer {
 	return s.tracer
 }
