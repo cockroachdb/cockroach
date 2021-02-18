@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -132,7 +131,7 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	return s.emit(int64(len(key) + len(value)))
 }

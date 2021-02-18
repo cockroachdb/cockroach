@@ -503,6 +503,9 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
   return u.val.(*tree.BackupOptions)
 }
+func (u *sqlSymUnion) replicationOptions() *tree.ReplicationOptions {
+  return u.val.(*tree.ReplicationOptions)
+}
 func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
   return u.val.(*tree.CopyOptions)
 }
@@ -616,7 +619,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
-%token <str> CURRENT_USER CYCLE
+%token <str> CURRENT_USER CURSOR CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
@@ -684,7 +687,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
-%token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING STREAM SUBSTRING
+%token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
@@ -810,7 +813,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
-%type <tree.Statement> create_changefeed_stmt
+%type <tree.Statement> create_changefeed_stmt create_replication_stream_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
@@ -1206,6 +1209,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
+%type <*tree.ReplicationOptions> opt_with_replication_options replication_options replication_options_list
 
 %type <str> relocate_kw
 
@@ -2414,9 +2418,10 @@ backup_options:
     $$.val = &tree.BackupOptions{Detached: true}
   }
 | KMS '=' string_or_placeholder_opt_list
-	{
+  {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
-	}
+  }
+
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
@@ -3118,7 +3123,9 @@ create_stmt:
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
-| create_extension_stmt // EXTEND WITH HELP: CREATE EXTENSION
+| create_changefeed_stmt
+| create_replication_stream_stmt
+| create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -3190,8 +3197,7 @@ drop_unsupported:
 | DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
-  create_changefeed_stmt
-| create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
+  create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_schema_stmt   // EXTEND WITH HELP: CREATE SCHEMA
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
@@ -3297,6 +3303,13 @@ create_stats_option:
     }
   }
 
+// %Help: CREATE CHANGEFEED  - create change data capture
+// %Category: CCL
+// %Text:
+// CREATE CHANGEFEED
+// FOR <targets> [INTO sink] [WITH <options>]
+//
+// Sink: Data caputre stream stream destination.  Enterprise only.
 create_changefeed_stmt:
   CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
@@ -3345,6 +3358,65 @@ opt_changefeed_sink:
   {
     /* SKIP DOC */
     $$.val = nil
+  }
+
+// %Help: CREATE REPLICATION STREAM - continuously replicate data
+// %Category: CCL
+// %Text:
+// CREATE REPLICATION STREAM FOR <targets> [INTO <sink>] [WITH <options>]
+//
+// Sink: Replication stream destination.
+// WITH <options>:
+//   Options specific to REPLICATION STREAM: See CHANGEFEED options
+//
+// %SeeAlso: CREATE CHANGEFEED
+create_replication_stream_stmt:
+  CREATE REPLICATION STREAM FOR targets opt_changefeed_sink opt_with_replication_options
+  {
+    $$.val = &tree.ReplicationStream{
+      Targets: $5.targetList(),
+      SinkURI: $6.expr(),
+      Options: *$7.replicationOptions(),
+    }
+  }
+
+// Optional replication stream options.
+opt_with_replication_options:
+  WITH replication_options_list
+  {
+    $$.val = $2.replicationOptions()
+  }
+| WITH OPTIONS '(' replication_options_list ')'
+  {
+    $$.val = $4.replicationOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ReplicationOptions{}
+  }
+
+replication_options_list:
+  // Require at least one option
+  replication_options
+  {
+    $$.val = $1.replicationOptions()
+  }
+| replication_options_list ',' replication_options
+  {
+    if err := $1.replicationOptions().CombineWith($3.replicationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid replication stream options.
+replication_options:
+  CURSOR '=' a_expr
+  {
+    $$.val = &tree.ReplicationOptions{Cursor: $3.expr()}
+  }
+| DETACHED
+  {
+    $$.val = &tree.ReplicationOptions{Detached: true}
   }
 
 // %Help: DELETE - delete rows from a table
@@ -12277,6 +12349,7 @@ unreserved_keyword:
 | CSV
 | CUBE
 | CURRENT
+| CURSOR
 | CYCLE
 | DATA
 | DATABASE

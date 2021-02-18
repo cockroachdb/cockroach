@@ -67,13 +67,17 @@ type Config struct {
 func Run(ctx context.Context, cfg Config) error {
 	g := ctxgroup.WithContext(ctx)
 	var sf schemaFeed
-	{
+
+	if cfg.SchemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+		sf = &doNothingSchemaFeed{}
+	} else {
 		rawSF := schemafeed.New(makeTablefeedConfig(cfg))
 		// Start polling the schemafeed, which must be done concurrently with
 		// the individual rangefeed routines.
 		g.GoCtx(rawSF.Run)
 		sf = rawSF
 	}
+
 	var sc kvScanner
 	{
 		sc = &scanRequestScanner{
@@ -126,6 +130,24 @@ func (e schemaChangeDetectedError) Error() string {
 type schemaFeed interface {
 	Peek(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
 	Pop(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
+}
+
+type doNothingSchemaFeed struct{}
+
+var _ schemaFeed = &doNothingSchemaFeed{}
+
+// Peek implements schemaFeed
+func (f *doNothingSchemaFeed) Peek(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
+}
+
+// Pop implements schemaFeed
+func (f *doNothingSchemaFeed) Pop(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
 }
 
 type kvFeed struct {
