@@ -638,6 +638,7 @@ vectorized: true
                 │ estimated row count: 333 (missing stats)
                 │ table: t_idx@t_idx_pkey
                 │ key columns: a
+                │ locking strength: for update
                 │
                 └── • scan
                       columns: (a)

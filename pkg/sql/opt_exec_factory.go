@@ -597,6 +597,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 	limitHint int64,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -613,6 +614,10 @@ func (ef *execFactory) ConstructIndexJoin(
 	idx := tabDesc.GetPrimaryIndex()
 	tableScan.index = idx
 	tableScan.disableBatchLimit()
+	if locking.IsLocking() {
+		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -794,6 +799,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
@@ -805,6 +811,10 @@ func (ef *execFactory) ConstructInvertedJoin(
 		return nil, err
 	}
 	tableScan.index = idx
+	if locking.IsLocking() {
+		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{

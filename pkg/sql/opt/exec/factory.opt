@@ -249,6 +249,7 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
     LimitHint int64
 }
 
@@ -310,6 +311,7 @@ define InvertedJoin {
     OnCond tree.TypedExpr
     IsFirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
 }
 
 # ZigzagJoin performs a zigzag join.
