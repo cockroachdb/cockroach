@@ -723,7 +723,7 @@ func maybeAddSequenceDependencies(
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
 // Called when the respective column (or the whole table) is being dropped.
 func (p *planner) dropSequencesOwnedByCol(
-	ctx context.Context, col *descpb.ColumnDescriptor, queueJob bool,
+	ctx context.Context, col *descpb.ColumnDescriptor, queueJob bool, behavior tree.DropBehavior,
 ) error {
 	// Copy out the sequence IDs as the code to drop the sequence will reach
 	// back around and update the descriptor from underneath us.
@@ -749,7 +749,7 @@ func (p *planner) dropSequencesOwnedByCol(
 		// Note that this call will end up resolving and modifying the table
 		// descriptor.
 		if err := p.dropSequenceImpl(
-			ctx, seqDesc, queueJob, jobDesc, tree.DropRestrict,
+			ctx, seqDesc, queueJob, jobDesc, behavior,
 		); err != nil {
 			return err
 		}

@@ -439,7 +439,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop.ColumnDesc(), true /* queueJob */); err != nil {
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop.ColumnDesc(), true /* queueJob */, t.DropBehavior); err != nil {
 				return err
 			}
 
