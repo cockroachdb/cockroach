@@ -1755,23 +1755,21 @@ func doRestorePlan(
 	if restoreStmt.Options.Detached {
 		// When running in detached mode, we simply create the job record.
 		// We do not wait for the job to finish.
-		aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-			ctx, jr, p.ExtendedEvalContext().Txn)
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+		_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, jr, jobID, p.ExtendedEvalContext().Txn)
 		if err != nil {
 			return err
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectTelemetry()
 		return nil
 	}
 
 	var sj *jobs.StartableJob
+	jobID := p.ExecCfg().JobRegistry.MakeJobID()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
-		if err != nil {
-			return err
-		}
-		return nil
+		return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
 	}); err != nil {
 		if sj != nil {
 			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {

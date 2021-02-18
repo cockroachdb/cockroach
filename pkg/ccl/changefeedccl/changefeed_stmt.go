@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -327,13 +328,17 @@ func changefeedPlanHook(
 		// changeFrontier.manageProtectedTimestamps for more details on the handling of
 		// protected timestamps.
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
 			var protectedTimestampID uuid.UUID
 			var spansToProtect []roachpb.Span
+			var ptr *ptpb.Record
 			if hasInitialScan := initialScanFromOptions(details.Opts); hasInitialScan {
 				protectedTimestampID = uuid.MakeV4()
 				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
+				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, jobID,
+					statementTime, spansToProtect)
 			}
 
 			jr := jobs.Record{
@@ -348,19 +353,15 @@ func changefeedPlanHook(
 				Details:  details,
 				Progress: *progress.GetChangefeed(),
 			}
-			createJobAndProtectedTS := func(ctx context.Context, txn *kv.Txn) (err error) {
-				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
-				if err != nil {
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
 					return err
 				}
-				if protectedTimestampID == uuid.Nil {
-					return nil
+				if ptr != nil {
+					return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
 				}
-				ptr := jobsprotectedts.MakeRecord(protectedTimestampID, *sj.ID(),
-					statementTime, spansToProtect)
-				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
-			}
-			if err := p.ExecCfg().DB.Txn(ctx, createJobAndProtectedTS); err != nil {
+				return nil
+			}); err != nil {
 				if sj != nil {
 					if err := sj.CleanupOnRollback(ctx); err != nil {
 						log.Warningf(ctx, "failed to cleanup aborted job: %v", err)
@@ -392,7 +393,7 @@ func changefeedPlanHook(
 		case <-ctx.Done():
 			return ctx.Err()
 		case resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*sj.ID())),
+			tree.NewDInt(tree.DInt(jobID)),
 		}:
 			return nil
 		}
