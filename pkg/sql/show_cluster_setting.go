@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -46,10 +48,11 @@ func (p *planner) showVersionSetting(
 	// then does the node update its persisted state; see #22796).
 	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("show cluster setting %s", name), 2*time.Minute,
 		func(ctx context.Context) error {
+
 			tBegin := timeutil.Now()
 
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
-			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
+			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() (err error) {
 				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
@@ -67,6 +70,17 @@ func (p *planner) showVersionSetting(
 							return errors.New("the existing value is not a string")
 						}
 						kvRawVal = []byte(string(*dStr))
+					} else if !p.execCfg.Codec.ForSystemTenant() {
+						// The tenant cluster in 20.2 did not ever initialize this value and
+						// utilized a hard-coded value of
+						tenantDefaultVersion := clusterversion.ClusterVersion{
+							Version: clusterversion.ByKey(clusterversion.V20_2),
+						}
+						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
+						if err != nil {
+							return errors.WithAssertionFailure(err)
+						}
+						kvRawVal = encoded
 					} else {
 						// There should always be a version saved; there's a migration
 						// populating it.

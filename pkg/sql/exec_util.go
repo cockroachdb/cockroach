@@ -847,7 +847,7 @@ type ExecutorConfig struct {
 	// on the system tenant.
 	//
 	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
-	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
+	VersionUpgradeHook VersionUpgradeHook
 
 	// MigrationJobDeps is used to drive migrations.
 	//
@@ -862,6 +862,13 @@ type ExecutorConfig struct {
 	// contention observability.
 	ContentionRegistry *contention.Registry
 }
+
+// VersionUpgradeHook is used to run migrations starting in v21.1.
+type VersionUpgradeHook func(
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+) error
 
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {

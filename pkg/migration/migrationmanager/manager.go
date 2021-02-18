@@ -256,6 +256,10 @@ func (m *Manager) runMigration(
 			Settings: m.settings,
 		})
 	}
+	_, isSystemMigration := mig.(*migration.SystemMigration)
+	if isSystemMigration && !m.codec.ForSystemTenant() {
+		return nil
+	}
 	alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version)
 	if alreadyCompleted || err != nil {
 		return err

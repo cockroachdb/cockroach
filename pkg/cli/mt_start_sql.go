@@ -79,7 +79,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	// TODO(tbg): this has to be passed in. See the upgrade strategy in:
 	// https://github.com/cockroachdb/cockroach/issues/47919
-	if err := clusterversion.Initialize(ctx, st.Version.BinaryVersion(), &st.SV); err != nil {
+	if err := clusterversion.Initialize(ctx, st.Version.BinaryMinSupportedVersion(), &st.SV); err != nil {
 		return err
 	}
 
