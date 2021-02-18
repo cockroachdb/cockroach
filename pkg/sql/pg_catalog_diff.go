@@ -167,7 +167,7 @@ func (p PGCatalogTables) addMissingColumn(tableName string, columnName string) {
 
 // rewriteDiffs creates pg_catalog_test-diffs.json
 func (p PGCatalogTables) rewriteDiffs(diffFile string) error {
-	f, err := os.OpenFile(diffFile, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(diffFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
