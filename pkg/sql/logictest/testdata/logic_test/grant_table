@@ -28,6 +28,7 @@ test           crdb_internal       NULL                                       ad
 test           crdb_internal       NULL                                       root     ALL
 test           crdb_internal       backward_dependencies                      public   SELECT
 test           crdb_internal       builtin_functions                          public   SELECT
+test           crdb_internal       cluster_contention_events                  public   SELECT
 test           crdb_internal       cluster_database_privileges                public   SELECT
 test           crdb_internal       cluster_queries                            public   SELECT
 test           crdb_internal       cluster_sessions                           public   SELECT
@@ -49,6 +50,7 @@ test           crdb_internal       kv_node_status                             pu
 test           crdb_internal       kv_store_status                            public   SELECT
 test           crdb_internal       leases                                     public   SELECT
 test           crdb_internal       node_build_info                            public   SELECT
+test           crdb_internal       node_contention_events                     public   SELECT
 test           crdb_internal       node_inflight_trace_spans                  public   SELECT
 test           crdb_internal       node_metrics                               public   SELECT
 test           crdb_internal       node_queries                               public   SELECT

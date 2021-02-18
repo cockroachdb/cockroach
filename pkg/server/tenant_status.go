@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -34,15 +35,17 @@ func newTenantStatusServer(
 	ambient log.AmbientContext,
 	privilegeChecker *adminPrivilegeChecker,
 	sessionRegistry *sql.SessionRegistry,
+	contentionRegistry *contention.Registry,
 	st *cluster.Settings,
 ) *tenantStatusServer {
 	ambient.AddLogTag("tenant-status", nil)
 	return &tenantStatusServer{
 		baseStatusServer: baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: privilegeChecker,
-			sessionRegistry:  sessionRegistry,
-			st:               st,
+			AmbientContext:     ambient,
+			privilegeChecker:   privilegeChecker,
+			sessionRegistry:    sessionRegistry,
+			contentionRegistry: contentionRegistry,
+			st:                 st,
 		},
 	}
 }
@@ -89,4 +92,20 @@ func (t *tenantStatusServer) CancelSession(
 		return nil, err
 	}
 	return t.sessionRegistry.CancelSession(request.SessionID)
+}
+
+func (t *tenantStatusServer) ListContentionEvents(
+	ctx context.Context, request *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	return t.ListLocalContentionEvents(ctx, request)
+}
+
+func (t *tenantStatusServer) ListLocalContentionEvents(
+	ctx context.Context, request *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	events, err := t.getLocalContentionEvents(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.ListContentionEventsResponse{Events: events}, nil
 }
