@@ -220,20 +220,20 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	return false, read.readAt.Less(args.RecordAliveAt), nil
 }
 
-// checkProtectedTimestampsForGC determines whether the Replica can run GC.
-// If the Replica can run GC, this method returns the latest timestamp which
-// can be used to determine a valid new GCThreshold. The policy is passed in
-// rather than read from the replica state to ensure that the same value used
-// for this calculation is used later.
+// checkProtectedTimestampsForGC determines whether the Replica can run GC. If
+// the Replica can run GC, this method returns the latest timestamp which can be
+// used to determine a valid new GCThreshold. The policy is passed in rather
+// than read from the replica state to ensure that the same value used for this
+// calculation is used later.
 //
-// In the case that GC can proceed, three timestamps are returned: The timestamp
+// In the case that GC can proceed, four timestamps are returned: The timestamp
 // corresponding to the state of the cache used to make the determination (used
 // for markPendingGC when actually performing GC), the timestamp used as the
-// basis to calculate the new gc threshold (used for scoring and reporting), and
-// the new gc threshold itself.
+// basis to calculate the new gc threshold (used for scoring and reporting), the
+// old gc threshold, and the new gc threshold.
 func (r *Replica) checkProtectedTimestampsForGC(
 	ctx context.Context, policy zonepb.GCPolicy,
-) (canGC bool, cacheTimestamp, gcTimestamp, newThreshold hlc.Timestamp) {
+) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp) {
 
 	// We may be reading the protected timestamp cache while we're holding
 	// the Replica.mu for reading. If we do so and find newer state in the cache
@@ -247,10 +247,10 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	defer r.mu.RUnlock()
 	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
 
-	gcThreshold := *r.mu.state.GCThreshold
+	oldThreshold = *r.mu.state.GCThreshold
 	lease := *r.mu.state.Lease
 
-	// earliestValidRecord is the record with the earliest timestamp which is
+	// read.earliestRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.
 	read = r.readProtectedTimestampsRLocked(ctx, nil)
 	gcTimestamp = read.readAt
@@ -266,18 +266,12 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	if gcTimestamp.Less(lease.Start) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
 			r, lease, gcTimestamp)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
 	}
 
 	newThreshold = gc.CalculateThreshold(gcTimestamp, policy)
 
-	// If we've already GC'd right up to this record, there's no reason to
-	// gc again.
-	if newThreshold.Equal(gcThreshold) {
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
-	}
-
-	return true, read.readAt, gcTimestamp, newThreshold
+	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold
 }
 
 // markPendingGC is called just prior to sending the GC request to increase the
