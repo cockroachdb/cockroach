@@ -703,6 +703,56 @@ vectorized: true
               locking strength: for update
 
 query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
 distribution: local
@@ -718,6 +768,7 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ locking strength: for update
     │
     └── • distinct
         │ columns: (b)
@@ -775,6 +826,7 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ locking strength: for update
     │
     └── • distinct
         │ columns: (b)
@@ -1618,6 +1670,251 @@ vectorized: true
       table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with index joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx(b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: indexed@indexed_pkey
+│ key columns: a
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: indexed@b_idx
+      spans: /2-/3
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 90 (missing stats)
+│ table: indexed@indexed_pkey
+│ key columns: a
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 90 (missing stats)
+      table: indexed@b_idx
+      spans: /2-/11
+      locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with lookup joins.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (c)
+│ estimated row count: 1 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /2/0
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (c)
+│ estimated row count: 9 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 9 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 9 (missing stats)
+          table: t@t_pkey
+          spans: /2-/11
+          parallel
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: indexed@indexed_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: indexed@b_idx
+    │ equality: (b) = (b)
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /2/0
+          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with inverted filters and joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE inverted (
+  a INT PRIMARY KEY,
+  b INT[],
+  c INT,
+  INVERTED INDEX b_inv(b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 12 (missing stats)
+│ table: inverted@inverted_pkey
+│ key columns: a
+│ locking strength: for update
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: inverted@b_inv
+              spans: /1-/3
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b, c)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[1,2]
+│
+└── • index join
+    │ columns: (a, b, c)
+    │ estimated row count: 111 (missing stats)
+    │ table: inverted@inverted_pkey
+    │ key columns: a
+    │ locking strength: for update
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: inverted@b_inv
+                  spans: /[]-/"D" /1-/3
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, a, b, c)
+│ estimated row count: 10,000 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, a, a, b, c)
+    │ table: inverted@inverted_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> b
+    │ locking strength: for update
+    │
+    └── • project
+        │ columns: (a, b, c, a)
+        │ estimated row count: 10,000 (missing stats)
+        │
+        └── • inverted join (inner)
+            │ columns: (a, b, c, a, b_inverted_key)
+            │ table: inverted@b_inv
+            │ inverted expr: b_inverted_key @> b
+            │ locking strength: for update
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: inverted@inverted_pkey
+                  spans: FULL SCAN
+                  locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with the NOWAIT lock wait policy.

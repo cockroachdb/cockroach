@@ -493,6 +493,78 @@ project
                 │         └── locking: for-update
                 └── a:1
 
+build
+SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── locking: for-update
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: b:6
+                │    └── scan t
+                │         └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                └── a:1
+
+build
+SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t
+      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: b:6
+                │    └── scan t
+                │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                │         └── locking: for-update
+                └── a:1
+
+build
+SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── locking: for-update
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: b:6
+                │    └── scan t
+                │         └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                └── a:1
+
+build
+SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t
+      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: b:6
+                │    └── scan t
+                │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                │         └── locking: for-update
+                └── a:1
+
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
 #
@@ -928,6 +1000,168 @@ project
       │         ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │         └── locking: for-update
       └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with index joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx(b)
+)
+----
+
+build
+SELECT * FROM indexed WHERE b = 2 FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ └── select
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan indexed
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── locking: for-update
+      └── filters
+           └── b:2 = 2
+
+build
+SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ └── select
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan indexed
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── locking: for-update
+      └── filters
+           └── (b:2 >= 2) AND (b:2 <= 10)
+
+# ------------------------------------------------------------------------------
+# Tests with lookup joins.
+# ------------------------------------------------------------------------------
+
+build
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ └── select
+      ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      ├── inner-join (hash)
+      │    ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    ├── scan t
+      │    │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    │    └── locking: for-update
+      │    ├── scan u
+      │    │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    │    └── locking: for-update
+      │    └── filters
+      │         └── b:2 = u.a:5
+      └── filters
+           └── t.a:1 = 2
+
+build
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ └── select
+      ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      ├── inner-join (hash)
+      │    ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    ├── scan t
+      │    │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    │    └── locking: for-update
+      │    ├── scan u
+      │    │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    │    └── locking: for-update
+      │    └── filters
+      │         └── b:2 = u.a:5
+      └── filters
+           └── (t.a:1 >= 2) AND (t.a:1 <= 10)
+
+build
+SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ └── select
+      ├── columns: t.a:1!null t.b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 indexed.a:5!null indexed.b:6!null c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
+      ├── inner-join (hash)
+      │    ├── columns: t.a:1!null t.b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 indexed.a:5!null indexed.b:6!null c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
+      │    ├── scan t
+      │    │    ├── columns: t.a:1!null t.b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    │    └── locking: for-update
+      │    ├── scan indexed
+      │    │    ├── columns: indexed.a:5!null indexed.b:6 c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
+      │    │    └── locking: for-update
+      │    └── filters
+      │         └── t.b:2 = indexed.b:6
+      └── filters
+           └── t.a:1 = 2
+
+# ------------------------------------------------------------------------------
+# Tests with inverted filters and joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE inverted (
+  a INT PRIMARY KEY,
+  b INT[],
+  c INT,
+  INVERTED INDEX b_inv(b)
+)
+----
+
+build
+SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ └── select
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan inverted
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── locking: for-update
+      └── filters
+           └── b:2 @> ARRAY[1,2]
+
+build
+SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan inverted
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── locking: for-update
+      └── filters
+           └── b:2 <@ ARRAY[1,2]
+
+build
+SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:3 a:7!null b:8 c:9
+ └── select
+      ├── columns: i1.a:1!null i1.b:2 i1.c:3 i1.crdb_internal_mvcc_timestamp:4 i1.tableoid:5 i2.a:7!null i2.b:8 i2.c:9 i2.crdb_internal_mvcc_timestamp:10 i2.tableoid:11
+      ├── inner-join (cross)
+      │    ├── columns: i1.a:1!null i1.b:2 i1.c:3 i1.crdb_internal_mvcc_timestamp:4 i1.tableoid:5 i2.a:7!null i2.b:8 i2.c:9 i2.crdb_internal_mvcc_timestamp:10 i2.tableoid:11
+      │    ├── scan inverted [as=i1]
+      │    │    ├── columns: i1.a:1!null i1.b:2 i1.c:3 i1.crdb_internal_mvcc_timestamp:4 i1.tableoid:5
+      │    │    ├── flags: force-index=b_inv
+      │    │    └── locking: for-update
+      │    ├── scan inverted [as=i2]
+      │    │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i2.crdb_internal_mvcc_timestamp:10 i2.tableoid:11
+      │    │    └── locking: for-update
+      │    └── filters (true)
+      └── filters
+           └── i1.b:2 @> i2.b:8
 
 # ------------------------------------------------------------------------------
 # Tests with virtual tables.

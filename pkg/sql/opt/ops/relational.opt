@@ -314,6 +314,20 @@ define IndexJoinPrivate {
     # Cols specifies the set of columns that the index join operator projects.
     # This may be a subset of the columns that the table contains.
     Cols ColSet
+
+    # Locking represents the row-level locking mode of the IndexJoin in the
+    # lookup table's primary index. Most index joins leave this unset (Strength
+    # = ForNone), which indicates that no row-level locking will be performed
+    # while joining with the table's index. Stronger locking modes are used by
+    # SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial row
+    # retrieval of DELETE and UPDATE statements.
+    #
+    # The row-level locking mode also dictates the policy used by the IndexJoin
+    # when handling conflicting locks held by other active transactions. Most
+    # index joins leave the policy set to its default (WaitPolicy = Block), but
+    # different wait policies are used by SELECT .. FOR UPDATE/SHARE SKIP
+    # LOCKED/NOWAIT statements to react differently to conflicting locks.
+    Locking Locking
 }
 
 # LookupJoin represents a join between an input expression and an index. The
@@ -437,6 +451,20 @@ define LookupJoinPrivate {
     # conditions on the KeyCols. These filters are needed by the statistics code to
     # correctly estimate selectivity.
     ConstFilters FiltersExpr
+
+    # Locking represents the row-level locking mode of the LookupJoin in the
+    # lookup table. Most lookup joins leave this unset (Strength = ForNone),
+    # which indicates that no row-level locking will be performed while joining
+    # with the table. Stronger locking modes are used by SELECT .. FOR [KEY]
+    # UPDATE/SHARE statements and by the initial row retrieval of DELETE and
+    # UPDATE statements.
+    #
+    # The row-level locking mode also dictates the policy used by the LookupJoin
+    # when handling conflicting locks held by other active transactions. Most
+    # lookup joins leave the policy set to its default (WaitPolicy = Block), but
+    # different wait policies are used by SELECT .. FOR UPDATE/SHARE SKIP
+    # LOCKED/NOWAIT statements to react differently to conflicting locks.
+    Locking Locking
     _ JoinPrivate
 }
 
@@ -496,6 +524,21 @@ define InvertedJoinPrivate {
     # equality conditions on the PrefixKeyCols. These filters are needed by the
     # statistics code to correctly estimate selectivity.
     ConstFilters FiltersExpr
+
+    # Locking represents the row-level locking mode of the InvertedJoin in the
+    # lookup table. Most inverted joins leave this unset (Strength = ForNone),
+    # which indicates that no row-level locking will be performed while joining
+    # with the table. Stronger locking modes are used by SELECT .. FOR [KEY]
+    # UPDATE/SHARE statements and by the initial row retrieval of DELETE and
+    # UPDATE statements.
+    #
+    # The row-level locking mode also dictates the policy used by the
+    # InvertedJoin when handling conflicting locks held by other active
+    # transactions. Most inverted joins leave the policy set to its default
+    # (WaitPolicy = Block), but different wait policies are used by SELECT ..
+    # FOR UPDATE/SHARE SKIP LOCKED/NOWAIT statements to react differently to
+    # conflicting locks.
+    Locking Locking
     _ JoinPrivate
 }
 

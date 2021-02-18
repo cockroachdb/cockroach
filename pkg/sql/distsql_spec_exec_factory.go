@@ -253,16 +253,14 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err
 	}
-	if params.Locking.IsLocking() {
-		trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
-		trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
-		if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
-			// Scans that are performing row-level locking cannot currently be
-			// distributed because their locks would not be propagated back to
-			// the root transaction coordinator.
-			// TODO(nvanbenschoten): lift this restriction.
-			recommendation = cannotDistribute
-		}
+	trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+	trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		// Scans that are performing row-level locking cannot currently be
+		// distributed because their locks would not be propagated back to
+		// the root transaction coordinator.
+		// TODO(nvanbenschoten): lift this restriction.
+		recommendation = cannotDistribute
 	}
 
 	// Note that we don't do anything about the possible filter here since we
@@ -646,6 +644,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 	limitHint int64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: index join")
@@ -683,6 +682,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: inverted join")
 }
