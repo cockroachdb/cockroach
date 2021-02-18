@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -639,7 +640,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	if cfg.TenantID == roachpb.SystemTenantID {
+	{
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
 		// versions.
@@ -647,11 +648,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// TODO(ajwerner): Allow tenants to set their cluster version and to
 		// perform sql migrations through the migration infrastructure.
 		// See #48436.
-		c := migrationcluster.New(migrationcluster.ClusterConfig{
-			NodeLiveness: nodeLiveness,
-			Dialer:       cfg.nodeDialer,
-			DB:           cfg.db,
-		})
+		var c migration.Cluster
+		if codec.ForSystemTenant() {
+			c = migrationcluster.New(migrationcluster.ClusterConfig{
+				NodeLiveness: nodeLiveness,
+				Dialer:       cfg.nodeDialer,
+				DB:           cfg.db,
+			})
+		} else {
+			c = migrationcluster.NewTenantCluster(cfg.db)
+		}
+
 		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
 			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,

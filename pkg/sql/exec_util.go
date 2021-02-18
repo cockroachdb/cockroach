@@ -843,15 +843,10 @@ type ExecutorConfig struct {
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
-	// that allow us to eventually remove legacy code. It will only be populated
-	// on the system tenant.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
-	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
+	// that allow us to eventually remove legacy code.
+	VersionUpgradeHook VersionUpgradeHook
 
 	// MigrationJobDeps is used to drive migrations.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
 	MigrationJobDeps migration.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
@@ -862,6 +857,13 @@ type ExecutorConfig struct {
 	// contention observability.
 	ContentionRegistry *contention.Registry
 }
+
+// VersionUpgradeHook is used to run migrations starting in v21.1.
+type VersionUpgradeHook func(
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+) error
 
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {
