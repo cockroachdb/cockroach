@@ -74,7 +74,7 @@ LOCALITY REGIONAL BY ROW
 
 statement ok
 CREATE TABLE regional_by_row_table_explicit_crdb_region_column (
-  pk int,
+  pk int PRIMARY KEY,
   a int,
   crdb_region crdb_internal_region,
   FAMILY (pk, a, crdb_region)
@@ -85,12 +85,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_explicit_crdb_region_column]
 ----
 CREATE TABLE public.regional_by_row_table_explicit_crdb_region_column (
-  pk INT8 NULL,
+  pk INT8 NOT NULL,
   a INT8 NULL,
   crdb_region public.crdb_internal_region NOT NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_pk_a_crdb_region_rowid (pk, a, crdb_region, rowid)
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  FAMILY fam_0_pk_a_crdb_region (pk, a, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_explicit_crdb_region_column@primary CONFIGURE ZONE USING
   num_voters = 5,
