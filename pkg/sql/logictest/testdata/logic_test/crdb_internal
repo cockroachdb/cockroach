@@ -16,6 +16,7 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
+crdb_internal  cluster_contention_events    table  NULL  NULL  NULL
 crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
@@ -37,6 +38,7 @@ crdb_internal  kv_node_status               table  NULL  NULL  NULL
 crdb_internal  kv_store_status              table  NULL  NULL  NULL
 crdb_internal  leases                       table  NULL  NULL  NULL
 crdb_internal  node_build_info              table  NULL  NULL  NULL
+crdb_internal  node_contention_events       table  NULL  NULL  NULL
 crdb_internal  node_inflight_trace_spans    table  NULL  NULL  NULL
 crdb_internal  node_metrics                 table  NULL  NULL  NULL
 crdb_internal  node_queries                 table  NULL  NULL  NULL
@@ -208,6 +210,16 @@ query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
 node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+
+query IIITTTI colnames
+SELECT * FROM crdb_internal.node_contention_events WHERE table_id < 0
+----
+table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
+
+query IIITTTI colnames
+SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
+----
+table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
 query TTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''

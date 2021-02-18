@@ -537,6 +537,7 @@ select table_name, estimated_row_count from crdb_internal.table_row_statistics;
 ----
 backward_dependencies                      NULL
 builtin_functions                          NULL
+cluster_contention_events                  NULL
 cluster_database_privileges                NULL
 cluster_queries                            NULL
 cluster_sessions                           NULL
@@ -558,6 +559,7 @@ kv_node_status                             NULL
 kv_store_status                            NULL
 leases                                     NULL
 node_build_info                            NULL
+node_contention_events                     NULL
 node_inflight_trace_spans                  NULL
 node_metrics                               NULL
 node_queries                               NULL

@@ -72,6 +72,7 @@ func makeClusterWideZipRequests(
 // Tables containing cluster-wide info that are collected using SQL
 // into a debug zip.
 var debugZipTablesPerCluster = []string{
+	"crdb_internal.cluster_contention_events",
 	"crdb_internal.cluster_database_privileges",
 	"crdb_internal.cluster_queries",
 	"crdb_internal.cluster_sessions",
