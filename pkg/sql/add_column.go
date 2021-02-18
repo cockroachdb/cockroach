@@ -79,7 +79,7 @@ func (p *planner) addColumnImpl(
 	// its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {
 		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx, params.p, n.tableDesc, col, expr, nil,
+			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
 		)
 		if err != nil {
 			return err

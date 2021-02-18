@@ -40,6 +40,7 @@ import (
 type SchemaResolver interface {
 	tree.ObjectNameExistingResolver
 	tree.ObjectNameTargetResolver
+	tree.QualifiedNameResolver
 
 	Txn() *kv.Txn
 	LogicalSchemaAccessor() catalog.Accessor

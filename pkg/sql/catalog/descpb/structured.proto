@@ -969,6 +969,12 @@ message TableDescriptor {
     // relation.
     repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
              (gogoproto.casttype) = "ColumnID"];
+    // ByID indicates whether the relation is referenced via its name or its ID.
+    // For example, nextval('foo.public.seq') vs. nextval(12345::REGCLASS),
+    // where 12345 is the ID of foo.public.seq
+    // Sequences referenced only by its ID have the ability to be renamed.
+    optional bool by_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ByID"];
   }
 
   // All references to this table/view from other views and sequences in the system,

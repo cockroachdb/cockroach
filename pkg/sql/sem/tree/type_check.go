@@ -58,6 +58,10 @@ type SemaContext struct {
 	// globally for the entire txn and this field would not be needed.
 	AsOfTimestamp *hlc.Timestamp
 
+	// TableNameResolver is used to resolve the fully qualified
+	// name of a table given its ID.
+	TableNameResolver QualifiedNameResolver
+
 	Properties SemaProperties
 }
 

@@ -189,9 +189,15 @@ func deserializeExprForFormatting(
 		return nil, err
 	}
 
+	// Replace any IDs in the expr with their fully qualified names.
+	seqReplacedExpr, err := replaceIDsWithFQNames(ctx, expr, semaCtx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	replacedExpr, _, err := replaceColumnVars(desc, seqReplacedExpr)
 	if err != nil {
 		return nil, err
 	}

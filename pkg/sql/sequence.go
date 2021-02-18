@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -629,23 +631,38 @@ func addSequenceOwner(
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
 	ctx context.Context,
+	st *cluster.Settings,
 	sc resolver.SchemaResolver,
 	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 ) ([]*tabledesc.Mutable, error) {
-	seqNames, err := sequence.GetUsedSequenceNames(expr)
+	seqIdentifiers, err := sequence.GetUsedSequences(expr)
 	if err != nil {
 		return nil, err
 	}
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
 	var seqDescs []*tabledesc.Mutable
-	for _, seqName := range seqNames {
-		parsedSeqName, err := parser.ParseTableName(seqName)
-		if err != nil {
-			return nil, err
+	var tn tree.TableName
+	seqNameToID := make(map[string]int64)
+	for _, seqIdentifier := range seqIdentifiers {
+		if seqIdentifier.IsByID() {
+			name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
+			tn = *name
+		} else {
+			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+			if err != nil {
+				return nil, err
+			}
+			tn = parsedSeqName.ToTableName()
 		}
-		tn := parsedSeqName.ToTableName()
 
 		var seqDesc *tabledesc.Mutable
 		p, ok := sc.(*planner)
@@ -661,6 +678,8 @@ func maybeAddSequenceDependencies(
 				return nil, err
 			}
 		}
+		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+
 		// If we had already modified this Sequence as part of this transaction,
 		// we only want to modify a single instance of it instead of overwriting it.
 		// So replace seqDesc with the descriptor that was previously modified.
@@ -679,12 +698,25 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
+				ByID:      byID,
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
 		}
 		seqDescs = append(seqDescs, seqDesc)
 	}
+
+	// If sequences are present in the expr (and the cluster is the right version),
+	// walk the expr tree and replace any sequences names with their IDs.
+	if len(seqIdentifiers) > 0 && byID {
+		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return nil, err
+		}
+		s := tree.Serialize(newExpr)
+		col.DefaultExpr = &s
+	}
+
 	return seqDescs, nil
 }
 

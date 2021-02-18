@@ -1,0 +1,335 @@
+# Test that sequences are encoded and decoded/printed properly.
+subtest show_sequences
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE test_seq
+
+statement ok
+CREATE SEQUENCE test_seq2
+
+let $test_seq_id
+SELECT 'test_seq'::regclass::int
+
+let $test_seq2_id
+SELECT 'test_seq2'::regclass::int
+
+statement ok
+CREATE TABLE foo (i SERIAL PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT nextval($test_seq_id::regclass)
+
+statement ok
+ALTER TABLE foo ADD COLUMN k SERIAL
+
+statement ok
+ALTER TABLE foo ADD COLUMN l INT NOT NULL
+
+statement ok
+ALTER TABLE FOO ALTER COLUMN l SET DEFAULT nextval('test_seq2')
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING::REGCLASS),
+     k INT8 NOT NULL DEFAULT nextval('test.public.foo_k_seq':::STRING::REGCLASS),
+     l INT8 NOT NULL DEFAULT nextval('test.public.test_seq2':::STRING::REGCLASS),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY "primary" (i, j, k, l)
+)
+
+statement ok
+INSERT INTO foo VALUES (default, default, default, default)
+
+
+# Test that references are still correctly created for
+# sequences referenced via their IDs.
+subtest sequence_references
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE dep_seq
+
+statement ok
+CREATE SEQUENCE dep_seq2
+
+let $dep_seq_id
+SELECT 'dep_seq'::regclass::int
+
+statement ok
+CREATE TABLE seq_table (
+  i SERIAL PRIMARY KEY,
+  j INT NOT NULL DEFAULT nextval($dep_seq_id::regclass),
+  k INT NOT NULL DEFAULT nextval('dep_seq2'))
+
+query TTT
+SELECT pg_get_serial_sequence('seq_table', 'i'), pg_get_serial_sequence('seq_table', 'j'), pg_get_serial_sequence('seq_table', 'k')
+----
+public.seq_table_i_seq  public.dep_seq  public.dep_seq2
+
+statement error cannot drop sequence seq_table_i_seq because other objects depend on it
+DROP SEQUENCE seq_table_i_seq
+
+statement error cannot drop sequence dep_seq because other objects depend on it
+DROP SEQUENCE dep_seq
+
+statement error cannot drop sequence dep_seq2 because other objects depend on it
+DROP SEQUENCE dep_seq2
+
+
+# Test that all new sequences can now be renamed, even if they are
+# referenced using their names (since they're converted to IDs now).
+subtest sequence_renames
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE s1
+
+let $s1_id
+SELECT 's1'::regclass::int
+
+statement ok
+CREATE SEQUENCE s2
+
+statement ok
+CREATE TABLE bar (
+  i SERIAL PRIMARY KEY,
+  j INT NOT NULL DEFAULT nextval($s1_id::regclass),
+  k INT NOT NULL DEFAULT nextval('s2'),
+  FAMILY (i, j, k))
+
+statement ok
+INSERT INTO bar VALUES (default, default, default)
+
+statement ok
+ALTER SEQUENCE bar_i_seq RENAME TO new_bar_i_seq
+
+statement ok
+ALTER SEQUENCE s1 RENAME TO new_s1
+
+statement ok
+ALTER SEQUENCE s2 RENAME TO new_s2
+
+# Verify that the sequence rename is reflected.
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL DEFAULT nextval('test.public.new_bar_i_seq':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.new_s1':::STRING::REGCLASS),
+     k INT8 NOT NULL DEFAULT nextval('test.public.new_s2':::STRING::REGCLASS),
+     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+     FAMILY fam_0_i_j_k (i, j, k)
+)
+
+# Verify that the table hasn't been corrupted.
+statement ok
+INSERT INTO bar VALUES (default, default, default)
+
+query III
+SELECT i, j, k FROM bar ORDER BY i, j, k
+----
+1  1  1
+2  2  2
+
+
+# Test that databases with sequences can be renamed, even if they are
+# referenced by name in a sequence (since we are now storing them as IDs).
+subtest database_renames
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE SEQUENCE other_db.s
+
+let $s_id
+SELECT 'other_db.s'::regclass::int
+
+statement ok
+CREATE SEQUENCE other_db.s2
+
+statement ok
+CREATE TABLE other_db.t (
+  i INT NOT NULL DEFAULT nextval($s_id::regclass),
+  j INT NOT NULL DEFAULT nextval('other_db.public.s2'),
+  FAMILY (i, j))
+
+statement ok
+INSERT INTO other_db.t VALUES (default, default)
+
+statement ok
+ALTER DATABASE other_db RENAME TO new_other_db
+
+# Verify that the database rename is reflected.
+query TT
+SHOW CREATE TABLE new_other_db.t
+----
+new_other_db.public.t  CREATE TABLE public.t (
+                       i INT8 NOT NULL DEFAULT nextval('new_other_db.public.s':::STRING::REGCLASS),
+                       j INT8 NOT NULL DEFAULT nextval('new_other_db.public.s2':::STRING::REGCLASS),
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                       FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+# Verify the table hasn't been corrupted.
+statement ok
+INSERT INTO new_other_db.public.t VALUES (default, default)
+
+query II
+SELECT i, j FROM new_other_db.t ORDER BY i, j
+----
+1  1
+2  2
+
+
+# Test that sequences can change schemas even if they're referenced
+# by name and that name contains the schema.
+subtest alter_sequence_schema
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE SEQUENCE sc_s1
+
+let $sc_s1_id
+SELECT 'sc_s1'::regclass::int
+
+statement ok
+CREATE SEQUENCE sc_s2
+
+statement ok
+CREATE SCHEMA test_schema
+
+statement ok
+CREATE TABLE tb (
+  i SERIAL PRIMARY KEY,
+  j INT NOT NULL DEFAULT nextval($sc_s1_id::regclass),
+  k INT NOT NULL DEFAULT nextval('test.public.sc_s2'),
+  FAMILY (i, j, k))
+
+statement ok
+INSERT INTO tb VALUES (default, default, default)
+
+statement ok
+ALTER SEQUENCE tb_i_seq SET SCHEMA test_schema
+
+statement ok
+ALTER SEQUENCE sc_s1 SET SCHEMA test_schema
+
+statement ok
+ALTER SEQUENCE sc_s2 SET SCHEMA test_schema
+
+# Verify that the schema change is reflected.
+query TT
+SHOW CREATE TABLE tb
+----
+tb  CREATE TABLE public.tb (
+    i INT8 NOT NULL DEFAULT nextval('test.test_schema.tb_i_seq':::STRING::REGCLASS),
+    j INT8 NOT NULL DEFAULT nextval('test.test_schema.sc_s1':::STRING::REGCLASS),
+    k INT8 NOT NULL DEFAULT nextval('test.test_schema.sc_s2':::STRING::REGCLASS),
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY fam_0_i_j_k (i, j, k)
+)
+
+# Verify the table hasn't been corrupted.
+statement ok
+INSERT INTO tb VALUES (default, default, default)
+
+query III
+SELECT i, j, k FROM tb ORDER BY i, j, k
+----
+1  1  1
+2  2  2
+
+
+# Test that sequences can have their schemas renamed even if
+# they're referenced by name and that name contains the schema.
+subtest rename_sequence_schema
+
+statement ok
+SET SCHEMA test_schema
+
+statement ok
+CREATE SEQUENCE s3
+
+let $s3_id
+SELECT 's3'::regclass::int
+
+statement ok
+CREATE SEQUENCE s4
+
+statement ok
+CREATE TABLE foo (
+  i SERIAL PRIMARY KEY,
+  j INT NOT NULL DEFAULT nextval($s3_id::regclass),
+  k INT NOT NULL DEFAULT nextval('test.test_schema.s4'),
+  FAMILY (i, j, k))
+
+statement ok
+INSERT INTO foo VALUES (default, default, default)
+
+statement ok
+ALTER SCHEMA test_schema RENAME to new_test_schema
+
+# Verify that the schema rename is reflected.
+query TT
+SHOW CREATE TABLE new_test_schema.foo
+----
+new_test_schema.foo  CREATE TABLE new_test_schema.foo (
+                     i INT8 NOT NULL DEFAULT nextval('test.new_test_schema.foo_i_seq':::STRING::REGCLASS),
+                     j INT8 NOT NULL DEFAULT nextval('test.new_test_schema.s3':::STRING::REGCLASS),
+                     k INT8 NOT NULL DEFAULT nextval('test.new_test_schema.s4':::STRING::REGCLASS),
+                     CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                     FAMILY fam_0_i_j_k (i, j, k)
+)
+
+# Verify the table hasn't been corrupted.
+statement ok
+INSERT INTO new_test_schema.foo VALUES (default, default, default)
+
+query III
+SELECT i, j, k FROM new_test_schema.foo ORDER BY i, j, k
+----
+1  1  1
+2  2  2
+
+statement ok
+SET SCHEMA public
+
+
+# Test that sequences can be accessed regardless of
+# the user's current database.
+subtest cross_database_sequence
+
+statement ok
+SET serial_normalization = 'sql_sequence'
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE TABLE other_db.t (s SERIAL PRIMARY KEY, i INT)
+
+statement ok
+INSERT INTO other_db.t (i) VALUES (1)
+
+statement ok
+USE other_db
+
+statement ok
+INSERT INTO t (i) VALUES (2)
