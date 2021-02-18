@@ -110,7 +110,7 @@ Current CockroachDB code is released under a combination of two licenses, the [B
 
 When contributing to a CockroachDB feature, you can find the relevant license in the comments at the top of each file.
 
-For more information, see [Licensing](https://www.cockroachlabs.com/docs/stable/licensing.html).
+For more information, see the [Licensing FAQs](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html).
 
 ## Comparison with Other Databases
 
