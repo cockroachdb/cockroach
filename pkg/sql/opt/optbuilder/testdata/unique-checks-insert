@@ -912,10 +912,10 @@ insert uniq_partial
  ├── project
  │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    └── upsert-distinct-on
- │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_constraint_distinct0:16
- │         ├── grouping columns: column2:6!null upsert_partial_constraint_distinct0:16
+ │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:16
+ │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:16
  │         ├── project
- │         │    ├── columns: upsert_partial_constraint_distinct0:16 column1:5!null column2:6!null column3:7!null
+ │         │    ├── columns: arbiter_unique_a_distinct:16 column1:5!null column2:6!null column3:7!null
  │         │    ├── upsert-distinct-on
  │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │         │    │    ├── grouping columns: column1:5!null
@@ -946,7 +946,7 @@ insert uniq_partial
  │         │    │         └── first-agg [as=column3:7]
  │         │    │              └── column3:7
  │         │    └── projections
- │         │         └── (column3:7 > 0) OR NULL::BOOL [as=upsert_partial_constraint_distinct0:16]
+ │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:16]
  │         └── aggregations
  │              ├── first-agg [as=column1:5]
  │              │    └── column1:5
@@ -994,10 +994,10 @@ insert uniq_partial
  ├── project
  │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    └── upsert-distinct-on
- │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_constraint_distinct0:12
- │         ├── grouping columns: column2:6!null upsert_partial_constraint_distinct0:12
+ │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:12
+ │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:12
  │         ├── project
- │         │    ├── columns: upsert_partial_constraint_distinct0:12 column1:5!null column2:6!null column3:7!null
+ │         │    ├── columns: arbiter_unique_a_distinct:12 column1:5!null column2:6!null column3:7!null
  │         │    ├── anti-join (hash)
  │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │         │    │    ├── values
@@ -1013,7 +1013,7 @@ insert uniq_partial
  │         │    │         ├── column2:6 = uniq_partial.a:9
  │         │    │         └── column3:7 > 0
  │         │    └── projections
- │         │         └── (column3:7 > 0) OR NULL::BOOL [as=upsert_partial_constraint_distinct0:12]
+ │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:12]
  │         └── aggregations
  │              ├── first-agg [as=column1:5]
  │              │    └── column1:5
@@ -1484,17 +1484,17 @@ insert uniq_partial_constraint_and_partial_index
  │    ├── project
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    │    └── upsert-distinct-on
- │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_constraint_distinct0:17
- │    │         ├── grouping columns: column2:6!null upsert_partial_constraint_distinct0:17
+ │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:17
+ │    │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:17
  │    │         ├── project
- │    │         │    ├── columns: upsert_partial_constraint_distinct0:17 column1:5!null column2:6!null column3:7!null
+ │    │         │    ├── columns: arbiter_unique_a_distinct:17 column1:5!null column2:6!null column3:7!null
  │    │         │    ├── project
  │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    │         │    │    └── upsert-distinct-on
- │    │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:16
- │    │         │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
+ │    │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_secondary_distinct:16
+ │    │         │    │         ├── grouping columns: column2:6!null arbiter_secondary_distinct:16
  │    │         │    │         ├── project
- │    │         │    │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
+ │    │         │    │         │    ├── columns: arbiter_secondary_distinct:16 column1:5!null column2:6!null column3:7!null
  │    │         │    │         │    ├── anti-join (hash)
  │    │         │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    │         │    │         │    │    ├── anti-join (hash)
@@ -1527,14 +1527,14 @@ insert uniq_partial_constraint_and_partial_index
  │    │         │    │         │    │         ├── column2:6 = uniq_partial_constraint_and_partial_index.a:13
  │    │         │    │         │    │         └── column3:7 > 10
  │    │         │    │         │    └── projections
- │    │         │    │         │         └── (column3:7 > 0) OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
+ │    │         │    │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_secondary_distinct:16]
  │    │         │    │         └── aggregations
  │    │         │    │              ├── first-agg [as=column1:5]
  │    │         │    │              │    └── column1:5
  │    │         │    │              └── first-agg [as=column3:7]
  │    │         │    │                   └── column3:7
  │    │         │    └── projections
- │    │         │         └── (column3:7 > 10) OR NULL::BOOL [as=upsert_partial_constraint_distinct0:17]
+ │    │         │         └── (column3:7 > 10) OR NULL::BOOL [as=arbiter_unique_a_distinct:17]
  │    │         └── aggregations
  │    │              ├── first-agg [as=column1:5]
  │    │              │    └── column1:5

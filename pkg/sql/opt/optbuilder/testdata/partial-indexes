@@ -898,10 +898,10 @@ insert uniq
       ├── project
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:16
-      │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
+      │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_secondary_distinct:16
+      │         ├── grouping columns: column2:6!null arbiter_secondary_distinct:16
       │         ├── project
-      │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
+      │         │    ├── columns: arbiter_secondary_distinct:16 column1:5!null column2:6!null column3:7!null
       │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    ├── grouping columns: column1:5!null
@@ -937,7 +937,7 @@ insert uniq
       │         │    │         └── first-agg [as=column3:7]
       │         │    │              └── column3:7
       │         │    └── projections
-      │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
+      │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=arbiter_secondary_distinct:16]
       │         └── aggregations
       │              ├── first-agg [as=column1:5]
       │              │    └── column1:5
@@ -967,17 +967,17 @@ insert uniq
       ├── project
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct2:17
-      │         ├── grouping columns: column2:6!null upsert_partial_index_distinct2:17
+      │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_u2_distinct:17
+      │         ├── grouping columns: column2:6!null arbiter_u2_distinct:17
       │         ├── project
-      │         │    ├── columns: upsert_partial_index_distinct2:17 column1:5!null column2:6!null column3:7!null
+      │         │    ├── columns: arbiter_u2_distinct:17 column1:5!null column2:6!null column3:7!null
       │         │    ├── project
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:16
-      │         │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
+      │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_secondary_distinct:16
+      │         │    │         ├── grouping columns: column2:6!null arbiter_secondary_distinct:16
       │         │    │         ├── project
-      │         │    │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
+      │         │    │         │    ├── columns: arbiter_secondary_distinct:16 column1:5!null column2:6!null column3:7!null
       │         │    │         │    ├── anti-join (hash)
       │         │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │         │    │    ├── anti-join (hash)
@@ -1014,14 +1014,14 @@ insert uniq
       │         │    │         │    │         ├── column2:6 = b:13
       │         │    │         │    │         └── column3:7 = 'bar'
       │         │    │         │    └── projections
-      │         │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
+      │         │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=arbiter_secondary_distinct:16]
       │         │    │         └── aggregations
       │         │    │              ├── first-agg [as=column1:5]
       │         │    │              │    └── column1:5
       │         │    │              └── first-agg [as=column3:7]
       │         │    │                   └── column3:7
       │         │    └── projections
-      │         │         └── (column3:7 = 'bar') OR NULL::BOOL [as=upsert_partial_index_distinct2:17]
+      │         │         └── (column3:7 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:17]
       │         └── aggregations
       │              ├── first-agg [as=column1:5]
       │              │    └── column1:5
@@ -1169,15 +1169,15 @@ upsert uniq
       │    │    │    ├── project
       │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:8
-      │    │    │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:8
+      │    │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_secondary_distinct:8
+      │    │    │    │         ├── grouping columns: column2:6!null arbiter_secondary_distinct:8
       │    │    │    │         ├── project
-      │    │    │    │         │    ├── columns: upsert_partial_index_distinct1:8 column1:5!null column2:6!null column3:7!null
+      │    │    │    │         │    ├── columns: arbiter_secondary_distinct:8 column1:5!null column2:6!null column3:7!null
       │    │    │    │         │    ├── values
       │    │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    │    │         │    │    └── (1, 1, 'bar')
       │    │    │    │         │    └── projections
-      │    │    │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:8]
+      │    │    │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=arbiter_secondary_distinct:8]
       │    │    │    │         └── aggregations
       │    │    │    │              ├── first-agg [as=column1:5]
       │    │    │    │              │    └── column1:5
@@ -1241,10 +1241,10 @@ upsert ambig
       │    │    │    ├── project
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7
       │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │         ├── columns: column1:5!null column2:6!null column7:7 upsert_partial_index_distinct1:8
-      │    │    │    │         ├── grouping columns: column1:5!null upsert_partial_index_distinct1:8
+      │    │    │    │         ├── columns: column1:5!null column2:6!null column7:7 arbiter_secondary_distinct:8
+      │    │    │    │         ├── grouping columns: column1:5!null arbiter_secondary_distinct:8
       │    │    │    │         ├── project
-      │    │    │    │         │    ├── columns: upsert_partial_index_distinct1:8 column1:5!null column2:6!null column7:7
+      │    │    │    │         │    ├── columns: arbiter_secondary_distinct:8 column1:5!null column2:6!null column7:7
       │    │    │    │         │    ├── project
       │    │    │    │         │    │    ├── columns: column7:7 column1:5!null column2:6!null
       │    │    │    │         │    │    ├── values
@@ -1253,7 +1253,7 @@ upsert ambig
       │    │    │    │         │    │    └── projections
       │    │    │    │         │    │         └── unique_rowid() [as=column7:7]
       │    │    │    │         │    └── projections
-      │    │    │    │         │         └── (column1:5 > 0) OR NULL::BOOL [as=upsert_partial_index_distinct1:8]
+      │    │    │    │         │         └── (column1:5 > 0) OR NULL::BOOL [as=arbiter_secondary_distinct:8]
       │    │    │    │         └── aggregations
       │    │    │    │              ├── first-agg [as=column2:6]
       │    │    │    │              │    └── column2:6
@@ -1308,10 +1308,10 @@ insert comp
       ├── project
       │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │    └── upsert-distinct-on
-      │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 upsert_partial_index_distinct3:24
-      │         ├── grouping columns: column2:8!null upsert_partial_index_distinct3:24
+      │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 arbiter_u1_distinct:24
+      │         ├── grouping columns: column2:8!null arbiter_u1_distinct:24
       │         ├── project
-      │         │    ├── columns: upsert_partial_index_distinct3:24 column1:7!null column2:8!null column3:9!null column10:10 column11:11
+      │         │    ├── columns: arbiter_u1_distinct:24 column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    │    ├── grouping columns: column1:7!null
@@ -1382,7 +1382,7 @@ insert comp
       │         │    │         └── first-agg [as=column11:11]
       │         │    │              └── column11:11
       │         │    └── projections
-      │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct3:24]
+      │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:24]
       │         └── aggregations
       │              ├── first-agg [as=column1:7]
       │              │    └── column1:7
@@ -1420,17 +1420,17 @@ insert comp
       ├── project
       │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │    └── upsert-distinct-on
-      │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 upsert_partial_index_distinct4:25
-      │         ├── grouping columns: column2:8!null upsert_partial_index_distinct4:25
+      │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 arbiter_u2_distinct:25
+      │         ├── grouping columns: column2:8!null arbiter_u2_distinct:25
       │         ├── project
-      │         │    ├── columns: upsert_partial_index_distinct4:25 column1:7!null column2:8!null column3:9!null column10:10 column11:11
+      │         │    ├── columns: arbiter_u2_distinct:25 column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    ├── project
       │         │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 upsert_partial_index_distinct3:24
-      │         │    │         ├── grouping columns: column2:8!null upsert_partial_index_distinct3:24
+      │         │    │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 arbiter_u1_distinct:24
+      │         │    │         ├── grouping columns: column2:8!null arbiter_u1_distinct:24
       │         │    │         ├── project
-      │         │    │         │    ├── columns: upsert_partial_index_distinct3:24 column1:7!null column2:8!null column3:9!null column10:10 column11:11
+      │         │    │         │    ├── columns: arbiter_u1_distinct:24 column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    │         │    ├── anti-join (hash)
       │         │    │         │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │         │    │         │    │    ├── anti-join (hash)
@@ -1498,7 +1498,7 @@ insert comp
       │         │    │         │    │         ├── column2:8 = b:19
       │         │    │         │    │         └── column11:11 = 'bar'
       │         │    │         │    └── projections
-      │         │    │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct3:24]
+      │         │    │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:24]
       │         │    │         └── aggregations
       │         │    │              ├── first-agg [as=column1:7]
       │         │    │              │    └── column1:7
@@ -1509,7 +1509,7 @@ insert comp
       │         │    │              └── first-agg [as=column11:11]
       │         │    │                   └── column11:11
       │         │    └── projections
-      │         │         └── (column11:11 = 'bar') OR NULL::BOOL [as=upsert_partial_index_distinct4:25]
+      │         │         └── (column11:11 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:25]
       │         └── aggregations
       │              ├── first-agg [as=column1:7]
       │              │    └── column1:7
@@ -1644,10 +1644,10 @@ upsert comp
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │    │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │    │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 upsert_partial_index_distinct3:12
-      │    │    │    │    │         ├── grouping columns: column2:8!null upsert_partial_index_distinct3:12
+      │    │    │    │    │         ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 arbiter_u1_distinct:12
+      │    │    │    │    │         ├── grouping columns: column2:8!null arbiter_u1_distinct:12
       │    │    │    │    │         ├── project
-      │    │    │    │    │         │    ├── columns: upsert_partial_index_distinct3:12 column1:7!null column2:8!null column3:9!null column10:10 column11:11
+      │    │    │    │    │         │    ├── columns: arbiter_u1_distinct:12 column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │    │    │    │    │         │    ├── project
       │    │    │    │    │         │    │    ├── columns: column10:10 column11:11 column1:7!null column2:8!null column3:9!null
       │    │    │    │    │         │    │    ├── values
@@ -1657,7 +1657,7 @@ upsert comp
       │    │    │    │    │         │    │         ├── lower(column3:9) [as=column10:10]
       │    │    │    │    │         │    │         └── upper(column3:9) [as=column11:11]
       │    │    │    │    │         │    └── projections
-      │    │    │    │    │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct3:12]
+      │    │    │    │    │         │         └── (column10:10 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:12]
       │    │    │    │    │         └── aggregations
       │    │    │    │    │              ├── first-agg [as=column1:7]
       │    │    │    │    │              │    └── column1:7

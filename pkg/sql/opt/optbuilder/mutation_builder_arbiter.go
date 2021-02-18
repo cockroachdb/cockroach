@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -334,7 +336,7 @@ func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
 //
 // The newly project scopeColumn is returned.
 func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
-	insertScope *scope, pred tree.Expr, alias string,
+	insertScope *scope, pred tree.Expr, arbiterName string,
 ) *scopeColumn {
 	projectionScope := mb.outScope.replace()
 	projectionScope.appendColumnsFromScope(insertScope)
@@ -345,6 +347,7 @@ func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
 	}
 	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
 
+	alias := fmt.Sprintf("arbiter_%s_distinct", arbiterName)
 	scopeCol := projectionScope.addColumn(alias, texpr)
 	mb.b.buildScalar(texpr, mb.outScope, projectionScope, scopeCol, nil)
 
