@@ -25,13 +25,17 @@ import classNames from "classnames/bind";
 import statementsPageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
   transactions: Transaction[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
-  handleDetails: (statementIds: Long[] | null) => void;
+  handleDetails: (
+    statementIds: Long[] | null,
+    transactionStats: TransactionStats,
+  ) => void;
   pagination: ISortedTablePagination;
   statements: Statement[];
   search?: string;
@@ -83,6 +87,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
             getStatementsById(item.stats_data.statement_ids, statements),
           ),
           transactionIds: item.stats_data.statement_ids,
+          transactionStats: item.stats_data.stats,
           handleDetails,
           search,
         }),
