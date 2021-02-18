@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -108,6 +110,10 @@ type SQLServer struct {
 	sqlLivenessProvider     sqlliveness.Provider
 	metricsRegistry         *metric.Registry
 	diagnosticsReporter     *diagnostics.Reporter
+
+	// settingsWatcher is utilized by secondary tenants to watch for settings
+	// changes. It is nil on the system tenant.
+	settingsWatcher *settingswatcher.SettingsWatcher
 
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
@@ -221,6 +227,9 @@ type sqlServerArgs struct {
 
 	// Used to list sessions and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
+
+	// Used to watch settings and descriptor changes.
+	rangeFeedFactory *rangefeed.Factory
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
@@ -300,6 +309,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		codec,
 		lmKnobs,
 		cfg.stopper,
+		cfg.rangeFeedFactory,
 		cfg.LeaseManagerConfig,
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
@@ -523,6 +533,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
 		ContentionRegistry:         contention.NewRegistry(),
+		RangeFeedFactory:           cfg.rangeFeedFactory,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -673,6 +684,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
+	var settingsWatcher *settingswatcher.SettingsWatcher
+	if !codec.ForSystemTenant() {
+		settingsWatcher = settingswatcher.New(
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper,
+		)
+	}
+
 	return &SQLServer{
 		stopper:                 cfg.stopper,
 		sqlIDContainer:          cfg.nodeIDContainer,
@@ -693,6 +711,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
+		settingsWatcher:         settingsWatcher,
 	}, nil
 }
 
@@ -802,6 +821,12 @@ func (s *SQLServer) preStart(
 		// doing more work than strictly necessary during the first time that the
 		// migrations are run.
 		bootstrapVersion = clusterversion.ByKey(clusterversion.Start20_2)
+	}
+
+	if s.settingsWatcher != nil {
+		if err := s.settingsWatcher.Start(ctx); err != nil {
+			return errors.Wrap(err, "initializing settings")
+		}
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).

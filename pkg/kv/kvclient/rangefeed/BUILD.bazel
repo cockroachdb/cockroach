@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangefeed",
+    srcs = [
+        "config.go",
+        "db_adapter.go",
+        "doc.go",
+        "rangefeed.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/span",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "rangefeed_test",
+    srcs = [
+        "db_adapter_external_test.go",
+        "helpers_test.go",
+        "main_test.go",
+        "rangefeed_external_test.go",
+        "rangefeed_mock_test.go",
+    ],
+    embed = [":rangefeed"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)

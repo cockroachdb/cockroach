@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -796,6 +797,8 @@ type ExecutorConfig struct {
 
 	GCJobNotifier *gcjobnotifier.Notifier
 
+	RangeFeedFactory *rangefeed.Factory
+
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code. It will only be populated
@@ -967,12 +970,6 @@ var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TenantTestingKnobs) ModuleTestingKnobs() {}
-
-// CanSetClusterSettings is a helper method that returns whether the tenant can
-// set in-memory cluster settings.
-func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
-	return k != nil && k.ClusterSettingsUpdater != nil
-}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
