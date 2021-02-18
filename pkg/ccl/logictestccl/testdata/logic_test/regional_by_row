@@ -814,6 +814,34 @@ ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row
   voter_constraints = '{+region=us-east-1: 2}',
   lease_preferences = '[[+region=us-east-1]]'
 
+statement ok
+CREATE TABLE regional_by_row_table_pk_defined_separately (
+  pk int,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC)
+) LOCALITY REGIONAL BY ROW
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_pk_defined_separately]
+----
+CREATE TABLE public.regional_by_row_table_pk_defined_separately (
+  pk INT8 NOT NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  FAMILY "primary" (pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_pk_defined_separately@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=ap-southeast-2: 2}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_pk_defined_separately@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=ca-central-1: 2}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_pk_defined_separately@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=us-east-1: 2}',
+  lease_preferences = '[[+region=us-east-1]]'
+
 # Tests for REGIONAL BY TABLE AS
 statement error  cannot use column crdb_region_col which has type INT8 in REGIONAL BY ROW AS\nDETAIL:\s+REGIONAL BY ROW AS must reference a column of type crdb_internal_region.
 CREATE TABLE regional_by_row_table_as (
