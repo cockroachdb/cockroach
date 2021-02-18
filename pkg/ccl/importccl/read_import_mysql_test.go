@@ -279,10 +279,10 @@ func TestMysqlValueToDatum(t *testing.T) {
 		typ  *types.T
 		want tree.Datum
 	}{
-		{raw: mysql.NewStrVal([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},
-		{raw: mysql.NewStrVal([]byte("2010-01-01")), typ: types.Date, want: date("2010-01-01")},
-		{raw: mysql.NewStrVal([]byte("0000-00-00 00:00:00")), typ: types.Timestamp, want: tree.DNull},
-		{raw: mysql.NewStrVal([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
+		{raw: mysql.NewStrLiteral([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},
+		{raw: mysql.NewStrLiteral([]byte("2010-01-01")), typ: types.Date, want: date("2010-01-01")},
+		{raw: mysql.NewStrLiteral([]byte("0000-00-00 00:00:00")), typ: types.Timestamp, want: tree.DNull},
+		{raw: mysql.NewStrLiteral([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
 	}
 	evalContext := tree.NewTestingEvalContext(nil)
 	for _, tc := range tests {
