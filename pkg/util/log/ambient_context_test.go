@@ -60,13 +60,13 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp1.Finish()
 
 	if err := tracing.TestingCheckRecordedSpans(sp1.GetRecording(), `
-		Span root:
+		span: root
 			tags: _verbose=1
 			event: a
 			event: c
-		Span child:
-			tags: _verbose=1 ambient=
-			event: [ambient] b
+			span: child
+				tags: _verbose=1 ambient=
+				event: [ambient] b
 	`); err != nil {
 		t.Fatal(err)
 	}
