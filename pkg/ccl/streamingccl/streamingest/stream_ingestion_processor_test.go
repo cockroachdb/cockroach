@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -196,7 +196,7 @@ func getPartitionSpanToTableID(
 func assertEqualKVs(
 	t *testing.T,
 	tc *testcluster.TestCluster,
-	streamValidator cdctest.StreamClientValidatorWrapper,
+	streamValidator *streamClientValidator,
 	tableID int,
 	partitionTimestamp hlc.Timestamp,
 ) {
@@ -233,7 +233,7 @@ func assertEqualKVs(
 			// All value ts should have been drained at this point, otherwise there is
 			// a mismatch between the streamed and ingested data.
 			require.Equal(t, 0, len(valueTimestampTuples))
-			valueTimestampTuples, err = streamValidator.GetValuesForKeyBelowTimestamp(
+			valueTimestampTuples, err = streamValidator.getValuesForKeyBelowTimestamp(
 				string(it.Key().Key), partitionTimestamp)
 			require.NoError(t, err)
 		}
@@ -255,6 +255,19 @@ func assertEqualKVs(
 	}
 }
 
+func makeTestStreamURI(
+	valueRange, kvsPerResolved, numPartitions, tenantID int,
+	kvFrequency time.Duration,
+	dupProbability float64,
+) string {
+	return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
+		"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
+		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
+		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
+		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32) +
+		"&TENANT_ID=" + strconv.Itoa(tenantID)
+}
+
 // TestRandomClientGeneration tests the ingestion processor against a random
 // stream workload.
 func TestRandomClientGeneration(t *testing.T) {
@@ -262,17 +275,6 @@ func TestRandomClientGeneration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	makeTestStreamURI := func(
-		valueRange, kvsPerResolved, numPartitions int,
-		kvFrequency time.Duration, dupProbability float64,
-	) string {
-		return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
-			"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
-			"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
-			"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
-			"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32)
-	}
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -286,8 +288,8 @@ func TestRandomClientGeneration(t *testing.T) {
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 4
 	dupProbability := 0.2
-	streamAddr := makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency,
-		dupProbability)
+	streamAddr := makeTestStreamURI(valueRange, kvsPerResolved, numPartitions,
+		int(roachpb.SystemTenantID.ToUint64()), kvFrequency, dupProbability)
 
 	// The random client returns system and table data partitions.
 	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
@@ -301,9 +303,10 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
-	cancelAfterCheckpoints := makeCheckpointEventCounter(1000, cancel)
-	streamValidator := cdctest.NewStreamClientValidatorWrapper()
-	validator := registerValidator(streamValidator.GetValidator())
+	mu := syncutil.Mutex{}
+	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
+	streamValidator := newStreamClientValidator()
+	validator := registerValidatorWithClient(streamValidator)
 	out, err := runStreamIngestionProcessor(ctx, t, kvDB, streamAddr, topo.Partitions,
 		startTime, []func(streamingccl.Event, streamingccl.PartitionAddress){cancelAfterCheckpoints,
 			validator}, nil /* mockClient */)
@@ -350,7 +353,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	}
 
 	// Ensure that no errors were reported to the validator.
-	for _, failure := range streamValidator.GetValidator().Failures() {
+	for _, failure := range streamValidator.Failures() {
 		t.Error(failure)
 	}
 
@@ -424,21 +427,21 @@ func runStreamIngestionProcessor(
 	return out, err
 }
 
-func registerValidator(
-	validator cdctest.Validator,
+func registerValidatorWithClient(
+	validator *streamClientValidator,
 ) func(event streamingccl.Event, pa streamingccl.PartitionAddress) {
 	return func(event streamingccl.Event, pa streamingccl.PartitionAddress) {
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
 			resolvedTS := *event.GetResolved()
-			err := validator.NoteResolved(string(pa), resolvedTS)
+			err := validator.noteResolved(string(pa), resolvedTS)
 			if err != nil {
 				panic(err.Error())
 			}
 		case streamingccl.KVEvent:
 			kv := *event.GetKV()
 
-			err := validator.NoteRow(string(pa), string(kv.Key), string(kv.Value.RawBytes),
+			err := validator.noteRow(string(pa), string(kv.Key), string(kv.Value.RawBytes),
 				kv.Value.Timestamp)
 			if err != nil {
 				panic(err.Error())
@@ -450,14 +453,18 @@ func registerValidator(
 // makeCheckpointEventCounter runs f after seeing `threshold` number of
 // checkpoint events.
 func makeCheckpointEventCounter(
-	threshold int, f func(),
+	mu *syncutil.Mutex, threshold int, f func(),
 ) func(streamingccl.Event, streamingccl.PartitionAddress) {
+	mu.Lock()
+	defer mu.Unlock()
 	numCheckpointEventsGenerated := 0
 	return func(event streamingccl.Event, _ streamingccl.PartitionAddress) {
+		mu.Lock()
+		defer mu.Unlock()
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
 			numCheckpointEventsGenerated++
-			if numCheckpointEventsGenerated > threshold {
+			if numCheckpointEventsGenerated == threshold {
 				f()
 			}
 		}
