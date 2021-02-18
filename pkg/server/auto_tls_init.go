@@ -255,7 +255,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
 	if _, err = os.Stat(cl.NodeCertPath()); !os.IsNotExist(err) {
-		err = errors.New("InterNodeHost certificate already present")
+		err = errors.New("interNodeHost certificate already present")
 		return
 	}
 
@@ -335,5 +335,24 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		return
 	}
 
+	return
+}
+
+// copyOnlyCAs is a helper function to only populate the CA portion of
+// a ServiceCertificateBundle
+func (sb *ServiceCertificateBundle) copyOnlyCAs(destBundle *ServiceCertificateBundle) {
+	destBundle.CACertificate = sb.CACertificate
+	destBundle.CAKey = sb.CAKey
+}
+
+// ToPeerInitBundle populates a bundle of initialization certificate CAs (only).
+// This function is expected to serve any node providing a init bundle to a
+// joining or starting peer.
+func (b *CertificateBundle) ToPeerInitBundle() (pb CertificateBundle) {
+	b.InterNode.copyOnlyCAs(&pb.InterNode)
+	b.UserAuth.copyOnlyCAs(&pb.UserAuth)
+	b.SQLService.copyOnlyCAs(&pb.SQLService)
+	b.RPCService.copyOnlyCAs(&pb.RPCService)
+	b.AdminUIService.copyOnlyCAs(&pb.AdminUIService)
 	return
 }
