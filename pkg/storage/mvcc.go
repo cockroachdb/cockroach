@@ -956,14 +956,18 @@ func MVCCGetAsTxn(
 //
 // If the supplied iterator is nil, no seek operation is performed. This is
 // used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
-// metadata is known not to exist.
+// metadata is known not to exist. If iterAlreadyPositioned is true, the
+// iterator has already been seeked to metaKey, so a wasteful seek can be
+// avoided.
 func mvccGetMetadata(
-	iter MVCCIterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
+	iter MVCCIterator, metaKey MVCCKey, iterAlreadyPositioned bool, meta *enginepb.MVCCMetadata,
 ) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
 		return false, false, 0, 0, nil
 	}
-	iter.SeekGE(metaKey)
+	if !iterAlreadyPositioned {
+		iter.SeekGE(metaKey)
+	}
 	if ok, err := iter.Valid(); !ok {
 		return false, false, 0, 0, err
 	}
@@ -1403,7 +1407,8 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
+	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
+		mvccGetMetadata(iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta)
 	if err != nil {
 		return err
 	}
@@ -2695,6 +2700,7 @@ func MVCCResolveWriteIntentUsingIter(
 	if len(intent.EndKey) > 0 {
 		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
+	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
 	return mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 }
 
@@ -2717,6 +2723,7 @@ func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, b
 }
 
 // mvccResolveWriteIntent is the core logic for resolving an intent.
+// REQUIRES: iter is already seeked to intent.Key.
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
@@ -2729,7 +2736,7 @@ func mvccResolveWriteIntent(
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
-		mvccGetMetadata(iter, metaKey, meta)
+		mvccGetMetadata(iter, metaKey, true /* iterAlreadyPositioned */, meta)
 	if err != nil {
 		return false, err
 	}
@@ -3154,6 +3161,10 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		var err error
 		var ok bool
 		if !key.IsValue() {
+			// When we start allowing existence of multiple intents on the same key,
+			// the iter is not necessarily positioned at the intent for this key
+			// that is owned by this txn (if there is any such intent). The logic in
+			// this function will need to be adjusted.
 			intent.Key = key.Key
 			ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 		}
@@ -3227,7 +3238,8 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, _, metaKeySize, metaValSize, err := mvccGetMetadata(iter, encKey, meta)
+		ok, _, metaKeySize, metaValSize, err :=
+			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta)
 		if err != nil {
 			return err
 		}

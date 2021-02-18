@@ -259,8 +259,8 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	estimatedLen :=
 		(len(keys.LocalRangeLockTablePrefix) + len(keys.LockTableSingleKeyInfix) + len(lk.Key) + 3) +
 			engineKeyVersionLockTableLen
-	if len(buf) < estimatedLen {
-		buf = make([]byte, estimatedLen)
+	if cap(buf) < estimatedLen {
+		buf = make([]byte, 0, estimatedLen)
 	}
 	ltKey, buf := keys.LockTableSingleKey(lk.Key, buf)
 	k := EngineKey{Key: ltKey}

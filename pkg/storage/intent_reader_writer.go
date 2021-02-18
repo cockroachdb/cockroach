@@ -12,6 +12,7 @@ package storage
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -236,21 +237,28 @@ type wrappableReader interface {
 	rawGet(key []byte) (value []byte, err error)
 }
 
-func tryWrapReader(r wrappableReader, iterKind MVCCIterKind) (reader Reader, wrapped bool) {
-	if iterKind == MVCCKeyIterKind {
-		return r, false
-	}
-	return intentInterleavingReader{wrappableReader: r}, true
+// wrapReader wraps the provided reader, to return an implementation of MVCCIterator
+// that supports MVCCKeyAndIntentsIterKind.
+func wrapReader(r wrappableReader) *intentInterleavingReader {
+	iiReader := intentInterleavingReaderPool.Get().(*intentInterleavingReader)
+	*iiReader = intentInterleavingReader{wrappableReader: r}
+	return iiReader
 }
 
 type intentInterleavingReader struct {
 	wrappableReader
 }
 
-var _ Reader = intentInterleavingReader{}
+var _ Reader = &intentInterleavingReader{}
+
+var intentInterleavingReaderPool = sync.Pool{
+	New: func() interface{} {
+		return &intentInterleavingReader{}
+	},
+}
 
 // Get implements the Reader interface.
-func (imr intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
+func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
 	val, err := imr.wrappableReader.rawGet(EncodeKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
@@ -270,14 +278,15 @@ func (imr intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
 }
 
 // MVCCGetProto implements the Reader interface.
-func (imr intentInterleavingReader) MVCCGetProto(
+func (imr *intentInterleavingReader) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(imr, key, msg)
 }
 
-// NewMVCCIterator implements the Reader interface.
-func (imr intentInterleavingReader) NewMVCCIterator(
+// NewMVCCIterator implements the Reader interface. The
+// intentInterleavingReader can be freed once this method returns.
+func (imr *intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
 ) MVCCIterator {
 	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
@@ -288,4 +297,9 @@ func (imr intentInterleavingReader) NewMVCCIterator(
 		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
 	return newIntentInterleavingIterator(imr.wrappableReader, opts)
+}
+
+func (imr *intentInterleavingReader) Free() {
+	*imr = intentInterleavingReader{}
+	intentInterleavingReaderPool.Put(imr)
 }
