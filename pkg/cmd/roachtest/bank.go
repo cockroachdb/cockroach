@@ -152,7 +152,7 @@ CREATE TABLE bank.accounts (
 func (s *bankState) transferMoney(
 	ctx context.Context, l *logger, c *cluster, idx, numAccounts, maxTransfer int,
 ) {
-	defer c.l.Printf("client %d shutting down\n", idx)
+	defer l.Printf("client %d shutting down\n", idx)
 	client := &s.clients[idx-1]
 	for !s.done(ctx) {
 		if err := client.transferMoney(ctx, numAccounts, maxTransfer); err != nil {
