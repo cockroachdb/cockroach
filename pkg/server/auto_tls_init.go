@@ -250,7 +250,7 @@ func writeKeyFile(keyPath string, keyPEM []byte) error {
 func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
 	// TODO(aaron-crl): Put this in the config map.
-	initLifespan, err := time.ParseDuration("60m")
+	initLifespan, err := time.ParseDuration("366d")
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
@@ -275,9 +275,12 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		return
 	}
 
+	// Initialize User auth certificates.
+	// TODO(aaron-crl): Double check that we want to do this. It seems
+	// like this is covered by the interface certificates?
 	err = b.UserAuth.loadOrCreateUserAuthCACertAndKey(
-		cl.UICACertPath(),
-		cl.UICAKeyPath(),
+		cl.ClientCACertPath(),
+		cl.ClientCAKeyPath(),
 		initLifespan,
 		"User Authentication",
 	)
@@ -333,6 +336,93 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		err = errors.Wrap(err,
 			"failed to load or create Admin UI service certificate(s)")
 		return
+	}
+
+	return
+}
+
+// InitializeNodeFromBundle uses the contents of the CertificateBundle and
+// details from the config object to write certs to disk and generate any
+// missing host-specific certificates and keys
+// It is assumed that a node receiving this has not has TLS initialized. If
+// a interNodeHost certificate is found, this function will error.
+func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) (err error) {
+	cl := security.MakeCertsLocator(c.SSLCertsDir)
+
+	// First check to see if host cert is already present
+	// if it is, we should fail to initialize.
+	if _, err = os.Stat(cl.NodeCertPath()); !os.IsNotExist(err) {
+		err = errors.New("interNodeHost certificate already present")
+		return
+	}
+
+	// Write received CA's to disk. If any of them already exist, fail
+	// and return an error.
+
+	// Attempt to write InterNodeHostCA to disk first.
+	err = b.InterNode.writeCAOrFail(cl.CACertPath(), cl.CAKeyPath())
+	if err != nil {
+		err = errors.Wrap(err, "failed to write InterNodeCA to disk")
+		return
+	}
+
+	// Attempt to write ClientCA to disk.
+	err = b.InterNode.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath())
+	if err != nil {
+		err = errors.Wrap(err, "failed to write ClientCA to disk")
+		return
+	}
+
+	// Attempt to write SQLServiceCA to disk.
+	err = b.InterNode.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath())
+	if err != nil {
+		err = errors.Wrap(err, "failed to write SQLServiceCA to disk")
+		return
+	}
+
+	// Attempt to write RPCServiceCA to disk.
+	err = b.InterNode.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath())
+	if err != nil {
+		err = errors.Wrap(err, "failed to write RPCServiceCA to disk")
+		return
+	}
+
+	// Attempt to write AdminUIServiceCA to disk.
+	err = b.InterNode.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath())
+	if err != nil {
+		err = errors.Wrap(err, "failed to write AdminUIServiceCA to disk")
+		return
+	}
+
+	// Once CAs are written call the same InitFromConfig function to create
+	// host certificates.
+	err = b.InitializeFromConfig(c)
+	if err != nil {
+		err = errors.Wrap(
+			err,
+			"failed to initialize host certs after writing CAs to disk")
+		return
+	}
+
+	return
+}
+
+// writeCAOrFail will attempt to write a service certificate bundle to the
+// specified paths on disk. It will ignore any missing certificate fields but
+// error if it fails to write a file to disk.
+func (sb *ServiceCertificateBundle) writeCAOrFail(certPath string, keyPath string) (err error) {
+	if sb.CACertificate != nil {
+		err = writeCertificateFile(certPath, sb.CACertificate)
+		if err != nil {
+			return
+		}
+	}
+
+	if sb.CAKey != nil {
+		writeKeyFile(keyPath, sb.CAKey)
+		if err != nil {
+			return
+		}
 	}
 
 	return
