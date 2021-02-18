@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -136,9 +138,10 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 // and the full statusServer.
 type baseStatusServer struct {
 	log.AmbientContext
-	privilegeChecker *adminPrivilegeChecker
-	sessionRegistry  *sql.SessionRegistry
-	st               *cluster.Settings
+	privilegeChecker   *adminPrivilegeChecker
+	sessionRegistry    *sql.SessionRegistry
+	contentionRegistry *contention.Registry
+	st                 *cluster.Settings
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -295,6 +298,33 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	return nil
 }
 
+func (b *baseStatusServer) getLocalContentionEvents(
+	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
+) ([]contentionpb.IndexContentionEvents, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	hasViewActivity, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAdmin && !hasViewActivity {
+		// Non-superusers are not allowed to query contention events.
+		return nil, status.Errorf(
+			codes.PermissionDenied,
+			"client user %q does not have permission to view contention events",
+			sessionUser)
+	}
+
+	return b.contentionRegistry.Serialize(), nil
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	*baseStatusServer
@@ -340,15 +370,17 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	contentionRegistry *contention.Registry,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: adminServer.adminPrivilegeChecker,
-			sessionRegistry:  sessionRegistry,
-			st:               st,
+			AmbientContext:     ambient,
+			privilegeChecker:   adminServer.adminPrivilegeChecker,
+			sessionRegistry:    sessionRegistry,
+			contentionRegistry: contentionRegistry,
+			st:                 st,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -1817,6 +1849,17 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
+// ListLocalContentionEvents returns a list of contention events on this node.
+func (s *statusServer) ListLocalContentionEvents(
+	ctx context.Context, req *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	events, err := s.getLocalContentionEvents(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.ListContentionEventsResponse{Events: events}, nil
+}
+
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
@@ -2016,6 +2059,47 @@ func (s *statusServer) listSessionsHelper(
 	return response, pagState, nil
 }
 
+func (s *statusServer) listContentionEventsHelper(
+	ctx context.Context, req *serverpb.ListContentionEventsRequest, limit int, start paginationState,
+) (*serverpb.ListContentionEventsResponse, paginationState, error) {
+	response := &serverpb.ListContentionEventsResponse{
+		Events: make([]contentionpb.IndexContentionEvents, 0),
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalContentionEvents(ctx, req)
+		if resp != nil && err == nil {
+			return resp.Events, nil
+		}
+		return nil, err
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		events := nodeResp.([]contentionpb.IndexContentionEvents)
+		response.Events = contention.MergeSerializedRegistries(response.Events, events)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListContentionEventsError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	var err error
+	var pagState paginationState
+	if pagState, err = s.paginatedIterateNodes(
+		ctx, "contention events list", limit, start, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		err := serverpb.ListContentionEventsError{Message: err.Error()}
+		response.Errors = append(response.Errors, err)
+	}
+	return response, pagState, nil
+}
+
 // ListSessions returns a list of SQL sessions on all nodes in the cluster.
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
@@ -2096,6 +2180,22 @@ func (s *statusServer) CancelQuery(
 		output.Error = err.Error()
 	}
 	return output, nil
+}
+
+// ListContentionEvents returns a list of contention events on all nodes in the
+// cluster.
+func (s *statusServer) ListContentionEvents(
+	ctx context.Context, req *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, _, err := s.privilegeChecker.getUserAndRole(ctx); err != nil {
+		return nil, err
+	}
+
+	resp, _, err := s.listContentionEventsHelper(ctx, req, 0 /* limit */, paginationState{})
+	return resp, err
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

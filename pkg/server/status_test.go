@@ -1506,6 +1506,12 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	if _, err := client.ListSessions(ctx, &serverpb.ListSessionsRequest{}); err != nil {
 		t.Error(err)
 	}
+	if _, err := client.ListLocalContentionEvents(ctx, &serverpb.ListContentionEventsRequest{}); err != nil {
+		t.Error(err)
+	}
+	if _, err := client.ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{}); err != nil {
+		t.Error(err)
+	}
 
 	// Check that keys are properly omitted from the Ranges, HotRanges, and
 	// RangeLog endpoints.
@@ -1920,6 +1926,85 @@ func TestListSessionsSecurity(t *testing.T) {
 			t.Errorf("unexpected failure listing sessions for %q; error: %v; response errors: %v",
 				user, err, resp.Errors)
 		}
+	}
+}
+
+func TestListContentionEventsSecurity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := s.(*TestServer)
+	defer ts.Stopper().Stop(ctx)
+
+	expectedErrNoPermission := "does not have permission to view contention events"
+
+	// HTTP requests respect the authenticated username from the HTTP session.
+	testCases := []struct {
+		endpoint                       string
+		expectedErr                    string
+		requestWithAdmin               bool
+		requestWithViewActivityGranted bool
+	}{
+		{"local_contention_events", expectedErrNoPermission, false, false},
+		{"contention_events", expectedErrNoPermission, false, false},
+		{"local_contention_events", "", true, false},
+		{"contention_events", "", true, false},
+		{"local_contention_events", "", false, true},
+		{"contention_events", "", false, true},
+	}
+	myUser := authenticatedUserNameNoAdmin().Normalized()
+	for _, tc := range testCases {
+		if tc.requestWithViewActivityGranted {
+			// Note that for this query to work, it is crucial that
+			// getStatusJSONProtoWithAdminOption below is called at least once,
+			// on the previous test case, so that the user exists.
+			_, err := db.Exec("ALTER USER $1 VIEWACTIVITY", myUser)
+			require.NoError(t, err)
+		}
+		var response serverpb.ListContentionEventsResponse
+		err := getStatusJSONProtoWithAdminOption(s, tc.endpoint, &response, tc.requestWithAdmin)
+		if tc.expectedErr == "" {
+			if err != nil || len(response.Errors) > 0 {
+				t.Errorf("unexpected failure listing contention events; error: %v; response errors: %v",
+					err, response.Errors)
+			}
+		} else {
+			respErr := "<no error>"
+			if len(response.Errors) > 0 {
+				respErr = response.Errors[0].Message
+			}
+			if !testutils.IsError(err, tc.expectedErr) &&
+				!strings.Contains(respErr, tc.expectedErr) {
+				t.Errorf("did not get expected error %q when listing contention events from %s: %v",
+					tc.expectedErr, tc.endpoint, err)
+			}
+		}
+		if tc.requestWithViewActivityGranted {
+			_, err := db.Exec("ALTER USER $1 NOVIEWACTIVITY", myUser)
+			require.NoError(t, err)
+		}
+	}
+
+	// gRPC requests behave as root and thus are always allowed.
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
+	rpcContext := newRPCTestContext(ts, rootConfig)
+	url := ts.ServingRPCAddr()
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+	request := &serverpb.ListContentionEventsRequest{}
+	if resp, err := client.ListLocalContentionEvents(ctx, request); err != nil || len(resp.Errors) > 0 {
+		t.Errorf("unexpected failure listing local contention events; error: %v; response errors: %v",
+			err, resp.Errors)
+	}
+	if resp, err := client.ListContentionEvents(ctx, request); err != nil || len(resp.Errors) > 0 {
+		t.Errorf("unexpected failure listing contention events; error: %v; response errors: %v",
+			err, resp.Errors)
 	}
 }
 
