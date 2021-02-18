@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cluster.go",
         "nodes.go",
+        "tenant_cluster.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationcluster",
     visibility = ["//visibility:public"],
