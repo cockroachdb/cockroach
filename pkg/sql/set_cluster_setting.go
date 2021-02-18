@@ -53,7 +53,7 @@ type setClusterSettingNode struct {
 	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
-	versionUpgradeHook func(ctx context.Context, username security.SQLUsername, from, to clusterversion.ClusterVersion) error
+	versionUpgradeHook VersionUpgradeHook
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
@@ -203,9 +203,24 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 					// hasn't run yet, we can't update the version as we don't
 					// have good enough information about the current cluster
 					// version.
-					return errors.New("no persisted cluster version found, please retry later")
+					if params.extendedEvalCtx.Codec.ForSystemTenant() {
+						return errors.New("no persisted cluster version found, please retry later")
+					}
+					// The tenant cluster in 20.2 did not ever initialize this value and
+					// utilized a hard-coded value of
+					tenantDefaultVersion := clusterversion.ClusterVersion{
+						Version: clusterversion.ByKey(clusterversion.V20_2),
+					}
+					// Pretend that the expected value was already there to allow us to
+					// run migrations.
+					prevEncoded, err := protoutil.Marshal(&tenantDefaultVersion)
+					if err != nil {
+						return errors.WithAssertionFailure(err)
+					}
+					prev = tree.NewDString(string(prevEncoded))
+				} else {
+					prev = datums[0]
 				}
-				prev = datums[0]
 			}
 			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value, prev)
 			expectedEncodedValue = encoded
@@ -214,20 +229,9 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if isSetVersion {
-				var from, to clusterversion.ClusterVersion
-
-				fromVersionVal := []byte(string(*prev.(*tree.DString)))
-				if err := protoutil.Unmarshal(fromVersionVal, &from); err != nil {
-					return err
-				}
-
-				targetVersionStr := string(*value.(*tree.DString))
-				to.Version = roachpb.MustParseVersion(targetVersionStr)
-
-				// toSettingString already validated the input, and checked to
-				// see that we are allowed to transition. Let's call into our
-				// upgrade hook to run migrations, if any.
-				if err := n.versionUpgradeHook(ctx, params.p.User(), from, to); err != nil {
+				if err := runVersionUpgradeHook(
+					ctx, params, prev, value, n.versionUpgradeHook,
+				); err != nil {
 					return err
 				}
 			}
@@ -325,6 +329,43 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	return err
 }
 
+func runVersionUpgradeHook(
+	ctx context.Context, params runParams, prev tree.Datum, value tree.Datum, f VersionUpgradeHook,
+) error {
+	var from, to clusterversion.ClusterVersion
+
+	fromVersionVal := []byte(string(*prev.(*tree.DString)))
+	if err := protoutil.Unmarshal(fromVersionVal, &from); err != nil {
+		return err
+	}
+
+	targetVersionStr := string(*value.(*tree.DString))
+	to.Version = roachpb.MustParseVersion(targetVersionStr)
+
+	start21_1 := clusterversion.ByKey(clusterversion.Start21_1)
+	if !params.extendedEvalCtx.Codec.ForSystemTenant() && from.Less(start21_1) {
+
+		// In the case that we're setting the cluster version to something that
+		// precedes the start of 21.1, which is permitted, if only because it's
+		// complex to prevent, then there's definitely no migrations to run and
+		// it may be hazardous due to assumptions about versions being even.
+		if to.Less(start21_1) {
+			return nil
+		}
+		// Otherwise, tell the migration layer that we're starting from the lowest
+		// allowable version.
+		from.Version = start21_1
+	}
+
+	// toSettingString already validated the input, and checked to
+	// see that we are allowed to transition. Let's call into our
+	// upgrade hook to run migrations, if any.
+	if err := f(ctx, params.p.User(), from, to); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
@@ -352,7 +393,7 @@ func toSettingString(
 		if s, ok := d.(*tree.DString); ok {
 			dStr, ok := prev.(*tree.DString)
 			if !ok {
-				return "", errors.New("the existing value is not a string")
+				return "", errors.Errorf("the existing value is not a string, got %T", prev)
 			}
 
 			prevRawVal := []byte(string(*dStr))
