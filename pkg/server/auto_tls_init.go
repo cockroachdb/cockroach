@@ -17,17 +17,17 @@
 package server
 
 import (
-	"errors"
 	"io/ioutil"
 	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/errors"
 )
 
 // CertificateBundle manages the collection of certificates used by a
-// CockroachDB node
+// CockroachDB node.
 type CertificateBundle struct {
 	InterNode      ServiceCertificateBundle
 	UserAuth       ServiceCertificateBundle
@@ -36,16 +36,16 @@ type CertificateBundle struct {
 	AdminUIService ServiceCertificateBundle
 }
 
-// ServiceCertificateBundle is a container for the CA and host certs for a node
+// ServiceCertificateBundle is a container for the CA and host node certs.
 type ServiceCertificateBundle struct {
 	CACertificate   []byte
 	CAKey           []byte
-	HostCertificate []byte // This will be blank if unused (as in the user case)
-	HostKey         []byte // This will be blank if unused (as in the user case)
+	HostCertificate []byte // This will be blank if unused (in the user case).
+	HostKey         []byte // This will be blank if unused (in the user case).
 }
 
+// Helper function to load cert and key for a service.
 func (sb *ServiceCertificateBundle) loadServiceCertAndKey(certPath string, keyPath string) (err error) {
-	// Load cert and key
 	sb.HostCertificate, err = loadCertificateFile(certPath)
 	if err != nil {
 		return
@@ -57,8 +57,8 @@ func (sb *ServiceCertificateBundle) loadServiceCertAndKey(certPath string, keyPa
 	return
 }
 
+// Helper function to load cert and key for a service CA.
 func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath string) (err error) {
-	// Load cert and key
 	sb.CACertificate, err = loadCertificateFile(certPath)
 	if err != nil {
 		return
@@ -70,17 +70,18 @@ func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath st
 	return
 }
 
-// LoadUserAuthCACertAndKey loads host certificate and key from disk or fails with error
+// LoadUserAuthCACertAndKey loads host certificate and key from disk or fails with error.
 func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string) (err error) {
-	// Check if the service cert and key already exist
+	// Check if the service cert and key already exist.
 	if _, err = os.Stat(caCertPath); os.IsNotExist(err) {
-		// cert DNE
+		// Cert DNE.
 		if _, err = os.Stat(caKeyPath); !os.IsNotExist(err) {
-			// key exist, this is an error
-			err = errors.New("found key but not certificate for user auth at " + caKeyPath)
+			// Key exists but cert does not, this is an error.
+			err = errors.Wrapf(err,
+				"found key but not certificate for user auth at: %s"+caKeyPath)
 		}
 
-		// (create both cert and key)
+		// Create both cert and key for service CA.
 		err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
 		if err != nil {
 			return
@@ -89,13 +90,13 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(caCertPath 
 		return
 	}
 
-	// load cert
+	// Load cert into ServiceCertificateBundle.
 	sb.CACertificate, err = loadCertificateFile(caCertPath)
 	if err != nil {
 		return
 	}
 
-	// maybe load key (if it exists)
+	// Load the key only if it exists.
 	if _, err = os.Stat(caKeyPath); !os.IsNotExist(err) {
 		sb.CAKey, err = loadKeyFile(caKeyPath)
 		if err != nil {
@@ -109,14 +110,14 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(caCertPath 
 // loadOrCreateServiceCertificates will attempt to load the service cert/key
 // into the service bundle.
 // * If they do not exist:
-//   It will attempt to load the service CA cert/key pair
-//   * If they do not exist
-//     It will generate the service CA cert/key pair
+//   It will attempt to load the service CA cert/key pair.
+//   * If they do not exist:
+//     It will generate the service CA cert/key pair.
 //     It will persist these to disk and store them
-//       in the ServiceCertificateBundle
-//   It will generate the service cert/key pair
+//       in the ServiceCertificateBundle.
+//   It will generate the service cert/key pair.
 //   It will persist these to disk and store them
-//     in the ServiceCertificateBundle
+//     in the ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	serviceCertPath string,
 	serviceKeyPath string,
@@ -126,22 +127,26 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	serviceName string,
 	hostname string) (err error) {
 
-	// Check if the service cert and key already exist
+	// Check if the service cert and key already exist.
 	if _, err = os.Stat(serviceCertPath); !os.IsNotExist(err) {
 		// cert exists
 		if _, err = os.Stat(serviceKeyPath); os.IsNotExist(err) {
 			// cert exists but key doesn't, this is an error
-			err = errors.New("failed to load service certificate key for " + serviceCertPath + "expected key at " + serviceKeyPath)
+			err = errors.Wrapf(err,
+				"failed to load service certificate key for %s expected key at %s",
+				serviceCertPath, serviceKeyPath)
 			return
 		}
 	} else {
-		// niether service cert or key exist, attempt to load CA
-		// Check if the CA cert and key already exist
+		// Niether service cert or key exist, attempt to load CA.
+		// Check if the CA cert and key already exist.
 		if _, err = os.Stat(caCertPath); !os.IsNotExist(err) {
 			// cert exists
 			if _, err = os.Stat(caKeyPath); os.IsNotExist(err) {
 				// cert exists but key doesn't, this is an error
-				err = errors.New("failed to load service CA key for " + caCertPath + "expected key at " + caKeyPath)
+				err = errors.Wrapf(err,
+					"failed to load service CA key for %s expected key at %s",
+					caCertPath, caKeyPath)
 				return
 			}
 
@@ -149,7 +154,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			sb.CAKey, err = loadKeyFile(caKeyPath)
 
 		} else {
-			// build CA cert and key
+			// Build the CA cert and key.
 			err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
 			if err != nil {
 				return
@@ -157,7 +162,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 
 		}
 
-		// build service cert and key
+		// Build service cert and key.
 		var hostCert, hostKey []byte
 		hostCert, hostKey, err = security.CreateServiceCertAndKey(
 			initLifespan,
@@ -192,8 +197,9 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	return
 }
 
+// createServiceCA builds CA cert and key and populates them to
+// ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) createServiceCA(caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string) (err error) {
-	// build CA cert and key
 	sb.CACertificate, sb.CAKey, err = security.CreateCACertAndKey(initLifespan, serviceName)
 	if err != nil {
 		return
@@ -212,26 +218,26 @@ func (sb *ServiceCertificateBundle) createServiceCA(caCertPath string, caKeyPath
 	return
 }
 
-// simple wrapper to make it easier to store certs somewhere else later
-// TODO (aaron-crl): Put validation checks here
+// Simple wrapper to make it easier to store certs somewhere else later.
+// TODO (aaron-crl): Put validation checks here.
 func loadCertificateFile(certPath string) (cert []byte, err error) {
 	cert, err = ioutil.ReadFile(certPath)
 	return
 }
 
-// simple wrapper to make it easier to store certs somewhere else later
-// TODO (aaron-crl): Put validation checks here
+// Simple wrapper to make it easier to store certs somewhere else later.
+// TODO (aaron-crl): Put validation checks here.
 func loadKeyFile(keyPath string) (key []byte, err error) {
 	key, err = ioutil.ReadFile(keyPath)
 	return
 }
 
-// simple wrapper to make it easier to store certs somewhere else later
+// simple wrapper to make it easier to store certs somewhere else later.
 func writeCertificateFile(certPath string, certPEM []byte) error {
 	return ioutil.WriteFile(certPath, certPEM, 0600)
 }
 
-// simple wrapper to make it easier to store certs somewhere else later
+// simple wrapper to make it easier to store certs somewhere else later.
 func writeKeyFile(keyPath string, keyPEM []byte) error {
 	return ioutil.WriteFile(keyPath, keyPEM, 0600)
 }
@@ -244,18 +250,18 @@ func writeKeyFile(keyPath string, keyPEM []byte) error {
 // as this should _never_ happen.
 func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
-	// TODO(aaron-crl): Put this in the config map
+	// TODO(aaron-crl): Put this in the config map.
 	initLifespan, err := time.ParseDuration("60m")
 
 	// First check to see if host cert is already present
-	// if it is, we should fail to initialize
+	// if it is, we should fail to initialize.
 	if _, err = os.Stat(cl.NodeCertPath()); !os.IsNotExist(err) {
 		err = errors.New("InterNodeHost certificate already present")
 		return
 	}
 
-	// Start by loading or creating the InterNode certificates
-	b.InterNode.loadOrCreateServiceCertificates(
+	// Start by loading or creating the InterNode certificates.
+	err = b.InterNode.loadOrCreateServiceCertificates(
 		cl.NodeCertPath(),
 		cl.NodeKeyPath(),
 		cl.CACertPath(),
@@ -264,16 +270,26 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		"InterNode Service",
 		c.Addr,
 	)
+	if err != nil {
+		err = errors.Wrap(err,
+			"failed to load or create InterNode certificates")
+		return
+	}
 
-	b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+	err = b.UserAuth.loadOrCreateUserAuthCACertAndKey(
 		cl.UICACertPath(),
 		cl.UICAKeyPath(),
 		initLifespan,
 		"User Authentication",
 	)
+	if err != nil {
+		err = errors.Wrap(err,
+			"failed to load or create User auth certificate(s)")
+		return
+	}
 
-	// Initialize SQLService Certs
-	b.SQLService.loadOrCreateServiceCertificates(
+	// Initialize SQLService Certs.
+	err = b.SQLService.loadOrCreateServiceCertificates(
 		cl.SQLServiceCertPath(),
 		cl.SQLServiceKeyPath(),
 		cl.SQLServiceCACertPath(),
@@ -282,20 +298,30 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		"SQL Service",
 		c.SQLAddr,
 	)
+	if err != nil {
+		err = errors.Wrap(err,
+			"failed to load or create SQL service certificate(s)")
+		return
+	}
 
-	// Initialize RPCService Certs
-	b.RPCService.loadOrCreateServiceCertificates(
+	// Initialize RPCService Certs.
+	err = b.RPCService.loadOrCreateServiceCertificates(
 		cl.RPCServiceCertPath(),
 		cl.RPCServiceKeyPath(),
 		cl.RPCServiceCACertPath(),
 		cl.RPCServiceCAKeyPath(),
 		initLifespan,
 		"RPC Service",
-		c.SQLAddr, // TODO(aaron-crl): Add RPC variable to config
+		c.SQLAddr, // TODO(aaron-crl): Add RPC variable to config.
 	)
+	if err != nil {
+		err = errors.Wrap(err,
+			"failed to load or create RPC service certificate(s)")
+		return
+	}
 
-	// Initialize AdminUIService Certs
-	b.AdminUIService.loadOrCreateServiceCertificates(
+	// Initialize AdminUIService Certs.
+	err = b.AdminUIService.loadOrCreateServiceCertificates(
 		cl.UICertPath(),
 		cl.UIKeyPath(),
 		cl.UICACertPath(),
@@ -304,6 +330,11 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		"AdminUI Service",
 		c.HTTPAddr,
 	)
+	if err != nil {
+		err = errors.Wrap(err,
+			"failed to load or create Admin UI service certificate(s)")
+		return
+	}
 
 	return
 }
