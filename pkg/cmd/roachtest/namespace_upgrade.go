@@ -13,31 +13,21 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func registerNamespaceUpgrade(r *testRegistry) {
+func registerNamespaceUpgradeMigration(r *testRegistry) {
 	r.Add(testSpec{
-		Name:  "version/namespace-upgrade",
-		Owner: OwnerSQLSchema,
-		// This test is a regression test designed to test for #49092.
-		// It drops objects from the 19.2 node after the 20.1 node joins the
-		// cluster, and also drops/adds objects in each of the states before, during
-		// and after the migration, making sure results are as we expect.
-		MinVersion: "v20.1.0",
+		Name:       "version/namespace-upgrade/migration",
+		Owner:      OwnerSQLSchema,
+		MinVersion: "v21.1.0",
 		Cluster:    makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			predV, err := PredecessorVersion(r.buildVersion)
-			if err != nil {
-				t.Fatal(err)
+			// This test is specifically for the namespace migration in 21.1 and
+			// should be removed in later versions.
+			if v := r.buildVersion; !(v.Major() == 21 && v.Minor() == 1) {
+				t.Skip("test is only for 21.1")
 			}
-			if !strings.HasPrefix(predV, "v19.2") {
-				t.Skip("wrong version", "this test only makes sense for the v19.2->v20.1 upgrade")
-			}
-			runNamespaceUpgrade(ctx, t, c, predV)
+			runNamespaceUpgradeMigration(ctx, t, c)
 		},
 	})
 }
@@ -145,7 +135,7 @@ func verifyNoOrphanedOldEntries(node int) versionStep {
 		db := u.conn(ctx, t, node)
 		// Check that there are no rows in namespace that aren't in namespace2,
 		// except for the old entry for namespace (descriptor 2) which we don't
-		//copy.
+		// copy.
 		row := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM [2 AS namespace] WHERE id != 2 AND id NOT IN (SELECT id FROM [30 as namespace2])`)
 		var count int
@@ -168,13 +158,24 @@ func uploadAndStart(nodes nodeListOption, v string) versionStep {
 	}
 }
 
-func runNamespaceUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
+func runNamespaceUpgradeMigration(ctx context.Context, t *test, c *cluster) {
+	const (
+		// These versions were recent point releases when this test was added.
+		v19_2 = "19.2.11"
+		v20_1 = "20.1.10"
+		v20_2 = "20.2.4"
+		// An empty string means that the cockroach binary specified by flag
+		// `cockroach` will be used.
+		mainVersion = ""
+	)
+
 	roachNodes := c.All()
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const mainVersion = ""
 	u := newVersionUpgradeTest(c,
-		uploadAndStart(roachNodes, predecessorVersion),
+		// The initial portion of the test, when we set up the descriptors and
+		// namespace entries in 19.2 and 20.1, was taken from the original
+		// version/namespace-upgrade test that only ran in 20.1.
+
+		uploadAndStart(roachNodes, v19_2),
 		waitForUpgradeStep(roachNodes),
 		preventAutoUpgradeStep(1),
 
@@ -188,9 +189,10 @@ func runNamespaceUpgrade(ctx context.Context, t *test, c *cluster, predecessorVe
 		createDBStep(1, "torename"),
 
 		// Upgrade Node 3.
-		binaryUpgradeStep(c.Node(3), mainVersion),
+		binaryUpgradeStep(c.Node(3), v20_1),
 
-		// Disable the migration. We'll re-enable it later.
+		// Disable the async migration that ran in previous versions so that we can
+		// test the 21.1 migration.
 		changeMigrationSetting(3, false),
 
 		// Drop the objects on node 1, which is still on the old version.
@@ -208,8 +210,8 @@ func runNamespaceUpgrade(ctx context.Context, t *test, c *cluster, predecessorVe
 		dropDBStep(1, "foo"),
 
 		// Upgrade the other 2 nodes.
-		binaryUpgradeStep(c.Node(1), mainVersion),
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(1), v20_1),
+		binaryUpgradeStep(c.Node(2), v20_1),
 
 		// Finalize upgrade.
 		allowAutoUpgradeStep(1),
@@ -226,36 +228,13 @@ func runNamespaceUpgrade(ctx context.Context, t *test, c *cluster, predecessorVe
 		renameDBStep(1, "torename", "new"),
 		truncateTableStep(1, "totruncate"),
 
-		// Re-enable the migration.
-		changeMigrationSetting(1, true),
+		// Now upgrade all the way to 21.1.
 
-		// Wait for the migration to finish.
-		func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			t.l.Printf("waiting for cluster to finish namespace migration\n")
+		binaryUpgradeStep(c.All(), v20_2),
+		waitForUpgradeStep(roachNodes),
 
-			for _, i := range roachNodes {
-				err := retry.ForDuration(30*time.Second, func() error {
-					db := u.conn(ctx, t, i)
-					// This is copied from pkg/sqlmigrations/migrations.go. We don't
-					// export it just for this test because it feels unnecessary.
-					const systemNamespaceMigrationName = "upgrade system.namespace post-20.1-finalization"
-					var complete bool
-					if err := db.QueryRowContext(ctx,
-						`SELECT crdb_internal.completed_migrations() @> ARRAY[$1::string]`,
-						systemNamespaceMigrationName,
-					).Scan(&complete); err != nil {
-						t.Fatal(err)
-					}
-					if !complete {
-						return fmt.Errorf("%d: migration not complete", i)
-					}
-					return nil
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-		},
+		binaryUpgradeStep(c.All(), mainVersion),
+		waitForUpgradeStep(roachNodes),
 
 		// Verify that there are no remaining entries that only live in the old
 		// namespace table.

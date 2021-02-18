@@ -252,6 +252,11 @@ const (
 	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
 	// on a TABLE.
 	MultiRegionFeatures
+	// NamespaceTableWithSchemasMigration is for the migration which copies
+	// entries from the old namespace table to the new one (with schema IDs).
+	// Previously this was implemented as an async task with no guarantees about
+	// completion.
+	NamespaceTableWithSchemasMigration
 
 	// Step (1): Add new versions here.
 )
@@ -425,6 +430,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     MultiRegionFeatures,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     NamespaceTableWithSchemasMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 36},
 	},
 	// Step (2): Add new versions here.
 })
