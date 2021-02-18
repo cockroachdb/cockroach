@@ -9,13 +9,16 @@
 // licenses/APL.txt.
 
 import { SessionsPageProps } from "./sessionsPage";
-//import {refreshSessions} from "src/redux/apiReducers";
 import { createMemoryHistory } from "history";
 import { SessionInfo } from "./sessionsTable";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 const Phase = cockroach.server.serverpb.ActiveQuery.Phase;
 import { util } from "protobufjs";
+import {
+  CancelQueryRequestMessage,
+  CancelSessionRequestMessage,
+} from "src/api/terminateQueryApi";
 
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
@@ -150,7 +153,9 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
   },
   sessions: sessionsList,
   sessionsError: null,
-  refreshSessions: (() => {}) as any,
+  refreshSessions: () => {},
+  cancelSession: (req: CancelSessionRequestMessage) => {},
+  cancelQuery: (req: CancelQueryRequestMessage) => {},
 };
 
 export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
@@ -169,6 +174,7 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
   },
   sessions: [],
   sessionsError: null,
-  refreshSessions: (() => {}) as any,
-  cancel: (() => {}) as any,
+  refreshSessions: () => {},
+  cancelSession: (req: CancelSessionRequestMessage) => {},
+  cancelQuery: (req: CancelQueryRequestMessage) => {},
 };
