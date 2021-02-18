@@ -181,11 +181,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 
 		// Determine whether the conflict columns match the columns in the unique
 		// constraint. If not, the constraint cannot be an arbiter.
-		var ucOrds util.FastIntSet
-		for i, n := 0, uniqueConstraint.ColumnCount(); i < n; i++ {
-			ucOrds.Add(uniqueConstraint.ColumnOrdinal(mb.tab, i))
-		}
-
+		ucOrds := getUniqueConstraintOrdinals(mb.tab, uniqueConstraint)
 		if ucOrds.Equals(conflictOrds) {
 			return util.FastIntSet{}, util.MakeFastIntSet(uc)
 		}
@@ -206,15 +202,13 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 // wraps the current mb.outScope.expr and removes rows that would conflict with
 // existing rows.
 //
-// 	 - colCount is the number of columns in the constraint or lax key columns
-// 	   in the index.
-// 	 - colOrdinal is a function that returns the position of the ith constraint
-// 	   or index column in its table.
+// 	 - columnOrds is the set of table column ordinals that the arbiter
+//     guarantees uniqueness of.
 // 	 - predExpr is the partial index predicate. If the arbiter is not a partial
 //     index, predExpr is nil.
 //
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, colCount int, colOrdinal func(i int) int, predExpr tree.Expr,
+	inScope *scope, columnOrds util.FastIntSet, predExpr tree.Expr,
 ) {
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -251,15 +245,14 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	//   ON ins.x = scan.a AND ins.y = scan.b
 	//
 	var on memo.FiltersExpr
-	for i := 0; i < colCount; i++ {
-		ord := colOrdinal(i)
-		fetchCol := fetchScope.getColumnForTableOrdinal(ord)
+	for i, ok := columnOrds.Next(0); ok; i, ok = columnOrds.Next(i + 1) {
+		fetchCol := fetchScope.getColumnForTableOrdinal(i)
 		if fetchCol == nil {
 			panic(errors.AssertionFailedf("missing column in fetchScope"))
 		}
 
 		condition := mb.b.factory.ConstructEq(
-			mb.b.factory.ConstructVariable(mb.insertColIDs[ord]),
+			mb.b.factory.ConstructVariable(mb.insertColIDs[i]),
 			mb.b.factory.ConstructVariable(fetchCol.id),
 		)
 		on = append(on, mb.b.factory.ConstructFiltersItem(condition))
@@ -287,26 +280,21 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 // buildDistinctOnForDoNothingArbiter adds an UpsertDistinctOn operator for a
 // single arbiter index or constraint.
 //
-//   - colCount is the number of columns in the constraint or lax key columns
-//     in the index.
-//   - colOrdinal is a function that returns the position of the ith constraint
-//     or index column in its table.
+// 	 - columnOrds is the set of table column ordinals that the arbiter
+//     guarantees uniqueness of.
 //   - partialIndexDistinctCol is a column that allows the UpsertDistinctOn to
 //     only de-duplicate insert rows that satisfy the partial index predicate.
 //     If the arbiter is not a partial index, partialIndexDistinctCol is nil.
 //
 func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
-	insertColScope *scope,
-	colCount int,
-	colOrdinal func(int) int,
-	partialIndexDistinctCol *scopeColumn,
+	insertColScope *scope, colOrds util.FastIntSet, partialIndexDistinctCol *scopeColumn,
 ) {
 	// Add an UpsertDistinctOn operator to ensure there are no duplicate input
 	// rows for this arbiter. Duplicate rows can trigger conflict errors at
 	// runtime, which DO NOTHING is not supposed to do. See issue #37880.
 	var conflictCols opt.ColSet
-	for i := 0; i < colCount; i++ {
-		conflictCols.Add(mb.insertColIDs[colOrdinal(i)])
+	for i, ok := colOrds.Next(0); ok; i, ok = colOrds.Next(i + 1) {
+		conflictCols.Add(mb.insertColIDs[i])
 	}
 	if partialIndexDistinctCol != nil {
 		conflictCols.Add(partialIndexDistinctCol.id)
