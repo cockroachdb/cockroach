@@ -2276,11 +2276,6 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
-// TODO(radu): remove this once the feature is stable.
-func (m *sessionDataMutator) SetVirtualColumnsEnabled(val bool) {
-	m.data.VirtualColumnsEnabled = val
-}
-
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {

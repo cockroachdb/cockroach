@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
@@ -234,10 +233,6 @@ func (b *Builder) alterTableAddColumn(
 	}
 
 	if d.IsComputed() {
-		if d.IsVirtual() {
-			return unimplemented.NewWithIssue(57608, "virtual computed columns")
-		}
-
 		// TODO (lucy): This is not going to work when the computed column
 		// references columns created in the same transaction.
 		computedColValidator := schemaexpr.MakeComputedColumnValidator(

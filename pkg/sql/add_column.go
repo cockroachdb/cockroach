@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -128,9 +127,6 @@ func (p *planner) addColumnImpl(
 	}
 
 	if d.IsComputed() {
-		if d.IsVirtual() && !sessionData.VirtualColumnsEnabled {
-			return unimplemented.NewWithIssue(57608, "virtual computed columns")
-		}
 		computedColValidator := schemaexpr.MakeComputedColumnValidator(
 			params.ctx,
 			n.tableDesc,

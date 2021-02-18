@@ -223,11 +223,6 @@ type LocalOnlySessionData struct {
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
 
-	// VirtualColumnsEnabled indicates whether we allow virtual (non-stored)
-	// computed columns.
-	// TODO(radu): remove this once the feature is stable.
-	VirtualColumnsEnabled bool
-
 	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
 	// constraints without an index is allowed.
 	// TODO(rytaft): remove this once unique without index constraints are fully
