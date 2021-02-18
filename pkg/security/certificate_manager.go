@@ -291,6 +291,12 @@ func (cl CertsLocator) ClientCACertPath() string {
 	return filepath.Join(cl.certsDir, "ca-client"+certExtension)
 }
 
+// ClientCAKeyPath returns the expected file path for the CA key
+// used to sign client certificates.
+func (cl CertsLocator) ClientCAKeyPath() string {
+	return filepath.Join(cl.certsDir, "ca-client"+keyExtension)
+}
+
 // UICACertPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICACertPath() string {
