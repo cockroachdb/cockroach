@@ -61,7 +61,7 @@ const (
 // Note that throughout this file "buckets" and "groups" mean the same thing
 // and are used interchangeably.
 type hashAggregator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	spec      *execinfrapb.AggregatorSpec
@@ -126,7 +126,7 @@ type hashAggregator struct {
 	toClose     colexecbase.Closers
 }
 
-var _ ResettableOperator = &hashAggregator{}
+var _ colexecbase.ResettableOperator = &hashAggregator{}
 var _ colexecbase.BufferingInMemoryOperator = &hashAggregator{}
 var _ closableOperator = &hashAggregator{}
 
@@ -146,7 +146,7 @@ const hashAggregatorAllocSize = 128
 // tuples.
 func NewHashAggregator(
 	args *colexecagg.NewAggregatorArgs, newSpillingQueueArgs *NewSpillingQueueArgs,
-) (ResettableOperator, error) {
+) (colexecbase.ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
@@ -161,7 +161,7 @@ func NewHashAggregator(
 		maxBuffered = coldata.MaxBatchSize
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:       NewOneInputNode(args.Input),
+		OneInputNode:       colexecbase.NewOneInputNode(args.Input),
 		allocator:          args.Allocator,
 		spec:               args.Spec,
 		state:              hashAggregatorBuffering,
@@ -183,7 +183,7 @@ func NewHashAggregator(
 }
 
 func (op *hashAggregator) Init() {
-	op.input.Init()
+	op.Input.Init()
 	// These numbers were chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
@@ -211,7 +211,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 					)
 				})
 			}
-			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.input.Next(ctx), 0
+			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
 				if err := op.inputTrackingState.tuples.enqueue(ctx, op.bufferingState.pendingBatch); err != nil {
@@ -492,15 +492,15 @@ func (op *hashAggregator) ExportBuffered(
 	return batch
 }
 
-func (op *hashAggregator) reset(ctx context.Context) {
-	if r, ok := op.input.(resetter); ok {
-		r.reset(ctx)
+func (op *hashAggregator) Reset(ctx context.Context) {
+	if r, ok := op.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	op.bufferingState.tuples.ResetInternalBatch()
 	op.bufferingState.pendingBatch = nil
 	op.bufferingState.unprocessedIdx = 0
 	op.buckets = op.buckets[:0]
-	op.ht.reset(ctx)
+	op.ht.Reset(ctx)
 	if op.inputTrackingState.tuples != nil {
 		if err := op.inputTrackingState.tuples.close(ctx); err != nil {
 			colexecerror.InternalError(err)

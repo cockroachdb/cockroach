@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -41,80 +42,80 @@ func TestIsNullProjOp(t *testing.T) {
 
 	testCases := []struct {
 		desc         string
-		inputTuples  tuples
-		outputTuples tuples
+		inputTuples  colexectestutils.Tuples
+		outputTuples colexectestutils.Tuples
 		projExpr     string
 	}{
 		{
 			desc:         "SELECT c, c IS NULL FROM t -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0, false}, {nil, true}, {1, false}, {2, false}, {nil, true}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0, false}, {nil, true}, {1, false}, {2, false}, {nil, true}},
 			projExpr:     "IS NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NULL FROM t -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0, false}, {1, false}, {2, false}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0, false}, {1, false}, {2, false}},
 			projExpr:     "IS NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NULL FROM t -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil, true}, {nil, true}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil, true}, {nil, true}},
 			projExpr:     "IS NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT NULL FROM t -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0, true}, {nil, false}, {1, true}, {2, true}, {nil, false}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {nil, false}, {1, true}, {2, true}, {nil, false}},
 			projExpr:     "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT NULL FROM t -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0, true}, {1, true}, {2, true}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {1, true}, {2, true}},
 			projExpr:     "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT NULL FROM t -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil, false}, {nil, false}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil, false}, {nil, false}},
 			projExpr:     "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0, false}, {nil, true}, {1, false}, {2, false}, {nil, true}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0, false}, {nil, true}, {1, false}, {2, false}, {nil, true}},
 			projExpr:     "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0, false}, {1, false}, {2, false}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0, false}, {1, false}, {2, false}},
 			projExpr:     "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil, true}, {nil, true}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil, true}, {nil, true}},
 			projExpr:     "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0, true}, {nil, false}, {1, true}, {2, true}, {nil, false}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {nil, false}, {1, true}, {2, true}, {nil, false}},
 			projExpr:     "IS DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0, true}, {1, true}, {2, true}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {1, true}, {2, true}},
 			projExpr:     "IS DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil, false}, {nil, false}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil, false}, {nil, false}},
 			projExpr:     "IS DISTINCT FROM NULL",
 		},
 	}
@@ -127,7 +128,7 @@ func TestIsNullProjOp(t *testing.T) {
 				fmt.Sprintf("@1 %s", c.projExpr), false, /* canFallbackToRowexec */
 			)
 		}
-		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
 }
 
@@ -147,80 +148,80 @@ func TestIsNullSelOp(t *testing.T) {
 
 	testCases := []struct {
 		desc         string
-		inputTuples  tuples
-		outputTuples tuples
+		inputTuples  colexectestutils.Tuples
+		outputTuples colexectestutils.Tuples
 		selExpr      string
 	}{
 		{
 			desc:         "SELECT c FROM t WHERE c IS NULL -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{nil}, {nil}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil}, {nil}},
 			selExpr:      "IS NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NULL -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "IS NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NULL -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil}, {nil}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil}, {nil}},
 			selExpr:      "IS NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0}, {1}, {2}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}, {2}},
 			selExpr:      "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0}, {1}, {2}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}, {2}},
 			selExpr:      "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "IS NOT NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{nil}, {nil}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil}, {nil}},
 			selExpr:      "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{{nil}, {nil}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{{nil}, {nil}},
 			selExpr:      "IS NOT DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- both",
-			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
-			outputTuples: tuples{{0}, {1}, {2}},
+			inputTuples:  colexectestutils.Tuples{{0}, {nil}, {1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}, {2}},
 			selExpr:      "IS DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- no NULLs",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0}, {1}, {2}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}, {2}},
 			selExpr:      "IS DISTINCT FROM NULL",
 		},
 		{
 			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- only NULLs",
-			inputTuples:  tuples{{nil}, {nil}},
-			outputTuples: tuples{},
+			inputTuples:  colexectestutils.Tuples{{nil}, {nil}},
+			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "IS DISTINCT FROM NULL",
 		},
 	}
@@ -249,6 +250,6 @@ func TestIsNullSelOp(t *testing.T) {
 			}
 			return result.Op, nil
 		}
-		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
 }

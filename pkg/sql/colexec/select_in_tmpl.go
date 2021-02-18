@@ -93,7 +93,7 @@ func GetInProjectionOperator(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			obj := &projectInOp_TYPE{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				colIdx:       colIdx,
 				outputIdx:    resultIdx,
@@ -118,7 +118,7 @@ func GetInOperator(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			obj := &selectInOp_TYPE{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				colIdx:       colIdx,
 				negate:       negate,
 			}
@@ -135,7 +135,7 @@ func GetInOperator(
 // {{range .WidthOverloads}}
 
 type selectInOp_TYPE struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	colIdx    int
 	filterRow []_GOTYPE
 	hasNulls  bool
@@ -145,7 +145,7 @@ type selectInOp_TYPE struct {
 var _ colexecbase.Operator = &selectInOp_TYPE{}
 
 type projectInOp_TYPE struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -200,16 +200,16 @@ func cmpIn_TYPE(
 }
 
 func (si *selectInOp_TYPE) Init() {
-	si.input.Init()
+	si.Input.Init()
 }
 
 func (pi *projectInOp_TYPE) Init() {
-	pi.input.Init()
+	pi.Input.Init()
 }
 
 func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := si.input.Next(ctx)
+		batch := si.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
@@ -285,7 +285,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 }
 
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
-	batch := pi.input.Next(ctx)
+	batch := pi.Input.Next(ctx)
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}

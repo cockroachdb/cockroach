@@ -34,7 +34,7 @@ func NewTupleProjOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
-		OneInputNode:      NewOneInputNode(input),
+		OneInputNode:      colexecbase.NewOneInputNode(input),
 		allocator:         allocator,
 		converter:         colconv.NewVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
 		tupleContentsIdxs: tupleContentsIdxs,
@@ -44,7 +44,7 @@ func NewTupleProjOp(
 }
 
 type tupleProjOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator         *colmem.Allocator
 	converter         *colconv.VecToDatumConverter
@@ -56,11 +56,11 @@ type tupleProjOp struct {
 var _ colexecbase.Operator = &tupleProjOp{}
 
 func (t *tupleProjOp) Init() {
-	t.input.Init()
+	t.Input.Init()
 }
 
 func (t *tupleProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := t.input.Next(ctx)
+	batch := t.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -84,12 +85,13 @@ func TestExternalHashAggregator(t *testing.T) {
 				)
 				require.NoError(t, err)
 				var semsToCheck []semaphore.Semaphore
-				runTestsWithTyps(
+				colexectestutils.RunTestsWithTyps(
 					t,
-					[]tuples{tc.input},
+					testAllocator,
+					[]colexectestutils.Tuples{tc.input},
 					[][]*types.T{tc.typs},
 					tc.expected,
-					unorderedVerifier,
+					colexectestutils.UnorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						sem := colexecbase.NewTestingSemaphore(ehaNumRequiredFDs)
 						semsToCheck = append(semsToCheck, sem)
@@ -176,7 +178,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
 					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+						new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
 							op, accs, mons, _, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg,
 								&colexecbase.TestingSemaphore{}, 0, /* numForcedRepartitions */

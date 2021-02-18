@@ -46,12 +46,12 @@ type defaultCmp_KINDSelOp struct {
 var _ colexecbase.Operator = &defaultCmp_KINDSelOp{}
 
 func (d *defaultCmp_KINDSelOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d *defaultCmp_KINDSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := d.input.Next(ctx)
+		batch := d.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch

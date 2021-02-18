@@ -106,7 +106,7 @@ func GetLikeOperator(
 	}
 	pat := []byte(pattern)
 	base := selConstOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
 	switch likeOpType {
@@ -208,7 +208,7 @@ func GetLikeProjectionOperator(
 	pat := []byte(pattern)
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	base := projConstOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    resultIdx,

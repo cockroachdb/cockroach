@@ -113,7 +113,7 @@ const ExternalSorterMinPartitions = 3
 // some amount of RAM for its buffer. This is determined by
 // maxNumberPartitions variable.
 type externalSorter struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 	closerHelper
 
@@ -133,7 +133,7 @@ type externalSorter struct {
 	ordering   execinfrapb.Ordering
 	// columnOrdering is the same as ordering used when creating mergers.
 	columnOrdering     colinfo.ColumnOrdering
-	inMemSorter        ResettableOperator
+	inMemSorter        colexecbase.ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
 	partitioner        colcontainer.PartitionedQueue
 	partitionerCreator func() colcontainer.PartitionedQueue
@@ -184,7 +184,7 @@ type externalSorter struct {
 	}
 }
 
-var _ ResettableOperator = &externalSorter{}
+var _ colexecbase.ResettableOperator = &externalSorter{}
 var _ closableOperator = &externalSorter{}
 
 // NewExternalSorter returns a disk-backed general sort operator.
@@ -267,7 +267,7 @@ func NewExternalSorter(
 		partitionedDiskQueueSemaphore = nil
 	}
 	es := &externalSorter{
-		OneInputNode:             NewOneInputNode(inMemSorter),
+		OneInputNode:             colexecbase.NewOneInputNode(inMemSorter),
 		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		mergeMemoryLimit:         mergeMemoryLimit,
@@ -290,7 +290,7 @@ func NewExternalSorter(
 }
 
 func (s *externalSorter) Init() {
-	s.input.Init()
+	s.Input.Init()
 	s.state = externalSorterNewPartition
 }
 
@@ -298,7 +298,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 	for {
 		switch s.state {
 		case externalSorterNewPartition:
-			b := s.input.Next(ctx)
+			b := s.Input.Next(ctx)
 			if b.Length() == 0 {
 				// The input has been fully exhausted, and it is always the case
 				// that the number of partitions is less than the maximum number
@@ -323,14 +323,14 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			s.state = externalSorterSpillPartition
 
 		case externalSorterSpillPartition:
-			b := s.input.Next(ctx)
+			b := s.Input.Next(ctx)
 			s.enqueue(ctx, b)
 			if b.Length() == 0 {
 				// The partition has been fully spilled, so we reset the
 				// in-memory sorter (which will do the "shallow" reset of
 				// inputPartitioningOperator).
 				s.inMemSorterInput.interceptReset = true
-				s.inMemSorter.reset(ctx)
+				s.inMemSorter.Reset(ctx)
 				s.numPartitions++
 				if s.shouldMergeAllPartitions() {
 					s.state = externalSorterRepeatedMerging
@@ -496,9 +496,9 @@ func (s *externalSorter) shouldMergeAllPartitions() bool {
 	return true
 }
 
-func (s *externalSorter) reset(ctx context.Context) {
-	if r, ok := s.input.(resetter); ok {
-		r.reset(ctx)
+func (s *externalSorter) Reset(ctx context.Context) {
+	if r, ok := s.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	s.state = externalSorterNewPartition
 	if err := s.Close(ctx); err != nil {
@@ -598,9 +598,9 @@ func (s *externalSorter) createMergerForPartitions(
 
 func newInputPartitioningOperator(
 	input colexecbase.Operator, memoryLimit int64,
-) ResettableOperator {
+) colexecbase.ResettableOperator {
 	return &inputPartitioningOperator{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		memoryLimit:  memoryLimit,
 	}
 }
@@ -610,7 +610,7 @@ func newInputPartitioningOperator(
 // limit. From that point, the operator returns a zero-length batch (until it is
 // reset).
 type inputPartitioningOperator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	// memoryLimit determines the size of each partition.
@@ -637,17 +637,17 @@ type inputPartitioningOperator struct {
 	interceptReset bool
 }
 
-var _ ResettableOperator = &inputPartitioningOperator{}
+var _ colexecbase.ResettableOperator = &inputPartitioningOperator{}
 
 func (o *inputPartitioningOperator) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 	if o.alreadyUsedMemory >= o.memoryLimit {
 		return coldata.ZeroBatch
 	}
-	b := o.input.Next(ctx)
+	b := o.Input.Next(ctx)
 	if b.Length() == 0 {
 		return b
 	}
@@ -661,10 +661,10 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
-func (o *inputPartitioningOperator) reset(ctx context.Context) {
+func (o *inputPartitioningOperator) Reset(ctx context.Context) {
 	if !o.interceptReset {
-		if r, ok := o.input.(resetter); ok {
-			r.reset(ctx)
+		if r, ok := o.Input.(colexecbase.Resetter); ok {
+			r.Reset(ctx)
 		}
 	}
 	o.interceptReset = false

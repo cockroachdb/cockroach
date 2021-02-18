@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,38 +33,38 @@ func init() {
 	sortChunksTestCases = []sortTestCase{
 		{
 			description: `three chunks`,
-			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
-			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
+			tuples:      colexectestutils.Tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
+			expected:    colexectestutils.Tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
 			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
 		{
 			description: `simple nulls asc`,
-			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
-			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
+			tuples:      colexectestutils.Tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
+			expected:    colexectestutils.Tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
 			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
 		{
 			description: `simple nulls desc`,
-			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
-			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
+			tuples:      colexectestutils.Tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
+			expected:    colexectestutils.Tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
 			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 			matchLen:    1,
 		},
 		{
 			description: `one chunk, matchLen 1, three ordering columns`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 1, 2},
 				{0, 2, 0},
 				{0, 1, 0},
 				{0, 1, 1},
 				{0, 2, 1},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 1, 1},
 				{0, 1, 2},
@@ -76,14 +77,14 @@ func init() {
 		},
 		{
 			description: `two chunks, matchLen 1, three ordering columns`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 1, 2},
 				{0, 2, 0},
 				{0, 1, 0},
 				{1, 2, 1},
 				{1, 1, 1},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 1, 2},
 				{0, 2, 0},
@@ -96,14 +97,14 @@ func init() {
 		},
 		{
 			description: `two chunks, matchLen 2, three ordering columns`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 1, 2},
 				{0, 1, 0},
 				{0, 1, 1},
 				{0, 2, 1},
 				{0, 2, 0},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 1, 1},
 				{0, 1, 2},
@@ -116,14 +117,14 @@ func init() {
 		},
 		{
 			description: `four chunks, matchLen 2, three ordering columns`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 1, 2},
 				{0, 1, 0},
 				{0, 2, 0},
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 1, 2},
 				{0, 2, 0},
@@ -136,14 +137,14 @@ func init() {
 		},
 		{
 			description: `three chunks, matchLen 1, three ordering columns (reordered)`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 2, 0},
 				{0, 1, 0},
 				{1, 1, 1},
 				{0, 1, 1},
 				{0, 1, 2},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 2, 0},
 				{0, 1, 1},
@@ -156,7 +157,7 @@ func init() {
 		},
 		{
 			description: `four chunks, matchLen 2, three ordering columns (reordered)`,
-			tuples: tuples{
+			tuples: colexectestutils.Tuples{
 				{0, 2, 0},
 				{0, 1, 0},
 				{1, 1, 1},
@@ -165,7 +166,7 @@ func init() {
 				{1, 2, 2},
 				{1, 1, 2},
 			},
-			expected: tuples{
+			expected: colexectestutils.Tuples{
 				{0, 1, 0},
 				{0, 2, 0},
 				{1, 1, 1},
@@ -186,7 +187,7 @@ func TestSortChunks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range sortChunksTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
 		})
 	}
@@ -208,9 +209,9 @@ func TestSortChunksRandomized(t *testing.T) {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 			for matchLen := 1; matchLen < nOrderingCols; matchLen++ {
 				ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
-				tups := make(tuples, nTups)
+				tups := make(colexectestutils.Tuples, nTups)
 				for i := range tups {
-					tups[i] = make(tuple, nCols)
+					tups[i] = make(colexectestutils.Tuple, nCols)
 					for j := range tups[i] {
 						// Small range so we can test partitioning.
 						tups[i][j] = rng.Int63() % 2048
@@ -219,16 +220,16 @@ func TestSortChunksRandomized(t *testing.T) {
 
 				// Sort tups on the first matchLen columns as needed for sort chunks
 				// operator.
-				sortedTups := make(tuples, nTups)
+				sortedTups := make(colexectestutils.Tuples, nTups)
 				copy(sortedTups, tups)
 				sort.Slice(sortedTups, less(sortedTups, ordCols[:matchLen]))
 
 				// Sort tups on all ordering columns to get the expected results.
-				expected := make(tuples, nTups)
+				expected := make(colexectestutils.Tuples, nTups)
 				copy(expected, tups)
 				sort.Slice(expected, less(expected, ordCols))
 
-				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
@@ -292,7 +293,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								}
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
-									source := newFiniteChunksSource(batch, typs, nBatches, matchLen)
+									source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
 									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)

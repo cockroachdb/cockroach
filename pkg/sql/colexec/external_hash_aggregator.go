@@ -42,7 +42,7 @@ func NewExternalHashAggregator(
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
 ) colexecbase.Operator {
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
@@ -58,7 +58,7 @@ func NewExternalHashAggregator(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		_ semaphore.Semaphore,
-	) ResettableOperator {
+	) colexecbase.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = createDiskBackedSorter(
 			partitionedInputs[0], newAggArgs.InputTypes,

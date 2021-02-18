@@ -40,7 +40,7 @@ func BoolOrUnknownToSelOp(
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
 type boolVecToSelOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	// outputCol is the boolean output column. It should be shared by other
@@ -48,13 +48,13 @@ type boolVecToSelOp struct {
 	outputCol []bool
 }
 
-var _ ResettableOperator = &boolVecToSelOp{}
+var _ colexecbase.ResettableOperator = &boolVecToSelOp{}
 
 func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
 	// exhausted.
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return batch
@@ -104,12 +104,12 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *boolVecToSelOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
-func (p *boolVecToSelOp) reset(ctx context.Context) {
-	if r, ok := p.input.(resetter); ok {
-		r.reset(ctx)
+func (p *boolVecToSelOp) Reset(ctx context.Context) {
+	if r, ok := p.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
@@ -133,8 +133,8 @@ func boolVecToSel64(vec []bool, sel []int) []int {
 // NOTE: if the column can be of a type other than boolean,
 // BoolOrUnknownToSelOp *must* be used instead.
 func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
-	d := selBoolOp{OneInputNode: NewOneInputNode(input), colIdx: colIdx}
-	ret := &boolVecToSelOp{OneInputNode: NewOneInputNode(&d)}
+	d := selBoolOp{OneInputNode: colexecbase.NewOneInputNode(input), colIdx: colIdx}
+	ret := &boolVecToSelOp{OneInputNode: colexecbase.NewOneInputNode(&d)}
 	d.boolVecToSelOp = ret
 	return ret
 }
@@ -142,18 +142,18 @@ func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Opera
 // selBoolOp is a small helper operator that transforms a boolVecToSelOp into
 // an operator that can see the inside of its input batch for newBoolVecToSelOp.
 type selBoolOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 	boolVecToSelOp *boolVecToSelOp
 	colIdx         int
 }
 
 func (d selBoolOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.input.Next(ctx)
+	batch := d.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return batch

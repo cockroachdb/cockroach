@@ -23,7 +23,7 @@ import (
 // columns.
 func NewUnorderedDistinct(
 	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) ResettableOperator {
+) colexecbase.ResettableOperator {
 	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
 	const hashTableNumBuckets = 128
@@ -39,7 +39,7 @@ func NewUnorderedDistinct(
 	)
 
 	return &unorderedDistinct{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		ht:           ht,
 	}
 }
@@ -49,7 +49,7 @@ func NewUnorderedDistinct(
 // distinct tuples from each input batch. Once at least one tuple is appended,
 // all of the distinct tuples from the batch are emitted in the output.
 type unorderedDistinct struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	ht *hashTable
 	// lastInputBatch tracks the last input batch read from the input and not
@@ -60,15 +60,15 @@ type unorderedDistinct struct {
 }
 
 var _ colexecbase.BufferingInMemoryOperator = &unorderedDistinct{}
-var _ ResettableOperator = &unorderedDistinct{}
+var _ colexecbase.ResettableOperator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
-	op.input.Init()
+	op.Input.Init()
 }
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	for {
-		op.lastInputBatch = op.input.Next(ctx)
+		op.lastInputBatch = op.Input.Next(ctx)
 		if op.lastInputBatch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
@@ -101,17 +101,17 @@ func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operato
 }
 
 // reset resets the unorderedDistinct.
-func (op *unorderedDistinct) reset(ctx context.Context) {
-	if r, ok := op.input.(resetter); ok {
-		r.reset(ctx)
+func (op *unorderedDistinct) Reset(ctx context.Context) {
+	if r, ok := op.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
-	op.ht.reset(ctx)
+	op.ht.Reset(ctx)
 }
 
 // unorderedDistinctFilterer filters out tuples that are duplicates of the
 // tuples already emitted by the unordered distinct.
 type unorderedDistinctFilterer struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	ht *hashTable
@@ -123,16 +123,16 @@ type unorderedDistinctFilterer struct {
 var _ colexecbase.Operator = &unorderedDistinctFilterer{}
 
 func (f *unorderedDistinctFilterer) Init() {
-	f.input.Init()
+	f.Input.Init()
 }
 
 func (f *unorderedDistinctFilterer) Next(ctx context.Context) coldata.Batch {
 	if f.ht.vals.Length() == 0 {
 		// The hash table is empty, so there is nothing to filter against.
-		return f.input.Next(ctx)
+		return f.Input.Next(ctx)
 	}
 	for {
-		batch := f.input.Next(ctx)
+		batch := f.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return coldata.ZeroBatch
 		}

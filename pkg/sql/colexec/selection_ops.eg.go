@@ -39,14 +39,14 @@ var (
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	colIdx         int
 	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	col1Idx        int
 	col2Idx        int
 	overloadHelper execgen.OverloadHelper
@@ -66,7 +66,7 @@ func (p *selEQBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -199,7 +199,7 @@ func (p *selEQBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQBoolBoolOp struct {
@@ -215,7 +215,7 @@ func (p *selEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -359,7 +359,7 @@ func (p *selEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQBytesBytesConstOp struct {
@@ -376,7 +376,7 @@ func (p *selEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -475,7 +475,7 @@ func (p *selEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQBytesBytesOp struct {
@@ -491,7 +491,7 @@ func (p *selEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -599,7 +599,7 @@ func (p *selEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt16ConstOp struct {
@@ -616,7 +616,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -741,7 +741,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt16Op struct {
@@ -757,7 +757,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -893,7 +893,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt32ConstOp struct {
@@ -910,7 +910,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1035,7 +1035,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt32Op struct {
@@ -1051,7 +1051,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1187,7 +1187,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt64ConstOp struct {
@@ -1204,7 +1204,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1329,7 +1329,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalInt64Op struct {
@@ -1345,7 +1345,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1481,7 +1481,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalFloat64ConstOp struct {
@@ -1498,7 +1498,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1631,7 +1631,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalFloat64Op struct {
@@ -1647,7 +1647,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1791,7 +1791,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalDecimalConstOp struct {
@@ -1808,7 +1808,7 @@ func (p *selEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -1909,7 +1909,7 @@ func (p *selEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDecimalDecimalOp struct {
@@ -1925,7 +1925,7 @@ func (p *selEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2037,7 +2037,7 @@ func (p *selEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int16ConstOp struct {
@@ -2054,7 +2054,7 @@ func (p *selEQInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2199,7 +2199,7 @@ func (p *selEQInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int16Op struct {
@@ -2215,7 +2215,7 @@ func (p *selEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2371,7 +2371,7 @@ func (p *selEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int32ConstOp struct {
@@ -2388,7 +2388,7 @@ func (p *selEQInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2533,7 +2533,7 @@ func (p *selEQInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int32Op struct {
@@ -2549,7 +2549,7 @@ func (p *selEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2705,7 +2705,7 @@ func (p *selEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int64ConstOp struct {
@@ -2722,7 +2722,7 @@ func (p *selEQInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -2867,7 +2867,7 @@ func (p *selEQInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Int64Op struct {
@@ -2883,7 +2883,7 @@ func (p *selEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3039,7 +3039,7 @@ func (p *selEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Float64ConstOp struct {
@@ -3056,7 +3056,7 @@ func (p *selEQInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3233,7 +3233,7 @@ func (p *selEQInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16Float64Op struct {
@@ -3249,7 +3249,7 @@ func (p *selEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3437,7 +3437,7 @@ func (p *selEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16DecimalConstOp struct {
@@ -3454,7 +3454,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3579,7 +3579,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt16DecimalOp struct {
@@ -3595,7 +3595,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3731,7 +3731,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int16ConstOp struct {
@@ -3748,7 +3748,7 @@ func (p *selEQInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -3893,7 +3893,7 @@ func (p *selEQInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int16Op struct {
@@ -3909,7 +3909,7 @@ func (p *selEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4065,7 +4065,7 @@ func (p *selEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int32ConstOp struct {
@@ -4082,7 +4082,7 @@ func (p *selEQInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4227,7 +4227,7 @@ func (p *selEQInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int32Op struct {
@@ -4243,7 +4243,7 @@ func (p *selEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4399,7 +4399,7 @@ func (p *selEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int64ConstOp struct {
@@ -4416,7 +4416,7 @@ func (p *selEQInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4561,7 +4561,7 @@ func (p *selEQInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Int64Op struct {
@@ -4577,7 +4577,7 @@ func (p *selEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4733,7 +4733,7 @@ func (p *selEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Float64ConstOp struct {
@@ -4750,7 +4750,7 @@ func (p *selEQInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -4927,7 +4927,7 @@ func (p *selEQInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32Float64Op struct {
@@ -4943,7 +4943,7 @@ func (p *selEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5131,7 +5131,7 @@ func (p *selEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32DecimalConstOp struct {
@@ -5148,7 +5148,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5273,7 +5273,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt32DecimalOp struct {
@@ -5289,7 +5289,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5425,7 +5425,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int16ConstOp struct {
@@ -5442,7 +5442,7 @@ func (p *selEQInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5587,7 +5587,7 @@ func (p *selEQInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int16Op struct {
@@ -5603,7 +5603,7 @@ func (p *selEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5759,7 +5759,7 @@ func (p *selEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int32ConstOp struct {
@@ -5776,7 +5776,7 @@ func (p *selEQInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -5921,7 +5921,7 @@ func (p *selEQInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int32Op struct {
@@ -5937,7 +5937,7 @@ func (p *selEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6093,7 +6093,7 @@ func (p *selEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int64ConstOp struct {
@@ -6110,7 +6110,7 @@ func (p *selEQInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6255,7 +6255,7 @@ func (p *selEQInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Int64Op struct {
@@ -6271,7 +6271,7 @@ func (p *selEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6427,7 +6427,7 @@ func (p *selEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Float64ConstOp struct {
@@ -6444,7 +6444,7 @@ func (p *selEQInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6621,7 +6621,7 @@ func (p *selEQInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64Float64Op struct {
@@ -6637,7 +6637,7 @@ func (p *selEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6825,7 +6825,7 @@ func (p *selEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64DecimalConstOp struct {
@@ -6842,7 +6842,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -6967,7 +6967,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQInt64DecimalOp struct {
@@ -6983,7 +6983,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -7119,7 +7119,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int16ConstOp struct {
@@ -7136,7 +7136,7 @@ func (p *selEQFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -7313,7 +7313,7 @@ func (p *selEQFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int16Op struct {
@@ -7329,7 +7329,7 @@ func (p *selEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -7517,7 +7517,7 @@ func (p *selEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int32ConstOp struct {
@@ -7534,7 +7534,7 @@ func (p *selEQFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -7711,7 +7711,7 @@ func (p *selEQFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int32Op struct {
@@ -7727,7 +7727,7 @@ func (p *selEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -7915,7 +7915,7 @@ func (p *selEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int64ConstOp struct {
@@ -7932,7 +7932,7 @@ func (p *selEQFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -8109,7 +8109,7 @@ func (p *selEQFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Int64Op struct {
@@ -8125,7 +8125,7 @@ func (p *selEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -8313,7 +8313,7 @@ func (p *selEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Float64ConstOp struct {
@@ -8330,7 +8330,7 @@ func (p *selEQFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -8507,7 +8507,7 @@ func (p *selEQFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64Float64Op struct {
@@ -8523,7 +8523,7 @@ func (p *selEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -8711,7 +8711,7 @@ func (p *selEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64DecimalConstOp struct {
@@ -8728,7 +8728,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -8861,7 +8861,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQFloat64DecimalOp struct {
@@ -8877,7 +8877,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9021,7 +9021,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQTimestampTimestampConstOp struct {
@@ -9038,7 +9038,7 @@ func (p *selEQTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9167,7 +9167,7 @@ func (p *selEQTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selEQTimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQTimestampTimestampOp struct {
@@ -9183,7 +9183,7 @@ func (p *selEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9323,7 +9323,7 @@ func (p *selEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQIntervalIntervalConstOp struct {
@@ -9340,7 +9340,7 @@ func (p *selEQIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9441,7 +9441,7 @@ func (p *selEQIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQIntervalIntervalOp struct {
@@ -9457,7 +9457,7 @@ func (p *selEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9569,7 +9569,7 @@ func (p *selEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDatumDatumConstOp struct {
@@ -9586,7 +9586,7 @@ func (p *selEQDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9693,7 +9693,7 @@ func (p *selEQDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selEQDatumDatumOp struct {
@@ -9709,7 +9709,7 @@ func (p *selEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9825,7 +9825,7 @@ func (p *selEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEBoolBoolConstOp struct {
@@ -9842,7 +9842,7 @@ func (p *selNEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -9975,7 +9975,7 @@ func (p *selNEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEBoolBoolOp struct {
@@ -9991,7 +9991,7 @@ func (p *selNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10135,7 +10135,7 @@ func (p *selNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEBytesBytesConstOp struct {
@@ -10152,7 +10152,7 @@ func (p *selNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10251,7 +10251,7 @@ func (p *selNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEBytesBytesOp struct {
@@ -10267,7 +10267,7 @@ func (p *selNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10375,7 +10375,7 @@ func (p *selNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt16ConstOp struct {
@@ -10392,7 +10392,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10517,7 +10517,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt16Op struct {
@@ -10533,7 +10533,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10669,7 +10669,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt32ConstOp struct {
@@ -10686,7 +10686,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10811,7 +10811,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt32Op struct {
@@ -10827,7 +10827,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -10963,7 +10963,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt64ConstOp struct {
@@ -10980,7 +10980,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11105,7 +11105,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalInt64Op struct {
@@ -11121,7 +11121,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11257,7 +11257,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalFloat64ConstOp struct {
@@ -11274,7 +11274,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11407,7 +11407,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalFloat64Op struct {
@@ -11423,7 +11423,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11567,7 +11567,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalDecimalConstOp struct {
@@ -11584,7 +11584,7 @@ func (p *selNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11685,7 +11685,7 @@ func (p *selNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDecimalDecimalOp struct {
@@ -11701,7 +11701,7 @@ func (p *selNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11813,7 +11813,7 @@ func (p *selNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int16ConstOp struct {
@@ -11830,7 +11830,7 @@ func (p *selNEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -11975,7 +11975,7 @@ func (p *selNEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int16Op struct {
@@ -11991,7 +11991,7 @@ func (p *selNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -12147,7 +12147,7 @@ func (p *selNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int32ConstOp struct {
@@ -12164,7 +12164,7 @@ func (p *selNEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -12309,7 +12309,7 @@ func (p *selNEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int32Op struct {
@@ -12325,7 +12325,7 @@ func (p *selNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -12481,7 +12481,7 @@ func (p *selNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int64ConstOp struct {
@@ -12498,7 +12498,7 @@ func (p *selNEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -12643,7 +12643,7 @@ func (p *selNEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Int64Op struct {
@@ -12659,7 +12659,7 @@ func (p *selNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -12815,7 +12815,7 @@ func (p *selNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Float64ConstOp struct {
@@ -12832,7 +12832,7 @@ func (p *selNEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13009,7 +13009,7 @@ func (p *selNEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16Float64Op struct {
@@ -13025,7 +13025,7 @@ func (p *selNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13213,7 +13213,7 @@ func (p *selNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16DecimalConstOp struct {
@@ -13230,7 +13230,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13355,7 +13355,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt16DecimalOp struct {
@@ -13371,7 +13371,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13507,7 +13507,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int16ConstOp struct {
@@ -13524,7 +13524,7 @@ func (p *selNEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13669,7 +13669,7 @@ func (p *selNEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int16Op struct {
@@ -13685,7 +13685,7 @@ func (p *selNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -13841,7 +13841,7 @@ func (p *selNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int32ConstOp struct {
@@ -13858,7 +13858,7 @@ func (p *selNEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14003,7 +14003,7 @@ func (p *selNEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int32Op struct {
@@ -14019,7 +14019,7 @@ func (p *selNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14175,7 +14175,7 @@ func (p *selNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int64ConstOp struct {
@@ -14192,7 +14192,7 @@ func (p *selNEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14337,7 +14337,7 @@ func (p *selNEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Int64Op struct {
@@ -14353,7 +14353,7 @@ func (p *selNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14509,7 +14509,7 @@ func (p *selNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Float64ConstOp struct {
@@ -14526,7 +14526,7 @@ func (p *selNEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14703,7 +14703,7 @@ func (p *selNEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32Float64Op struct {
@@ -14719,7 +14719,7 @@ func (p *selNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -14907,7 +14907,7 @@ func (p *selNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32DecimalConstOp struct {
@@ -14924,7 +14924,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15049,7 +15049,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt32DecimalOp struct {
@@ -15065,7 +15065,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15201,7 +15201,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int16ConstOp struct {
@@ -15218,7 +15218,7 @@ func (p *selNEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15363,7 +15363,7 @@ func (p *selNEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int16Op struct {
@@ -15379,7 +15379,7 @@ func (p *selNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15535,7 +15535,7 @@ func (p *selNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int32ConstOp struct {
@@ -15552,7 +15552,7 @@ func (p *selNEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15697,7 +15697,7 @@ func (p *selNEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int32Op struct {
@@ -15713,7 +15713,7 @@ func (p *selNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -15869,7 +15869,7 @@ func (p *selNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int64ConstOp struct {
@@ -15886,7 +15886,7 @@ func (p *selNEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16031,7 +16031,7 @@ func (p *selNEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Int64Op struct {
@@ -16047,7 +16047,7 @@ func (p *selNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16203,7 +16203,7 @@ func (p *selNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Float64ConstOp struct {
@@ -16220,7 +16220,7 @@ func (p *selNEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16397,7 +16397,7 @@ func (p *selNEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64Float64Op struct {
@@ -16413,7 +16413,7 @@ func (p *selNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16601,7 +16601,7 @@ func (p *selNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64DecimalConstOp struct {
@@ -16618,7 +16618,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16743,7 +16743,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEInt64DecimalOp struct {
@@ -16759,7 +16759,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -16895,7 +16895,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int16ConstOp struct {
@@ -16912,7 +16912,7 @@ func (p *selNEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -17089,7 +17089,7 @@ func (p *selNEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int16Op struct {
@@ -17105,7 +17105,7 @@ func (p *selNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -17293,7 +17293,7 @@ func (p *selNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int32ConstOp struct {
@@ -17310,7 +17310,7 @@ func (p *selNEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -17487,7 +17487,7 @@ func (p *selNEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int32Op struct {
@@ -17503,7 +17503,7 @@ func (p *selNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -17691,7 +17691,7 @@ func (p *selNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int64ConstOp struct {
@@ -17708,7 +17708,7 @@ func (p *selNEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -17885,7 +17885,7 @@ func (p *selNEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Int64Op struct {
@@ -17901,7 +17901,7 @@ func (p *selNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18089,7 +18089,7 @@ func (p *selNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Float64ConstOp struct {
@@ -18106,7 +18106,7 @@ func (p *selNEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18283,7 +18283,7 @@ func (p *selNEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64Float64Op struct {
@@ -18299,7 +18299,7 @@ func (p *selNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18487,7 +18487,7 @@ func (p *selNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64DecimalConstOp struct {
@@ -18504,7 +18504,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18637,7 +18637,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEFloat64DecimalOp struct {
@@ -18653,7 +18653,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18797,7 +18797,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNETimestampTimestampConstOp struct {
@@ -18814,7 +18814,7 @@ func (p *selNETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -18943,7 +18943,7 @@ func (p *selNETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selNETimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNETimestampTimestampOp struct {
@@ -18959,7 +18959,7 @@ func (p *selNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19099,7 +19099,7 @@ func (p *selNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEIntervalIntervalConstOp struct {
@@ -19116,7 +19116,7 @@ func (p *selNEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19217,7 +19217,7 @@ func (p *selNEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEIntervalIntervalOp struct {
@@ -19233,7 +19233,7 @@ func (p *selNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19345,7 +19345,7 @@ func (p *selNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDatumDatumConstOp struct {
@@ -19362,7 +19362,7 @@ func (p *selNEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19469,7 +19469,7 @@ func (p *selNEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selNEDatumDatumOp struct {
@@ -19485,7 +19485,7 @@ func (p *selNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19601,7 +19601,7 @@ func (p *selNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selNEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTBoolBoolConstOp struct {
@@ -19618,7 +19618,7 @@ func (p *selLTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19751,7 +19751,7 @@ func (p *selLTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTBoolBoolOp struct {
@@ -19767,7 +19767,7 @@ func (p *selLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -19911,7 +19911,7 @@ func (p *selLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTBytesBytesConstOp struct {
@@ -19928,7 +19928,7 @@ func (p *selLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20027,7 +20027,7 @@ func (p *selLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTBytesBytesOp struct {
@@ -20043,7 +20043,7 @@ func (p *selLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20151,7 +20151,7 @@ func (p *selLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt16ConstOp struct {
@@ -20168,7 +20168,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20293,7 +20293,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt16Op struct {
@@ -20309,7 +20309,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20445,7 +20445,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt32ConstOp struct {
@@ -20462,7 +20462,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20587,7 +20587,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt32Op struct {
@@ -20603,7 +20603,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20739,7 +20739,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt64ConstOp struct {
@@ -20756,7 +20756,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -20881,7 +20881,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalInt64Op struct {
@@ -20897,7 +20897,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21033,7 +21033,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalFloat64ConstOp struct {
@@ -21050,7 +21050,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21183,7 +21183,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalFloat64Op struct {
@@ -21199,7 +21199,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21343,7 +21343,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalDecimalConstOp struct {
@@ -21360,7 +21360,7 @@ func (p *selLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21461,7 +21461,7 @@ func (p *selLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDecimalDecimalOp struct {
@@ -21477,7 +21477,7 @@ func (p *selLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21589,7 +21589,7 @@ func (p *selLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int16ConstOp struct {
@@ -21606,7 +21606,7 @@ func (p *selLTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21751,7 +21751,7 @@ func (p *selLTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int16Op struct {
@@ -21767,7 +21767,7 @@ func (p *selLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -21923,7 +21923,7 @@ func (p *selLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int32ConstOp struct {
@@ -21940,7 +21940,7 @@ func (p *selLTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22085,7 +22085,7 @@ func (p *selLTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int32Op struct {
@@ -22101,7 +22101,7 @@ func (p *selLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22257,7 +22257,7 @@ func (p *selLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int64ConstOp struct {
@@ -22274,7 +22274,7 @@ func (p *selLTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22419,7 +22419,7 @@ func (p *selLTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Int64Op struct {
@@ -22435,7 +22435,7 @@ func (p *selLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22591,7 +22591,7 @@ func (p *selLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Float64ConstOp struct {
@@ -22608,7 +22608,7 @@ func (p *selLTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22785,7 +22785,7 @@ func (p *selLTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16Float64Op struct {
@@ -22801,7 +22801,7 @@ func (p *selLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -22989,7 +22989,7 @@ func (p *selLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16DecimalConstOp struct {
@@ -23006,7 +23006,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23131,7 +23131,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt16DecimalOp struct {
@@ -23147,7 +23147,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23283,7 +23283,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int16ConstOp struct {
@@ -23300,7 +23300,7 @@ func (p *selLTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23445,7 +23445,7 @@ func (p *selLTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int16Op struct {
@@ -23461,7 +23461,7 @@ func (p *selLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23617,7 +23617,7 @@ func (p *selLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int32ConstOp struct {
@@ -23634,7 +23634,7 @@ func (p *selLTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23779,7 +23779,7 @@ func (p *selLTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int32Op struct {
@@ -23795,7 +23795,7 @@ func (p *selLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -23951,7 +23951,7 @@ func (p *selLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int64ConstOp struct {
@@ -23968,7 +23968,7 @@ func (p *selLTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24113,7 +24113,7 @@ func (p *selLTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Int64Op struct {
@@ -24129,7 +24129,7 @@ func (p *selLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24285,7 +24285,7 @@ func (p *selLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Float64ConstOp struct {
@@ -24302,7 +24302,7 @@ func (p *selLTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24479,7 +24479,7 @@ func (p *selLTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32Float64Op struct {
@@ -24495,7 +24495,7 @@ func (p *selLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24683,7 +24683,7 @@ func (p *selLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32DecimalConstOp struct {
@@ -24700,7 +24700,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24825,7 +24825,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt32DecimalOp struct {
@@ -24841,7 +24841,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -24977,7 +24977,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int16ConstOp struct {
@@ -24994,7 +24994,7 @@ func (p *selLTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25139,7 +25139,7 @@ func (p *selLTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int16Op struct {
@@ -25155,7 +25155,7 @@ func (p *selLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25311,7 +25311,7 @@ func (p *selLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int32ConstOp struct {
@@ -25328,7 +25328,7 @@ func (p *selLTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25473,7 +25473,7 @@ func (p *selLTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int32Op struct {
@@ -25489,7 +25489,7 @@ func (p *selLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25645,7 +25645,7 @@ func (p *selLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int64ConstOp struct {
@@ -25662,7 +25662,7 @@ func (p *selLTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25807,7 +25807,7 @@ func (p *selLTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Int64Op struct {
@@ -25823,7 +25823,7 @@ func (p *selLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -25979,7 +25979,7 @@ func (p *selLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Float64ConstOp struct {
@@ -25996,7 +25996,7 @@ func (p *selLTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -26173,7 +26173,7 @@ func (p *selLTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64Float64Op struct {
@@ -26189,7 +26189,7 @@ func (p *selLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -26377,7 +26377,7 @@ func (p *selLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64DecimalConstOp struct {
@@ -26394,7 +26394,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -26519,7 +26519,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTInt64DecimalOp struct {
@@ -26535,7 +26535,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -26671,7 +26671,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int16ConstOp struct {
@@ -26688,7 +26688,7 @@ func (p *selLTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -26865,7 +26865,7 @@ func (p *selLTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int16Op struct {
@@ -26881,7 +26881,7 @@ func (p *selLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -27069,7 +27069,7 @@ func (p *selLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int32ConstOp struct {
@@ -27086,7 +27086,7 @@ func (p *selLTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -27263,7 +27263,7 @@ func (p *selLTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int32Op struct {
@@ -27279,7 +27279,7 @@ func (p *selLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -27467,7 +27467,7 @@ func (p *selLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int64ConstOp struct {
@@ -27484,7 +27484,7 @@ func (p *selLTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -27661,7 +27661,7 @@ func (p *selLTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Int64Op struct {
@@ -27677,7 +27677,7 @@ func (p *selLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -27865,7 +27865,7 @@ func (p *selLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Float64ConstOp struct {
@@ -27882,7 +27882,7 @@ func (p *selLTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28059,7 +28059,7 @@ func (p *selLTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64Float64Op struct {
@@ -28075,7 +28075,7 @@ func (p *selLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28263,7 +28263,7 @@ func (p *selLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64DecimalConstOp struct {
@@ -28280,7 +28280,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28413,7 +28413,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTFloat64DecimalOp struct {
@@ -28429,7 +28429,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28573,7 +28573,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTTimestampTimestampConstOp struct {
@@ -28590,7 +28590,7 @@ func (p *selLTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28719,7 +28719,7 @@ func (p *selLTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selLTTimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTTimestampTimestampOp struct {
@@ -28735,7 +28735,7 @@ func (p *selLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28875,7 +28875,7 @@ func (p *selLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTIntervalIntervalConstOp struct {
@@ -28892,7 +28892,7 @@ func (p *selLTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -28993,7 +28993,7 @@ func (p *selLTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTIntervalIntervalOp struct {
@@ -29009,7 +29009,7 @@ func (p *selLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29121,7 +29121,7 @@ func (p *selLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDatumDatumConstOp struct {
@@ -29138,7 +29138,7 @@ func (p *selLTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29245,7 +29245,7 @@ func (p *selLTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLTDatumDatumOp struct {
@@ -29261,7 +29261,7 @@ func (p *selLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29377,7 +29377,7 @@ func (p *selLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEBoolBoolConstOp struct {
@@ -29394,7 +29394,7 @@ func (p *selLEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29527,7 +29527,7 @@ func (p *selLEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEBoolBoolOp struct {
@@ -29543,7 +29543,7 @@ func (p *selLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29687,7 +29687,7 @@ func (p *selLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEBytesBytesConstOp struct {
@@ -29704,7 +29704,7 @@ func (p *selLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29803,7 +29803,7 @@ func (p *selLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEBytesBytesOp struct {
@@ -29819,7 +29819,7 @@ func (p *selLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -29927,7 +29927,7 @@ func (p *selLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt16ConstOp struct {
@@ -29944,7 +29944,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30069,7 +30069,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt16Op struct {
@@ -30085,7 +30085,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30221,7 +30221,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt32ConstOp struct {
@@ -30238,7 +30238,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30363,7 +30363,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt32Op struct {
@@ -30379,7 +30379,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30515,7 +30515,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt64ConstOp struct {
@@ -30532,7 +30532,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30657,7 +30657,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalInt64Op struct {
@@ -30673,7 +30673,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30809,7 +30809,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalFloat64ConstOp struct {
@@ -30826,7 +30826,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -30959,7 +30959,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalFloat64Op struct {
@@ -30975,7 +30975,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31119,7 +31119,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalDecimalConstOp struct {
@@ -31136,7 +31136,7 @@ func (p *selLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31237,7 +31237,7 @@ func (p *selLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDecimalDecimalOp struct {
@@ -31253,7 +31253,7 @@ func (p *selLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31365,7 +31365,7 @@ func (p *selLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int16ConstOp struct {
@@ -31382,7 +31382,7 @@ func (p *selLEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31527,7 +31527,7 @@ func (p *selLEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int16Op struct {
@@ -31543,7 +31543,7 @@ func (p *selLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31699,7 +31699,7 @@ func (p *selLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int32ConstOp struct {
@@ -31716,7 +31716,7 @@ func (p *selLEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -31861,7 +31861,7 @@ func (p *selLEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int32Op struct {
@@ -31877,7 +31877,7 @@ func (p *selLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32033,7 +32033,7 @@ func (p *selLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int64ConstOp struct {
@@ -32050,7 +32050,7 @@ func (p *selLEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32195,7 +32195,7 @@ func (p *selLEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Int64Op struct {
@@ -32211,7 +32211,7 @@ func (p *selLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32367,7 +32367,7 @@ func (p *selLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Float64ConstOp struct {
@@ -32384,7 +32384,7 @@ func (p *selLEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32561,7 +32561,7 @@ func (p *selLEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16Float64Op struct {
@@ -32577,7 +32577,7 @@ func (p *selLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32765,7 +32765,7 @@ func (p *selLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16DecimalConstOp struct {
@@ -32782,7 +32782,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -32907,7 +32907,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt16DecimalOp struct {
@@ -32923,7 +32923,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33059,7 +33059,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int16ConstOp struct {
@@ -33076,7 +33076,7 @@ func (p *selLEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33221,7 +33221,7 @@ func (p *selLEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int16Op struct {
@@ -33237,7 +33237,7 @@ func (p *selLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33393,7 +33393,7 @@ func (p *selLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int32ConstOp struct {
@@ -33410,7 +33410,7 @@ func (p *selLEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33555,7 +33555,7 @@ func (p *selLEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int32Op struct {
@@ -33571,7 +33571,7 @@ func (p *selLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33727,7 +33727,7 @@ func (p *selLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int64ConstOp struct {
@@ -33744,7 +33744,7 @@ func (p *selLEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -33889,7 +33889,7 @@ func (p *selLEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Int64Op struct {
@@ -33905,7 +33905,7 @@ func (p *selLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34061,7 +34061,7 @@ func (p *selLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Float64ConstOp struct {
@@ -34078,7 +34078,7 @@ func (p *selLEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34255,7 +34255,7 @@ func (p *selLEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32Float64Op struct {
@@ -34271,7 +34271,7 @@ func (p *selLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34459,7 +34459,7 @@ func (p *selLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32DecimalConstOp struct {
@@ -34476,7 +34476,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34601,7 +34601,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt32DecimalOp struct {
@@ -34617,7 +34617,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34753,7 +34753,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int16ConstOp struct {
@@ -34770,7 +34770,7 @@ func (p *selLEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -34915,7 +34915,7 @@ func (p *selLEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int16Op struct {
@@ -34931,7 +34931,7 @@ func (p *selLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35087,7 +35087,7 @@ func (p *selLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int32ConstOp struct {
@@ -35104,7 +35104,7 @@ func (p *selLEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35249,7 +35249,7 @@ func (p *selLEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int32Op struct {
@@ -35265,7 +35265,7 @@ func (p *selLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35421,7 +35421,7 @@ func (p *selLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int64ConstOp struct {
@@ -35438,7 +35438,7 @@ func (p *selLEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35583,7 +35583,7 @@ func (p *selLEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Int64Op struct {
@@ -35599,7 +35599,7 @@ func (p *selLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35755,7 +35755,7 @@ func (p *selLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Float64ConstOp struct {
@@ -35772,7 +35772,7 @@ func (p *selLEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -35949,7 +35949,7 @@ func (p *selLEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64Float64Op struct {
@@ -35965,7 +35965,7 @@ func (p *selLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -36153,7 +36153,7 @@ func (p *selLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64DecimalConstOp struct {
@@ -36170,7 +36170,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -36295,7 +36295,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEInt64DecimalOp struct {
@@ -36311,7 +36311,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -36447,7 +36447,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int16ConstOp struct {
@@ -36464,7 +36464,7 @@ func (p *selLEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -36641,7 +36641,7 @@ func (p *selLEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int16Op struct {
@@ -36657,7 +36657,7 @@ func (p *selLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -36845,7 +36845,7 @@ func (p *selLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int32ConstOp struct {
@@ -36862,7 +36862,7 @@ func (p *selLEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -37039,7 +37039,7 @@ func (p *selLEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int32Op struct {
@@ -37055,7 +37055,7 @@ func (p *selLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -37243,7 +37243,7 @@ func (p *selLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int64ConstOp struct {
@@ -37260,7 +37260,7 @@ func (p *selLEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -37437,7 +37437,7 @@ func (p *selLEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Int64Op struct {
@@ -37453,7 +37453,7 @@ func (p *selLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -37641,7 +37641,7 @@ func (p *selLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Float64ConstOp struct {
@@ -37658,7 +37658,7 @@ func (p *selLEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -37835,7 +37835,7 @@ func (p *selLEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64Float64Op struct {
@@ -37851,7 +37851,7 @@ func (p *selLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38039,7 +38039,7 @@ func (p *selLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64DecimalConstOp struct {
@@ -38056,7 +38056,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38189,7 +38189,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEFloat64DecimalOp struct {
@@ -38205,7 +38205,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38349,7 +38349,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLETimestampTimestampConstOp struct {
@@ -38366,7 +38366,7 @@ func (p *selLETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38495,7 +38495,7 @@ func (p *selLETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selLETimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLETimestampTimestampOp struct {
@@ -38511,7 +38511,7 @@ func (p *selLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38651,7 +38651,7 @@ func (p *selLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEIntervalIntervalConstOp struct {
@@ -38668,7 +38668,7 @@ func (p *selLEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38769,7 +38769,7 @@ func (p *selLEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEIntervalIntervalOp struct {
@@ -38785,7 +38785,7 @@ func (p *selLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -38897,7 +38897,7 @@ func (p *selLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDatumDatumConstOp struct {
@@ -38914,7 +38914,7 @@ func (p *selLEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39021,7 +39021,7 @@ func (p *selLEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selLEDatumDatumOp struct {
@@ -39037,7 +39037,7 @@ func (p *selLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39153,7 +39153,7 @@ func (p *selLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTBoolBoolConstOp struct {
@@ -39170,7 +39170,7 @@ func (p *selGTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39303,7 +39303,7 @@ func (p *selGTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTBoolBoolOp struct {
@@ -39319,7 +39319,7 @@ func (p *selGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39463,7 +39463,7 @@ func (p *selGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTBytesBytesConstOp struct {
@@ -39480,7 +39480,7 @@ func (p *selGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39579,7 +39579,7 @@ func (p *selGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTBytesBytesOp struct {
@@ -39595,7 +39595,7 @@ func (p *selGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39703,7 +39703,7 @@ func (p *selGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt16ConstOp struct {
@@ -39720,7 +39720,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39845,7 +39845,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt16Op struct {
@@ -39861,7 +39861,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -39997,7 +39997,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt32ConstOp struct {
@@ -40014,7 +40014,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40139,7 +40139,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt32Op struct {
@@ -40155,7 +40155,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40291,7 +40291,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt64ConstOp struct {
@@ -40308,7 +40308,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40433,7 +40433,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalInt64Op struct {
@@ -40449,7 +40449,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40585,7 +40585,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalFloat64ConstOp struct {
@@ -40602,7 +40602,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40735,7 +40735,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalFloat64Op struct {
@@ -40751,7 +40751,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -40895,7 +40895,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalDecimalConstOp struct {
@@ -40912,7 +40912,7 @@ func (p *selGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41013,7 +41013,7 @@ func (p *selGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDecimalDecimalOp struct {
@@ -41029,7 +41029,7 @@ func (p *selGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41141,7 +41141,7 @@ func (p *selGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int16ConstOp struct {
@@ -41158,7 +41158,7 @@ func (p *selGTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41303,7 +41303,7 @@ func (p *selGTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int16Op struct {
@@ -41319,7 +41319,7 @@ func (p *selGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41475,7 +41475,7 @@ func (p *selGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int32ConstOp struct {
@@ -41492,7 +41492,7 @@ func (p *selGTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41637,7 +41637,7 @@ func (p *selGTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int32Op struct {
@@ -41653,7 +41653,7 @@ func (p *selGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41809,7 +41809,7 @@ func (p *selGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int64ConstOp struct {
@@ -41826,7 +41826,7 @@ func (p *selGTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -41971,7 +41971,7 @@ func (p *selGTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Int64Op struct {
@@ -41987,7 +41987,7 @@ func (p *selGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42143,7 +42143,7 @@ func (p *selGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Float64ConstOp struct {
@@ -42160,7 +42160,7 @@ func (p *selGTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42337,7 +42337,7 @@ func (p *selGTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16Float64Op struct {
@@ -42353,7 +42353,7 @@ func (p *selGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42541,7 +42541,7 @@ func (p *selGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16DecimalConstOp struct {
@@ -42558,7 +42558,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42683,7 +42683,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt16DecimalOp struct {
@@ -42699,7 +42699,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42835,7 +42835,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int16ConstOp struct {
@@ -42852,7 +42852,7 @@ func (p *selGTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -42997,7 +42997,7 @@ func (p *selGTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int16Op struct {
@@ -43013,7 +43013,7 @@ func (p *selGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -43169,7 +43169,7 @@ func (p *selGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int32ConstOp struct {
@@ -43186,7 +43186,7 @@ func (p *selGTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -43331,7 +43331,7 @@ func (p *selGTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int32Op struct {
@@ -43347,7 +43347,7 @@ func (p *selGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -43503,7 +43503,7 @@ func (p *selGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int64ConstOp struct {
@@ -43520,7 +43520,7 @@ func (p *selGTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -43665,7 +43665,7 @@ func (p *selGTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Int64Op struct {
@@ -43681,7 +43681,7 @@ func (p *selGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -43837,7 +43837,7 @@ func (p *selGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Float64ConstOp struct {
@@ -43854,7 +43854,7 @@ func (p *selGTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44031,7 +44031,7 @@ func (p *selGTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32Float64Op struct {
@@ -44047,7 +44047,7 @@ func (p *selGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44235,7 +44235,7 @@ func (p *selGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32DecimalConstOp struct {
@@ -44252,7 +44252,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44377,7 +44377,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt32DecimalOp struct {
@@ -44393,7 +44393,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44529,7 +44529,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int16ConstOp struct {
@@ -44546,7 +44546,7 @@ func (p *selGTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44691,7 +44691,7 @@ func (p *selGTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int16Op struct {
@@ -44707,7 +44707,7 @@ func (p *selGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -44863,7 +44863,7 @@ func (p *selGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int32ConstOp struct {
@@ -44880,7 +44880,7 @@ func (p *selGTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45025,7 +45025,7 @@ func (p *selGTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int32Op struct {
@@ -45041,7 +45041,7 @@ func (p *selGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45197,7 +45197,7 @@ func (p *selGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int64ConstOp struct {
@@ -45214,7 +45214,7 @@ func (p *selGTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45359,7 +45359,7 @@ func (p *selGTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Int64Op struct {
@@ -45375,7 +45375,7 @@ func (p *selGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45531,7 +45531,7 @@ func (p *selGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Float64ConstOp struct {
@@ -45548,7 +45548,7 @@ func (p *selGTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45725,7 +45725,7 @@ func (p *selGTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64Float64Op struct {
@@ -45741,7 +45741,7 @@ func (p *selGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -45929,7 +45929,7 @@ func (p *selGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64DecimalConstOp struct {
@@ -45946,7 +45946,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -46071,7 +46071,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTInt64DecimalOp struct {
@@ -46087,7 +46087,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -46223,7 +46223,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int16ConstOp struct {
@@ -46240,7 +46240,7 @@ func (p *selGTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -46417,7 +46417,7 @@ func (p *selGTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int16Op struct {
@@ -46433,7 +46433,7 @@ func (p *selGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -46621,7 +46621,7 @@ func (p *selGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int32ConstOp struct {
@@ -46638,7 +46638,7 @@ func (p *selGTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -46815,7 +46815,7 @@ func (p *selGTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int32Op struct {
@@ -46831,7 +46831,7 @@ func (p *selGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47019,7 +47019,7 @@ func (p *selGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int64ConstOp struct {
@@ -47036,7 +47036,7 @@ func (p *selGTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47213,7 +47213,7 @@ func (p *selGTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Int64Op struct {
@@ -47229,7 +47229,7 @@ func (p *selGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47417,7 +47417,7 @@ func (p *selGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Float64ConstOp struct {
@@ -47434,7 +47434,7 @@ func (p *selGTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47611,7 +47611,7 @@ func (p *selGTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64Float64Op struct {
@@ -47627,7 +47627,7 @@ func (p *selGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47815,7 +47815,7 @@ func (p *selGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64DecimalConstOp struct {
@@ -47832,7 +47832,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -47965,7 +47965,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTFloat64DecimalOp struct {
@@ -47981,7 +47981,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48125,7 +48125,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTTimestampTimestampConstOp struct {
@@ -48142,7 +48142,7 @@ func (p *selGTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48271,7 +48271,7 @@ func (p *selGTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selGTTimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTTimestampTimestampOp struct {
@@ -48287,7 +48287,7 @@ func (p *selGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48427,7 +48427,7 @@ func (p *selGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTTimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTIntervalIntervalConstOp struct {
@@ -48444,7 +48444,7 @@ func (p *selGTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48545,7 +48545,7 @@ func (p *selGTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTIntervalIntervalOp struct {
@@ -48561,7 +48561,7 @@ func (p *selGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48673,7 +48673,7 @@ func (p *selGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDatumDatumConstOp struct {
@@ -48690,7 +48690,7 @@ func (p *selGTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48797,7 +48797,7 @@ func (p *selGTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGTDatumDatumOp struct {
@@ -48813,7 +48813,7 @@ func (p *selGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -48929,7 +48929,7 @@ func (p *selGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEBoolBoolConstOp struct {
@@ -48946,7 +48946,7 @@ func (p *selGEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49079,7 +49079,7 @@ func (p *selGEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEBoolBoolConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEBoolBoolOp struct {
@@ -49095,7 +49095,7 @@ func (p *selGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49239,7 +49239,7 @@ func (p *selGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEBoolBoolOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEBytesBytesConstOp struct {
@@ -49256,7 +49256,7 @@ func (p *selGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49355,7 +49355,7 @@ func (p *selGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEBytesBytesConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEBytesBytesOp struct {
@@ -49371,7 +49371,7 @@ func (p *selGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49479,7 +49479,7 @@ func (p *selGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEBytesBytesOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt16ConstOp struct {
@@ -49496,7 +49496,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49621,7 +49621,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt16Op struct {
@@ -49637,7 +49637,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49773,7 +49773,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt32ConstOp struct {
@@ -49790,7 +49790,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -49915,7 +49915,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt32Op struct {
@@ -49931,7 +49931,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50067,7 +50067,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt64ConstOp struct {
@@ -50084,7 +50084,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50209,7 +50209,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalInt64Op struct {
@@ -50225,7 +50225,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50361,7 +50361,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalInt64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalFloat64ConstOp struct {
@@ -50378,7 +50378,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50511,7 +50511,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalFloat64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalFloat64Op struct {
@@ -50527,7 +50527,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50671,7 +50671,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalFloat64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalDecimalConstOp struct {
@@ -50688,7 +50688,7 @@ func (p *selGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50789,7 +50789,7 @@ func (p *selGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalDecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDecimalDecimalOp struct {
@@ -50805,7 +50805,7 @@ func (p *selGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -50917,7 +50917,7 @@ func (p *selGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDecimalDecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int16ConstOp struct {
@@ -50934,7 +50934,7 @@ func (p *selGEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51079,7 +51079,7 @@ func (p *selGEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int16Op struct {
@@ -51095,7 +51095,7 @@ func (p *selGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51251,7 +51251,7 @@ func (p *selGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int32ConstOp struct {
@@ -51268,7 +51268,7 @@ func (p *selGEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51413,7 +51413,7 @@ func (p *selGEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int32Op struct {
@@ -51429,7 +51429,7 @@ func (p *selGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51585,7 +51585,7 @@ func (p *selGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int64ConstOp struct {
@@ -51602,7 +51602,7 @@ func (p *selGEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51747,7 +51747,7 @@ func (p *selGEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Int64Op struct {
@@ -51763,7 +51763,7 @@ func (p *selGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -51919,7 +51919,7 @@ func (p *selGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Float64ConstOp struct {
@@ -51936,7 +51936,7 @@ func (p *selGEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52113,7 +52113,7 @@ func (p *selGEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16Float64Op struct {
@@ -52129,7 +52129,7 @@ func (p *selGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52317,7 +52317,7 @@ func (p *selGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16DecimalConstOp struct {
@@ -52334,7 +52334,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52459,7 +52459,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt16DecimalOp struct {
@@ -52475,7 +52475,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52611,7 +52611,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt16DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int16ConstOp struct {
@@ -52628,7 +52628,7 @@ func (p *selGEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52773,7 +52773,7 @@ func (p *selGEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int16Op struct {
@@ -52789,7 +52789,7 @@ func (p *selGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -52945,7 +52945,7 @@ func (p *selGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int32ConstOp struct {
@@ -52962,7 +52962,7 @@ func (p *selGEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -53107,7 +53107,7 @@ func (p *selGEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int32Op struct {
@@ -53123,7 +53123,7 @@ func (p *selGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -53279,7 +53279,7 @@ func (p *selGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int64ConstOp struct {
@@ -53296,7 +53296,7 @@ func (p *selGEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -53441,7 +53441,7 @@ func (p *selGEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Int64Op struct {
@@ -53457,7 +53457,7 @@ func (p *selGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -53613,7 +53613,7 @@ func (p *selGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Float64ConstOp struct {
@@ -53630,7 +53630,7 @@ func (p *selGEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -53807,7 +53807,7 @@ func (p *selGEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32Float64Op struct {
@@ -53823,7 +53823,7 @@ func (p *selGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54011,7 +54011,7 @@ func (p *selGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32DecimalConstOp struct {
@@ -54028,7 +54028,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54153,7 +54153,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt32DecimalOp struct {
@@ -54169,7 +54169,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54305,7 +54305,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt32DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int16ConstOp struct {
@@ -54322,7 +54322,7 @@ func (p *selGEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54467,7 +54467,7 @@ func (p *selGEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int16Op struct {
@@ -54483,7 +54483,7 @@ func (p *selGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54639,7 +54639,7 @@ func (p *selGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int32ConstOp struct {
@@ -54656,7 +54656,7 @@ func (p *selGEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54801,7 +54801,7 @@ func (p *selGEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int32Op struct {
@@ -54817,7 +54817,7 @@ func (p *selGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -54973,7 +54973,7 @@ func (p *selGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int64ConstOp struct {
@@ -54990,7 +54990,7 @@ func (p *selGEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55135,7 +55135,7 @@ func (p *selGEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Int64Op struct {
@@ -55151,7 +55151,7 @@ func (p *selGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55307,7 +55307,7 @@ func (p *selGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Float64ConstOp struct {
@@ -55324,7 +55324,7 @@ func (p *selGEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55501,7 +55501,7 @@ func (p *selGEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64Float64Op struct {
@@ -55517,7 +55517,7 @@ func (p *selGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55705,7 +55705,7 @@ func (p *selGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64DecimalConstOp struct {
@@ -55722,7 +55722,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55847,7 +55847,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEInt64DecimalOp struct {
@@ -55863,7 +55863,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -55999,7 +55999,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEInt64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int16ConstOp struct {
@@ -56016,7 +56016,7 @@ func (p *selGEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -56193,7 +56193,7 @@ func (p *selGEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int16ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int16Op struct {
@@ -56209,7 +56209,7 @@ func (p *selGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -56397,7 +56397,7 @@ func (p *selGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int16Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int32ConstOp struct {
@@ -56414,7 +56414,7 @@ func (p *selGEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -56591,7 +56591,7 @@ func (p *selGEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int32ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int32Op struct {
@@ -56607,7 +56607,7 @@ func (p *selGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -56795,7 +56795,7 @@ func (p *selGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int32Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int64ConstOp struct {
@@ -56812,7 +56812,7 @@ func (p *selGEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -56989,7 +56989,7 @@ func (p *selGEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Int64Op struct {
@@ -57005,7 +57005,7 @@ func (p *selGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -57193,7 +57193,7 @@ func (p *selGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Int64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Float64ConstOp struct {
@@ -57210,7 +57210,7 @@ func (p *selGEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -57387,7 +57387,7 @@ func (p *selGEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Float64ConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64Float64Op struct {
@@ -57403,7 +57403,7 @@ func (p *selGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -57591,7 +57591,7 @@ func (p *selGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64Float64Op) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64DecimalConstOp struct {
@@ -57608,7 +57608,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -57741,7 +57741,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64DecimalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEFloat64DecimalOp struct {
@@ -57757,7 +57757,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -57901,7 +57901,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEFloat64DecimalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGETimestampTimestampConstOp struct {
@@ -57918,7 +57918,7 @@ func (p *selGETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58047,7 +58047,7 @@ func (p *selGETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 }
 
 func (p *selGETimestampTimestampConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGETimestampTimestampOp struct {
@@ -58063,7 +58063,7 @@ func (p *selGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58203,7 +58203,7 @@ func (p *selGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGETimestampTimestampOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEIntervalIntervalConstOp struct {
@@ -58220,7 +58220,7 @@ func (p *selGEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58321,7 +58321,7 @@ func (p *selGEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEIntervalIntervalConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEIntervalIntervalOp struct {
@@ -58337,7 +58337,7 @@ func (p *selGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58449,7 +58449,7 @@ func (p *selGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEIntervalIntervalOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDatumDatumConstOp struct {
@@ -58466,7 +58466,7 @@ func (p *selGEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58573,7 +58573,7 @@ func (p *selGEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDatumDatumConstOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 type selGEDatumDatumOp struct {
@@ -58589,7 +58589,7 @@ func (p *selGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -58705,7 +58705,7 @@ func (p *selGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGEDatumDatumOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // GetSelectionConstOperator returns the appropriate constant selection operator
@@ -58722,7 +58722,7 @@ func GetSelectionConstOperator(
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
 	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
@@ -59983,7 +59983,7 @@ func GetSelectionOperator(
 ) (colexecbase.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}

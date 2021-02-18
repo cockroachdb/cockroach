@@ -94,7 +94,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 	tr := res.Op
 	tr.Init()
-	meta := tr.(*colexec.CancelChecker).Input().(*colfetcher.ColBatchScan).DrainMeta(ctx)
+	meta := tr.(*colexec.CancelChecker).Input.(*colfetcher.ColBatchScan).DrainMeta(ctx)
 	var txnFinalStateSeen bool
 	for _, m := range meta {
 		if m.LeafTxnFinalState != nil {

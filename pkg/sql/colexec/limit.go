@@ -43,14 +43,14 @@ func NewLimitOp(input colexecbase.Operator, limit uint64) colexecbase.Operator {
 }
 
 func (c *limitOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if c.done {
 		return coldata.ZeroBatch
 	}
-	bat := c.input.Next(ctx)
+	bat := c.Input.Next(ctx)
 	length := bat.Length()
 	if length == 0 {
 		return bat

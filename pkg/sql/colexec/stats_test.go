@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -86,7 +87,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 		leftSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
+			OneInputNode: colexecbase.NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(
@@ -95,7 +96,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			nil, /* inputStatsCollectors */
 		)
 		rightSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
+			OneInputNode: colexecbase.NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(
@@ -115,7 +116,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			t.Fatal(err)
 		}
 		timeAdvancingMergeJoiner := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(mergeJoiner),
+			OneInputNode: colexecbase.NewOneInputNode(mergeJoiner),
 			timeSource:   timeSource,
 		}
 
@@ -156,13 +157,13 @@ func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbas
 		vec[i] = int64(i)
 	}
 	batch.SetLength(batchSize)
-	return newFiniteChunksSource(batch, typs, nBatches, 1 /* matchLen */)
+	return colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, 1 /* matchLen */)
 }
 
 // timeAdvancingOperator is an Operator that advances the time source upon
 // receiving a non-empty batch from its input. It is used for testing only.
 type timeAdvancingOperator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	timeSource *timeutil.TestTimeSource
 }
@@ -170,11 +171,11 @@ type timeAdvancingOperator struct {
 var _ colexecbase.Operator = &timeAdvancingOperator{}
 
 func (o *timeAdvancingOperator) Init() {
-	o.input.Init()
+	o.Input.Init()
 }
 
 func (o *timeAdvancingOperator) Next(ctx context.Context) coldata.Batch {
-	b := o.input.Next(ctx)
+	b := o.Input.Next(ctx)
 	if b.Length() > 0 {
 		o.timeSource.Advance()
 	}

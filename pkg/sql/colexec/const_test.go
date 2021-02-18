@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,20 +38,20 @@ func TestConst(t *testing.T) {
 		},
 	}
 	tcs := []struct {
-		tuples   tuples
-		expected tuples
+		tuples   colexectestutils.Tuples
+		expected colexectestutils.Tuples
 	}{
 		{
-			tuples:   tuples{{1}, {1}},
-			expected: tuples{{1, 9}, {1, 9}},
+			tuples:   colexectestutils.Tuples{{1}, {1}},
+			expected: colexectestutils.Tuples{{1, 9}, {1, 9}},
 		},
 		{
-			tuples:   tuples{},
-			expected: tuples{},
+			tuples:   colexectestutils.Tuples{},
+			expected: colexectestutils.Tuples{},
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, orderedVerifier,
+		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
@@ -74,20 +75,20 @@ func TestConstNull(t *testing.T) {
 		},
 	}
 	tcs := []struct {
-		tuples   tuples
-		expected tuples
+		tuples   colexectestutils.Tuples
+		expected colexectestutils.Tuples
 	}{
 		{
-			tuples:   tuples{{1}, {1}},
-			expected: tuples{{1, nil}, {1, nil}},
+			tuples:   colexectestutils.Tuples{{1}, {1}},
+			expected: colexectestutils.Tuples{{1, nil}, {1, nil}},
 		},
 		{
-			tuples:   tuples{},
-			expected: tuples{},
+			tuples:   colexectestutils.Tuples{},
+			expected: colexectestutils.Tuples{},
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, orderedVerifier,
+		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},

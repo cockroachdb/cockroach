@@ -22,7 +22,7 @@ import (
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
 // an additional column to the result with an ordinal number.
 type ordinalityOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	// outputIdx is the index of the column in which ordinalityOp will write the
@@ -40,7 +40,7 @@ func NewOrdinalityOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Int, outputIdx)
 	c := &ordinalityOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		outputIdx:    outputIdx,
 		counter:      1,
@@ -49,11 +49,11 @@ func NewOrdinalityOp(
 }
 
 func (c *ordinalityOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
-	bat := c.input.Next(ctx)
+	bat := c.Input.Next(ctx)
 	if bat.Length() == 0 {
 		return coldata.ZeroBatch
 	}

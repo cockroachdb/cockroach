@@ -13,6 +13,7 @@ package colexec
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,17 +24,17 @@ func TestBoolVecToSelOp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		boolCol  uint32
-		tuples   tuples
-		expected tuples
+		tuples   colexectestutils.Tuples
+		expected colexectestutils.Tuples
 	}{
 		{
 			boolCol:  0,
-			tuples:   tuples{{true}, {false}, {true}},
-			expected: tuples{{true}, {true}},
+			tuples:   colexectestutils.Tuples{{true}, {false}, {true}},
+			expected: colexectestutils.Tuples{{true}, {true}},
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return newBoolVecToSelOp(input[0], 0), nil
 		})
 	}

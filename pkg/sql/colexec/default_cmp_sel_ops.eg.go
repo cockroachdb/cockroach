@@ -29,12 +29,12 @@ type defaultCmpSelOp struct {
 var _ colexecbase.Operator = &defaultCmpSelOp{}
 
 func (d *defaultCmpSelOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := d.input.Next(ctx)
+		batch := d.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch
@@ -85,12 +85,12 @@ type defaultCmpConstSelOp struct {
 var _ colexecbase.Operator = &defaultCmpConstSelOp{}
 
 func (d *defaultCmpConstSelOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := d.input.Next(ctx)
+		batch := d.Input.Next(ctx)
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch
