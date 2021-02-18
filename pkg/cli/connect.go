@@ -10,7 +10,14 @@
 
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"context"
+	"fmt"
+	"net"
+
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/spf13/cobra"
+)
 
 // connectCmd triggers a TLS initialization handshake and writes
 // certificates in the specified certs-dir for use with start.
@@ -28,7 +35,17 @@ secure inter-node connections.
 // runConnect connects to other nodes and negotiates an initialization bundle
 // for use with secure inter-node connections.
 func runConnect(cmd *cobra.Command, args []string) error {
-	// TODO(bilal): Implement TLS init handshake.
-	// https://github.com/cockroachdb/cockroach/issues/60632
-	return nil
+	peers := []string(serverCfg.JoinList)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", startCtx.serverListenAddr, serverListenPort))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	return server.InitHandshake(ctx, baseCfg, baseCfg.InitToken, len(peers), peers, baseCfg.SSLCertsDir, listener)
 }
