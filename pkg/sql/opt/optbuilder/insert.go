@@ -726,9 +726,10 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 		// details.
 		var partialIndexDistinctCol *scopeColumn
 		if _, isPartial := index.Predicate(); isPartial {
-			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
 			pred := mb.parsePartialIndexPredicateExpr(idx)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, string(index.Name()),
+			)
 		}
 
 		mb.buildDistinctOnForDoNothingArbiter(
@@ -746,9 +747,10 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 		// details.
 		var partialIndexDistinctCol *scopeColumn
 		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
-			alias := fmt.Sprintf("upsert_partial_constraint_distinct%d", uc)
 			pred := mb.parseUniqueConstraintPredicateExpr(uc)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, uniqueConstraint.Name(),
+			)
 		}
 		mb.buildDistinctOnForDoNothingArbiter(
 			insertColScope,
@@ -951,8 +953,9 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		// more details.
 		var partialIndexDistinctCol *scopeColumn
 		if isPartial {
-			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(insertColScope, pred, alias)
+			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, string(index.Name()),
+			)
 		}
 
 		buildInputForArbiter(func() *scopeColumn {
