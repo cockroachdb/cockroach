@@ -398,6 +398,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = index.Ordinal()
+		lookupJoin.Locking = scanPrivate.Locking
 
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
@@ -748,6 +749,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = rightCols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
+		indexJoin.Locking = scanPrivate.Locking
 		if pairedJoins {
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
@@ -1131,6 +1133,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.Index = index.Ordinal()
 		invertedJoin.InvertedExpr = invertedExpr
 		invertedJoin.Cols = indexCols.Union(inputCols)
+		invertedJoin.Locking = scanPrivate.Locking
 		if continuationCol != 0 {
 			invertedJoin.Cols.Add(continuationCol)
 			invertedJoin.IsFirstJoinInPairedJoiner = true
@@ -1172,6 +1175,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexJoin.KeyCols = c.getPkCols(invertedJoin.Table)
 		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
+		indexJoin.Locking = scanPrivate.Locking
 		if continuationCol != 0 {
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
@@ -1488,6 +1492,7 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 		Cols:                  outCols,
 		LookupColsAreTableKey: true,
 		ConstFilters:          nil,
+		Locking:               indexPrivate.Locking,
 		JoinPrivate:           memo.JoinPrivate{},
 	}
 }

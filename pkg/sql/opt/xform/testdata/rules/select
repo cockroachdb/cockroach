@@ -1133,6 +1133,7 @@ SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
 ----
 index-join b
  ├── columns: k:1!null u:2 v:3!null j:4
+ ├── locking: for-update
  ├── cardinality: [0 - 10]
  ├── volatile
  ├── key: (1)
@@ -1157,6 +1158,7 @@ select
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
  │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── locking: for-update
  │    ├── cardinality: [0 - 10]
  │    ├── volatile
  │    ├── key: (1)
@@ -6070,6 +6072,7 @@ select
  ├── fd: ()-->(2,3)
  ├── index-join pqr
  │    ├── columns: q:2 r:3
+ │    ├── locking: for-update
  │    ├── volatile
  │    ├── fd: ()-->(2)
  │    └── scan pqr@q
@@ -6375,6 +6378,7 @@ SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
 index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)

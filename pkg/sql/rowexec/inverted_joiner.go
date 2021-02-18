@@ -321,7 +321,7 @@ func newInvertedJoiner(
 	fetcher, err := makeRowFetcherLegacy(
 		flowCtx, ij.desc, int(spec.IndexIdx), false, /* reverse */
 		allIndexCols, flowCtx.EvalCtx.Mon, &ij.alloc,
-		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
+		spec.LockingStrength, spec.LockingWaitPolicy,
 		false, /* withSystemColumns */
 	)
 	if err != nil {
