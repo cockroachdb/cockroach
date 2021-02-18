@@ -4716,7 +4716,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 	})
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
-		job, err := registry.CreateAndStartJob(ctx, nil, record)
+		job, err := registry.CreateAndStartJobTesting(ctx, nil, record)
 		require.NoError(t, err)
 		return job
 	}

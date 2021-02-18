@@ -377,11 +377,6 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 func (j *Job) deprecatedInsert(
 	ctx context.Context, txn *kv.Txn, id int64, lease *jobspb.Lease, session sqlliveness.Session,
 ) error {
-	if j.id != nil {
-		// Already created - do nothing.
-		return nil
-	}
-
 	j.mu.payload.Lease = lease
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {

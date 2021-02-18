@@ -327,6 +327,7 @@ func changefeedPlanHook(
 		// changeFrontier.manageProtectedTimestamps for more details on the handling of
 		// protected timestamps.
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
 			var protectedTimestampID uuid.UUID
 			var spansToProtect []roachpb.Span
@@ -349,14 +350,14 @@ func changefeedPlanHook(
 				Progress: *progress.GetChangefeed(),
 			}
 			createJobAndProtectedTS := func(ctx context.Context, txn *kv.Txn) (err error) {
-				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
+				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, sj, jobID, txn, jr)
 				if err != nil {
 					return err
 				}
 				if protectedTimestampID == uuid.Nil {
 					return nil
 				}
-				ptr := jobsprotectedts.MakeRecord(protectedTimestampID, *sj.ID(),
+				ptr := jobsprotectedts.MakeRecord(protectedTimestampID, jobID,
 					statementTime, spansToProtect)
 				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
 			}
@@ -392,7 +393,7 @@ func changefeedPlanHook(
 		case <-ctx.Done():
 			return ctx.Err()
 		case resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*sj.ID())),
+			tree.NewDInt(tree.DInt(jobID)),
 		}:
 			return nil
 		}

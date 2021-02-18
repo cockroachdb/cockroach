@@ -65,7 +65,7 @@ func createMockImportJob(
 			ResumePos:       []int64{resumePos},
 		},
 	}
-	mockImportJob, err := registry.CreateJobWithTxn(ctx, mockImportRecord, nil /* txn */)
+	mockImportJob, err := registry.CreateJobWithTxn(ctx, mockImportRecord, registry.MakeJobID(), nil)
 	require.NoError(t, err)
 	return mockImportJob
 }

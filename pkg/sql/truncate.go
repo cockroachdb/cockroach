@@ -254,7 +254,8 @@ func (p *planner) truncateTable(
 		details.InterleavedIndexes = droppedInterleaves
 	}
 	record := CreateGCJobRecord(jobDesc, p.User(), details)
-	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, record, p.txn); err != nil {
+	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
 		return err
 	}
 

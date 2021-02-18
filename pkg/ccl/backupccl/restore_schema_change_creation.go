@@ -146,11 +146,11 @@ func createTypeChangeJobFromDesc(
 		// Type change jobs are not cancellable.
 		NonCancelable: true,
 	}
-	job, err := jr.CreateJobWithTxn(ctx, record, txn)
-	if err != nil {
+	jobID := jr.MakeJobID()
+	if _, err := jr.CreateJobWithTxn(ctx, record, jobID, txn); err != nil {
 		return err
 	}
-	log.Infof(ctx, "queued new type schema change job %d for type %d", *job.ID(), typ.GetID())
+	log.Infof(ctx, "queued new type schema change job %d for type %d", jobID, typ.GetID())
 	return nil
 }
 
@@ -201,18 +201,18 @@ func createSchemaChangeJobsFromMutations(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := jr.CreateJobWithTxn(ctx, jobRecord, txn)
-		if err != nil {
+		jobID := jr.MakeJobID()
+		if _, err := jr.CreateJobWithTxn(ctx, jobRecord, jobID, txn); err != nil {
 			return err
 		}
 		newMutationJob := descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
-			JobID:      *newJob.ID(),
+			JobID:      jobID,
 		}
 		mutationJobs = append(mutationJobs, newMutationJob)
 
 		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
-			*newJob.ID(), tableDesc.ID, mutationID)
+			jobID, tableDesc.ID, mutationID)
 	}
 	tableDesc.MutationJobs = mutationJobs
 	return nil

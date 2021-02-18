@@ -98,8 +98,9 @@ func ingestionPlanHook(
 		}
 
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, sj, jobID, txn, jr)
 			return err
 		}); err != nil {
 			if sj != nil {
