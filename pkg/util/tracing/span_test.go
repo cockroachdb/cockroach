@@ -64,37 +64,35 @@ func TestRecordingString(t *testing.T) {
 
 	rec := root.GetRecording()
 	// Sanity check that the recording looks like we want. Note that this is not
-	// its String() representation; this just list all the spans in order.
-	err = TestingCheckRecordedSpans(rec, `
-Span root:
-	tags: _verbose=1
-	event: root 1
-	event: root 2
-	event: root 3
-	event: root 4
-	event: root 5
-Span remote child:
-	tags: _verbose=1
-	event: remote child 1
-Span local child:
-	tags: _verbose=1
-	event: local child 1
-`)
-	require.NoError(t, err)
+	// its String() representation; this just lists all the spans in order.
+	require.NoError(t, TestingCheckRecordedSpans(rec, `
+		span: root
+			tags: _verbose=1
+			event: root 1
+			event: root 2
+			event: root 3
+			event: root 4
+			event: root 5
+			span: remote child
+				tags: _verbose=1
+				event: remote child 1
+			span: local child
+				tags: _verbose=1
+				event: local child 1
+		`))
 
-	exp := `=== operation:root _verbose:1
-event:root 1
-    === operation:remote child _verbose:1
-    event:remote child 1
-event:root 2
-event:root 3
-    === operation:local child _verbose:1
-    event:local child 1
-event:root 4
-event:root 5
-`
-	require.Equal(t, exp, recToStrippedString(rec))
-
+	require.NoError(t, TestingCheckRecording(rec, `
+		=== operation:root _verbose:1
+		event:root 1
+			=== operation:remote child _verbose:1
+			event:remote child 1
+		event:root 2
+		event:root 3
+			=== operation:local child _verbose:1
+			event:local child 1
+		event:root 4
+		event:root 5
+		`))
 	// Check the timing info on the first two lines.
 	lines := strings.Split(rec.String(), "\n")
 	l, err := parseLine(lines[0])
@@ -133,17 +131,6 @@ func parseLine(s string) (traceLine, error) {
 	}, nil
 }
 
-func recToStrippedString(r Recording) string {
-	s := r.String()
-	// Strip the timing info, converting rows like:
-	//      0.007ms      0.007ms    event:root 1
-	// into:
-	//    event:root 1
-	re := regexp.MustCompile(`.*s.*s\s{4}`)
-	stripped := string(re.ReplaceAll([]byte(s), nil))
-	return stripped
-}
-
 func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
@@ -162,26 +149,26 @@ func TestRecordingInRecording(t *testing.T) {
 
 	rootRec := root.GetRecording()
 	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
-Span root:
-	tags: _verbose=1
-Span child:
-	tags: _verbose=1
-Span grandchild:
-	tags: _verbose=1
-`))
+		span: root
+			tags: _verbose=1
+			span: child
+				tags: _verbose=1
+				span: grandchild
+					tags: _verbose=1
+		`))
 
 	childRec := child.GetRecording()
 	require.NoError(t, TestingCheckRecordedSpans(childRec, `
-Span child:
-	tags: _verbose=1
-Span grandchild:
-	tags: _verbose=1
-`))
+		span: child
+			tags: _verbose=1
+			span: grandchild
+				tags: _verbose=1
+		`))
 
-	exp := `=== operation:child _verbose:1
-    === operation:grandchild _verbose:1
-`
-	require.Equal(t, exp, recToStrippedString(childRec))
+	require.NoError(t, TestingCheckRecording(childRec, `
+		=== operation:child _verbose:1
+			=== operation:grandchild _verbose:1
+		`))
 }
 
 func TestSpan_ImportRemoteSpans(t *testing.T) {
@@ -198,10 +185,10 @@ func TestSpan_ImportRemoteSpans(t *testing.T) {
 	sp.Finish()
 
 	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
-Span root:
-Span child:
-  event: foo
-`))
+		span: root
+			span: child
+				event: foo
+		`))
 }
 
 func TestSpanRecordStructured(t *testing.T) {
@@ -217,6 +204,13 @@ func TestSpanRecordStructured(t *testing.T) {
 	var d1 types.DynamicAny
 	require.NoError(t, types.UnmarshalAny(item, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
+	require.NoError(t, TestingCheckRecordedSpans(rec, `
+		span: root
+			tags: _unfinished=1
+		`))
+	require.NoError(t, TestingCheckRecording(rec, `
+		=== operation:root _unfinished:1
+	`))
 }
 
 func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
