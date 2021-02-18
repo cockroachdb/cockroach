@@ -1,6 +1,9 @@
 # LogicTest: !3node-tenant(49854)
 
 statement ok
+SET CLUSTER SETTING kv.transaction.max_intents_bytes = "1048576"
+
+statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 
 # Randomize the use of insert fast path.

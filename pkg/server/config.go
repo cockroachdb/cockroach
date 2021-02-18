@@ -484,6 +484,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
 		if spec.InMemory {
+			log.Infof(ctx, "cache sizeInBytes: %d, percent: %f", sizeInBytes, spec.Size.Percent)
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
@@ -515,7 +516,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes, cfg.Settings))
+				// engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes, cfg.Settings))
+				engines = append(engines,
+					storage.NewInMemWithCache(ctx, spec.Attributes, pebbleCache, cfg.Settings))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
@@ -557,6 +560,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if len(spec.RocksDBOptions) > 0 {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
+			log.Infof(ctx, "calling NewPebble with cache")
 			eng, err := storage.NewPebble(ctx, pebbleConfig)
 			if err != nil {
 				return Engines{}, err

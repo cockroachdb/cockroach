@@ -14,10 +14,13 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // NewInMem allocates and returns a new, opened in-memory engine. The caller
@@ -28,6 +31,36 @@ func NewInMem(
 	ctx context.Context, attrs roachpb.Attributes, cacheSize int64, settings *cluster.Settings,
 ) Engine {
 	return newPebbleInMem(ctx, attrs, cacheSize, settings)
+}
+
+// NewInMemWithCache allocated and returns a new, opened in-memory engine, and
+// uses the provided cache. The caller must call the engine's Close method
+// when the engine is no longer needed.
+func NewInMemWithCache(
+	ctx context.Context, attrs roachpb.Attributes, cache *pebble.Cache, settings *cluster.Settings,
+) Engine {
+	log.Infof(ctx, "NewInMemWithCache")
+	opts := DefaultPebbleOptions()
+	opts.Cache = cache
+
+	opts.FS = vfs.NewMem()
+	db, err := NewPebble(
+		ctx,
+		PebbleConfig{
+			StorageConfig: base.StorageConfig{
+				Attrs: attrs,
+				// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+				// https://github.com/cockroachdb/cockroach/issues/16750
+				MaxSize:  512 << 20, /* 512 MiB */
+				Settings: settings,
+			},
+			Opts: opts,
+		})
+	if err != nil {
+		panic(err)
+	}
+	return db
+
 }
 
 // The ForTesting functions randomize the settings for separated intents. This
