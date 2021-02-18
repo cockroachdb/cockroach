@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/knz/strtime"
 )
 
@@ -3586,6 +3587,15 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view trace ID")
+				}
+
 				sp := tracing.SpanFromContext(ctx.Context)
 				if sp == nil {
 					return tree.DNull, nil
@@ -3594,6 +3604,50 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.payloads_for_span": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"span ID", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view payloads")
+				}
+
+				builder := json.NewArrayBuilder(len(args))
+
+				spanID := uint64(*(args[0].(*tree.DInt)))
+				span, found := ctx.Settings.Tracer.GetActiveSpanFromID(spanID)
+				// A span may not be found if its ID was surfaced previously but its
+				// corresponding trace has ended by the time this builtin was run.
+				if !found {
+					// Returns an empty JSON array.
+					return tree.NewDJSON(builder.Build()), nil
+				}
+
+				for _, rec := range span.GetRecording() {
+					rec.Structured(func(item *pbtypes.Any) {
+						payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
+						if err != nil {
+							return
+						}
+						if payload != nil {
+							builder.Add(payload)
+						}
+					})
+				}
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info:       "Returns the payload(s) of the span whose ID is passed in the argument.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

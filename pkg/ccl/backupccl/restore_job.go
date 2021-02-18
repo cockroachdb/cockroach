@@ -426,7 +426,7 @@ func WriteDescriptors(
 		}
 
 		for _, db := range databases {
-			if err := db.Validate(); err != nil {
+			if err := db.Validate(ctx, dg); err != nil {
 				return errors.Wrapf(err,
 					"validate database %d", errors.Safe(db.GetID()))
 			}

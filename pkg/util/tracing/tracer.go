@@ -155,7 +155,8 @@ type Tracer struct {
 	// In normal operation, a local root Span is inserted on creation and
 	// removed on .Finish().
 	//
-	// The map can be introspected by `Tracer.VisitSpans`.
+	// The map can be introspected by `Tracer.VisitSpans`. A Span can also be
+	// retrieved from its ID by `Tracer.GetActiveSpanFromID`.
 	activeSpans struct {
 		// NB: it might be tempting to use a sync.Map here, but
 		// this incurs an allocation per Span (sync.Map does
@@ -676,6 +677,14 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 		recordingType:    recordingType,
 		Baggage:          baggage,
 	}, nil
+}
+
+// GetActiveSpanFromID retrieves any active span given its span ID.
+func (t *Tracer) GetActiveSpanFromID(spanID uint64) (*Span, bool) {
+	t.activeSpans.Lock()
+	span, found := t.activeSpans.m[spanID]
+	t.activeSpans.Unlock()
+	return span, found
 }
 
 // VisitSpans invokes the visitor with all active Spans. The function will

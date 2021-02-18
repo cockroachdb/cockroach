@@ -13,6 +13,7 @@
 package dbdesc
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -250,10 +252,26 @@ func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
-// Validate validates that the database descriptor is well formed.
+// ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
+// iterutil.StopIteration is supported.
+func (desc *Immutable) ForEachSchemaInfo(
+	f func(id descpb.ID, name string, isDropped bool) error,
+) error {
+	for name, info := range desc.Schemas {
+		if err := f(info.ID, name, info.Dropped); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateSelf validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *Immutable) Validate() error {
+func (desc *Immutable) ValidateSelf(_ context.Context) error {
 	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
@@ -292,6 +310,16 @@ func (desc *Immutable) Validate() error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID(), privilege.Database)
+}
+
+// Validate punts to ValidateSelf.
+func (desc *Immutable) Validate(ctx context.Context, _ catalog.DescGetter) error {
+	return desc.ValidateSelf(ctx)
+}
+
+// ValidateTxnCommit punts to Validate.
+func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
+	return desc.Validate(ctx, descGetter)
 }
 
 // SchemaMeta implements the tree.SchemaMeta interface.
