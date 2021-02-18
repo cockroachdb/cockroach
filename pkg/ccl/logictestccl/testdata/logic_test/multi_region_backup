@@ -969,3 +969,16 @@ BACKUP TABLE regional_by_table_in_ca_central_1 TO 'nodelocal://1/rbr_table/';
 
 statement error cannot backup individual table
 BACKUP TABLE global_table TO 'nodelocal://1/rbr_table/';
+
+statement ok
+CREATE DATABASE non_mr_backup;
+USE non_mr_backup
+
+statement ok
+CREATE TABLE non_mr_table (i int)
+
+statement ok
+BACKUP TABLE non_mr_table TO 'nodelocal://1/non_mr_table/'
+
+statement error cannot restore individual table
+RESTORE TABLE non_mr_table FROM 'nodelocal://1/non_mr_table/' WITH into_db = 'mr-backup-1'
