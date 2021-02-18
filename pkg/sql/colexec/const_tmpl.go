@@ -72,7 +72,7 @@ func NewConstOp(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &const_TYPEOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(_GOTYPE),
@@ -88,7 +88,7 @@ func NewConstOp(
 // {{range .WidthOverloads}}
 
 type const_TYPEOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -96,11 +96,11 @@ type const_TYPEOp struct {
 }
 
 func (c const_TYPEOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -147,24 +147,24 @@ func NewConstNullOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	outputIdx int
 }
 
 var _ colexecbase.Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

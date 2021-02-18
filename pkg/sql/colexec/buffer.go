@@ -20,7 +20,7 @@ import (
 // bufferOp is an operator that buffers a single batch at a time from an input,
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	initStatus OperatorInitStatus
 
 	// read is true if someone has read the current batch already.
@@ -34,7 +34,7 @@ var _ colexecbase.Operator = &bufferOp{}
 // supplied input.
 func NewBufferOp(input colexecbase.Operator) colexecbase.Operator {
 	return &bufferOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 	}
 }
 
@@ -44,7 +44,7 @@ func (b *bufferOp) Init() {
 	// the input to bufferOp, so we do this check whether Init has already been
 	// performed.
 	if b.initStatus == OperatorNotInitialized {
-		b.input.Init()
+		b.Input.Init()
 		b.initStatus = OperatorInitialized
 	}
 }
@@ -59,7 +59,7 @@ func (b *bufferOp) rewind() {
 // advance reads the next batch from the input into the buffer, preparing itself
 // for reads.
 func (b *bufferOp) advance(ctx context.Context) {
-	b.batch = b.input.Next(ctx)
+	b.batch = b.Input.Next(ctx)
 	b.rewind()
 }
 

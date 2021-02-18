@@ -189,7 +189,7 @@ type hashTable struct {
 	probeMode hashTableProbeMode
 }
 
-var _ resetter = &hashTable{}
+var _ colexecbase.Resetter = &hashTable{}
 
 // newHashTable returns a new hashTable.
 //
@@ -702,14 +702,14 @@ func (ht *hashTable) checkBuildForAggregation(
 	return nDiffers
 }
 
-// reset resets the hashTable for reuse.
+// Reset resets the hashTable for reuse.
 // NOTE: memory that already has been allocated for ht.vals is *not* released.
 // However, resetting the length of ht.vals to zero doesn't confuse the
 // allocator - it is smart enough to look at the capacities of the allocated
 // vectors, and the capacities would stay the same until an actual new
 // allocation is needed, and at that time the allocator will update the memory
 // account accordingly.
-func (ht *hashTable) reset(_ context.Context) {
+func (ht *hashTable) Reset(_ context.Context) {
 	for n := 0; n < len(ht.buildScratch.first); n += copy(ht.buildScratch.first[n:], zeroUint64Column) {
 	}
 	ht.vals.ResetInternalBatch()

@@ -41,36 +41,6 @@ type NonExplainable interface {
 	nonExplainableMarker()
 }
 
-// NewOneInputNode returns an execinfra.OpNode with a single Operator input.
-func NewOneInputNode(input colexecbase.Operator) OneInputNode {
-	return OneInputNode{input: input}
-}
-
-// OneInputNode is an execinfra.OpNode with a single Operator input.
-type OneInputNode struct {
-	input colexecbase.Operator
-}
-
-// ChildCount implements the execinfra.OpNode interface.
-func (OneInputNode) ChildCount(verbose bool) int {
-	return 1
-}
-
-// Child implements the execinfra.OpNode interface.
-func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
-	if nth == 0 {
-		return n.input
-	}
-	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
-}
-
-// Input returns the single input of this OneInputNode as an Operator.
-func (n OneInputNode) Input() colexecbase.Operator {
-	return n.input
-}
-
 // newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
 func newTwoInputNode(inputOne, inputTwo colexecbase.Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
@@ -95,32 +65,6 @@ func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
-}
-
-// resetter is an interface that operators can implement if they can be reset
-// either for reusing (to keep the already allocated memory) or during tests.
-type resetter interface {
-	reset(ctx context.Context)
-}
-
-// ResettableOperator is an Operator that can be reset.
-type ResettableOperator interface {
-	colexecbase.Operator
-	resetter
-}
-
-// isOperatorChainResettable traverses the whole operator tree rooted at op and
-// returns true if all nodes are resetters.
-func isOperatorChainResettable(op execinfra.OpNode) bool {
-	if _, resettable := op.(resetter); !resettable {
-		return false
-	}
-	for i := 0; i < op.ChildCount(true /* verbose */); i++ {
-		if !isOperatorChainResettable(op.Child(i, true /* verbose */)) {
-			return false
-		}
-	}
-	return true
 }
 
 // CallbackCloser is a utility struct that implements the Closer interface by
@@ -161,12 +105,12 @@ type closableOperator interface {
 
 func makeOneInputCloserHelper(input colexecbase.Operator) oneInputCloserHelper {
 	return oneInputCloserHelper{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 	}
 }
 
 type oneInputCloserHelper struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	closerHelper
 }
 
@@ -176,7 +120,7 @@ func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 	if !c.close() {
 		return nil
 	}
-	if closer, ok := c.input.(colexecbase.Closer); ok {
+	if closer, ok := c.Input.(colexecbase.Closer); ok {
 		return closer.Close(ctx)
 	}
 	return nil
@@ -190,26 +134,26 @@ type noopOperator struct {
 var _ colexecbase.Operator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
-func NewNoop(input colexecbase.Operator) ResettableOperator {
+func NewNoop(input colexecbase.Operator) colexecbase.ResettableOperator {
 	return &noopOperator{oneInputCloserHelper: makeOneInputCloserHelper(input)}
 }
 
 func (n *noopOperator) Init() {
-	n.input.Init()
+	n.Input.Init()
 }
 
 func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
-	return n.input.Next(ctx)
+	return n.Input.Next(ctx)
 }
 
-func (n *noopOperator) reset(ctx context.Context) {
-	if r, ok := n.input.(resetter); ok {
-		r.reset(ctx)
+func (n *noopOperator) Reset(ctx context.Context) {
+	if r, ok := n.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 type zeroOperator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 }
 
@@ -217,11 +161,11 @@ var _ colexecbase.Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
 func NewZeroOp(input colexecbase.Operator) colexecbase.Operator {
-	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
+	return &zeroOperator{OneInputNode: colexecbase.NewOneInputNode(input)}
 }
 
 func (s *zeroOperator) Init() {
-	s.input.Init()
+	s.Input.Init()
 }
 
 func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
@@ -324,7 +268,7 @@ type vectorTypeEnforcer struct {
 	idx       int
 }
 
-var _ ResettableOperator = &vectorTypeEnforcer{}
+var _ colexecbase.ResettableOperator = &vectorTypeEnforcer{}
 
 func newVectorTypeEnforcer(
 	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
@@ -338,11 +282,11 @@ func newVectorTypeEnforcer(
 }
 
 func (e *vectorTypeEnforcer) Init() {
-	e.input.Init()
+	e.Input.Init()
 }
 
 func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
-	b := e.input.Next(ctx)
+	b := e.Input.Next(ctx)
 	if b.Length() == 0 {
 		return b
 	}
@@ -350,9 +294,9 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
-func (e *vectorTypeEnforcer) reset(ctx context.Context) {
-	if r, ok := e.input.(resetter); ok {
-		r.reset(ctx)
+func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
+	if r, ok := e.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
@@ -401,7 +345,7 @@ func NewBatchSchemaSubsetEnforcer(
 
 // Init implements the colexecbase.Operator interface.
 func (e *BatchSchemaSubsetEnforcer) Init() {
-	e.input.Init()
+	e.Input.Init()
 	if e.subsetStartIdx >= e.subsetEndIdx {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly subsetStartIdx is not less than subsetEndIdx"))
 	}
@@ -409,7 +353,7 @@ func (e *BatchSchemaSubsetEnforcer) Init() {
 
 // Next implements the colexecbase.Operator interface.
 func (e *BatchSchemaSubsetEnforcer) Next(ctx context.Context) coldata.Batch {
-	b := e.input.Next(ctx)
+	b := e.Input.Next(ctx)
 	if b.Length() == 0 {
 		return b
 	}

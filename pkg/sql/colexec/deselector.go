@@ -25,7 +25,7 @@ import (
 // or omitted according to the selection vector). If the batches come with no
 // selection vector, it is a noop.
 type deselectorOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 	allocator  *colmem.Allocator
 	inputTypes []*types.T
@@ -41,14 +41,14 @@ func NewDeselectorOp(
 	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
 ) colexecbase.Operator {
 	return &deselectorOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		inputTypes:   typs,
 	}
 }
 
 func (p *deselectorOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
@@ -65,7 +65,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	p.output, _ = p.allocator.ResetMaybeReallocate(
 		p.inputTypes, p.output, 1 /* minCapacity */, maxBatchMemSize,
 	)
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	if batch.Selection() == nil {
 		return batch
 	}

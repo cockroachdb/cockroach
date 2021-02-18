@@ -49,16 +49,16 @@ var (
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
 	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (ResettableOperator, []bool, error) {
+) (colexecbase.ResettableOperator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		fn:           func() { copy(distinctCol, zeroBoolColumn) },
 	}
 	var (
 		err error
-		r   ResettableOperator
+		r   colexecbase.ResettableOperator
 		ok  bool
 	)
 	for i := range distinctCols {
@@ -67,8 +67,8 @@ func OrderedDistinctColsToOperators(
 			return nil, nil, err
 		}
 	}
-	if r, ok = input.(ResettableOperator); !ok {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a resetter"))
+	if r, ok = input.(colexecbase.ResettableOperator); !ok {
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a Resetter"))
 	}
 	distinctChain := &distinctChainOps{
 		ResettableOperator: r,
@@ -77,22 +77,22 @@ func OrderedDistinctColsToOperators(
 }
 
 type distinctChainOps struct {
-	ResettableOperator
+	colexecbase.ResettableOperator
 }
 
-var _ ResettableOperator = &distinctChainOps{}
+var _ colexecbase.ResettableOperator = &distinctChainOps{}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
 func NewOrderedDistinct(
 	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (ResettableOperator, error) {
+) (colexecbase.ResettableOperator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
 	}
 	return &boolVecToSelOp{
-		OneInputNode: NewOneInputNode(op),
+		OneInputNode: colexecbase.NewOneInputNode(op),
 		outputCol:    outputCol,
 	}, nil
 }
@@ -131,7 +131,7 @@ func newSingleDistinct(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &distinct_TYPEOp{
-				OneInputNode:   NewOneInputNode(input),
+				OneInputNode:   colexecbase.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -190,7 +190,7 @@ type distinct_TYPEOp struct {
 	// still works across batch boundaries.
 	lastVal _GOTYPE
 
-	OneInputNode
+	colexecbase.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -202,22 +202,22 @@ type distinct_TYPEOp struct {
 	lastValNull bool
 }
 
-var _ ResettableOperator = &distinct_TYPEOp{}
+var _ colexecbase.ResettableOperator = &distinct_TYPEOp{}
 
 func (p *distinct_TYPEOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
-func (p *distinct_TYPEOp) reset(ctx context.Context) {
+func (p *distinct_TYPEOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.input.(resetter); ok {
-		resetter.reset(ctx)
+	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+		resetter.Reset(ctx)
 	}
 }
 
 func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	if batch.Length() == 0 {
 		return batch
 	}

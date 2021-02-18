@@ -46,7 +46,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constBoolOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(bool),
@@ -57,7 +57,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constBytesOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.([]byte),
@@ -68,7 +68,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constDecimalOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(apd.Decimal),
@@ -78,14 +78,14 @@ func NewConstOp(
 		switch t.Width() {
 		case 16:
 			return &constInt16Op{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(int16),
 			}, nil
 		case 32:
 			return &constInt32Op{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(int32),
@@ -93,7 +93,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constInt64Op{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(int64),
@@ -104,7 +104,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constFloat64Op{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(float64),
@@ -115,7 +115,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constTimestampOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(time.Time),
@@ -126,7 +126,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constIntervalOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(duration.Duration),
@@ -137,7 +137,7 @@ func NewConstOp(
 		case -1:
 		default:
 			return &constDatumOp{
-				OneInputNode: NewOneInputNode(input),
+				OneInputNode: colexecbase.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(interface{}),
@@ -148,7 +148,7 @@ func NewConstOp(
 }
 
 type constBoolOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -156,11 +156,11 @@ type constBoolOp struct {
 }
 
 func (c constBoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constBoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -196,7 +196,7 @@ func (c constBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type constBytesOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -204,11 +204,11 @@ type constBytesOp struct {
 }
 
 func (c constBytesOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constBytesOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -243,7 +243,7 @@ func (c constBytesOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type constDecimalOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -251,11 +251,11 @@ type constDecimalOp struct {
 }
 
 func (c constDecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -291,7 +291,7 @@ func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type constInt16Op struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -299,11 +299,11 @@ type constInt16Op struct {
 }
 
 func (c constInt16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constInt16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -339,7 +339,7 @@ func (c constInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type constInt32Op struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -347,11 +347,11 @@ type constInt32Op struct {
 }
 
 func (c constInt32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constInt32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -387,7 +387,7 @@ func (c constInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type constInt64Op struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -395,11 +395,11 @@ type constInt64Op struct {
 }
 
 func (c constInt64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constInt64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -435,7 +435,7 @@ func (c constInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type constFloat64Op struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -443,11 +443,11 @@ type constFloat64Op struct {
 }
 
 func (c constFloat64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constFloat64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -483,7 +483,7 @@ func (c constFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type constTimestampOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -491,11 +491,11 @@ type constTimestampOp struct {
 }
 
 func (c constTimestampOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constTimestampOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -531,7 +531,7 @@ func (c constTimestampOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type constIntervalOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -539,11 +539,11 @@ type constIntervalOp struct {
 }
 
 func (c constIntervalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constIntervalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -579,7 +579,7 @@ func (c constIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type constDatumOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -587,11 +587,11 @@ type constDatumOp struct {
 }
 
 func (c constDatumOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constDatumOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -632,24 +632,24 @@ func NewConstNullOp(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	outputIdx int
 }
 
 var _ colexecbase.Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -130,11 +130,11 @@ type castOpNullAny struct {
 var _ closableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -187,21 +187,21 @@ type cast_NAMEOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &cast_NAMEOp{}
+var _ colexecbase.ResettableOperator = &cast_NAMEOp{}
 var _ closableOperator = &cast_NAMEOp{}
 
 func (c *cast_NAMEOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *cast_NAMEOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *cast_NAMEOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *cast_NAMEOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -222,7 +222,7 @@ func NewMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (ResettableOperator, error) {
+) (colexecbase.ResettableOperator, error) {
 	// Merge joiner only supports the case when the physical types in the
 	// equality columns in both inputs are the same. We, however, also need to
 	// support joining on numeric columns of different types or widths. If we
@@ -296,7 +296,7 @@ func NewMergeJoinOp(
 	if err != nil {
 		return nil, err
 	}
-	var mergeJoinerOp ResettableOperator
+	var mergeJoinerOp colexecbase.ResettableOperator
 	switch joinType {
 	case descpb.InnerJoin:
 		mergeJoinerOp = &mergeJoinInnerOp{base}
@@ -355,7 +355,7 @@ func NewMergeJoinOp(
 	}
 	return NewSimpleProjectOp(
 		mergeJoinerOp, numActualLeftTypes+numActualRightTypes, projection,
-	).(ResettableOperator), nil
+	).(colexecbase.ResettableOperator), nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -485,19 +485,19 @@ type mergeJoinBase struct {
 	diskAcc *mon.BoundAccount
 }
 
-var _ resetter = &mergeJoinBase{}
+var _ colexecbase.Resetter = &mergeJoinBase{}
 var _ colexecbase.Closer = &mergeJoinBase{}
 
-func (o *mergeJoinBase) reset(ctx context.Context) {
-	if r, ok := o.left.source.(resetter); ok {
-		r.reset(ctx)
+func (o *mergeJoinBase) Reset(ctx context.Context) {
+	if r, ok := o.left.source.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
-	if r, ok := o.right.source.(resetter); ok {
-		r.reset(ctx)
+	if r, ok := o.right.source.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	o.outputReady = false
 	o.state = mjEntry
-	o.bufferedGroup.helper.reset(ctx)
+	o.bufferedGroup.helper.Reset(ctx)
 	o.bufferedGroup.needToReset = false
 	o.proberState.lBatch = nil
 	o.proberState.rBatch = nil
@@ -651,7 +651,7 @@ func (o *mergeJoinBase) initProberState(ctx context.Context) {
 		o.proberState.rLength = o.proberState.rBatch.Length()
 	}
 	if o.bufferedGroup.needToReset {
-		o.bufferedGroup.helper.reset(ctx)
+		o.bufferedGroup.helper.Reset(ctx)
 		o.bufferedGroup.needToReset = false
 	}
 }
@@ -696,7 +696,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 	}
 
 	isBufferedGroupComplete := false
-	input.distincter.(resetter).reset(ctx)
+	input.distincter.(colexecbase.Resetter).Reset(ctx)
 	// Ignore the first row of the distincter in the first pass since we already
 	// know that we are in the same group and, thus, the row is not distinct,
 	// regardless of what the distincter outputs.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -79,11 +80,11 @@ func getDiskQueueCfgAndMemoryTestCases(
 // getDataAndFullSelection is a test helper that generates tuples representing
 // a batch with single int64 column where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
-func getDataAndFullSelection() (tuples, []*types.T, []int) {
-	data := make(tuples, coldata.BatchSize())
+func getDataAndFullSelection() (colexectestutils.Tuples, []*types.T, []int) {
+	data := make(colexectestutils.Tuples, coldata.BatchSize())
 	fullSelection := make([]int, coldata.BatchSize())
 	for i := range data {
-		data[i] = tuple{i}
+		data[i] = colexectestutils.Tuple{i}
 		fullSelection[i] = i
 	}
 	return data, []*types.T{types.Int}, fullSelection
@@ -181,8 +182,8 @@ func TestRouterOutputAddBatch(t *testing.T) {
 						},
 					},
 				)
-				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
-				out := newOpTestOutput(o, data[:len(tc.selection)])
+				in := colexectestutils.NewOpTestInput(testAllocator, tc.inputBatchSize, data, nil)
+				out := colexectestutils.NewOpTestOutput(o, data[:len(tc.selection)])
 				in.Init()
 				for {
 					b := in.Next(ctx)
@@ -221,7 +222,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 	testCases := []struct {
 		unblockEvent func(in colexecbase.Operator, o *routerOutputOp)
-		expected     tuples
+		expected     colexectestutils.Tuples
 		name         string
 	}{
 		{
@@ -246,7 +247,7 @@ func TestRouterOutputNext(t *testing.T) {
 			unblockEvent: func(_ colexecbase.Operator, o *routerOutputOp) {
 				o.addBatch(ctx, coldata.ZeroBatch)
 			},
-			expected: tuples{},
+			expected: colexectestutils.Tuples{},
 			name:     "ReaderWaitsForZeroBatch",
 		},
 		{
@@ -255,7 +256,7 @@ func TestRouterOutputNext(t *testing.T) {
 			unblockEvent: func(_ colexecbase.Operator, o *routerOutputOp) {
 				o.cancel(ctx, nil /* err */)
 			},
-			expected: tuples{},
+			expected: colexectestutils.Tuples{},
 			name:     "CancelUnblocksReader",
 		},
 	}
@@ -287,7 +288,7 @@ func TestRouterOutputNext(t *testing.T) {
 						unblockedEventsChan: unblockedEventsChan,
 					},
 				)
-				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
+				in := colexectestutils.NewOpTestInput(testAllocator, coldata.BatchSize(), data, nil)
 				in.Init()
 				wg.Add(1)
 				go func() {
@@ -314,7 +315,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 				// Should have data available, pushed by our reader goroutine.
 				batches := colexecbase.NewBatchBuffer()
-				out := newOpTestOutput(batches, tc.expected)
+				out := colexectestutils.NewOpTestOutput(batches, tc.expected)
 				for {
 					b := <-batchChan
 					batches.Add(b, typs)
@@ -365,7 +366,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 			if len(fullSelection) <= smallBatchSize {
 				// If a full batch is smaller than our small batch size, reduce it, since
-				// this test relies on multiple batches returned from the input.
+				// this test relies on multiple batches returned from the Input.
 				smallBatchSize = 2
 				if smallBatchSize >= minBatchSize {
 					// Sanity check.
@@ -377,7 +378,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// Use a smaller selection than the batch size; it increases test coverage.
 			selection := fullSelection[:blockThreshold]
 
-			expected := make(tuples, 0, len(data))
+			expected := make(colexectestutils.Tuples, 0, len(data))
 			for i := 0; i < len(data); i += smallBatchSize {
 				for k := 0; k < blockThreshold && i+k < len(data); k++ {
 					expected = append(expected, data[i+k])
@@ -399,8 +400,8 @@ func TestRouterOutputNext(t *testing.T) {
 					},
 				},
 			)
-			in := newOpTestInput(smallBatchSize, data, nil /* typs */)
-			out := newOpTestOutput(o, expected)
+			in := colexectestutils.NewOpTestInput(testAllocator, smallBatchSize, data, nil)
+			out := colexectestutils.NewOpTestOutput(o, expected)
 			in.Init()
 
 			b := in.Next(ctx)
@@ -456,9 +457,9 @@ func TestRouterOutputRandom(t *testing.T) {
 	typs := []*types.T{types.Int, types.Int}
 
 	dataLen := 1 + rng.Intn(maxValues-1)
-	data := make(tuples, dataLen)
+	data := make(colexectestutils.Tuples, dataLen)
 	for i := range data {
-		data[i] = make(tuple, len(typs))
+		data[i] = make(colexectestutils.Tuple, len(typs))
 		for j := range typs {
 			data[i][j] = rng.Int63()
 		}
@@ -472,7 +473,7 @@ func TestRouterOutputRandom(t *testing.T) {
 	)
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("%s/memoryLimit=%s", testName, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colexecbase.Operator) {
+			colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{data}, nil, func(t *testing.T, inputs []colexecbase.Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
 				o := newRouterOutputOp(
@@ -491,7 +492,7 @@ func TestRouterOutputRandom(t *testing.T) {
 				)
 				inputs[0].Init()
 
-				expected := make(tuples, 0, len(data))
+				expected := make(colexectestutils.Tuples, 0, len(data))
 
 				// canceled is a boolean that specifies whether the output was canceled.
 				// If this is the case, the output should not be verified.
@@ -513,7 +514,7 @@ func TestRouterOutputRandom(t *testing.T) {
 						selection = selection[:b.Length()]
 
 						for _, i := range selection {
-							expected = append(expected, make(tuple, len(typs)))
+							expected = append(expected, make(colexectestutils.Tuple, len(typs)))
 							for j := range typs {
 								expected[len(expected)-1][j] = b.ColVec(j).Int64()[i]
 							}
@@ -584,7 +585,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					return
 				}
 
-				if err := newOpTestOutput(actual, expected).Verify(); err != nil {
+				if err := colexectestutils.NewOpTestOutput(actual, expected).Verify(); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -638,14 +639,14 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		defer func(batchSize int) { require.NoError(t, coldata.SetBatchSizeForTests(batchSize)) }(batchSize)
 		batchSize = expectedBatchSize
 	}
-	data := make(tuples, batchSize)
+	data := make(colexectestutils.Tuples, batchSize)
 	valsYetToSee := make(map[int64]struct{})
 	for i := range data {
-		data[i] = tuple{i}
+		data[i] = colexectestutils.Tuple{i}
 		valsYetToSee[int64(i)] = struct{}{}
 	}
 
-	in := newOpTestInput(batchSize, data, nil /* typs */)
+	in := colexectestutils.NewOpTestInput(testAllocator, batchSize, data, nil)
 	in.Init()
 
 	var (
@@ -808,7 +809,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	data, typs, _ := getDataAndFullSelection()
 
-	expected := make(tuples, 0, len(data))
+	expected := make(colexectestutils.Tuples, 0, len(data))
 	for _, i := range sel {
 		expected = append(expected, data[i])
 	}
@@ -822,13 +823,13 @@ func TestHashRouterOneOutput(t *testing.T) {
 			testAllocator.ReleaseMemory(testAllocator.Used())
 			diskAcc := testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
-			r, routerOutputs := NewHashRouter([]*colmem.Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data, typs), typs, []uint32{0}, mtc.bytes, queueCfg, colexecbase.NewTestingSemaphore(2), []*mon.BoundAccount{&diskAcc}, nil /* toDrain */, nil /* toClose */)
+			r, routerOutputs := NewHashRouter([]*colmem.Allocator{testAllocator}, colexectestutils.NewOpFixedSelTestInput(testAllocator, sel, len(sel), data, typs), typs, []uint32{0}, mtc.bytes, queueCfg, colexecbase.NewTestingSemaphore(2), []*mon.BoundAccount{&diskAcc}, nil /* toDrain */, nil /* toClose */)
 
 			if len(routerOutputs) != 1 {
 				t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
 			}
 
-			o := newOpTestOutput(routerOutputs[0], expected)
+			o := colexectestutils.NewOpTestOutput(routerOutputs[0], expected)
 
 			ro := routerOutputs[0].(*routerOutputOp)
 
@@ -874,9 +875,9 @@ func TestHashRouterRandom(t *testing.T) {
 
 	typs := []*types.T{types.Int, types.Int}
 	dataLen := 1 + rng.Intn(maxValues-1)
-	data := make(tuples, dataLen)
+	data := make(colexectestutils.Tuples, dataLen)
 	for i := range data {
-		data[i] = make(tuple, len(typs))
+		data[i] = make(colexectestutils.Tuple, len(typs))
 		for j := range typs {
 			data[i][j] = rng.Int63()
 		}
@@ -945,7 +946,7 @@ func TestHashRouterRandom(t *testing.T) {
 	var expectedDistribution []int
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf(testName+"/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colexecbase.Operator) {
+			colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{data}, nil, func(t *testing.T, inputs []colexecbase.Operator) {
 				unblockEventsChan := make(chan struct{}, 2*numOutputs)
 				outputs := make([]routerOutput, numOutputs)
 				outputsAsOps := make([]colexecbase.DrainableOperator, numOutputs)

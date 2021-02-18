@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -141,7 +142,7 @@ func BenchmarkMaterializer(b *testing.B) {
 							sel[i] = i
 						}
 					}
-					input := newFiniteBatchSource(batch, typs, nBatches)
+					input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 
 					b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 					for i := 0; i < b.N; i++ {
@@ -175,7 +176,7 @@ func BenchmarkMaterializer(b *testing.B) {
 						if foundRows != nRows {
 							b.Fatalf("expected %d rows, found %d", nRows, foundRows)
 						}
-						input.reset(nBatches)
+						input.Reset(nBatches)
 					}
 				})
 			}

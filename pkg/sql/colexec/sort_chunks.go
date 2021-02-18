@@ -58,7 +58,7 @@ func NewSortChunks(
 type sortChunksOp struct {
 	allocator *colmem.Allocator
 	input     *chunker
-	sorter    ResettableOperator
+	sorter    colexecbase.ResettableOperator
 
 	exportedFromBuffer int
 	exportedFromBatch  int
@@ -103,7 +103,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 			// the full reset of the chunker because we're in the middle of
 			// processing of the input to sortChunksOp.
 			c.input.emptyBuffer()
-			c.sorter.reset(ctx)
+			c.sorter.Reset(ctx)
 		} else {
 			return batch
 		}
@@ -198,7 +198,7 @@ const (
 // in the middle of processing the input). Instead, sortChunksOp will empty the
 // buffer when appropriate.
 type chunker struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	NonExplainable
 
 	allocator *colmem.Allocator
@@ -267,7 +267,7 @@ func newChunker(
 	}
 	deselector := NewDeselectorOp(allocator, input, inputTypes)
 	return &chunker{
-		OneInputNode:      NewOneInputNode(deselector),
+		OneInputNode:      colexecbase.NewOneInputNode(deselector),
 		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
@@ -277,7 +277,7 @@ func newChunker(
 }
 
 func (s *chunker) init() {
-	s.input.Init()
+	s.Input.Init()
 	s.bufferedTuples = newAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
@@ -297,7 +297,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 	for {
 		switch s.state {
 		case chunkerReading:
-			s.batch = s.input.Next(ctx)
+			s.batch = s.Input.Next(ctx)
 			s.exportState.numProcessedTuplesFromBatch = 0
 			if s.batch.Length() == 0 {
 				s.inputDone = true

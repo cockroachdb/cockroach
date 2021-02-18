@@ -36,7 +36,7 @@ func NewExternalDistinct(
 ) colexecbase.Operator {
 	distinctSpec := args.Spec.Core.Distinct
 	distinctCols := distinctSpec.DistinctColumns
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to process using the in-memory unordered distinct fit under the
 		// limit, so we use an unlimited allocator.
@@ -49,7 +49,7 @@ func NewExternalDistinct(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		_ semaphore.Semaphore,
-	) ResettableOperator {
+	) colexecbase.ResettableOperator {
 		// The distinct operator *must* keep the first tuple from the input
 		// among all that are identical on distinctCols. In order to guarantee
 		// such behavior in the fallback, we append an ordinality column to
@@ -81,7 +81,7 @@ func NewExternalDistinct(
 	// in-memory operator tuples, so we plan a special filterer operator to
 	// remove all such tuples.
 	input = &unorderedDistinctFilterer{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
 	}
 	numRequiredActivePartitions := ExternalSorterMinPartitions

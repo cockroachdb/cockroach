@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -29,8 +30,8 @@ import (
 )
 
 type windowFnTestCase struct {
-	tuples       []tuple
-	expected     []tuple
+	tuples       []colexectestutils.Tuple
+	expected     []colexectestutils.Tuple
 	windowerSpec execinfrapb.WindowerSpec
 }
 
@@ -75,8 +76,8 @@ func TestWindowFunctions(t *testing.T) {
 		for _, tc := range []windowFnTestCase{
 			// With PARTITION BY, no ORDER BY.
 			{
-				tuples:   tuples{{1}, {1}, {1}, {2}, {2}, {3}},
-				expected: tuples{{1, 1}, {1, 2}, {1, 3}, {2, 1}, {2, 2}, {3, 1}},
+				tuples:   colexectestutils.Tuples{{1}, {1}, {1}, {2}, {2}, {3}},
+				expected: colexectestutils.Tuples{{1, 1}, {1, 2}, {1, 3}, {2, 1}, {2, 2}, {3, 1}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -88,8 +89,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1}, {nil, 1}, {1, 1}, {1, 1}, {2, 1}, {3, 1}, {3, 1}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1}, {nil, 1}, {1, 1}, {1, 1}, {2, 1}, {3, 1}, {3, 1}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -101,8 +102,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1}, {nil, 1}, {1, 1}, {1, 1}, {2, 1}, {3, 1}, {3, 1}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1}, {nil, 1}, {1, 1}, {1, 1}, {2, 1}, {3, 1}, {3, 1}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -114,8 +115,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 0}, {nil, 0}, {1, 0}, {1, 0}, {2, 0}, {3, 0}, {3, 0}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 0}, {nil, 0}, {1, 0}, {1, 0}, {2, 0}, {3, 0}, {3, 0}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -127,8 +128,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1.0}, {nil, 1.0}, {1, 1.0}, {1, 1.0}, {2, 1.0}, {3, 1.0}, {3, 1.0}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1.0}, {nil, 1.0}, {1, 1.0}, {1, 1.0}, {2, 1.0}, {3, 1.0}, {3, 1.0}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -142,8 +143,8 @@ func TestWindowFunctions(t *testing.T) {
 
 			// No PARTITION BY, with ORDER BY.
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1}, {nil, 2}, {1, 3}, {1, 4}, {2, 5}, {3, 6}, {3, 7}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1}, {nil, 2}, {1, 3}, {1, 4}, {2, 5}, {3, 6}, {3, 7}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 						{
@@ -155,8 +156,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1}, {nil, 1}, {1, 3}, {1, 3}, {2, 5}, {3, 6}, {3, 6}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1}, {nil, 1}, {1, 3}, {1, 3}, {2, 5}, {3, 6}, {3, 6}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 						{
@@ -168,8 +169,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 1}, {nil, 1}, {1, 2}, {1, 2}, {2, 3}, {3, 4}, {3, 4}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 1}, {nil, 1}, {1, 2}, {1, 2}, {2, 3}, {3, 4}, {3, 4}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 						{
@@ -181,8 +182,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {1}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 0}, {nil, 0}, {1, 2.0 / 7}, {1, 2.0 / 7}, {1, 2.0 / 7}, {2, 5.0 / 7}, {3, 6.0 / 7}, {3, 6.0 / 7}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {1}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 0}, {nil, 0}, {1, 2.0 / 7}, {1, 2.0 / 7}, {1, 2.0 / 7}, {2, 5.0 / 7}, {3, 6.0 / 7}, {3, 6.0 / 7}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 						{
@@ -194,8 +195,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3}, {1}, {2}, {1}, {nil}, {1}, {nil}, {3}},
-				expected: tuples{{nil, 2.0 / 8}, {nil, 2.0 / 8}, {1, 5.0 / 8}, {1, 5.0 / 8}, {1, 5.0 / 8}, {2, 6.0 / 8}, {3, 1.0}, {3, 1.0}},
+				tuples:   colexectestutils.Tuples{{3}, {1}, {2}, {1}, {nil}, {1}, {nil}, {3}},
+				expected: colexectestutils.Tuples{{nil, 2.0 / 8}, {nil, 2.0 / 8}, {1, 5.0 / 8}, {1, 5.0 / 8}, {1, 5.0 / 8}, {2, 6.0 / 8}, {3, 1.0}, {3, 1.0}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 						{
@@ -209,8 +210,8 @@ func TestWindowFunctions(t *testing.T) {
 
 			// With both PARTITION BY and ORDER BY.
 			{
-				tuples:   tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
-				expected: tuples{{nil, nil, 1}, {nil, nil, 2}, {nil, 1, 3}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
+				tuples:   colexectestutils.Tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
+				expected: colexectestutils.Tuples{{nil, nil, 1}, {nil, nil, 2}, {nil, 1, 3}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -223,8 +224,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
-				expected: tuples{{nil, nil, 1}, {nil, nil, 1}, {nil, 1, 3}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
+				tuples:   colexectestutils.Tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
+				expected: colexectestutils.Tuples{{nil, nil, 1}, {nil, nil, 1}, {nil, 1, 3}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -237,8 +238,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
-				expected: tuples{{nil, nil, 1}, {nil, nil, 1}, {nil, 1, 2}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
+				tuples:   colexectestutils.Tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
+				expected: colexectestutils.Tuples{{nil, nil, 1}, {nil, nil, 1}, {nil, 1, 2}, {1, nil, 1}, {1, 2, 2}, {2, 1, 1}, {3, 1, 1}, {3, 2, 2}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -251,8 +252,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{nil, 2}, {3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {1, 3}, {nil, nil}, {3, 1}},
-				expected: tuples{{nil, nil, 0}, {nil, nil, 0}, {nil, 1, 2.0 / 3}, {nil, 2, 1}, {1, nil, 0}, {1, 2, 1.0 / 2}, {1, 3, 1}, {2, 1, 0}, {3, 1, 0}, {3, 2, 1}},
+				tuples:   colexectestutils.Tuples{{nil, 2}, {3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {1, 3}, {nil, nil}, {3, 1}},
+				expected: colexectestutils.Tuples{{nil, nil, 0}, {nil, nil, 0}, {nil, 1, 2.0 / 3}, {nil, 2, 1}, {1, nil, 0}, {1, 2, 1.0 / 2}, {1, 3, 1}, {2, 1, 0}, {3, 1, 0}, {3, 2, 1}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -265,8 +266,8 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 			{
-				tuples:   tuples{{nil, 2}, {3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {1, 3}, {nil, nil}, {3, 1}},
-				expected: tuples{{nil, nil, 2.0 / 4}, {nil, nil, 2.0 / 4}, {nil, 1, 3.0 / 4}, {nil, 2, 1}, {1, nil, 1.0 / 3}, {1, 2, 2.0 / 3}, {1, 3, 1}, {2, 1, 1}, {3, 1, 1.0 / 2}, {3, 2, 1}},
+				tuples:   colexectestutils.Tuples{{nil, 2}, {3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {1, 3}, {nil, nil}, {3, 1}},
+				expected: colexectestutils.Tuples{{nil, nil, 2.0 / 4}, {nil, nil, 2.0 / 4}, {nil, 1, 3.0 / 4}, {nil, 2, 1}, {1, nil, 1.0 / 3}, {1, 2, 2.0 / 3}, {1, 3, 1}, {2, 1, 1}, {3, 1, 1.0 / 2}, {3, 2, 1}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -281,7 +282,7 @@ func TestWindowFunctions(t *testing.T) {
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
-			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 				tc.init()
 				ct := make([]*types.T, len(tc.tuples[0]))
 				for i := range ct {

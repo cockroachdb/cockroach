@@ -38,7 +38,7 @@ func NewRowNumberOperator(
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	base := rowNumberBase{
-		OneInputNode:    NewOneInputNode(input),
+		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
@@ -53,7 +53,7 @@ func NewRowNumberOperator(
 // variations of row number operators. Note that it is not an operator itself
 // and should not be used directly.
 type rowNumberBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator       *colmem.Allocator
 	outputColIdx    int
 	partitionColIdx int
@@ -62,7 +62,7 @@ type rowNumberBase struct {
 }
 
 func (r *rowNumberBase) Init() {
-	r.Input().Init()
+	r.Input.Init()
 }
 
 // {{/*
@@ -98,7 +98,7 @@ type _ROW_NUMBER_STRINGOp struct {
 var _ colexecbase.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input().Next(ctx)
+	batch := r.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

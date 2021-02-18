@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -50,31 +51,31 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		desc         string
 		expr         string
 		inputCols    []int
-		inputTuples  tuples
+		inputTuples  colexectestutils.Tuples
 		inputTypes   []*types.T
-		outputTuples tuples
+		outputTuples colexectestutils.Tuples
 	}{
 		{
 			desc:         "AbsVal",
 			expr:         "abs(@1)",
 			inputCols:    []int{0},
-			inputTuples:  tuples{{1}, {-2}},
+			inputTuples:  colexectestutils.Tuples{{1}, {-2}},
 			inputTypes:   []*types.T{types.Int},
-			outputTuples: tuples{{1, 1}, {-2, 2}},
+			outputTuples: colexectestutils.Tuples{{1, 1}, {-2, 2}},
 		},
 		{
 			desc:         "StringLen",
 			expr:         "length(@1)",
 			inputCols:    []int{0},
-			inputTuples:  tuples{{"Hello"}, {"The"}},
+			inputTuples:  colexectestutils.Tuples{{"Hello"}, {"The"}},
 			inputTypes:   []*types.T{types.String},
-			outputTuples: tuples{{"Hello", 5}, {"The", 3}},
+			outputTuples: colexectestutils.Tuples{{"Hello", 5}, {"The", 3}},
 		},
 	}
 
 	for _, tc := range testCases {
 		log.Infof(ctx, "%s", tc.desc)
-		runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes,
@@ -189,7 +190,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode:        NewOneInputNode(source),
+		OneInputNode:        colexecbase.NewOneInputNode(source),
 		allocator:           testAllocator,
 		evalCtx:             evalCtx,
 		funcExpr:            typedExpr.(*tree.FuncExpr),

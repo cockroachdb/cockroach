@@ -125,7 +125,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 // and returns the next batch from the input on every even-numbered (i.e. it
 // becomes a noop for those iterations). Used for tests only.
 type testVectorizedInternalPanicEmitter struct {
-	colexec.OneInputNode
+	colexecbase.OneInputNode
 	emitBatch bool
 }
 
@@ -133,13 +133,13 @@ var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
 
 func newTestVectorizedInternalPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
 	return &testVectorizedInternalPanicEmitter{
-		OneInputNode: colexec.NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 	}
 }
 
 // Init is part of exec.Operator interface.
 func (e *testVectorizedInternalPanicEmitter) Init() {
-	e.Input().Init()
+	e.Input.Init()
 }
 
 // Next is part of exec.Operator interface.
@@ -150,7 +150,7 @@ func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.B
 	}
 
 	e.emitBatch = false
-	return e.Input().Next(ctx)
+	return e.Input.Next(ctx)
 }
 
 // testNonVectorizedPanicEmitter is the same as
@@ -158,7 +158,7 @@ func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.B
 // function. Used for tests only. It is the only colexec.Operator panics from
 // which are not caught.
 type testNonVectorizedPanicEmitter struct {
-	colexec.OneInputNode
+	colexecbase.OneInputNode
 	emitBatch bool
 }
 
@@ -166,13 +166,13 @@ var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
 
 func newTestNonVectorizedPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
 	return &testNonVectorizedPanicEmitter{
-		OneInputNode: colexec.NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 	}
 }
 
 // Init is part of exec.Operator interface.
 func (e *testNonVectorizedPanicEmitter) Init() {
-	e.Input().Init()
+	e.Input.Init()
 }
 
 // Next is part of exec.Operator interface.
@@ -183,5 +183,5 @@ func (e *testNonVectorizedPanicEmitter) Next(ctx context.Context) coldata.Batch 
 	}
 
 	e.emitBatch = false
-	return e.Input().Next(ctx)
+	return e.Input.Next(ctx)
 }

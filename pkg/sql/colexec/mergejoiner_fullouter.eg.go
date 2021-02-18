@@ -13804,7 +13804,7 @@ func (o *mergeJoinFullOuterOp) Next(ctx context.Context) coldata.Batch {
 			// Note that resetting of buffered group will close disk queues
 			// (if there are any).
 			if o.bufferedGroup.needToReset {
-				o.bufferedGroup.helper.reset(ctx)
+				o.bufferedGroup.helper.Reset(ctx)
 				o.bufferedGroup.needToReset = false
 			}
 			return coldata.ZeroBatch

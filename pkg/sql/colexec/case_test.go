@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,34 +39,34 @@ func TestCaseOp(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		tuples     tuples
+		tuples     colexectestutils.Tuples
 		renderExpr string
-		expected   tuples
+		expected   colexectestutils.Tuples
 		inputTypes []*types.T
 	}{
 		{
 			// Basic test.
-			tuples:     tuples{{1}, {2}, {nil}, {3}},
+			tuples:     colexectestutils.Tuples{{1}, {2}, {nil}, {3}},
 			renderExpr: "CASE WHEN @1 = 2 THEN 1 ELSE 0 END",
-			expected:   tuples{{0}, {1}, {0}, {0}},
+			expected:   colexectestutils.Tuples{{0}, {1}, {0}, {0}},
 			inputTypes: []*types.T{types.Int},
 		},
 		{
 			// Test "reordered when's."
-			tuples:     tuples{{1, 1}, {2, 0}, {nil, nil}, {3, 3}},
+			tuples:     colexectestutils.Tuples{{1, 1}, {2, 0}, {nil, nil}, {3, 3}},
 			renderExpr: "CASE WHEN @1 + @2 > 3 THEN 0 WHEN @1 = 2 THEN 1 ELSE 2 END",
-			expected:   tuples{{2}, {1}, {2}, {0}},
+			expected:   colexectestutils.Tuples{{2}, {1}, {2}, {0}},
 			inputTypes: []*types.T{types.Int, types.Int},
 		},
 		{
 			// Test the short-circuiting behavior.
-			tuples:     tuples{{1, 2}, {2, 0}, {nil, nil}, {3, 3}},
+			tuples:     colexectestutils.Tuples{{1, 2}, {2, 0}, {nil, nil}, {3, 3}},
 			renderExpr: "CASE WHEN @1 = 2 THEN 0::FLOAT WHEN @1 / @2 = 1 THEN 1::FLOAT END",
-			expected:   tuples{{nil}, {0.0}, {nil}, {1.0}},
+			expected:   colexectestutils.Tuples{{nil}, {0.0}, {nil}, {1.0}},
 			inputTypes: []*types.T{types.Int, types.Int},
 		},
 	} {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 			caseOp, err := createTestProjectingOperator(
 				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr,
 				false, /* canFallbackToRowexec */

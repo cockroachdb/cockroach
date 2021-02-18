@@ -30,11 +30,11 @@ type defaultCmpProjOp struct {
 var _ colexecbase.Operator = &defaultCmpProjOp{}
 
 func (d *defaultCmpProjOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d *defaultCmpProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.input.Next(ctx)
+	batch := d.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -91,11 +91,11 @@ type defaultCmpRConstProjOp struct {
 var _ colexecbase.Operator = &defaultCmpRConstProjOp{}
 
 func (d *defaultCmpRConstProjOp) Init() {
-	d.input.Init()
+	d.Input.Init()
 }
 
 func (d *defaultCmpRConstProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.input.Next(ctx)
+	batch := d.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -76,7 +76,7 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // so, it'll be redeclared because we execute that template twice. To go
 // around the problem we specify it here.
 type projConstOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
@@ -85,7 +85,7 @@ type projConstOpBase struct {
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator      *colmem.Allocator
 	col1Idx        int
 	col2Idx        int
@@ -106,7 +106,7 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -141,7 +141,7 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p _OP_NAME) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // {{end}}
@@ -259,7 +259,7 @@ func GetProjectionOperator(
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputNode:   NewOneInputNode(input),
+		OneInputNode:   colexecbase.NewOneInputNode(input),
 		allocator:      allocator,
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,

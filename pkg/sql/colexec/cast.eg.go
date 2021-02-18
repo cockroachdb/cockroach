@@ -461,11 +461,11 @@ type castOpNullAny struct {
 var _ closableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -513,21 +513,21 @@ type castBoolBoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castBoolBoolOp{}
+var _ colexecbase.ResettableOperator = &castBoolBoolOp{}
 var _ closableOperator = &castBoolBoolOp{}
 
 func (c *castBoolBoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castBoolBoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castBoolBoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -618,21 +618,21 @@ type castBoolFloat64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castBoolFloat64Op{}
+var _ colexecbase.ResettableOperator = &castBoolFloat64Op{}
 var _ closableOperator = &castBoolFloat64Op{}
 
 func (c *castBoolFloat64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castBoolFloat64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castBoolFloat64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -743,21 +743,21 @@ type castBoolInt16Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castBoolInt16Op{}
+var _ colexecbase.ResettableOperator = &castBoolInt16Op{}
 var _ closableOperator = &castBoolInt16Op{}
 
 func (c *castBoolInt16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castBoolInt16Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castBoolInt16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -868,21 +868,21 @@ type castBoolInt32Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castBoolInt32Op{}
+var _ colexecbase.ResettableOperator = &castBoolInt32Op{}
 var _ closableOperator = &castBoolInt32Op{}
 
 func (c *castBoolInt32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castBoolInt32Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castBoolInt32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -993,21 +993,21 @@ type castBoolInt64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castBoolInt64Op{}
+var _ colexecbase.ResettableOperator = &castBoolInt64Op{}
 var _ closableOperator = &castBoolInt64Op{}
 
 func (c *castBoolInt64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castBoolInt64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castBoolInt64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1118,21 +1118,21 @@ type castDecimalBoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castDecimalBoolOp{}
+var _ colexecbase.ResettableOperator = &castDecimalBoolOp{}
 var _ closableOperator = &castDecimalBoolOp{}
 
 func (c *castDecimalBoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castDecimalBoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castDecimalBoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1223,21 +1223,21 @@ type castDecimalDecimalOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castDecimalDecimalOp{}
+var _ colexecbase.ResettableOperator = &castDecimalDecimalOp{}
 var _ closableOperator = &castDecimalDecimalOp{}
 
 func (c *castDecimalDecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castDecimalDecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castDecimalDecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1348,21 +1348,21 @@ type castInt16Int16Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16Int16Op{}
+var _ colexecbase.ResettableOperator = &castInt16Int16Op{}
 var _ closableOperator = &castInt16Int16Op{}
 
 func (c *castInt16Int16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16Int16Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16Int16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1453,21 +1453,21 @@ type castInt16Int32Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16Int32Op{}
+var _ colexecbase.ResettableOperator = &castInt16Int32Op{}
 var _ closableOperator = &castInt16Int32Op{}
 
 func (c *castInt16Int32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16Int32Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16Int32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1566,21 +1566,21 @@ type castInt16Int64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16Int64Op{}
+var _ colexecbase.ResettableOperator = &castInt16Int64Op{}
 var _ closableOperator = &castInt16Int64Op{}
 
 func (c *castInt16Int64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16Int64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16Int64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1679,21 +1679,21 @@ type castInt16BoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16BoolOp{}
+var _ colexecbase.ResettableOperator = &castInt16BoolOp{}
 var _ closableOperator = &castInt16BoolOp{}
 
 func (c *castInt16BoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16BoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16BoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1792,21 +1792,21 @@ type castInt16DecimalOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16DecimalOp{}
+var _ colexecbase.ResettableOperator = &castInt16DecimalOp{}
 var _ closableOperator = &castInt16DecimalOp{}
 
 func (c *castInt16DecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16DecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16DecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1921,21 +1921,21 @@ type castInt16Float64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt16Float64Op{}
+var _ colexecbase.ResettableOperator = &castInt16Float64Op{}
 var _ closableOperator = &castInt16Float64Op{}
 
 func (c *castInt16Float64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt16Float64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt16Float64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2034,21 +2034,21 @@ type castInt32Int16Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32Int16Op{}
+var _ colexecbase.ResettableOperator = &castInt32Int16Op{}
 var _ closableOperator = &castInt32Int16Op{}
 
 func (c *castInt32Int16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32Int16Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32Int16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2147,21 +2147,21 @@ type castInt32Int32Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32Int32Op{}
+var _ colexecbase.ResettableOperator = &castInt32Int32Op{}
 var _ closableOperator = &castInt32Int32Op{}
 
 func (c *castInt32Int32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32Int32Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32Int32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2252,21 +2252,21 @@ type castInt32Int64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32Int64Op{}
+var _ colexecbase.ResettableOperator = &castInt32Int64Op{}
 var _ closableOperator = &castInt32Int64Op{}
 
 func (c *castInt32Int64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32Int64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32Int64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2365,21 +2365,21 @@ type castInt32BoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32BoolOp{}
+var _ colexecbase.ResettableOperator = &castInt32BoolOp{}
 var _ closableOperator = &castInt32BoolOp{}
 
 func (c *castInt32BoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32BoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32BoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2478,21 +2478,21 @@ type castInt32DecimalOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32DecimalOp{}
+var _ colexecbase.ResettableOperator = &castInt32DecimalOp{}
 var _ closableOperator = &castInt32DecimalOp{}
 
 func (c *castInt32DecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32DecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32DecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2607,21 +2607,21 @@ type castInt32Float64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt32Float64Op{}
+var _ colexecbase.ResettableOperator = &castInt32Float64Op{}
 var _ closableOperator = &castInt32Float64Op{}
 
 func (c *castInt32Float64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt32Float64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt32Float64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2720,21 +2720,21 @@ type castInt64Int16Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64Int16Op{}
+var _ colexecbase.ResettableOperator = &castInt64Int16Op{}
 var _ closableOperator = &castInt64Int16Op{}
 
 func (c *castInt64Int16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64Int16Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64Int16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2833,21 +2833,21 @@ type castInt64Int32Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64Int32Op{}
+var _ colexecbase.ResettableOperator = &castInt64Int32Op{}
 var _ closableOperator = &castInt64Int32Op{}
 
 func (c *castInt64Int32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64Int32Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64Int32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2946,21 +2946,21 @@ type castInt64Int64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64Int64Op{}
+var _ colexecbase.ResettableOperator = &castInt64Int64Op{}
 var _ closableOperator = &castInt64Int64Op{}
 
 func (c *castInt64Int64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64Int64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64Int64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3051,21 +3051,21 @@ type castInt64BoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64BoolOp{}
+var _ colexecbase.ResettableOperator = &castInt64BoolOp{}
 var _ closableOperator = &castInt64BoolOp{}
 
 func (c *castInt64BoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64BoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64BoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3164,21 +3164,21 @@ type castInt64DecimalOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64DecimalOp{}
+var _ colexecbase.ResettableOperator = &castInt64DecimalOp{}
 var _ closableOperator = &castInt64DecimalOp{}
 
 func (c *castInt64DecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64DecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64DecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3293,21 +3293,21 @@ type castInt64Float64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castInt64Float64Op{}
+var _ colexecbase.ResettableOperator = &castInt64Float64Op{}
 var _ closableOperator = &castInt64Float64Op{}
 
 func (c *castInt64Float64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castInt64Float64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castInt64Float64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3406,21 +3406,21 @@ type castFloat64Float64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64Float64Op{}
+var _ colexecbase.ResettableOperator = &castFloat64Float64Op{}
 var _ closableOperator = &castFloat64Float64Op{}
 
 func (c *castFloat64Float64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64Float64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64Float64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3511,21 +3511,21 @@ type castFloat64BoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64BoolOp{}
+var _ colexecbase.ResettableOperator = &castFloat64BoolOp{}
 var _ closableOperator = &castFloat64BoolOp{}
 
 func (c *castFloat64BoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64BoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64BoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3624,21 +3624,21 @@ type castFloat64DecimalOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64DecimalOp{}
+var _ colexecbase.ResettableOperator = &castFloat64DecimalOp{}
 var _ closableOperator = &castFloat64DecimalOp{}
 
 func (c *castFloat64DecimalOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64DecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64DecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3761,21 +3761,21 @@ type castFloat64Int16Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64Int16Op{}
+var _ colexecbase.ResettableOperator = &castFloat64Int16Op{}
 var _ closableOperator = &castFloat64Int16Op{}
 
 func (c *castFloat64Int16Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64Int16Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64Int16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3886,21 +3886,21 @@ type castFloat64Int32Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64Int32Op{}
+var _ colexecbase.ResettableOperator = &castFloat64Int32Op{}
 var _ closableOperator = &castFloat64Int32Op{}
 
 func (c *castFloat64Int32Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64Int32Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64Int32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4011,21 +4011,21 @@ type castFloat64Int64Op struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castFloat64Int64Op{}
+var _ colexecbase.ResettableOperator = &castFloat64Int64Op{}
 var _ closableOperator = &castFloat64Int64Op{}
 
 func (c *castFloat64Int64Op) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castFloat64Int64Op) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castFloat64Int64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4136,21 +4136,21 @@ type castDatumBoolOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castDatumBoolOp{}
+var _ colexecbase.ResettableOperator = &castDatumBoolOp{}
 var _ closableOperator = &castDatumBoolOp{}
 
 func (c *castDatumBoolOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castDatumBoolOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castDatumBoolOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4273,21 +4273,21 @@ type castDatumDatumOp struct {
 	toType    *types.T
 }
 
-var _ ResettableOperator = &castDatumDatumOp{}
+var _ colexecbase.ResettableOperator = &castDatumDatumOp{}
 var _ closableOperator = &castDatumDatumOp{}
 
 func (c *castDatumDatumOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 }
 
-func (c *castDatumDatumOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
+func (c *castDatumDatumOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 }
 
 func (c *castDatumDatumOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
+	batch := c.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

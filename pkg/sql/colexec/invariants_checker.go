@@ -24,7 +24,7 @@ import (
 // are present in the vectorized engine are maintained on all batches. It
 // should be planned between other Operators in tests.
 type invariantsChecker struct {
-	OneInputNode
+	colexecbase.OneInputNode
 }
 
 var _ colexecbase.Operator = invariantsChecker{}
@@ -32,16 +32,16 @@ var _ colexecbase.Operator = invariantsChecker{}
 // NewInvariantsChecker creates a new invariantsChecker.
 func NewInvariantsChecker(input colexecbase.Operator) colexecbase.Operator {
 	return &invariantsChecker{
-		OneInputNode: OneInputNode{input: input},
+		OneInputNode: colexecbase.OneInputNode{Input: input},
 	}
 }
 
 func (i invariantsChecker) Init() {
-	i.input.Init()
+	i.Input.Init()
 }
 
 func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
-	b := i.input.Next(ctx)
+	b := i.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b

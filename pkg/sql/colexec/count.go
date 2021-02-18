@@ -24,7 +24,7 @@ import (
 // column containing a single integer, the count of rows received from the
 // upstream.
 type countOp struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	internalBatch coldata.Batch
 	done          bool
@@ -36,7 +36,7 @@ var _ colexecbase.Operator = &countOp{}
 // NewCountOp returns a new count operator that counts the rows in its input.
 func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexecbase.Operator {
 	c := &countOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 	}
 	c.internalBatch = allocator.NewMemBatchWithFixedCapacity(
 		[]*types.T{types.Int}, 1, /* capacity */
@@ -45,7 +45,7 @@ func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexec
 }
 
 func (c *countOp) Init() {
-	c.input.Init()
+	c.Input.Init()
 	c.count = 0
 	c.done = false
 }
@@ -56,7 +56,7 @@ func (c *countOp) Next(ctx context.Context) coldata.Batch {
 	}
 	c.internalBatch.ResetInternalBatch()
 	for {
-		bat := c.input.Next(ctx)
+		bat := c.Input.Next(ctx)
 		length := bat.Length()
 		if length == 0 {
 			c.done = true

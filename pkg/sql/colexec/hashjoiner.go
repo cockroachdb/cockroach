@@ -235,7 +235,7 @@ type hashJoiner struct {
 }
 
 var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
-var _ resetter = &hashJoiner{}
+var _ colexecbase.Resetter = &hashJoiner{}
 
 // HashJoinerInitialNumBuckets is the number of the hash buckets initially
 // allocated by the hash table that is used by the in-memory hash joiner.
@@ -713,14 +713,14 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 	)
 }
 
-func (hj *hashJoiner) reset(ctx context.Context) {
+func (hj *hashJoiner) Reset(ctx context.Context) {
 	for _, input := range []colexecbase.Operator{hj.inputOne, hj.inputTwo} {
-		if r, ok := input.(resetter); ok {
-			r.reset(ctx)
+		if r, ok := input.(colexecbase.Resetter); ok {
+			r.Reset(ctx)
 		}
 	}
 	hj.state = hjBuilding
-	hj.ht.reset(ctx)
+	hj.ht.Reset(ctx)
 	// Note that we don't zero out hj.probeState.buildIdx,
 	// hj.probeState.probeIdx, and hj.probeState.probeRowUnmatched because the
 	// values in these slices are always set in collecting methods.
@@ -805,7 +805,7 @@ func NewHashJoiner(
 	leftSource, rightSource colexecbase.Operator,
 	initialNumBuckets uint64,
 	memoryLimit int64,
-) ResettableOperator {
+) colexecbase.ResettableOperator {
 	return &hashJoiner{
 		twoInputNode:               newTwoInputNode(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,

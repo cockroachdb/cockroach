@@ -80,7 +80,7 @@ const (
 // output batch if a worst case input batch is encountered (one where every
 // value is part of a new group).
 type orderedAggregator struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	state orderedAggregatorState
 
@@ -134,11 +134,13 @@ type orderedAggregator struct {
 	toClose           colexecbase.Closers
 }
 
-var _ ResettableOperator = &orderedAggregator{}
+var _ colexecbase.ResettableOperator = &orderedAggregator{}
 var _ closableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator.
-func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+func NewOrderedAggregator(
+	args *colexecagg.NewAggregatorArgs,
+) (colexecbase.ResettableOperator, error) {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
@@ -161,7 +163,7 @@ func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperato
 	}
 
 	a := &orderedAggregator{
-		OneInputNode:       NewOneInputNode(op),
+		OneInputNode:       colexecbase.NewOneInputNode(op),
 		allocator:          args.Allocator,
 		spec:               args.Spec,
 		groupCol:           groupCol,
@@ -175,7 +177,7 @@ func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperato
 }
 
 func (a *orderedAggregator) Init() {
-	a.input.Init()
+	a.Input.Init()
 	a.bucket.init(a.bucket.fns, a.aggHelper.makeSeenMaps(), a.groupCol)
 }
 
@@ -197,7 +199,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			batch := a.lastReadBatch
 			a.lastReadBatch = nil
 			if batch == nil {
-				batch = a.input.Next(ctx)
+				batch = a.Input.Next(ctx)
 			}
 			batchLength := batch.Length()
 
@@ -394,9 +396,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (a *orderedAggregator) reset(ctx context.Context) {
-	if r, ok := a.input.(resetter); ok {
-		r.reset(ctx)
+func (a *orderedAggregator) Reset(ctx context.Context) {
+	if r, ok := a.Input.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
 	a.state = orderedAggregatorAggregating
 	// In some cases we might reset the aggregator before Next() is called for

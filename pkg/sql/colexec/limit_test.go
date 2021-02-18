@@ -13,6 +13,7 @@ package colexec
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,50 +24,50 @@ func TestLimit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		limit    uint64
-		tuples   []tuple
-		expected []tuple
+		tuples   []colexectestutils.Tuple
+		expected []colexectestutils.Tuple
 	}{
 		{
 			limit:    2,
-			tuples:   tuples{{1}},
-			expected: tuples{{1}},
+			tuples:   colexectestutils.Tuples{{1}},
+			expected: colexectestutils.Tuples{{1}},
 		},
 		{
 			limit:    1,
-			tuples:   tuples{{1}},
-			expected: tuples{{1}},
+			tuples:   colexectestutils.Tuples{{1}},
+			expected: colexectestutils.Tuples{{1}},
 		},
 		{
 			limit:    0,
-			tuples:   tuples{{1}},
-			expected: tuples{},
+			tuples:   colexectestutils.Tuples{{1}},
+			expected: colexectestutils.Tuples{},
 		},
 		{
 			limit:    100000,
-			tuples:   tuples{{1}, {2}, {3}, {4}},
-			expected: tuples{{1}, {2}, {3}, {4}},
+			tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}},
+			expected: colexectestutils.Tuples{{1}, {2}, {3}, {4}},
 		},
 		{
 			limit:    2,
-			tuples:   tuples{{1}, {2}, {3}, {4}},
-			expected: tuples{{1}, {2}},
+			tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}},
+			expected: colexectestutils.Tuples{{1}, {2}},
 		},
 		{
 			limit:    1,
-			tuples:   tuples{{1}, {2}, {3}, {4}},
-			expected: tuples{{1}},
+			tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}},
+			expected: colexectestutils.Tuples{{1}},
 		},
 		{
 			limit:    0,
-			tuples:   tuples{{1}, {2}, {3}, {4}},
-			expected: tuples{},
+			tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}},
+			expected: colexectestutils.Tuples{},
 		},
 	}
 
 	for _, tc := range tcs {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
-		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewLimitOp(input[0], tc.limit), nil
 		})
 	}
