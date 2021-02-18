@@ -368,7 +368,7 @@ insert uniq
 # TODO(rytaft): we should be able to remove the unique check for w in this case
 # (see #59119).
 build
-INSERT INTO UNIQ VALUES (1, 2, 3, 4, 5) ON CONFLICT (W) DO NOTHING
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
