@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -2744,7 +2745,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		processors := make(execComponents, len(plan.ResultRouters))
 		for i, resultProcIdx := range plan.ResultRouters {
 			processors[i] = execinfrapb.ProcessorComponentID(
-				plan.Processors[resultProcIdx].Node,
+				base.SQLInstanceID(plan.Processors[resultProcIdx].Node),
 				execinfrapb.FlowID{UUID: planCtx.infra.FlowID},
 				int32(resultProcIdx),
 			)

@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colflow",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/rpc/nodedialer",

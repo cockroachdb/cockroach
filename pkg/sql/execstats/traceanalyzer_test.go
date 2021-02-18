@@ -194,8 +194,8 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 		cumulativeContentionTime = node1ContentionTime + node2ContentionTime
 	)
 	a := &execstats.TraceAnalyzer{FlowsMetadata: &execstats.FlowsMetadata{}}
-	n1 := roachpb.NodeID(1)
-	n2 := roachpb.NodeID(2)
+	n1 := base.SQLInstanceID(1)
+	n2 := base.SQLInstanceID(2)
 	a.AddComponentStats(
 		&execinfrapb.ComponentStats{
 			Component: execinfrapb.ProcessorComponentID(
@@ -291,8 +291,8 @@ func TestGetQueryLevelStatsAccumulates(t *testing.T) {
 	// Artificially inject component stats directly into the FlowsMetadata (in
 	// the non-testing setting the stats come from the trace).
 	var f1, f2 execstats.FlowsMetadata
-	n1 := roachpb.NodeID(1)
-	n2 := roachpb.NodeID(2)
+	n1 := base.SQLInstanceID(1)
+	n2 := base.SQLInstanceID(2)
 	f1.AddComponentStats(
 		&execinfrapb.ComponentStats{
 			Component: execinfrapb.ProcessorComponentID(

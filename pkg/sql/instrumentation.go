@@ -497,7 +497,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodes util.FastIntSet
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
-					nodes.Add(int(c.NodeID))
+					nodes.Add(int(c.SQLInstanceID))
 				}
 				stats := statsMap[c]
 				if stats == nil {

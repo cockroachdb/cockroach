@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -600,14 +601,14 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 	for i := range d.Processors {
 		p := &d.Processors[i]
 		nodeID := d.nodeIDs[p.NodeIdx]
-		component := ProcessorComponentID(nodeID, d.flowID, p.processorID)
+		component := ProcessorComponentID(base.SQLInstanceID(nodeID), d.flowID, p.processorID)
 		if compStats := statsMap[component]; compStats != nil {
 			p.Core.Details = append(p.Core.Details, compStats.StatsForQueryPlan()...)
 		}
 	}
 	for i := range d.Edges {
 		originNodeID := d.nodeIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
-		component := StreamComponentID(originNodeID, d.flowID, d.Edges[i].streamID)
+		component := StreamComponentID(base.SQLInstanceID(originNodeID), d.flowID, d.Edges[i].streamID)
 		if compStats := statsMap[component]; compStats != nil {
 			d.Edges[i].Stats = compStats.StatsForQueryPlan()
 		}
