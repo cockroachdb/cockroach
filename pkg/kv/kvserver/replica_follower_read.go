@@ -36,16 +36,15 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // canServeFollowerReadRLocked tests, when a range lease could not be acquired,
 // whether the batch can be served as a follower read despite the error. Only
 // non-locking, read-only requests can be served as follower reads. The batch
-// must be composed exclusively only this kind of request to be accepted as a
-// follower read.
+// must be transactional and composed exclusively of this kind of request to be
+// accepted as a follower read.
 func (r *Replica) canServeFollowerReadRLocked(
 	ctx context.Context, ba *roachpb.BatchRequest, err error,
 ) bool {
 	var lErr *roachpb.NotLeaseHolderError
 	eligible := errors.As(err, &lErr) &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
-		(!ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
-		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
+		(ba.Txn != nil && !ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 
 	if !eligible {
@@ -65,14 +64,10 @@ func (r *Replica) canServeFollowerReadRLocked(
 		return false
 	}
 
-	ts := ba.Timestamp
-	if ba.Txn != nil {
-		ts.Forward(ba.Txn.GlobalUncertaintyLimit)
-	}
-
+	requiredFrontier := ba.Txn.RequiredFrontier()
 	maxClosed, _ := r.maxClosedRLocked(ctx)
-	canServeFollowerRead := ts.LessEq(maxClosed)
-	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
+	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
+	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
 		uncertaintyLimitStr := "n/a"
 		if ba.Txn != nil {

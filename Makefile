@@ -971,7 +971,13 @@ $(go-targets): override LINKFLAGS += \
 $(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
-SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
+docs/generated/settings/settings.html: $(settings-doc-gen)
+	@$(settings-doc-gen) gen settings-list --format=html > $@
+
+docs/generated/settings/settings-for-tenants.txt:  $(settings-doc-gen)
+	@$(settings-doc-gen) gen settings-list --without-system-only > $@
+
+SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/settings/settings-for-tenants.txt
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
@@ -1002,7 +1008,7 @@ build: $(COCKROACH)
 buildoss: $(COCKROACHOSS)
 buildshort: $(COCKROACHSHORT)
 build buildoss buildshort: $(if $(is-cross-compile),,$(DOCGEN_TARGETS))
-build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGES))
 
 # For historical reasons, symlink cockroach to cockroachshort.
 # TODO(benesch): see if it would break anyone's workflow to remove this.
@@ -1139,7 +1145,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(WKTPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(WKTPARSER_TARGETS) $(SETTINGS_DOC_PAGES) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
 
@@ -1592,9 +1598,6 @@ pkg/util/log/log_channels_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/l
 	mv -f $@.tmp $@
 
 settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
-
-$(SETTINGS_DOC_PAGE): $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --format=html > $@
 
 .PHONY: execgen
 execgen: ## Regenerate generated code for the vectorized execution engine.

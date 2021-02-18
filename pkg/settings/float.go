@@ -94,6 +94,15 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 	}
 }
 
+// WithSystemOnly indicates system-usage only and can be chained.
+func (f *FloatSetting) WithSystemOnly() *FloatSetting {
+	f.common.systemOnly = true
+	return f
+}
+
+// Defeat the linter.
+var _ = (*FloatSetting).WithSystemOnly
+
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(
 	key, desc string, defaultValue float64, validateFns ...func(float64) error,

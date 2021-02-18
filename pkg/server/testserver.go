@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -551,6 +552,11 @@ func makeSQLServerArgs(
 		ds,
 	)
 	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
+	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, rangeFeedKnobs)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
 
 	circularInternalExecutor := &sql.InternalExecutor{}
 	// Protected timestamps won't be available (at first) in multi-tenant
@@ -626,6 +632,7 @@ func makeSQLServerArgs(
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
+		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer: newTenantStatusServer(
 			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor}, sessionRegistry, baseCfg.Settings,
 		),
