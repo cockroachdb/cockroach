@@ -45,7 +45,7 @@ func run() error {
 	}
 	tmpl, err := template.New(tmplName).Parse(tmplSrc)
 	if err != nil {
-		return errors.Wrap(err, tmplName)
+		return errors.Wrapf(err, "%s", tmplName)
 	}
 
 	// Read the input .proto file.
