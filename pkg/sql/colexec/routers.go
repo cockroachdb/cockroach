@@ -400,7 +400,7 @@ const (
 // destination for each row. These destinations are exposed as Operators
 // returned by the constructor.
 type HashRouter struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []uint32
 
@@ -502,7 +502,7 @@ func newHashRouterWithOutputs(
 	toClose []colexecbase.Closer,
 ) *HashRouter {
 	r := &HashRouter{
-		OneInputNode:        NewOneInputNode(input),
+		OneInputNode:        colexecbase.NewOneInputNode(input),
 		hashCols:            hashCols,
 		outputs:             outputs,
 		closers:             toClose,
@@ -552,7 +552,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		r.input.Init()
+		r.Input.Init()
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
@@ -620,7 +620,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 // each column to its corresponding output, returning whether the input is
 // done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
-	b := r.input.Next(ctx)
+	b := r.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
@@ -648,8 +648,8 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 
 // resetForTests resets the HashRouter for a test or benchmark run.
 func (r *HashRouter) resetForTests(ctx context.Context) {
-	if i, ok := r.input.(resetter); ok {
-		i.reset(ctx)
+	if i, ok := r.Input.(colexecbase.Resetter); ok {
+		i.Reset(ctx)
 	}
 	r.setDrainState(hashRouterDrainStateRunning)
 	r.waitForMetadata = make(chan []execinfrapb.ProducerMetadata, 1)

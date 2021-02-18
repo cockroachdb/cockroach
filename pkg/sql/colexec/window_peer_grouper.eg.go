@@ -52,7 +52,7 @@ func NewWindowPeerGrouper(
 	}
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
-		OneInputNode:    NewOneInputNode(input),
+		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,
 		partitionColIdx: partitionColIdx,
 		distinctCol:     distinctCol,
@@ -79,7 +79,7 @@ func NewWindowPeerGrouper(
 }
 
 type windowPeerGrouperInitFields struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator       *colmem.Allocator
 	partitionColIdx int
@@ -97,11 +97,11 @@ type windowPeerGrouperNoPartitionOp struct {
 var _ colexecbase.Operator = &windowPeerGrouperNoPartitionOp{}
 
 func (p *windowPeerGrouperNoPartitionOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *windowPeerGrouperNoPartitionOp) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b
@@ -136,11 +136,11 @@ type windowPeerGrouperWithPartitionOp struct {
 var _ colexecbase.Operator = &windowPeerGrouperWithPartitionOp{}
 
 func (p *windowPeerGrouperWithPartitionOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *windowPeerGrouperWithPartitionOp) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b
@@ -186,11 +186,11 @@ type windowPeerGrouperAllPeersNoPartitionOp struct {
 var _ colexecbase.Operator = &windowPeerGrouperAllPeersNoPartitionOp{}
 
 func (p *windowPeerGrouperAllPeersNoPartitionOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *windowPeerGrouperAllPeersNoPartitionOp) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b
@@ -227,11 +227,11 @@ type windowPeerGrouperAllPeersWithPartitionOp struct {
 var _ colexecbase.Operator = &windowPeerGrouperAllPeersWithPartitionOp{}
 
 func (p *windowPeerGrouperAllPeersWithPartitionOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *windowPeerGrouperAllPeersWithPartitionOp) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b

@@ -50,7 +50,7 @@ func newSubstringOperator(
 	startType := typs[argumentCols[1]]
 	lengthType := typs[argumentCols[2]]
 	base := substringFunctionBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,
 		argumentCols: argumentCols,
 		outputIdx:    outputIdx,
@@ -78,14 +78,14 @@ func newSubstringOperator(
 }
 
 type substringFunctionBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	allocator    *colmem.Allocator
 	argumentCols []int
 	outputIdx    int
 }
 
 func (s *substringFunctionBase) Init() {
-	s.input.Init()
+	s.Input.Init()
 }
 
 // {{range $startWidth, $lengthWidths := .}}
@@ -98,7 +98,7 @@ type substring_StartType_LengthTypeOperator struct {
 var _ colexecbase.Operator = &substring_StartType_LengthTypeOperator{}
 
 func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) coldata.Batch {
-	batch := s.input.Next(ctx)
+	batch := s.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

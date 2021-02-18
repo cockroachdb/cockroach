@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -28,8 +29,8 @@ import (
 type distinctTestCase struct {
 	distinctCols            []uint32
 	typs                    []*types.T
-	tuples                  []tuple
-	expected                []tuple
+	tuples                  []colexectestutils.Tuple
+	expected                []colexectestutils.Tuple
 	isOrderedOnDistinctCols bool
 }
 
@@ -37,7 +38,7 @@ var distinctTestCases = []distinctTestCase{
 	{
 		distinctCols: []uint32{0, 1, 2},
 		typs:         []*types.T{types.Float, types.Int, types.String, types.Int},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{nil, nil, nil, nil},
 			{nil, nil, nil, nil},
 			{nil, nil, "30", nil},
@@ -48,7 +49,7 @@ var distinctTestCases = []distinctTestCase{
 			{2.0, 3, "40", 4},
 			{2.0, 3, "40", 4},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{nil, nil, nil, nil},
 			{nil, nil, "30", nil},
 			{1.0, 2, "30", 4},
@@ -61,7 +62,7 @@ var distinctTestCases = []distinctTestCase{
 	{
 		distinctCols: []uint32{1, 0, 2},
 		typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{nil, nil, nil, nil},
 			{nil, nil, nil, nil},
 			{nil, nil, "30", nil},
@@ -72,7 +73,7 @@ var distinctTestCases = []distinctTestCase{
 			{2.0, 3, "40", 4},
 			{2.0, 3, "40", 4},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{nil, nil, nil, nil},
 			{nil, nil, "30", nil},
 			{1.0, 2, "30", 4},
@@ -85,7 +86,7 @@ var distinctTestCases = []distinctTestCase{
 	{
 		distinctCols: []uint32{0, 1, 2},
 		typs:         []*types.T{types.Float, types.Int, types.String, types.Int},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{1.0, 2, "30", 4},
 			{1.0, 2, "30", 4},
 			{nil, nil, nil, nil},
@@ -96,7 +97,7 @@ var distinctTestCases = []distinctTestCase{
 			{2.0, 3, "40", 4},
 			{2.0, 3, "40", 4},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{1.0, 2, "30", 4},
 			{nil, nil, nil, nil},
 			{2.0, 2, "30", 4},
@@ -108,7 +109,7 @@ var distinctTestCases = []distinctTestCase{
 	{
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Int, types.Bytes},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{1, "a"},
 			{2, "b"},
 			{3, "c"},
@@ -119,7 +120,7 @@ var distinctTestCases = []distinctTestCase{
 			{2, "2"},
 			{3, "3"},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{1, "a"},
 			{2, "b"},
 			{3, "c"},
@@ -133,7 +134,7 @@ var distinctTestCases = []distinctTestCase{
 		// boundaries and ensure it always emits the first tuple it encountered.
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Int, types.String},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{1, "1"},
 			{1, "2"},
 			{1, "3"},
@@ -151,7 +152,7 @@ var distinctTestCases = []distinctTestCase{
 			{1, "15"},
 			{1, "16"},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{1, "1"},
 			{2, "6"},
 			{0, "11"},
@@ -160,7 +161,7 @@ var distinctTestCases = []distinctTestCase{
 	{
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Jsonb, types.String},
-		tuples: tuples{
+		tuples: colexectestutils.Tuples{
 			{`'{"id": 1}'`, "a"},
 			{`'{"id": 2}'`, "b"},
 			{`'{"id": 3}'`, "c"},
@@ -171,7 +172,7 @@ var distinctTestCases = []distinctTestCase{
 			{`'{"id": 6}'`, "f"},
 			{`'{"id": 3}'`, "3"},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{`'{"id": 1}'`, "a"},
 			{`'{"id": 2}'`, "b"},
 			{`'{"id": 3}'`, "c"},
@@ -188,7 +189,7 @@ func TestDistinct(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return NewUnorderedDistinct(
 					testAllocator, input[0], tc.distinctCols, tc.typs,
@@ -201,7 +202,7 @@ func TestDistinct(t *testing.T) {
 				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 					orderedCols[i] = tc.distinctCols[j]
 				}
-				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return newPartiallyOrderedDistinct(
 							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
@@ -209,7 +210,7 @@ func TestDistinct(t *testing.T) {
 					})
 			}
 			log.Info(context.Background(), "ordered")
-			runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
 				})
@@ -240,14 +241,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 		nTuples = maxNumTuples
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
-	runTestsWithTyps(
-		t,
-		[]tuples{tups},
-		[][]*types.T{typs},
-		expected,
-		// tups and expected are in an arbitrary order, so we use an unordered
-		// verifier.
-		unorderedVerifier,
+	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs), nil
 		},
@@ -329,7 +323,7 @@ func runDistinctBenchmarks(
 								// Note that the source will be ordered on all nCols so that the
 								// number of distinct tuples doesn't vary between different
 								// distinct operator variations.
-								source := newChunkingBatchSource(typs, cols, nRows)
+								source := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nRows)
 								distinct, err := distinctConstructor(testAllocator, source, distinctCols, numOrderedCols, typs)
 								if err != nil {
 									b.Fatal(err)

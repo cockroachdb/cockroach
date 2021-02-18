@@ -52,7 +52,7 @@ func NewWindowSortingPartitioner(
 
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
-		OneInputNode:    NewOneInputNode(input),
+		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,
 		distinctCol:     distinctCol,
 		partitionColIdx: partitionColIdx,
@@ -60,7 +60,7 @@ func NewWindowSortingPartitioner(
 }
 
 type windowSortingPartitioner struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator *colmem.Allocator
 	// distinctCol is the output column of the chain of ordered distinct
@@ -71,11 +71,11 @@ type windowSortingPartitioner struct {
 }
 
 func (p *windowSortingPartitioner) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	if b.Length() == 0 {
 		return coldata.ZeroBatch
 	}

@@ -42,6 +42,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 2,001 (16 KiB)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • scan
   actual row count: 2,001
@@ -60,6 +63,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 3 (24 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • lookup join
 │ actual row count: 2
@@ -85,6 +91,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 4 (32 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • merge join
 │ actual row count: 2

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -47,7 +48,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 			Settings: st,
 		},
 	}
-	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1}, {2}, {nil}}}, colexectestutils.Tuples{{1, 2}, {2, 3}, {nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
@@ -69,8 +70,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 			Settings: st,
 		},
 	}
-	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
-		orderedVerifier,
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1, 2}, {3, 4}, {5, nil}}}, colexectestutils.Tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
@@ -92,8 +92,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 			Settings: st,
 		},
 	}
-	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
-		orderedVerifier,
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, colexectestutils.Tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
@@ -122,7 +121,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	}
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: NewOneInputNode(op.(*projMultFloat64Float64ConstOp).input),
+			OneInputNode: colexecbase.NewOneInputNode(op.(*projMultFloat64Float64ConstOp).Input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -154,7 +153,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: NewOneInputNode(op.(*projGEInt64Int16ConstOp).input),
+			OneInputNode: colexecbase.NewOneInputNode(op.(*projGEInt64Int16ConstOp).Input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -240,7 +239,7 @@ func TestRandomComparisons(t *testing.T) {
 				}
 				expected[i] = b
 			}
-			input := newChunkingBatchSource(typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
+			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := createTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
 				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
@@ -282,7 +281,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputNode: NewOneInputNode(op.(*projMultInt16Int16Op).input),
+			OneInputNode: colexecbase.NewOneInputNode(op.(*projMultInt16Int16Op).Input),
 			allocator:    testAllocator,
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,

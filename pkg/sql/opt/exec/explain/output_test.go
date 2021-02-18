@@ -112,3 +112,13 @@ func TestOutputBuilder(t *testing.T) {
 		}
 	})
 }
+
+func TestEmptyOutputBuilder(t *testing.T) {
+	ob := explain.NewOutputBuilder(explain.Flags{Verbose: true})
+	if str := ob.BuildString(); str != "" {
+		t.Errorf("expected empty string, got '%s'", str)
+	}
+	if rows := ob.BuildStringRows(); len(rows) != 0 {
+		t.Errorf("expected no rows, got %v", rows)
+	}
+}

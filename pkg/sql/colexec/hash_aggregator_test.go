@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -34,7 +35,7 @@ import (
 var hashAggregatorTestCases = []aggregatorTestCase{
 	{
 		// Test carry between output batches.
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{1, 5},
 			{0, 4},
@@ -47,7 +48,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		groupCols: []uint32{0},
 		aggCols:   [][]uint32{{1}},
 
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{5},
 			{6},
 			{17},
@@ -57,14 +58,14 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 	},
 	{
 		// Test a single row input source.
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{5},
 		},
 		typs:      []*types.T{types.Int},
 		groupCols: []uint32{0},
 		aggCols:   [][]uint32{{0}},
 
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{5},
 		},
 
@@ -72,7 +73,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 	},
 	{
 		// Test bucket collisions.
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 3},
 			{0, 4},
 			{coldata.BatchSize(), 6},
@@ -83,7 +84,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		groupCols: []uint32{0},
 		aggCols:   [][]uint32{{1}},
 
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{12},
 			{13},
 		},
@@ -91,7 +92,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		name: "bucketCollision",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, 1.3},
 			{0, 1, 1.6},
 			{0, 1, 0.5},
@@ -106,7 +107,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 			{2}, {1},
 		},
 
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{3.4, 3},
 			{1.2, 1},
 		},
@@ -115,7 +116,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 	},
 	{
 		// Test unused input columns.
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, 2, 3},
 			{0, 1, 4, 5},
 			{1, 1, 3, 7},
@@ -127,7 +128,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		groupCols: []uint32{0, 1},
 		aggCols:   [][]uint32{{3}},
 
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{7},
 			{19},
 			{22},
@@ -156,7 +157,7 @@ func TestHashAggregator(t *testing.T) {
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
-		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
@@ -199,13 +200,13 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		for _, groupSize := range groupSizes {
 			for _, agg := range []aggType{
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
 						return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
 					},
 					name: "tracking=false",
 				},
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
 						return NewHashAggregator(args, &NewSpillingQueueArgs{

@@ -92,7 +92,7 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.input.Next(ctx)
+	batch := p.Input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -133,7 +133,7 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p _OP_CONST_NAME) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // {{end}}
@@ -264,7 +264,7 @@ func GetProjection_CONST_SIDEConstOperator(
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
-		OneInputNode:   NewOneInputNode(input),
+		OneInputNode:   colexecbase.NewOneInputNode(input),
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,

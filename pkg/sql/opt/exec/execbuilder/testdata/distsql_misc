@@ -104,6 +104,9 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+rows read from KV: 1,000 (7.8 KiB)
+maximum memory usage: <hidden>
+network usage: <hidden>
 ·
 • create statistics
 ·

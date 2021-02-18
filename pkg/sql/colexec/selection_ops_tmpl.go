@@ -172,14 +172,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	colIdx         int
 	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	col1Idx        int
 	col2Idx        int
 	overloadHelper execgen.OverloadHelper
@@ -200,7 +200,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -223,7 +223,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *_OP_CONST_NAME) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // {{end}}
@@ -242,7 +242,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.input.Next(ctx)
+		batch := p.Input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -268,7 +268,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *_OP_NAME) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 // {{end}}
@@ -302,7 +302,7 @@ func GetSelectionConstOperator(
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
 	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
@@ -357,7 +357,7 @@ func GetSelectionOperator(
 ) (colexecbase.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode: NewOneInputNode(input),
+		OneInputNode: colexecbase.NewOneInputNode(input),
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}

@@ -62,7 +62,7 @@ func NewWindowPeerGrouper(
 	}
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
-		OneInputNode:    NewOneInputNode(input),
+		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,
 		partitionColIdx: partitionColIdx,
 		distinctCol:     distinctCol,
@@ -89,7 +89,7 @@ func NewWindowPeerGrouper(
 }
 
 type windowPeerGrouperInitFields struct {
-	OneInputNode
+	colexecbase.OneInputNode
 
 	allocator       *colmem.Allocator
 	partitionColIdx int
@@ -112,11 +112,11 @@ type _PEER_GROUPER_STRINGOp struct {
 var _ colexecbase.Operator = &_PEER_GROUPER_STRINGOp{}
 
 func (p *_PEER_GROUPER_STRINGOp) Init() {
-	p.input.Init()
+	p.Input.Init()
 }
 
 func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	b := p.input.Next(ctx)
+	b := p.Input.Next(ctx)
 	n := b.Length()
 	if n == 0 {
 		return b

@@ -24,7 +24,7 @@ import (
 // panicInjector is a helper Operator that will randomly inject panics into
 // Init and Next methods of the wrapped operator.
 type panicInjector struct {
-	OneInputNode
+	colexecbase.OneInputNode
 	rng *rand.Rand
 }
 
@@ -44,7 +44,7 @@ const (
 func NewPanicInjector(input colexecbase.Operator) colexecbase.Operator {
 	rng, _ := randutil.NewPseudoRand()
 	return &panicInjector{
-		OneInputNode: OneInputNode{input: input},
+		OneInputNode: colexecbase.OneInputNode{Input: input},
 		rng:          rng,
 	}
 }
@@ -53,12 +53,12 @@ func (i panicInjector) Init() {
 	if i.rng.Float64() < initPanicInjectionProbability {
 		colexecerror.ExpectedError(errors.New("injected panic in Init"))
 	}
-	i.input.Init()
+	i.Input.Init()
 }
 
 func (i panicInjector) Next(ctx context.Context) coldata.Batch {
 	if i.rng.Float64() < nextPanicInjectionProbability {
 		colexecerror.ExpectedError(errors.New("injected panic in Next"))
 	}
-	return i.input.Next(ctx)
+	return i.Input.Next(ctx)
 }

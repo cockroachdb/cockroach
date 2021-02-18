@@ -75,7 +75,7 @@ type crossJoiner struct {
 }
 
 var _ closableOperator = &crossJoiner{}
-var _ ResettableOperator = &crossJoiner{}
+var _ colexecbase.ResettableOperator = &crossJoiner{}
 
 func (c *crossJoiner) Init() {
 	c.inputOne.Init()
@@ -238,14 +238,14 @@ func setAllNulls(vecs []coldata.Vec, length int) {
 	}
 }
 
-func (c *crossJoiner) reset(ctx context.Context) {
-	if r, ok := c.inputOne.(resetter); ok {
-		r.reset(ctx)
+func (c *crossJoiner) Reset(ctx context.Context) {
+	if r, ok := c.inputOne.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
-	if r, ok := c.inputTwo.(resetter); ok {
-		r.reset(ctx)
+	if r, ok := c.inputTwo.(colexecbase.Resetter); ok {
+		r.Reset(ctx)
 	}
-	c.crossJoinerBase.reset(ctx)
+	c.crossJoinerBase.Reset(ctx)
 	c.inputsConsumed = false
 	c.numTotalOutputTuples = 0
 	c.numAlreadyEmitted = 0
@@ -419,7 +419,7 @@ func (b *crossJoinerBase) calculateOutputCount() int {
 	}
 }
 
-func (b *crossJoinerBase) reset(ctx context.Context) {
+func (b *crossJoinerBase) Reset(ctx context.Context) {
 	if b.left.tuples != nil {
 		b.left.tuples.reset(ctx)
 	}

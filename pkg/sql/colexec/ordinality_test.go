@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -40,34 +41,34 @@ func TestOrdinality(t *testing.T) {
 		},
 	}
 	tcs := []struct {
-		tuples     []tuple
-		expected   []tuple
+		tuples     []colexectestutils.Tuple
+		expected   []colexectestutils.Tuple
 		inputTypes []*types.T
 	}{
 		{
-			tuples:     tuples{{1}},
-			expected:   tuples{{1, 1}},
+			tuples:     colexectestutils.Tuples{{1}},
+			expected:   colexectestutils.Tuples{{1, 1}},
 			inputTypes: []*types.T{types.Int},
 		},
 		{
-			tuples:     tuples{{}, {}, {}, {}, {}},
-			expected:   tuples{{1}, {2}, {3}, {4}, {5}},
+			tuples:     colexectestutils.Tuples{{}, {}, {}, {}, {}},
+			expected:   colexectestutils.Tuples{{1}, {2}, {3}, {4}, {5}},
 			inputTypes: []*types.T{},
 		},
 		{
-			tuples:     tuples{{5}, {6}, {7}, {8}},
-			expected:   tuples{{5, 1}, {6, 2}, {7, 3}, {8, 4}},
+			tuples:     colexectestutils.Tuples{{5}, {6}, {7}, {8}},
+			expected:   colexectestutils.Tuples{{5, 1}, {6, 2}, {7, 3}, {8, 4}},
 			inputTypes: []*types.T{types.Int},
 		},
 		{
-			tuples:     tuples{{5, 'a'}, {6, 'b'}, {7, 'c'}, {8, 'd'}},
-			expected:   tuples{{5, 'a', 1}, {6, 'b', 2}, {7, 'c', 3}, {8, 'd', 4}},
+			tuples:     colexectestutils.Tuples{{5, 'a'}, {6, 'b'}, {7, 'c'}, {8, 'd'}},
+			expected:   colexectestutils.Tuples{{5, 'a', 1}, {6, 'b', 2}, {7, 'c', 3}, {8, 'd', 4}},
 			inputTypes: []*types.T{types.Int, types.String},
 		},
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})

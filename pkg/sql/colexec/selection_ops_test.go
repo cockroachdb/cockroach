@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,11 +35,11 @@ const (
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tups := tuples{{0}, {1}, {2}, {nil}}
-	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+	tups := colexectestutils.Tuples{{0}, {1}, {2}, {nil}}
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0}, {1}}, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
-				OneInputNode: NewOneInputNode(input[0]),
+				OneInputNode: colexecbase.NewOneInputNode(input[0]),
 				colIdx:       0,
 			},
 			constArg: 2,
@@ -49,7 +50,7 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 func TestSelLTInt64Int64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tups := tuples{
+	tups := colexectestutils.Tuples{
 		{0, 0},
 		{0, 1},
 		{1, 0},
@@ -58,10 +59,10 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0, 1}}, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
-				OneInputNode: NewOneInputNode(input[0]),
+				OneInputNode: colexecbase.NewOneInputNode(input[0]),
 				col1Idx:      0,
 				col2Idx:      1,
 			},
@@ -87,7 +88,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	}
 	expected := &selLTInt64Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: colexecbase.NewOneInputNode(input),
 			colIdx:       colIdx,
 		},
 		constArg: constVal,
@@ -115,7 +116,7 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &selLTInt16Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: colexecbase.NewOneInputNode(input),
 			colIdx:       colIdx,
 		},
 		constArg: constVal,
@@ -144,7 +145,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 	expected := &selGEInt16Int16Op{
 		selOpBase: selOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: colexecbase.NewOneInputNode(input),
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
 		},
@@ -187,7 +188,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 
 	plusOp := &selLTInt64Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: NewOneInputNode(source),
+			OneInputNode: colexecbase.NewOneInputNode(source),
 			colIdx:       0,
 		},
 		constArg: 0,
@@ -248,7 +249,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 
 	plusOp := &selLTInt64Int64Op{
 		selOpBase: selOpBase{
-			OneInputNode: NewOneInputNode(source),
+			OneInputNode: colexecbase.NewOneInputNode(source),
 			col1Idx:      0,
 			col2Idx:      1,
 		},

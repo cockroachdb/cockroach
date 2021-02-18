@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,67 +33,67 @@ func TestLikeOperators(t *testing.T) {
 	for _, tc := range []struct {
 		pattern  string
 		negate   bool
-		tups     tuples
-		expected tuples
+		tups     colexectestutils.Tuples
+		expected colexectestutils.Tuples
 	}{
 		{
 			pattern:  "def",
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"def"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
 		},
 		{
 			pattern:  "def",
 			negate:   true,
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"abc"}, {"ghi"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 		{
 			pattern:  "de%",
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"def"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
 		},
 		{
 			pattern:  "de%",
 			negate:   true,
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"abc"}, {"ghi"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 		{
 			pattern:  "%ef",
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"def"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
 		},
 		{
 			pattern:  "%ef",
 			negate:   true,
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"abc"}, {"ghi"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 		{
 			pattern:  "_e_",
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"def"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
 		},
 		{
 			pattern:  "_e_",
 			negate:   true,
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"abc"}, {"ghi"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 		{
 			pattern:  "%e%",
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"def"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
 		},
 		{
 			pattern:  "%e%",
 			negate:   true,
-			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: tuples{{"abc"}, {"ghi"}},
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
 	} {
-		runTests(
-			t, []tuples{tc.tups}, tc.expected, orderedVerifier,
+		colexectestutils.RunTests(
+			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
@@ -128,7 +129,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	source.Init()
 
 	base := selConstOpBase{
-		OneInputNode: NewOneInputNode(source),
+		OneInputNode: colexecbase.NewOneInputNode(source),
 		colIdx:       0,
 	}
 	prefixOp := &selPrefixBytesBytesConstOp{

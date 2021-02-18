@@ -1720,6 +1720,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"sql/col*",
 			":!sql/col*_test.go",
+			":!sql/colexec/colexectestutils/utils.go",
 		)
 		if err != nil {
 			t.Fatal(err)

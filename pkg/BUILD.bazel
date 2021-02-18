@@ -155,6 +155,7 @@ ALL_TESTS = [
     "//pkg/sql/colcontainer:colcontainer_test",
     "//pkg/sql/colencoding:colencoding_test",
     "//pkg/sql/colexec/colbuilder:colbuilder_test",
+    "//pkg/sql/colexec/colexectestutils:colexectestutils_test",
     "//pkg/sql/colexec/execgen:execgen_test",
     "//pkg/sql/colexec:colexec_test",
     "//pkg/sql/colexecbase/colexecerror:colexecerror_test",

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -57,9 +58,9 @@ type aggregatorTestCase struct {
 	spec           *execinfrapb.AggregatorSpec
 	aggDistinct    []bool
 	aggFilter      []int
-	input          tuples
+	input          colexectestutils.Tuples
 	unorderedInput bool
-	expected       tuples
+	expected       colexectestutils.Tuples
 	name           string
 
 	// convToDecimal will convert any float64s to apd.Decimals. If a string is
@@ -71,7 +72,7 @@ type aggregatorTestCase struct {
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new  func(*colexecagg.NewAggregatorArgs) (ResettableOperator, error)
+	new  func(*colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error)
 	name string
 }
 
@@ -79,7 +80,7 @@ var aggTypes = []aggType{
 	{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
-		new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+		new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
 			return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
 		},
 		name: "hash",
@@ -92,7 +93,7 @@ var aggTypes = []aggType{
 
 func (tc *aggregatorTestCase) init() error {
 	if tc.convToDecimal {
-		for _, tuples := range []tuples{tc.input, tc.expected} {
+		for _, tuples := range []colexectestutils.Tuples{tc.input, tc.expected} {
 			for _, tuple := range tuples {
 				for i, e := range tuple {
 					switch v := e.(type) {
@@ -153,33 +154,33 @@ func (tc *aggregatorTestCase) init() error {
 
 var aggregatorsTestCases = []aggregatorTestCase{
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{1},
 		},
 		name: "OneTuple",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 1},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{2},
 		},
 		name: "OneGroup",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 0},
 			{0, 1},
 			{1, 4},
 			{2, 5},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{2},
 			{4},
 			{5},
@@ -187,21 +188,21 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		name: "MultiGroup",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
 			{0, 3},
 			{1, 4},
 			{1, 5},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{6},
 			{9},
 		},
 		name: "CarryBetweenInputBatches",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
 			{0, 3},
@@ -209,7 +210,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{1, 5},
 			{2, 6},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{10},
 			{5},
 			{6},
@@ -217,7 +218,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		name: "CarryBetweenOutputBatches",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 1},
 			{1, 2},
@@ -230,7 +231,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{6, 7},
 			{7, 8},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{2},
 			{2},
 			{6},
@@ -243,26 +244,26 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		name: "CarryBetweenInputAndOutputBatches",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
 			{0, 3},
 			{0, 4},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{10},
 		},
 		name:      "NoGroupingCols",
 		groupCols: []uint32{},
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{1, 0, 0},
 			{2, 0, 0},
 			{3, 0, 0},
 			{4, 0, 0},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{10},
 		},
 		name:      "UnusedInputColumns",
@@ -271,12 +272,12 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols:   [][]uint32{{0}},
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{nil, 1},
 			{4, 42},
 			{nil, 2},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{3},
 			{42},
 		},
@@ -291,7 +292,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols:        [][]uint32{{0}, {}},
 		typs:           []*types.T{types.Int},
 		unorderedInput: true,
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{1},
 			{2},
 			{1},
@@ -306,7 +307,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{4},
 			{2},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{nil, 2},
 			{1, 4},
 			{2, 3},
@@ -319,12 +320,12 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols: [][]uint32{
 			{2}, {1},
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, 2},
 			{0, 1, 2},
 		},
 		typs: []*types.T{types.Int, types.Int, types.Int},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{4, 2},
 		},
 		name: "OutputOrder",
@@ -334,14 +335,14 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols: [][]uint32{
 			{2}, {1},
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, 1.3},
 			{0, 1, 1.6},
 			{0, 1, 0.5},
 			{1, 1, 1.2},
 		},
 		typs: []*types.T{types.Int, types.Int, types.Decimal},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{3.4, 3},
 			{1.2, 1},
 		},
@@ -353,7 +354,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols: [][]uint32{
 			{1}, {1},
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1.1},
 			{0, 1.2},
 			{0, 2.3},
@@ -361,7 +362,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{1, 2.43},
 		},
 		typs: []*types.T{types.Int, types.Decimal},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{"1.5333333333333333333", 4.6},
 			{4.32, 8.64},
 		},
@@ -376,7 +377,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols: [][]uint32{
 			{1}, {1},
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, true},
 			{1, false},
 			{2, true},
@@ -396,7 +397,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{8, nil},
 		},
 		typs: []*types.T{types.Int, types.Bool},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{true, true},
 			{false, false},
 			{false, true},
@@ -417,12 +418,12 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			execinfrapb.AggregatorSpec_MIN,
 			execinfrapb.AggregatorSpec_SUM,
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{2, 1.0, "1.0", 2.0},
 			{2, 1.0, "1.0", 4.0},
 			{2, 2.0, "2.0", 6.0},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{2, 1.0, "1.0", 2.0, 6.0},
 			{2, 2.0, "2.0", 6.0, 6.0},
 		},
@@ -438,7 +439,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 			execinfrapb.AggregatorSpec_SUM_INT,
 		},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 0), -1},
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 1},
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 2},
@@ -448,7 +449,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 3), 101},
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 4), 102},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 0), -1},
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 3},
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 2), 21},
@@ -463,7 +464,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		},
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, nil, 1, 1, 1.0, 1.0, duration.MakeDuration(1, 1, 1)},
 			{0, 1, nil, 2, 2.0, 2.0, duration.MakeDuration(2, 2, 2)},
 			{0, 2, 2, nil, 3.0, 3.0, duration.MakeDuration(3, 3, 3)},
@@ -471,7 +472,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{0, 4, 4, 4, 4.0, nil, duration.MakeDuration(5, 5, 5)},
 			{0, 5, 5, 5, 5.0, 5.0, nil},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{3.0, 3.0, 3.0, 3.0, 3.0, duration.MakeDuration(3, 3, 3)},
 		},
 		typs:    []*types.T{types.Int, types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval},
@@ -480,7 +481,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		name:    "AVG on all types",
 	},
 	{
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{1, "1"},
 			{1, "2"},
 			{1, "3"},
@@ -493,7 +494,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{4, nil},
 			{4, nil},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{"123"},
 			{"12"},
 			{"12"},
@@ -521,7 +522,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		},
 		aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {3}, {3}, {4}},
 		typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 3.1, 2, true, "zero"},
 			{0, 1.1, 3, false, "zero"},
 			{1, 1.1, 1, false, "one"},
@@ -530,7 +531,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{3, 4.1, 0, false, "three"},
 			{3, 5.1, 0, true, "three"},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{0, "zero", 2.1, 2, 2, 4.2, 5, 2, 3, false, true, "zerozero"},
 			{1, "one", 2.6, 2, 2, 5.2, 1, 0, 1, false, false, "oneone"},
 			{2, "two", 1.1, 1, 1, 1.1, 1, 1, 1, true, true, "two"},
@@ -557,14 +558,14 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		},
 		aggCols: [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}, {4}},
 		typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{nil, 1.1, 4, true, "a"},
 			{0, nil, nil, nil, nil},
 			{0, 3.1, 5, nil, "b"},
 			{1, nil, nil, nil, nil},
 			{1, nil, nil, false, nil},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1, true, true, "a"},
 			{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1, nil, nil, "b"},
 			{1, nil, 2, 0, nil, nil, nil, nil, nil, false, false, nil},
@@ -584,7 +585,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols:     [][]uint32{{0}, {1}, {1}, {1}, {1}},
 		aggDistinct: []bool{false, false, true, false, true},
 		typs:        []*types.T{types.Int, types.Int},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
 			{0, 2},
@@ -595,7 +596,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{1, 2},
 			{1, 2},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{0, 4, 2, 6, 3},
 			{1, 3, 2, 5, 3},
 		},
@@ -611,7 +612,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols:   [][]uint32{{0}, {}, {1}},
 		aggFilter: []int{tree.NoColumnIdx, 2, 2},
 		typs:      []*types.T{types.Int, types.Int, types.Bool},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, false},
 			{0, 2, true},
 			{0, 2, true},
@@ -622,7 +623,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{1, 2, nil},
 			{1, 2, true},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{0, 3, 4},
 			{1, 2, 3},
 		},
@@ -638,7 +639,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggCols:   [][]uint32{{0}, {}, {1}},
 		aggFilter: []int{tree.NoColumnIdx, 2, 2},
 		typs:      []*types.T{types.Int, types.Int, types.Bool},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, false},
 			{0, nil, nil},
 			{0, 2, false},
@@ -649,7 +650,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{2, nil, nil},
 			{2, 2, nil},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{0, 0, nil},
 			{1, 2, 3},
 			{2, 0, nil},
@@ -671,7 +672,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		aggDistinct: []bool{false, false, true, true, false, true, true},
 		aggFilter:   []int{tree.NoColumnIdx, 2, tree.NoColumnIdx, 2, 2, tree.NoColumnIdx, 2},
 		typs:        []*types.T{types.Int, types.Int, types.Bool},
-		input: tuples{
+		input: colexectestutils.Tuples{
 			{0, 1, false},
 			{0, 2, true},
 			{0, 2, true},
@@ -682,7 +683,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{1, 2, nil},
 			{1, 2, true},
 		},
-		expected: tuples{
+		expected: colexectestutils.Tuples{
 			{0, 2, 2, 1, 4, 3, 2},
 			{1, 2, 2, 2, 3, 3, 3},
 		},
@@ -720,11 +721,11 @@ func TestAggregators(t *testing.T) {
 				continue
 			}
 			log.Infof(ctx, "%s/%s", tc.name, agg.name)
-			verifier := orderedVerifier
+			verifier := colexectestutils.OrderedVerifier
 			if agg.name == "hash" {
-				verifier = unorderedVerifier
+				verifier = colexectestutils.UnorderedVerifier
 			}
-			runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return agg.new(&colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
@@ -768,7 +769,7 @@ func TestAggregatorRandom(t *testing.T) {
 						testAllocator.NewMemColumn(typs[1], nTuples),
 					}
 					groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Float64(), cols[1].Nulls()
-					expectedTuples := tuples{}
+					expectedTuples := colexectestutils.Tuples{}
 
 					var expRowCounts, expCounts []int64
 					var expSums, expMins, expMaxs []float64
@@ -779,11 +780,11 @@ func TestAggregatorRandom(t *testing.T) {
 						if i%groupSize == 0 {
 							if curGroup != -1 {
 								if expNulls[curGroup] {
-									expectedTuples = append(expectedTuples, tuple{
+									expectedTuples = append(expectedTuples, colexectestutils.Tuple{
 										expRowCounts[curGroup], expCounts[curGroup], nil, nil, nil, nil,
 									})
 								} else {
-									expectedTuples = append(expectedTuples, tuple{
+									expectedTuples = append(expectedTuples, colexectestutils.Tuple{
 										expRowCounts[curGroup], expCounts[curGroup], expSums[curGroup], expMins[curGroup], expMaxs[curGroup], expSums[curGroup] / float64(expCounts[curGroup]),
 									})
 								}
@@ -817,16 +818,16 @@ func TestAggregatorRandom(t *testing.T) {
 					}
 					// Add result for last group.
 					if expNulls[curGroup] {
-						expectedTuples = append(expectedTuples, tuple{
+						expectedTuples = append(expectedTuples, colexectestutils.Tuple{
 							expRowCounts[curGroup], expCounts[curGroup], nil, nil, nil, nil,
 						})
 					} else {
-						expectedTuples = append(expectedTuples, tuple{
+						expectedTuples = append(expectedTuples, colexectestutils.Tuple{
 							expRowCounts[curGroup], expCounts[curGroup], expSums[curGroup], expMins[curGroup], expMaxs[curGroup], expSums[curGroup] / float64(expCounts[curGroup]),
 						})
 					}
 
-					source := newChunkingBatchSource(typs, cols, nTuples)
+					source := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					tc := aggregatorTestCase{
 						typs: typs,
 						aggFns: []execinfrapb.AggregatorSpec_Func{
@@ -861,7 +862,7 @@ func TestAggregatorRandom(t *testing.T) {
 					}
 					a.Init()
 
-					testOutput := newOpTestOutput(a, expectedTuples)
+					testOutput := colexectestutils.NewOpTestOutput(a, expectedTuples)
 					if strings.Contains(agg.name, "hash") {
 						err = testOutput.VerifyAnyOrder()
 					} else {
@@ -938,7 +939,7 @@ func benchmarkAggregateFunction(
 			vals[i] = vals[i] % 1024
 		}
 	}
-	source := newChunkingBatchSource(typs, cols, numInputRows)
+	source := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, numInputRows)
 
 	aggCols := make([]uint32, len(aggInputTypes))
 	for i := range aggCols {
@@ -1024,7 +1025,7 @@ func benchmarkAggregateFunction(
 				if err = a.(colexecbase.Closer).Close(ctx); err != nil {
 					b.Fatal(err)
 				}
-				source.reset(ctx)
+				source.Reset(ctx)
 			}
 		},
 	)
