@@ -874,3 +874,40 @@ SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv = 20 AND jv @> '{"b": "c"}' ORDER B
 ----
 11  20  {"b": "c"}
 12  20  {"b": "c", "d": "e"}
+
+# Test that virtual computed columns which reference mutation columns cannot
+# be added.
+subtest referencing_mutations
+
+statement ok
+CREATE TABLE t_ref (i INT PRIMARY KEY);
+
+statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
+ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
+   ADD COLUMN k INT AS (i+j) VIRTUAL;
+
+statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
+BEGIN;
+    ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
+    ALTER TABLE t_ref ADD COLUMN k INT NOT NULL DEFAULT 42;
+    ALTER TABLE t_ref ADD COLUMN l INT AS (i+j+k) VIRTUAL;
+COMMIT;
+
+statement ok
+ROLLBACK;
+
+# Test that adding virtual computed columns to tables which have been created
+# in the current transaction is fine.
+
+statement ok
+DROP TABLE t_ref;
+
+statement ok
+BEGIN;
+    CREATE TABLE t_ref (i INT PRIMARY KEY);
+    ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
+    ALTER TABLE t_ref ADD COLUMN k INT AS (i+j) VIRTUAL;
+COMMIT;
+
+statement ok
+DROP TABLE t_ref;
