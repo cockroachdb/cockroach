@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -834,7 +835,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
 				// not originate from this node (we are the target node).
 				compID := execinfrapb.StreamComponentID(
-					inputStream.OriginNodeID, flowCtx.ID, inputStream.StreamID,
+					base.SQLInstanceID(inputStream.OriginNodeID), flowCtx.ID, inputStream.StreamID,
 				)
 				op, err = s.wrapWithNetworkVectorizedStatsCollector(inbox, compID, latency)
 				if err != nil {
@@ -961,7 +962,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 							// flow-level span.
 							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
 							span.SetSpanStats(&execinfrapb.ComponentStats{
-								Component: execinfrapb.FlowComponentID(outputStream.OriginNodeID, flowCtx.ID),
+								Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
 									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
 								},

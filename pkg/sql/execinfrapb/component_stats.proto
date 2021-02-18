@@ -48,11 +48,12 @@ message ComponentID {
   optional int32 id = 3 [(gogoproto.nullable) = false,
                          (gogoproto.customname) = "ID"];
 
-  // NodeID of the node this component is associated with. For cross-node
+  // SQLInstanceID of the node this component is associated with. For cross-node
   // streams, this is the *origin* node for the stream.
-  optional int32 node_id = 4 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "NodeID",
-                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  optional int32 sql_instance_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SQLInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
 }
 
 // ComponentStats contains statistics for an execution component. A component is

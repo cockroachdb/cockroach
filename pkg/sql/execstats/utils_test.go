@@ -11,6 +11,7 @@
 package execstats
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
@@ -27,7 +28,7 @@ func (m *FlowsMetadata) AddComponentStats(stats *execinfrapb.ComponentStats) {
 	switch stats.Component.Type {
 	case execinfrapb.ComponentID_PROCESSOR:
 		processorStat := &processorStats{
-			nodeID: stats.Component.NodeID,
+			nodeID: roachpb.NodeID(stats.Component.SQLInstanceID),
 			stats:  stats,
 		}
 		if m.processorStats == nil {
@@ -36,7 +37,7 @@ func (m *FlowsMetadata) AddComponentStats(stats *execinfrapb.ComponentStats) {
 		m.processorStats[execinfrapb.ProcessorID(stats.Component.ID)] = processorStat
 	case execinfrapb.ComponentID_STREAM:
 		streamStat := &streamStats{
-			originNodeID: stats.Component.NodeID,
+			originNodeID: roachpb.NodeID(stats.Component.SQLInstanceID),
 			stats:        stats,
 		}
 		if m.streamStats == nil {
@@ -47,8 +48,8 @@ func (m *FlowsMetadata) AddComponentStats(stats *execinfrapb.ComponentStats) {
 		flowStat := &flowStats{}
 		flowStat.stats = append(flowStat.stats, stats)
 		if m.flowStats == nil {
-			m.flowStats = make(map[roachpb.NodeID]*flowStats)
+			m.flowStats = make(map[base.SQLInstanceID]*flowStats)
 		}
-		m.flowStats[stats.Component.NodeID] = flowStat
+		m.flowStats[stats.Component.SQLInstanceID] = flowStat
 	}
 }
