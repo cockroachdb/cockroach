@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package partitionccl_test
+package multiregionccl_test
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// REGIONAL BY ROW tests are defined in partitionccl as REGIONAL BY ROW
+// REGIONAL BY ROW tests are defined in multiregionccl as REGIONAL BY ROW
 // requires CCL to operate.
 
 // TestAlterTableLocalityRegionalByRowError tests an alteration involving
