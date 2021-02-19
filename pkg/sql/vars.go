@@ -674,6 +674,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`locality_optimized_search`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`locality_optimized_search`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`locality_optimized_search`, s)
+			if err != nil {
+				return err
+			}
+			m.SetLocalityOptimizedSearch(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.LocalityOptimizedSearch)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(localityOptimizedSearchMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_implicit_select_for_update`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_select_for_update`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
