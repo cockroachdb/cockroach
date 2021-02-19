@@ -2913,3 +2913,11 @@ query T
 SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
 ----
 {3,0,1}
+
+subtest crdb_internal.payloads_for_span
+
+query TTT colnames
+SELECT *
+FROM crdb_internal.payloads_for_span(0)
+----
+payload_type  payload_pretty  payload_jsonb

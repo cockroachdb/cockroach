@@ -480,6 +480,12 @@ select * from crdb_internal.gossip_alerts
 query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
 select * from crdb_internal.node_inflight_trace_spans
 
+query error pq: only users with the admin role are allowed to read crdb_internal.trace_id
+select * from crdb_internal.trace_id
+
+query error pq: only users with the admin role are allowed to read crdb_internal.payloads_for_span
+select * from crdb_internal.payloads_for_span
+
 # Anyone can see the executable version.
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
