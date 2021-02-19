@@ -355,7 +355,7 @@ func buildOneWorkload(svc s3putter, o opts) {
 	}
 
 	{
-		cmd := exec.Command("make", "bin/workload")
+		cmd := exec.Command("mkrelease", "amd64-linux-gnu", "bin/workload")
 		cmd.Dir = o.PkgDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
