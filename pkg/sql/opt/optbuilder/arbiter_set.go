@@ -90,39 +90,39 @@ func (a *arbiterSet) UniqueConstraintOrdinals() []int {
 // with the following arguments:
 //
 //   - name is the name of the index or unique constraint.
-//   - columnOrdinals is the set of table column ordinals of the arbiter. For
+//   - conflictOrds is the set of table column ordinals of the arbiter. For
 //     index arbiters, this is the lax key columns. For constraint arbiters,
 //     this is all the columns in the constraint.
 //   - pred is the partial predicate expression of the arbiter, if the arbiter
 //     is a partial index or partial constraint. If the arbiter is not partial,
 //     pred is nil.
 //
-func (a *arbiterSet) ForEach(f func(name string, columnOrdinals util.FastIntSet, pred tree.Expr)) {
+func (a *arbiterSet) ForEach(f func(name string, conflictOrds util.FastIntSet, pred tree.Expr)) {
 	// Call the callback for each index arbiter.
 	a.indexes.ForEach(func(i int) {
 		index := a.mb.tab.Index(i)
 
-		colOrds := getIndexLaxKeyOrdinals(index)
+		conflictOrds := getIndexLaxKeyOrdinals(index)
 
 		var pred tree.Expr
 		if _, isPartial := index.Predicate(); isPartial {
 			pred = a.mb.parsePartialIndexPredicateExpr(i)
 		}
 
-		f(string(index.Name()), colOrds, pred)
+		f(string(index.Name()), conflictOrds, pred)
 	})
 
 	// Call the callback for each unique constraint arbiter.
 	a.uniqueConstraints.ForEach(func(i int) {
 		uniqueConstraint := a.mb.tab.Unique(i)
 
-		colOrds := getUniqueConstraintOrdinals(a.mb.tab, uniqueConstraint)
+		conflictOrds := getUniqueConstraintOrdinals(a.mb.tab, uniqueConstraint)
 
 		var pred tree.Expr
 		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
 			pred = a.mb.parseUniqueConstraintPredicateExpr(i)
 		}
 
-		f(uniqueConstraint.Name(), colOrds, pred)
+		f(uniqueConstraint.Name(), conflictOrds, pred)
 	})
 }
