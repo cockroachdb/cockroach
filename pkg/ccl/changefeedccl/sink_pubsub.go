@@ -21,7 +21,6 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -67,6 +66,8 @@ type pubsubSink struct {
 
 	pendingResults []pendingResult
 }
+
+var _ Sink = (*pubsubSink)(nil)
 
 func (g gcpPubsubDesc) String() string {
 	return fmt.Sprintf("projects/%s/topics/%s", g.project, g.topic)
@@ -238,11 +239,11 @@ func (p *pubsubSink) orderingKey(key []byte) string {
 }
 
 func (p *pubsubSink) EmitRow(
-	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	msg := &pubsub.Message{
 		Attributes: map[string]string{
-			"table": table.GetName(),
+			"topic": topic.GetName(),
 		},
 		Data: value,
 	}
@@ -338,5 +339,3 @@ func (p *pubsubSink) Close() error {
 	}
 	return nil
 }
-
-var _ Sink = (*pubsubSink)(nil)

@@ -16,6 +16,7 @@ go_library(
         "scram_client.go",
         "sink.go",
         "sink_cloudstorage.go",
+        "sink_pubsub.go",
         "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl",
@@ -94,6 +95,9 @@ go_library(
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",
         "@com_github_xdg_scram//:scram",
+        "@com_google_cloud_go_pubsub//:pubsub",
+        "@org_golang_google_api//option",
+        "@org_golang_x_oauth2//google",
     ],
 )
 
