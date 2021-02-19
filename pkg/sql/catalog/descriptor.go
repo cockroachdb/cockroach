@@ -73,14 +73,18 @@ type Descriptor interface {
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *descpb.Descriptor
 
+	// GetReferencedDescIDs returns the IDs of all descriptors directly referenced
+	// by this descriptor, including itself.
+	GetReferencedDescIDs() DescriptorIDSet
+
 	// ValidateSelf checks the internal consistency of the descriptor.
-	ValidateSelf(ctx context.Context) error
+	ValidateSelf(vea ValidationErrorAccumulator)
 
-	// Validate is like ValidateSelf but with additional cross-reference checks.
-	Validate(ctx context.Context, descGetter DescGetter) error
+	// ValidateCrossReferences performs cross-reference checks.
+	ValidateCrossReferences(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 
-	// ValidateTxnCommit is like Validate but with additional pre-commit checks.
-	ValidateTxnCommit(ctx context.Context, descGetter DescGetter) error
+	// ValidateTxnCommit performs pre-commit checks.
+	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 }
 
 // DatabaseDescriptor will eventually be called dbdesc.Descriptor.
@@ -264,7 +268,7 @@ type TableDescriptor interface {
 	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
 	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	GetConstraintInfo(ctx context.Context, dg DescGetter) (map[string]descpb.ConstraintDetail, error)
+	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
 	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
 	GetInboundFKs() []descpb.ForeignKeyConstraint
 	GetOutboundFKs() []descpb.ForeignKeyConstraint

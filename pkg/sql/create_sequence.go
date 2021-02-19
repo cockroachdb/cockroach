@@ -151,8 +151,7 @@ func doCreateSequence(
 		return err
 	}
 
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := desc.Validate(params.ctx, dg); err != nil {
+	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
 		return err
 	}
 
@@ -231,7 +230,7 @@ func NewSequenceTableDesc(
 	// immediately.
 	desc.State = descpb.DescriptorState_PUBLIC
 
-	if err := desc.ValidateSelf(ctx); err != nil {
+	if err := catalog.ValidateSelf(&desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil

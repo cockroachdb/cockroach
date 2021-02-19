@@ -2511,7 +2511,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 
 	// Test that trying different schema changes results an error.
 	_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z INT`)
-	expected := "pq: unimplemented: cannot perform a schema change operation while a primary key change is in progress"
+	expected := `pq: relation "test" \(53\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected to find error %s but found %+v", expected, err)
 	}

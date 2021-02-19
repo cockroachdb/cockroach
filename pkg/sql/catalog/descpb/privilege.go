@@ -218,7 +218,11 @@ func (p *PrivilegeDescriptor) Revoke(
 // perhaps it was intended only for the 2.0 release but then somehow we got
 // bad descriptors with bad initial permissions into later versions or we didn't
 // properly bake this migration in.
-func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
+func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
+	if *ptr == nil {
+		*ptr = &PrivilegeDescriptor{}
+	}
+	p := *ptr
 	allowedPrivilegesBits := privilege.ALL.Mask()
 	if IsReservedID(id) {
 		// System databases and tables have custom maximum allowed privileges.

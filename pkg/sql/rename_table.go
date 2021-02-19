@@ -218,9 +218,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
-	if err := tableDesc.Validate(
-		ctx, catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec),
-	); err != nil {
+	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err
 	}
 

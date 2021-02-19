@@ -190,9 +190,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			if !ok {
 				return errors.Errorf("schema %d not found for desc %d", scID, desc.GetID())
 			}
-			scDesc, ok := scDescI.(catalog.SchemaDescriptor)
-			if !ok {
-				return errors.Errorf("descriptor %d is not a schema", scDescI.GetID())
+			scDesc, err := catalog.AsSchemaDescriptor(scDescI)
+			if err != nil {
+				return err
 			}
 			scName = scDesc.GetName()
 		}
