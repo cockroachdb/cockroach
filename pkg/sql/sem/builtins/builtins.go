@@ -3607,7 +3607,7 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
-
+	// TODO(angelapwen) Remove this built-in when generator is complete.
 	"crdb_internal.payloads_for_span": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
