@@ -218,7 +218,6 @@ func TestIndexBackfillerComputedAndGeneratedColumns(t *testing.T) {
 		{
 			name: "virtual computed column in key",
 			setupSQL: `
-SET experimental_enable_virtual_columns = true;
 CREATE TABLE foo (i INT PRIMARY KEY, k INT, v INT AS (i*i + k) VIRTUAL);
 INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 `,

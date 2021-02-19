@@ -108,10 +108,11 @@ func (ctx *FlowCtx) Codec() keys.SQLCodec {
 // ProcessorComponentID returns a ComponentID for the given processor in this
 // flow.
 func (ctx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.ComponentID {
-	return execinfrapb.ProcessorComponentID(ctx.ID, procID)
+	return execinfrapb.ProcessorComponentID(ctx.NodeID.SQLInstanceID(), ctx.ID, procID)
 }
 
 // StreamComponentID returns a ComponentID for the given stream in this flow.
+// The stream must originate from the node associated with this FlowCtx.
 func (ctx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
-	return execinfrapb.StreamComponentID(ctx.ID, streamID)
+	return execinfrapb.StreamComponentID(ctx.NodeID.SQLInstanceID(), ctx.ID, streamID)
 }

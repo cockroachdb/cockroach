@@ -105,6 +105,15 @@ func (ob *OutputBuilder) AddField(key, value string) {
 	ob.entries = append(ob.entries, entry{field: key, fieldVal: value})
 }
 
+// AddNonDeterministicField adds an information field under the current node,
+// but hides the information if the MakeDeterministic flag is set.
+func (ob *OutputBuilder) AddNonDeterministicField(key, value string) {
+	if ob.flags.MakeDeterministic {
+		value = "<hidden>"
+	}
+	ob.AddField(key, value)
+}
+
 // Attr adds an information field under the current node.
 func (ob *OutputBuilder) Attr(key string, value interface{}) {
 	ob.AddField(key, fmt.Sprint(value))

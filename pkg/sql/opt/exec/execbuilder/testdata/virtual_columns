@@ -1,9 +1,6 @@
 # LogicTest: local
 
 statement ok
-SET experimental_enable_virtual_columns = true
-
-statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,

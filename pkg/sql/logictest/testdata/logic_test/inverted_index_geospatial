@@ -37,25 +37,30 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • sort
+│ cluster nodes: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
+    │ cluster nodes: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
+        │ cluster nodes: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
+            │ cluster nodes: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
+                  cluster nodes: <hidden>
                   actual row count: 2
                   KV rows read: 4
                   KV bytes read: 32 B
@@ -108,25 +113,30 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • sort
+│ cluster nodes: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
+    │ cluster nodes: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
+        │ cluster nodes: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
+            │ cluster nodes: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
+                  cluster nodes: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B
@@ -155,25 +165,30 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • sort
+│ cluster nodes: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
+    │ cluster nodes: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
+        │ cluster nodes: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
         │
         └── • inverted filter
+            │ cluster nodes: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
+                  cluster nodes: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B
