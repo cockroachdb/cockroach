@@ -152,7 +152,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spec.PartitionAddresses = []streamingccl.PartitionAddress{pa1, pa2}
-			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
+			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec,
+				nil, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
 			if !ok {

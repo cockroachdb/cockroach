@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -46,6 +47,10 @@ var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
 
+var (
+	errCutoverRequested = errors.New("cutover requested")
+)
+
 type mvccKeyValues []storage.MVCCKeyValue
 
 func (s mvccKeyValues) Len() int           { return len(s) }
@@ -58,6 +63,7 @@ type streamIngestionProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
 	output  execinfra.RowReceiver
+	alloc   rowenc.DatumAlloc
 
 	// curBatch temporarily batches MVCC Keys so they can be
 	// sorted before ingestion.
@@ -88,8 +94,17 @@ type streamIngestionProcessor struct {
 	// that it can be forwarded through the DistSQL flow.
 	ingestionErr error
 
+	ingestionMeta *execinfrapb.ProducerMetadata
+
 	// eventCh is the merged event channel of all of the partition event streams.
 	eventCh chan partitionEvent
+
+	// signalCh is the channel used to pass rows from input to the stream
+	// ingestion processor.
+	signalCh chan rowenc.EncDatum
+
+	// input returns rows from the stream ingestion polling processor.
+	input execinfra.RowSource
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -107,6 +122,7 @@ func newStreamIngestionDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.StreamIngestionDataSpec,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -135,13 +151,15 @@ func newStreamIngestionDataProcessor(
 		output:              output,
 		curBatch:            make([]storage.MVCCKeyValue, 0),
 		client:              streamClient,
+		input:               input,
 		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
 		timer:               timeutil.NewTimer(),
+		signalCh:            make(chan rowenc.EncDatum),
 	}
 
-	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := sip.Init(sip, post, input.OutputTypes(), flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{},
+			InputsToDrain: []execinfra.RowSource{sip.input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				sip.close()
 				return nil
@@ -156,6 +174,7 @@ func newStreamIngestionDataProcessor(
 
 // Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context {
+	sip.input.Start(ctx)
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
 	evalCtx := sip.FlowCtx.EvalCtx
@@ -181,6 +200,23 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 	}
 	sip.eventCh = sip.merge(sip.Ctx, eventChs)
 
+	// Start listening for signals from the poller processor.
+	go func() {
+		row, meta := sip.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				sip.MoveToDraining(nil /* err */)
+			}
+			sip.ingestionMeta = meta
+			return
+		}
+		if row == nil {
+			sip.MoveToDraining(nil /* err */)
+			return
+		}
+		sip.signalCh <- row[0]
+	}()
+
 	return ctx
 }
 
@@ -189,7 +225,6 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	if sip.State != execinfra.StateRunning {
 		return nil, sip.DrainHelper()
 	}
-
 	progressUpdate, err := sip.consumeEvents()
 	if err != nil {
 		sip.MoveToDraining(err)
@@ -206,6 +241,10 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 			rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
 		}
 		return row, nil
+	}
+
+	if sip.ingestionMeta != nil {
+		return nil, sip.ingestionMeta
 	}
 
 	if sip.ingestionErr != nil {
@@ -229,6 +268,9 @@ func (sip *streamIngestionProcessor) close() {
 		}
 		if sip.timer != nil {
 			sip.timer.Stop()
+		}
+		if sip.signalCh != nil {
+			close(sip.signalCh)
 		}
 	}
 }
@@ -298,6 +340,39 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 	for sip.State == execinfra.StateRunning {
 		select {
+		case row, ok := <-sip.signalCh:
+			if !ok {
+				sip.internalDrained = true
+				return sip.flush()
+			}
+			if err := row.EnsureDecoded(streamIngestionResultTypes[0], &sip.alloc); err != nil {
+				return nil, err
+			}
+			raw, ok := row.Datum.(*tree.DBytes)
+			if !ok {
+				return nil, errors.AssertionFailedf(`unexpected datum type %T: %s`, row.Datum,
+					row.Datum)
+			}
+			var streamIngestionProg jobspb.StreamIngestionProgress
+			if err := protoutil.Unmarshal([]byte(*raw), &streamIngestionProg); err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					`unmarshalling stream ingestion progress: %x`, raw)
+			}
+
+			// Check if the job has been signalled to cutover.
+			// TODO(adityamaru): The cutover ts could be in the future, in which case
+			// we would like to inform all partitions to ingest up until that ts and
+			// then stop. For the MVP we do not allow specifying a cutover ts past the
+			// resolved timestamp written to the job progress at the time the cutover
+			// was requested, so we can simply return.
+			// As of now, we don't flush the buffered KVs before returning as they
+			// will be reverted because of the invariant mentioned above.
+			if ts := streamIngestionProg.CutoverTime; !ts.IsEmpty() {
+				sip.ingestionErr = errors.Wrap(errCutoverRequested, fmt.Sprintf("cutover at ts %s",
+					ts.String()))
+				return nil, nil
+			}
+			return nil, errors.New("unsupported signal received from input")
 		case event, ok := <-sip.eventCh:
 			if !ok {
 				sip.internalDrained = true

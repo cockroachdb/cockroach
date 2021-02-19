@@ -407,7 +407,8 @@ func runStreamIngestionProcessor(
 	spec.PartitionAddresses = partitionAddresses
 	spec.StartTime = startTime
 	processorID := int32(0)
-	proc, err := newStreamIngestionDataProcessor(&flowCtx, processorID, spec, &post, out)
+	proc, err := newStreamIngestionDataProcessor(&flowCtx, processorID, spec, nil /* input */, &post,
+		out)
 	require.NoError(t, err)
 	sip, ok := proc.(*streamIngestionProcessor)
 	if !ok {
