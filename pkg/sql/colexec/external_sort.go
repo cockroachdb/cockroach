@@ -144,8 +144,6 @@ type externalSorter struct {
 	partitionerToOperators []*partitionerToOperator
 	// numPartitions is the current number of partitions.
 	numPartitions int
-	// firstPartitionIdx is the index of the first partition to merge next.
-	firstPartitionIdx int
 	// maxNumberPartitions determines the maximum number of active partitions
 	// we can have at once. This number can be limited by the number of FDs
 	// available as well as by dynamically computed limit when the memory usage
@@ -167,6 +165,14 @@ type externalSorter struct {
 		maxBatchMemSize []int64
 	}
 
+	// currentPartitionIdx keeps track of the next available partition index.
+	currentPartitionIdx int
+	// currentPartitionIdxs is a slice of size maxNumberPartitions containing
+	// the mapping of all partitions to their corresponding partition indices.
+	currentPartitionIdxs []int
+	// maxMerged is a slice of size maxNumberPartitions containing
+	// the mapping of all partitions to their maximum number of merges.
+	maxMerged []int
 	// fdState is used to acquire file descriptors up front.
 	fdState struct {
 		fdSemaphore semaphore.Semaphore
@@ -281,6 +287,8 @@ func NewExternalSorter(
 		columnOrdering:      execinfrapb.ConvertToColumnOrdering(ordering),
 		maxNumberPartitions: maxNumberPartitions,
 		numForcedMerges:     numForcedMerges,
+		currentPartitionIdxs: make([]int, maxNumberPartitions),
+		maxMerged: make([]int, maxNumberPartitions),
 	}
 	es.partitionsInfo.totalSize = make([]int64, maxNumberPartitions)
 	es.partitionsInfo.maxBatchMemSize = make([]int64, maxNumberPartitions)
@@ -331,8 +339,11 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				// inputPartitioningOperator).
 				s.inMemSorterInput.interceptReset = true
 				s.inMemSorter.Reset(ctx)
+				s.currentPartitionIdxs[s.numPartitions] = s.currentPartitionIdx
+				s.maxMerged[s.numPartitions] = 0
 				s.numPartitions++
-				if s.shouldMergeAllPartitions() {
+				s.currentPartitionIdx++
+				if s.shouldMergeSomePartitions() {
 					s.state = externalSorterRepeatedMerging
 					continue
 				}
@@ -341,6 +352,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 
 		case externalSorterRepeatedMerging:
+			// TODO(barryhe2000): update later comment
 			// We will merge all partitions in range [s.firstPartitionIdx,
 			// s.firstPartitionIdx+s.numPartitions) and will spill all the
 			// resulting batches into a new partition with the next available
@@ -354,13 +366,24 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			// Note that the memory used for dequeueing batches from the
 			// partitions is retained and is registered with the merge unlimited
 			// allocator.
-			merger, err := s.createMergerForPartitions(ctx)
+
+
+			// [0 0 0 0] [1 0 0 0] (e, f, g h) (1, 1, 0, 0) (e,i,j,k) (1, 1, 1 ,0) (e,i,l,m)
+			// (2, 1, 1, 0) (n, r, u, v)
+
+			n := 2
+			for i := s.numPartitions-2; i > 0; i-- {
+				if s.maxMerged[i] != s.maxMerged[i-1] {
+					break
+				}
+				n++
+			}
+			merger, err := s.createMergerForPartitions(ctx, n)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
 			merger.Init()
-			s.firstPartitionIdx += s.numPartitions
-			s.numPartitions = 0
+			s.numPartitions -= n
 			s.partitionsInfo.totalSize[s.numPartitions] = 0
 			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = 0
 			for b := merger.Next(ctx); ; b = merger.Next(ctx) {
@@ -369,7 +392,10 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					break
 				}
 			}
-			s.numPartitions = 1
+			s.maxMerged[s.numPartitions]++
+			s.currentPartitionIdxs[s.numPartitions] = s.currentPartitionIdx
+			s.numPartitions++
+			s.currentPartitionIdx++
 			// We are now done with the merger, so we can release the memory
 			// used for the output batches (all of which have been enqueued into
 			// the new partition).
@@ -387,11 +413,11 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterFinished
 				continue
 			} else if s.numPartitions == 1 {
-				s.createPartitionerToOperators()
+				s.createPartitionerToOperators(s.numPartitions)
 				s.emitter = s.partitionerToOperators[0]
 			} else {
 				var err error
-				s.emitter, err = s.createMergerForPartitions(ctx)
+				s.emitter, err = s.createMergerForPartitions(ctx, s.numPartitions)
 				if err != nil {
 					colexecerror.InternalError(err)
 				}
@@ -430,18 +456,17 @@ func (s *externalSorter) enqueue(ctx context.Context, b coldata.Batch) {
 			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = batchMemSize
 		}
 	}
-	curPartitionIdx := s.firstPartitionIdx + s.numPartitions
 	// Note that b will never have a selection vector set because the allSpooler
 	// performs a deselection when buffering up the tuples, and the in-memory
 	// sorter has allSpooler as its input.
-	if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
+	if err := s.partitioner.Enqueue(ctx, s.currentPartitionIdx, b); err != nil {
 		colexecerror.InternalError(err)
 	}
 }
 
-// shouldMergeAllPartitions returns true if we need to merge all current
+// shouldMergeSomePartitions returns true if we need to merge some current
 // partitions into one before proceeding to spilling a new partition.
-func (s *externalSorter) shouldMergeAllPartitions() bool {
+func (s *externalSorter) shouldMergeSomePartitions() bool {
 	if s.numPartitions <= 1 {
 		return false
 	}
@@ -506,7 +531,7 @@ func (s *externalSorter) Reset(ctx context.Context) {
 	}
 	// Reset closed so that the sorter may be closed again.
 	s.closed = false
-	s.firstPartitionIdx = 0
+	s.currentPartitionIdx = 0
 	s.numPartitions = 0
 	// Note that we consciously do not reset maxNumberPartitions and
 	// maxNumberPartitionsDynamicallyReduced (when the latter is true) since we
@@ -533,47 +558,47 @@ func (s *externalSorter) Close(ctx context.Context) error {
 }
 
 // createPartitionerToOperators updates s.partitionerToOperators to correspond
-// to all current partitions.
-func (s *externalSorter) createPartitionerToOperators() {
+// to the last n of the current partitions to be merged.
+func (s *externalSorter) createPartitionerToOperators(n int) {
 	oldPartitioners := s.partitionerToOperators
-	if len(oldPartitioners) < s.numPartitions {
-		s.partitionerToOperators = make([]*partitionerToOperator, s.numPartitions)
+	if len(oldPartitioners) < n {
+		s.partitionerToOperators = make([]*partitionerToOperator, n)
 		copy(s.partitionerToOperators, oldPartitioners)
-		for i := len(oldPartitioners); i < s.numPartitions; i++ {
+		for i := len(oldPartitioners); i < n; i++ {
 			s.partitionerToOperators[i] = newPartitionerToOperator(
 				s.mergeUnlimitedAllocator, s.inputTypes, s.partitioner,
 			)
 		}
 	}
-	for i := 0; i < s.numPartitions; i++ {
+	for i := 0; i < n; i++ {
 		// We only need to set the partitioner and partitionIdx fields because
 		// all others will not change when these operators are reused.
 		s.partitionerToOperators[i].partitioner = s.partitioner
-		s.partitionerToOperators[i].partitionIdx = s.firstPartitionIdx + i
+		s.partitionerToOperators[i].partitionIdx = s.currentPartitionIdxs[s.numPartitions-n+i]
 	}
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
-// partitions in [firstPartitionIdx, firstPartitionIdx+numPartitions) range.
+// the last n current partitions.
 func (s *externalSorter) createMergerForPartitions(
-	ctx context.Context,
+	ctx context.Context, n int,
 ) (colexecbase.Operator, error) {
-	s.createPartitionerToOperators()
-	syncInputs := make([]SynchronizerInput, s.numPartitions)
+	s.createPartitionerToOperators(n)
+	syncInputs := make([]SynchronizerInput, n)
 	for i := range syncInputs {
 		syncInputs[i].Op = s.partitionerToOperators[i]
 	}
 	if log.V(2) {
 		var b strings.Builder
-		for i := 0; i < s.numPartitions; i++ {
+		for i := 0; i < n; i++ {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(humanizeutil.IBytes(s.partitionsInfo.totalSize[i]))
+			b.WriteString(humanizeutil.IBytes(s.partitionsInfo.totalSize[s.numPartitions-n+i]))
 		}
 		log.Infof(ctx,
-			"external sorter is merging partitions in range [%d, %d) with sizes [%s]",
-			s.firstPartitionIdx, s.firstPartitionIdx+s.numPartitions, b.String(),
+			"external sorter is merging partitions with partition indices %s with sizes [%s]",
+			s.currentPartitionIdxs[s.numPartitions-n:s.numPartitions], b.String(),
 		)
 	}
 
