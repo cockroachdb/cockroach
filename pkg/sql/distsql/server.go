@@ -395,6 +395,11 @@ func (ds *ServerImpl) NewFlowContext(
 		CollectStats:   collectStats,
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
+		// The flow disk monitor is a child of the server's and is closed on
+		// Cleanup.
+		DiskMonitor: execinfra.NewMonitor(
+			ctx, ds.ParentDiskMonitor, "flow-disk-monitor",
+		),
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

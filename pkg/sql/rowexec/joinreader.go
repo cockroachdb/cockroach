@@ -413,7 +413,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
 	// Initialize memory monitors and row container for looked up rows.
 	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joinreader-limited")
-	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
+	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,

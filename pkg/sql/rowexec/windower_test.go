@@ -60,8 +60,8 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
+		DiskMonitor: diskMonitor,
 	}
 
 	post := &execinfrapb.PostProcessSpec{}
@@ -204,9 +204,9 @@ func BenchmarkWindower(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: diskMonitor,
 	}
 
 	rowsGenerators := []func(int, int) rowenc.EncDatumRows{
