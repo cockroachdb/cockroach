@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // See the comments at the start of generators.go for details about
@@ -323,6 +327,22 @@ var generators = map[string]builtinDefinition{
 			rangeKeyIteratorType,
 			makeRangeKeyIterator,
 			"Returns all SQL K/V pairs within the requested range.",
+			tree.VolatilityVolatile,
+		),
+	),
+
+	"crdb_internal.payloads_for_span": makeBuiltin(
+		tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: categorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "span_id", Typ: types.Int},
+			},
+			payloadsForSpanGeneratorType,
+			makePayloadsForSpanGenerator,
+			"Returns the payload(s) of the requested span.",
 			tree.VolatilityVolatile,
 		),
 	),
@@ -1363,3 +1383,133 @@ func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
 
 // Close implements the tree.ValueGenerator interface.
 func (rk *rangeKeyIterator) Close() {}
+
+var payloadsForSpanGeneratorLabels = []string{"payload_type", "payload_jsonb"}
+
+var payloadsForSpanGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.Jsonb},
+	payloadsForSpanGeneratorLabels,
+)
+
+// payloadsForSpanGenerator is a value generator that iterates over all payloads
+// over all recordings for a given Span.
+type payloadsForSpanGenerator struct {
+	// The span to iterate over.
+	span *tracing.Span
+
+	// recordingIndex maintains the current position of the index of the iterator
+	// in the list of recordings surfaced by a given span. The payloads of the
+	// recording that this iterator points to are buffered in `payloads`
+	recordingIndex int
+
+	// payloads represents all payloads for a given recording currently accessed
+	// by the iterator, and accesses more in a streaming fashion.
+	payloads []json.JSON
+
+	// payloadIndex maintains the current position of the index of the iterator
+	// in the list of `payloads` associated with a given recording.
+	payloadIndex int
+}
+
+func makePayloadsForSpanGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
+		)
+	}
+	spanID := uint64(*(args[0].(*tree.DInt)))
+	span, found := ctx.Settings.Tracer.GetActiveSpanFromID(spanID)
+	if !found {
+		return nil, nil
+	}
+
+	return &payloadsForSpanGenerator{span: span}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (p *payloadsForSpanGenerator) ResolvedType() *types.T {
+	return payloadsForSpanGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	// The user of the generator first calls Next(), then Values(), so the index
+	// managing the iterator's position needs to start at -1 instead of 0.
+	p.recordingIndex = -1
+	p.payloadIndex = -1
+
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
+	p.payloadIndex++
+
+	// If payloadIndex is within payloads and there are some payloads, then we
+	// have more buffered payloads to return.
+	if p.payloads != nil && p.payloadIndex < len(p.payloads) {
+		return true, nil
+	}
+
+	// Otherwise either there are no payloads or we have exhausted the payloads in
+	// our current recording, and we need to access another set of payloads from
+	// another recording.
+	p.payloads = nil
+
+	// Keep searching recordings for one with a valid (non-nil) payload.
+	for p.payloads == nil {
+		p.recordingIndex++
+		// If there are no more recordings, then we cannot continue.
+		if !(p.recordingIndex < p.span.GetRecording().Len()) {
+			return false, nil
+		}
+		currRecording := p.span.GetRecording()[p.recordingIndex]
+		currRecording.Structured(func(item *pbtypes.Any) {
+			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
+			if err != nil {
+				return
+			}
+			if payload != nil {
+				p.payloads = append(p.payloads, payload)
+			}
+		})
+	}
+
+	p.payloadIndex = 0
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
+	payload := p.payloads[p.payloadIndex]
+	payloadTypeAsJSON, err := payload.FetchValKey("@type")
+	if err != nil {
+		return nil, err
+	}
+
+	// We trim the proto type prefix as well as the enclosing double quotes
+	// leftover from JSON value conversion.
+	payloadTypeAsString := strings.TrimSuffix(
+		strings.TrimPrefix(
+			payloadTypeAsJSON.String(),
+			"\"type.googleapis.com/cockroach.",
+		),
+		"\"",
+	)
+
+	return tree.Datums{
+		tree.NewDString(payloadTypeAsString),
+		tree.NewDJSON(payload),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (p *payloadsForSpanGenerator) Close() {}

@@ -9,7 +9,7 @@ GRANT ADMIN TO testuser
 
 statement ok
 CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
-ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z');
+ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z')
 
 query TT
 SELECT * FROM kv
@@ -18,7 +18,7 @@ SELECT * FROM kv
 user testuser
 
 statement ok
-BEGIN;
+BEGIN
 
 statement ok
 INSERT INTO kv VALUES('k', 'v')
@@ -32,7 +32,7 @@ user root
 statement ok
 BEGIN;
 SET TRANSACTION PRIORITY HIGH;
-SELECT * FROM kv;
+SELECT * FROM kv
 
 user testuser
 
@@ -49,16 +49,16 @@ user root
 #
 # NB: this needs the 5node-pretend59315 config because otherwise the span is not
 # tracked.
-#
 query B
 WITH spans AS (
-  SELECT span_id FROM crdb_internal.node_inflight_trace_spans
+  SELECT span_id
+  FROM crdb_internal.node_inflight_trace_spans
   WHERE trace_id = crdb_internal.trace_id()
-), payload_types AS (
-    SELECT jsonb_array_elements(crdb_internal.payloads_for_span(span_id))->>'@type' AS payload_type
-    FROM spans
+), payloads AS (
+  SELECT *
+  FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)
 ) SELECT count(*) > 0
-    FROM payload_types
-    WHERE payload_type = 'type.googleapis.com/cockroach.roachpb.ContentionEvent';
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
 ----
 true

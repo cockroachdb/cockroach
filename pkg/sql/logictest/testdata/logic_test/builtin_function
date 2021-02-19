@@ -2913,3 +2913,34 @@ query T
 SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
 ----
 {3,0,1}
+
+subtest crdb_internal.trace_id
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error insufficient privilege
+SELECT * FROM crdb_internal.trace_id()
+
+user root
+
+query B
+SELECT count(*) = 1 FROM crdb_internal.trace_id()
+----
+true
+
+subtest crdb_internal.payloads_for_span
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+SELECT * FROM crdb_internal.payloads_for_span(0)
+
+user root
+
+query TT colnames
+SELECT * FROM crdb_internal.payloads_for_span(0)
+WHERE false
+----
+payload_type  payload_jsonb
