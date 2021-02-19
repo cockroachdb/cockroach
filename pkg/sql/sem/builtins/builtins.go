@@ -2625,6 +2625,31 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// parse_timestamp converts strings to timestamps. It is useful in expressions
+	// where casts (which are not immutable) cannot be used, like computed column
+	// expressions or partial index predicates. Only absolute timestamps that do
+	// not depend on the current context are supported (relative timestamps like
+	// 'now' are not supported).
+	"parse_timestamp": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := string(tree.MustBeDString(args[0]))
+				ts, dependsOnContext, err := tree.ParseDTimestamp(ctx, arg, time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "relative timestamps are not supported")
+				}
+				return ts, nil
+			},
+			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	// Array functions.
 
 	"string_to_array": makeBuiltin(arrayPropsNullableArgs(),
