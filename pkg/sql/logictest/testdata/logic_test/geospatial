@@ -4998,10 +4998,10 @@ false  false  97  false  false
 
 # Test for 2+ string arguments for Geometry where one side of the arguments
 # raises an error.
-statement error Unknown type: 'ABC'
+statement error pq: st_intersects\(\): lex error: invalid keyword at pos 0\nabc\n\^
 SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 
-statement error Unknown type: 'ABC'
+statement error pq: st_intersects\(\): lex error: invalid keyword at pos 0\nabc\n\^
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
 query T
@@ -5258,7 +5258,7 @@ SELECT
   ST_AsText(ST_LineMerge(g::geometry))
 FROM ( VALUES
   ('MULTILINESTRING ((1 2, 3 4), (3 4, 5 6))'),
-  ('MULTILINESTRING ((1 2, 3 4), (5 6, 7 8)))'),
+  ('MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))'),
   ('POINT (1 2)')
   )
  t(g)
