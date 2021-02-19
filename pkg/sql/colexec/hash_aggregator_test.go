@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -209,7 +210,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 					new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
-						return NewHashAggregator(args, &NewSpillingQueueArgs{
+						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 							Types:              args.InputTypes,
 							MemoryLimit:        defaultMemoryLimit,
