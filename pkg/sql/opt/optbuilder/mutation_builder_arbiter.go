@@ -25,10 +25,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// arbiterIndexesAndConstraints returns sets of index ordinals and unique
-// constraint ordinals to be used as arbiter constraints for an INSERT ON
-// CONFLICT statement. This function panics if no arbiter indexes or constraints
-// are found.
+// findArbiters returns a set of arbiters for an INSERT ON CONFLICT statement.
+// Both unique indexes and unique constraints can be arbiters. This function
+// panics if no arbiters are found.
 //
 // Arbiter constraints ensure that the columns designated by conflictOrds
 // reference at most one target row of a UNIQUE index or constraint. Using ANTI
@@ -69,23 +68,25 @@ import (
 //      found.
 //   3. Otherwise, returns all partial arbiter indexes and constraints.
 //
-func (mb *mutationBuilder) arbiterIndexesAndConstraints(
+func (mb *mutationBuilder) findArbiters(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
-) (indexes util.FastIntSet, uniqueConstraints util.FastIntSet) {
+) arbiterSet {
+	arbiters := makeArbiterSet(mb)
+
 	// If conflictOrds is empty, then all unique indexes and unique without
 	// index constraints are arbiters.
 	if conflictOrds.Empty() {
 		for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 			if mb.tab.Index(idx).IsUnique() {
-				indexes.Add(idx)
+				arbiters.AddIndex(idx)
 			}
 		}
 		for uc, ucCount := 0, mb.tab.UniqueCount(); uc < ucCount; uc++ {
 			if mb.tab.Unique(uc).WithoutIndex() {
-				uniqueConstraints.Add(uc)
+				arbiters.AddUniqueConstraint(uc)
 			}
 		}
-		return indexes, uniqueConstraints
+		return arbiters
 	}
 
 	h := &mb.arbiterPredicateHelper
@@ -112,7 +113,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
 		if _, isPartial := index.Predicate(); !isPartial {
-			return util.MakeFastIntSet(idx), util.FastIntSet{}
+			return makeSingleIndexArbiterSet(mb, idx)
 		}
 
 		// If the index is a pseudo-partial index, it can always be an arbiter.
@@ -120,13 +121,13 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// uniqueness of its columns across all rows.
 		pred := h.partialIndexPredicate(idx)
 		if pred.IsTrue() {
-			return util.MakeFastIntSet(idx), util.FastIntSet{}
+			return makeSingleIndexArbiterSet(mb, idx)
 		}
 
 		// If the index is a partial index, then it can only be an arbiter if
 		// the arbiterPredicate implies it.
 		if h.predicateIsImpliedByArbiterPredicate(pred) {
-			indexes.Add(idx)
+			arbiters.AddIndex(idx)
 		}
 	}
 
@@ -158,7 +159,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// If the unique constraint is not partial, it should be returned
 		// without any partial index arbiters.
 		if _, isPartial := uniqueConstraint.Predicate(); !isPartial {
-			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+			return makeSingleUniqueConstraintArbiterSet(mb, uc)
 		}
 
 		// If the constraint is a pseudo-partial unique constraint, it can
@@ -166,24 +167,24 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// arbiters.
 		pred := h.partialUniqueConstraintPredicate(uc)
 		if pred.IsTrue() {
-			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+			return makeSingleUniqueConstraintArbiterSet(mb, uc)
 		}
 
 		// If the unique constraint is partial, then it can only be an arbiter
 		// if the arbiterPredicate implies it.
 		if h.predicateIsImpliedByArbiterPredicate(pred) {
-			uniqueConstraints.Add(uc)
+			arbiters.AddUniqueConstraint(uc)
 		}
 	}
 
-	// Err if we did not previously return and did not find partial indexes or
-	// partial unique constraints.
-	if indexes.Empty() && uniqueConstraints.Empty() {
+	// Err if we did not previously return and did not find any partial
+	// arbiters.
+	if arbiters.Empty() {
 		panic(pgerror.Newf(pgcode.InvalidColumnReference,
 			"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 	}
 
-	return indexes, uniqueConstraints
+	return arbiters
 }
 
 // buildAntiJoinForDoNothingArbiter builds an anti-join for a single arbiter index
