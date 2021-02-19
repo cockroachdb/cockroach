@@ -176,6 +176,7 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkBytes.Add(other.NetworkBytes, execStatCollectionCount, other.Count)
 	s.MaxMemUsage.Add(other.MaxMemUsage, execStatCollectionCount, other.Count)
 	s.ContentionTime.Add(other.ContentionTime, execStatCollectionCount, other.Count)
+	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 
 	s.Count += s.Count
 }
@@ -184,5 +185,6 @@ func (s *ExecStats) AlmostEqual(other *ExecStats, eps float64) bool {
 	return s.Count == other.Count &&
 		s.NetworkBytes.AlmostEqual(other.NetworkBytes, eps) &&
 		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps) &&
-		s.ContentionTime.AlmostEqual(other.ContentionTime, eps)
+		s.ContentionTime.AlmostEqual(other.ContentionTime, eps) &&
+		s.NetworkMessages.AlmostEqual(other.NetworkMessages, eps)
 }
