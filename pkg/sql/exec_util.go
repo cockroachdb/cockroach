@@ -1497,14 +1497,44 @@ func truncateStatementStringForTelemetry(stmt string) string {
 	return stmt
 }
 
-func anonymizeStmtAndConstants(stmt tree.Statement) string {
-	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
+// hideNonVirtualTableNameFunc returns a function that can be used with
+// FmtCtx.SetReformatTableNames. It hides all table names that are not virtual
+// tables.
+func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *tree.TableName) {
+	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
+		virtual, err := vt.getVirtualTableEntry(tn)
+		if err != nil || virtual == nil {
+			ctx.WriteByte('_')
+			return
+		}
+		// Virtual table: we want to keep the name; however
+		// we need to scrub the database name prefix.
+		newTn := *tn
+		newTn.CatalogName = "_"
+
+		ctx.WithFlags(tree.FmtParsable, func() {
+			ctx.WithReformatTableNames(nil, func() {
+				ctx.FormatNode(&newTn)
+			})
+		})
+	}
+	return reformatFn
+}
+
+func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
+	// Re-format to remove most names.
+	f := tree.NewFmtCtx(tree.FmtAnonymize | tree.FmtHideConstants)
+	if vt != nil {
+		f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
+	}
+	f.FormatNode(stmt)
+	return f.CloseAndGetString()
 }
 
 // WithAnonymizedStatement attaches the anonymized form of a statement
 // to an error object.
-func WithAnonymizedStatement(err error, stmt tree.Statement) error {
-	anonStmtStr := anonymizeStmtAndConstants(stmt)
+func WithAnonymizedStatement(err error, stmt tree.Statement, vt VirtualTabler) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt, vt)
 	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
 	return errors.WithSafeDetails(err,
 		"while executing: %s", errors.Safe(anonStmtStr))
