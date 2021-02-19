@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -38,11 +39,11 @@ func TestSafeMessage(t *testing.T) {
 		exp      string
 	}{
 		{
-			id:       12,
+			id:       112,
 			parentID: 21,
 			schema:   "CREATE TABLE foo ()",
 			exp: "tabledesc.Mutable: {" +
-				"ID: 12, Version: 1, IsUncommitted: true, " +
+				"ID: 112, Version: 1, IsUncommitted: true, " +
 				"ModificationTime: \"0,0\", " +
 				"ParentID: 21, ParentSchemaID: 29, " +
 				"State: PUBLIC, " +
@@ -56,11 +57,11 @@ func TestSafeMessage(t *testing.T) {
 				"}",
 		},
 		{
-			id:       12,
+			id:       112,
 			parentID: 21,
 			schema:   "CREATE TABLE foo (i INT PRIMARY KEY, j INT, j_str STRING AS (j::STRING) STORED, INDEX (j_str))",
 			exp: `tabledesc.immutable: {` +
-				`ID: 12, Version: 1, ModificationTime: "1.000000000,0", ` +
+				`ID: 112, Version: 1, ModificationTime: "1.000000000,0", ` +
 				`ParentID: 21, ParentSchemaID: 29, State: PUBLIC, ` +
 				`NextColumnID: 6, ` +
 				`Columns: [` +
@@ -76,7 +77,7 @@ func TestSafeMessage(t *testing.T) {
 				`{MutationID: 3, JobID: 1234}` +
 				`], ` +
 				`Mutations: [` +
-				`{MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, ConstraintType: FOREIGN_KEY, ForeignKey: {OriginTableID: 12, OriginColumns: [2], ReferencedTableID: 2, ReferencedColumnIDs: [3], Validity: Unvalidated, State: ADD, MutationID: 1}}, ` +
+				`{MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, ConstraintType: FOREIGN_KEY, ForeignKey: {OriginTableID: 112, OriginColumns: [2], ReferencedTableID: 2, ReferencedColumnIDs: [3], Validity: Unvalidated, State: ADD, MutationID: 1}}, ` +
 				`{MutationID: 2, Direction: ADD, State: DELETE_ONLY, Column: {ID: 5, TypeID: 20, Null: false, State: ADD, MutationID: 2}}, ` +
 				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, ConstraintType: CHECK, NotNullColumn: 2, Check: {Columns: [2], Validity: Unvalidated, State: ADD, MutationID: 3}}, ` +
 				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: false, Columns: [{ID: 3, Dir: ASC}, {ID: 2, Dir: DESC}], ExtraColumns: [1], StoreColumns: [5], State: ADD, MutationID: 3}}` +
@@ -91,13 +92,13 @@ func TestSafeMessage(t *testing.T) {
 				`{Columns: [2], Validity: Validated}` +
 				`], ` +
 				`Unique Without Index Constraints: [` +
-				`{TableID: 12, Columns: [2], Validity: Validated}` +
+				`{TableID: 112, Columns: [2], Validity: Validated}` +
 				`], ` +
 				`InboundFKs: [` +
-				`{OriginTableID: 2, OriginColumns: [3], ReferencedTableID: 12, ReferencedColumnIDs: [2], Validity: Validated}` +
+				`{OriginTableID: 2, OriginColumns: [3], ReferencedTableID: 112, ReferencedColumnIDs: [2], Validity: Validated}` +
 				`], ` +
 				`OutboundFKs: [` +
-				`{OriginTableID: 12, OriginColumns: [2], ReferencedTableID: 3, ReferencedColumnIDs: [1], Validity: Validated}` +
+				`{OriginTableID: 112, OriginColumns: [2], ReferencedTableID: 3, ReferencedColumnIDs: [1], Validity: Validated}` +
 				`]}`,
 			f: func(mutable *tabledesc.Mutable) catalog.TableDescriptor {
 				// Add check constraints, unique without index constraints, foreign key
@@ -111,7 +112,7 @@ func TestSafeMessage(t *testing.T) {
 				mutable.UniqueWithoutIndexConstraints = append(
 					mutable.UniqueWithoutIndexConstraints, descpb.UniqueWithoutIndexConstraint{
 						Name:      "unique",
-						TableID:   12,
+						TableID:   112,
 						Validity:  descpb.ConstraintValidity_Validated,
 						ColumnIDs: []descpb.ColumnID{2},
 					},
@@ -121,14 +122,14 @@ func TestSafeMessage(t *testing.T) {
 					OriginTableID:       2,
 					OriginColumnIDs:     []descpb.ColumnID{3},
 					ReferencedColumnIDs: []descpb.ColumnID{2},
-					ReferencedTableID:   12,
+					ReferencedTableID:   112,
 					Validity:            descpb.ConstraintValidity_Validated,
 					OnDelete:            descpb.ForeignKeyReference_CASCADE,
 					Match:               descpb.ForeignKeyReference_PARTIAL,
 				})
 				mutable.OutboundFKs = append(mutable.OutboundFKs, descpb.ForeignKeyConstraint{
 					Name:                "outbound_fk",
-					OriginTableID:       12,
+					OriginTableID:       112,
 					OriginColumnIDs:     []descpb.ColumnID{2},
 					ReferencedColumnIDs: []descpb.ColumnID{1},
 					ReferencedTableID:   3,
@@ -145,7 +146,7 @@ func TestSafeMessage(t *testing.T) {
 							Name:           "outbound_fk_mutation",
 							ForeignKey: descpb.ForeignKeyConstraint{
 								Name:                "outbound_fk_mutation",
-								OriginTableID:       12,
+								OriginTableID:       112,
 								OriginColumnIDs:     []descpb.ColumnID{2},
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
@@ -233,11 +234,11 @@ func TestSafeMessage(t *testing.T) {
 			},
 		},
 		{
-			id:       12,
+			id:       112,
 			parentID: 21,
 			schema:   "CREATE TABLE foo ()",
 			exp: "tabledesc.immutable: {" +
-				"ID: 12, Version: 1, " +
+				"ID: 112, Version: 1, " +
 				"ModificationTime: \"0,0\", " +
 				"ParentID: 21, ParentSchemaID: 29, " +
 				"State: PUBLIC, " +
@@ -256,7 +257,7 @@ func TestSafeMessage(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			desc, err := sql.CreateTestTableDescriptor(ctx, tc.parentID, tc.id, tc.schema, &descpb.PrivilegeDescriptor{})
+			desc, err := sql.CreateTestTableDescriptor(ctx, tc.parentID, tc.id, tc.schema, descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()))
 			require.NoError(t, err)
 			var td catalog.TableDescriptor
 			if tc.f != nil {
@@ -265,7 +266,7 @@ func TestSafeMessage(t *testing.T) {
 				td = desc
 			}
 			redacted := string(redact.Sprint(td).Redact())
-			require.NoError(t, desc.ValidateSelf(ctx))
+			require.NoError(t, catalog.ValidateSelf(desc))
 			require.Equal(t, tc.exp, redacted)
 			var m map[string]interface{}
 			require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m), redacted)

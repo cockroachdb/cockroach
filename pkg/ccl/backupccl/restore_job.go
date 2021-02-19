@@ -433,23 +433,16 @@ func WriteDescriptors(
 			}
 			return err
 		}
-		// TODO(ajwerner): Utilize validation inside of the descs.Collection
-		// rather than reaching into the store.
-		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, codec)
-		for _, table := range tables {
-			if err := table.Validate(ctx, dg); err != nil {
-				return errors.Wrapf(err,
-					"validate table %d", errors.Safe(table.GetID()))
-			}
-		}
 
-		for _, db := range databases {
-			if err := db.Validate(ctx, dg); err != nil {
-				return errors.Wrapf(err,
-					"validate database %d", errors.Safe(db.GetID()))
-			}
+		bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, codec)
+		descs := make([]catalog.Descriptor, 0, len(databases)+len(tables))
+		for _, table := range tables {
+			descs = append(descs, table)
 		}
-		return nil
+		for _, db := range databases {
+			descs = append(descs, db)
+		}
+		return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descs...)
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")
 }

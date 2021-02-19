@@ -452,268 +452,233 @@ func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
 }
 
 // ValidateSelf performs validation on the TypeDescriptor.
-func (desc *Immutable) ValidateSelf(_ context.Context) error {
+func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
-		return err
+	vea.Report(catalog.ValidateName(desc.Name, "type"))
+	if desc.GetID() == descpb.InvalidID {
+		vea.Report(errors.AssertionFailedf("invalid ID %d", desc.GetID()))
 	}
-
-	if desc.ID == descpb.InvalidID {
-		return errors.AssertionFailedf("invalid ID %d", errors.Safe(desc.ID))
+	if desc.GetParentID() == descpb.InvalidID {
+		vea.Report(errors.AssertionFailedf("invalid parentID %d", desc.GetParentID()))
 	}
-	if desc.ParentID == descpb.InvalidID {
-		return errors.AssertionFailedf("invalid parentID %d", errors.Safe(desc.ParentID))
-	}
-
-	switch desc.Kind {
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		// In the case of the multi-region enum, we also keep the logical descriptors
-		// sorted. Validate that's the case.
-		for i := 0; i < len(desc.EnumMembers)-1; i++ {
-			if desc.EnumMembers[i].LogicalRepresentation > desc.EnumMembers[i+1].LogicalRepresentation {
-				return errors.AssertionFailedf(
-					"multi-region enum is out of order %q > %q",
-					desc.EnumMembers[i].LogicalRepresentation,
-					desc.EnumMembers[i+1].LogicalRepresentation,
-				)
-			}
-		}
-		// Now do all of the checking for ordinary enums, which also apply to multi-region enums.
-		fallthrough
-	case descpb.TypeDescriptor_ENUM:
-		// All of the enum members should be in sorted order.
-		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
-			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)
-		}
-		// Ensure there are no duplicate enum physical reps.
-		for i := 0; i < len(desc.EnumMembers)-1; i++ {
-			if bytes.Equal(desc.EnumMembers[i].PhysicalRepresentation, desc.EnumMembers[i+1].PhysicalRepresentation) {
-				return errors.AssertionFailedf("duplicate enum physical rep %v", desc.EnumMembers[i].PhysicalRepresentation)
-			}
-		}
-		// Ensure there are no duplicate enum values.
-		members := make(map[string]struct{}, len(desc.EnumMembers))
-		for i := range desc.EnumMembers {
-			_, ok := members[desc.EnumMembers[i].LogicalRepresentation]
-			if ok {
-				return errors.AssertionFailedf("duplicate enum member %q", desc.EnumMembers[i].LogicalRepresentation)
-			}
-			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
-		}
-
-		// Ensure the sanity of enum capabilities and transition directions.
-		for _, member := range desc.EnumMembers {
-			switch member.Capability {
-			case descpb.TypeDescriptor_EnumMember_READ_ONLY:
-				if member.Direction == descpb.TypeDescriptor_EnumMember_NONE {
-					return errors.AssertionFailedf(
-						"read only capability member must have transition direction set")
-				}
-			case descpb.TypeDescriptor_EnumMember_ALL:
-				if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
-					return errors.AssertionFailedf("public enum member can not have transition direction set")
-				}
-			default:
-				return errors.AssertionFailedf("invalid member capability %s", member.Capability)
-			}
-		}
-
-		// Validate the Privileges of the descriptor.
-		if err := desc.Privileges.Validate(desc.ID, privilege.Type); err != nil {
-			return err
-		}
-	case descpb.TypeDescriptor_ALIAS:
-		if desc.Alias == nil {
-			return errors.AssertionFailedf("ALIAS type desc has nil alias type")
-		}
-	default:
-		return errors.AssertionFailedf("invalid desc kind %s", desc.Kind.String())
+	if desc.GetParentSchemaID() == descpb.InvalidID {
+		vea.Report(errors.AssertionFailedf("invalid parent schema ID %d", desc.GetParentSchemaID()))
 	}
 
 	switch desc.Kind {
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		vea.Report(desc.Privileges.Validate(desc.ID, privilege.Type))
+		// Check presence of region config
 		if desc.RegionConfig == nil {
-			return errors.AssertionFailedf("no region config on %s type desc", desc.Kind.String())
+			vea.Report(errors.AssertionFailedf("no region config on %s type desc", desc.Kind.String()))
+		}
+		if desc.validateEnumMembers(vea) {
+			// In the case of the multi-region enum, we also keep the logical descriptors
+			// sorted. Validate that's the case.
+			for i := 0; i < len(desc.EnumMembers)-1; i++ {
+				if desc.EnumMembers[i].LogicalRepresentation > desc.EnumMembers[i+1].LogicalRepresentation {
+					vea.Report(errors.AssertionFailedf(
+						"multi-region enum is out of order %q > %q",
+						desc.EnumMembers[i].LogicalRepresentation,
+						desc.EnumMembers[i+1].LogicalRepresentation,
+					))
+				}
+			}
+		}
+	case descpb.TypeDescriptor_ENUM:
+		vea.Report(desc.Privileges.Validate(desc.ID, privilege.Type))
+		if desc.RegionConfig != nil {
+			vea.Report(errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String()))
+		}
+		desc.validateEnumMembers(vea)
+	case descpb.TypeDescriptor_ALIAS:
+		if desc.RegionConfig != nil {
+			vea.Report(errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String()))
+		}
+		if desc.Alias == nil {
+			vea.Report(errors.AssertionFailedf("ALIAS type desc has nil alias type"))
+		}
+		if desc.GetArrayTypeID() != descpb.InvalidID {
+			vea.Report(errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.GetArrayTypeID()))
 		}
 	default:
-		if desc.RegionConfig != nil {
-			return errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String())
-		}
+		vea.Report(errors.AssertionFailedf("invalid type descriptor kind %s", desc.Kind.String()))
 	}
-
-	return nil
 }
 
-// Validate performs ValidateSelf followed by
-// cross reference checks on the descriptor.
-func (desc *Immutable) Validate(ctx context.Context, descGetter catalog.DescGetter) error {
-	if err := desc.ValidateSelf(ctx); err != nil {
-		return err
+// validateEnumMembers performs enum member checks.
+// Returns true iff the enums are sorted.
+func (desc *Immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulator) (isSorted bool) {
+	// All of the enum members should be in sorted order.
+	isSorted = sort.IsSorted(EnumMembers(desc.EnumMembers))
+	if !isSorted {
+		vea.Report(errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers))
 	}
-
-	// Don't validate cross-references for dropped descriptors.
-	if desc.Dropped() || descGetter == nil {
-		return nil
-	}
-
-	// Validate all cross references on the descriptor.
-
-	// Buffer all the requested requests and error checks together to run at once.
-	var checks []func(got catalog.Descriptor) error
-	var reqs []descpb.ID
-
-	// Validate the parentID.
-	reqs = append(reqs, desc.ParentID)
-	checks = append(checks, func(got catalog.Descriptor) error {
-		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
-			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+	// Ensure there are no duplicate enum physical and logical reps.
+	physicalMap := make(map[string]struct{}, len(desc.EnumMembers))
+	logicalMap := make(map[string]struct{}, len(desc.EnumMembers))
+	for _, member := range desc.EnumMembers {
+		// Ensure there are no duplicate enum physical reps.
+		_, duplicatePhysical := physicalMap[string(member.PhysicalRepresentation)]
+		if duplicatePhysical {
+			vea.Report(errors.AssertionFailedf("duplicate enum physical rep %v", member.PhysicalRepresentation))
 		}
-		return nil
-	})
+		physicalMap[string(member.PhysicalRepresentation)] = struct{}{}
+		// Ensure there are no duplicate enum logical reps.
+		_, duplicateLogical := logicalMap[member.LogicalRepresentation]
+		if duplicateLogical {
+			vea.Report(errors.AssertionFailedf("duplicate enum member %q", member.LogicalRepresentation))
+		}
+		logicalMap[member.LogicalRepresentation] = struct{}{}
+		// Ensure the sanity of enum capabilities and transition directions.
+		switch member.Capability {
+		case descpb.TypeDescriptor_EnumMember_READ_ONLY:
+			if member.Direction == descpb.TypeDescriptor_EnumMember_NONE {
+				vea.Report(errors.AssertionFailedf(
+					"read only capability member must have transition direction set"))
+			}
+		case descpb.TypeDescriptor_EnumMember_ALL:
+			if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+				vea.Report(errors.AssertionFailedf("public enum member can not have transition direction set"))
+			}
+		default:
+			vea.Report(errors.AssertionFailedf("invalid member capability %s", member.Capability))
+		}
+	}
+	return isSorted
+}
 
-	switch desc.Kind {
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		// Validate regions on the parent database and the type descriptor are
-		// consistent.
-		reqs = append(reqs, desc.ParentID)
-		checks = append(checks, func(got catalog.Descriptor) error {
-			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
-			if !isDB {
-				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
-			}
-			// Parent database must be a multi-region database if it includes a
-			// multi-region enum.
+// GetReferencedDescIDs returns the IDs of all descriptors referenced by
+// this descriptor, including itself.
+func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+	ids := catalog.MakeDescriptorIDSet(desc.GetReferencingDescriptorIDs()...)
+	ids.Add(desc.GetParentID())
+	if desc.GetParentSchemaID() != keys.PublicSchemaID {
+		ids.Add(desc.GetParentSchemaID())
+	}
+	for id := range desc.GetIDClosure() {
+		ids.Add(id)
+	}
+	return ids
+}
 
-			if !dbDesc.IsMultiRegion() {
-				return errors.AssertionFailedf("parent database is not a multi-region database")
-			}
-			dbRegions, err := dbDesc.RegionNames()
-			if err != nil {
-				return err
-			}
-
-			// Count the number of regions that aren't being dropped.
-			numRegions := 0
-			for _, member := range desc.EnumMembers {
-				if !isBeingDropped(&member) {
-					numRegions++
-				}
-			}
-			if numRegions != len(dbRegions) {
-				return errors.AssertionFailedf(
-					"unexpected number of regions on db desc: %d expected %d",
-					len(dbRegions), len(desc.EnumMembers))
-			}
-
-			regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
-			for _, region := range dbRegions {
-				regions[region] = struct{}{}
-			}
-
-			for _, member := range desc.EnumMembers {
-				if isBeingDropped(&member) {
-					continue
-				}
-				enumRegion := descpb.RegionName(member.LogicalRepresentation)
-				if _, ok := regions[enumRegion]; !ok {
-					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
-				}
-			}
-			return nil
-		})
-
-		// Validate the primary region on the parent database and the type
-		// descriptor is consistent.
-		reqs = append(reqs, desc.ParentID)
-		checks = append(checks, func(got catalog.Descriptor) error {
-			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
-			if !isDB {
-				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
-			}
-			dbPrimaryRegion, err := dbDesc.PrimaryRegionName()
-			if err != nil {
-				return err
-			}
-			primaryRegion, err := desc.PrimaryRegionName()
-			if err != nil {
-				return err
-			}
-			if dbPrimaryRegion != primaryRegion {
-				return errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
-					dbPrimaryRegion, primaryRegion)
-			}
-			return nil
-		})
+// ValidateCrossReferences performs cross reference checks on the type descriptor.
+func (desc *Immutable) ValidateCrossReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// Validate the parentID.
+	dbDesc, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
+	if err != nil {
+		vea.Report(err)
 	}
 
-	// Validate the parentSchemaID.
-	if desc.ParentSchemaID != keys.PublicSchemaID {
-		reqs = append(reqs, desc.ParentSchemaID)
-		checks = append(checks, func(got catalog.Descriptor) error {
-			if _, isSchema := got.(catalog.SchemaDescriptor); !isSchema {
-				return errors.AssertionFailedf("parentSchemaID %d does not exist", errors.Safe(desc.ParentSchemaID))
-			}
-			return nil
-		})
+	// Check that the parent schema exists.
+	if desc.GetParentSchemaID() != keys.PublicSchemaID {
+		schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
+		vea.Report(err)
+		if schemaDesc != nil && dbDesc != nil && schemaDesc.GetParentID() != dbDesc.GetID() {
+			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
+				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
+		}
 	}
 
-	switch desc.Kind {
+	if desc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM && dbDesc != nil {
+		desc.validateMultiRegion(dbDesc, vea)
+	}
+
+	// Validate that the referenced types exist.
+	switch desc.GetKind() {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Ensure that the referenced array type exists.
-		reqs = append(reqs, desc.ArrayTypeID)
-		checks = append(checks, func(got catalog.Descriptor) error {
-			if _, isType := got.(catalog.TypeDescriptor); !isType {
-				return errors.AssertionFailedf("arrayTypeID %d does not exist for %q", errors.Safe(desc.ArrayTypeID), desc.Kind.String())
-			}
-			return nil
-		})
-	case descpb.TypeDescriptor_ALIAS:
-		if desc.ArrayTypeID != descpb.InvalidID {
-			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
+		if _, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
+			vea.Report(errors.Wrapf(err, "arrayTypeID %d does not exist for %q", desc.GetArrayTypeID(), desc.GetKind()))
 		}
-	default:
-		return errors.New("unknown type descriptor type")
+	case descpb.TypeDescriptor_ALIAS:
+		if desc.GetAlias().UserDefined() {
+			aliasedID := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
+			if _, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
+				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
+			}
+		}
 	}
 
 	// Validate that all of the referencing descriptors exist.
-	tableExists := func(id descpb.ID) func(got catalog.Descriptor) error {
-		return func(got catalog.Descriptor) error {
-			tableDesc, isTable := got.(catalog.TableDescriptor)
-			if !isTable {
-				return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
-			}
-			if tableDesc.Dropped() {
-				return errors.AssertionFailedf(
-					"referencing descriptor %d was dropped without dependency unlinking", id)
-			}
-			return nil
+	for _, id := range desc.GetReferencingDescriptorIDs() {
+		tableDesc, err := vdg.GetTableDescriptor(id)
+		if err != nil {
+			vea.Report(err)
+			continue
+		}
+		if tableDesc.Dropped() {
+			vea.Report(errors.AssertionFailedf(
+				"referencing table %d was dropped without dependency unlinking", id))
 		}
 	}
-	if !desc.Dropped() {
-		for _, id := range desc.ReferencingDescriptorIDs {
-			reqs = append(reqs, id)
-			checks = append(checks, tableExists(id))
-		}
-	}
-
-	descs, err := catalog.GetDescs(ctx, descGetter, reqs)
-	if err != nil {
-		return err
-	}
-
-	// For each result in the batch, apply the corresponding check.
-	for i := range checks {
-		if err := checks[i](descs[i]); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
-// ValidateTxnCommit punts to Validate.
-func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
-	return desc.Validate(ctx, descGetter)
+func (desc *Immutable) validateMultiRegion(
+	dbDesc catalog.DatabaseDescriptor, vea catalog.ValidationErrorAccumulator,
+) {
+	// Parent database must be a multi-region database if it includes a
+	// multi-region enum.
+	if !dbDesc.IsMultiRegion() {
+		vea.Report(errors.AssertionFailedf("parent database is not a multi-region database"))
+		return
+	}
+
+	dbRegions, err := dbDesc.RegionNames()
+	if err != nil {
+		vea.Report(err)
+		return
+	}
+
+	// Count the number of regions that aren't being dropped.
+	numRegions := 0
+	for _, member := range desc.EnumMembers {
+		if !isBeingDropped(&member) {
+			numRegions++
+		}
+	}
+	if numRegions != len(dbRegions) {
+		vea.Report(errors.AssertionFailedf(
+			"unexpected number of regions on db desc: %d expected %d",
+			len(dbRegions), len(desc.EnumMembers)))
+	}
+
+	regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
+	for _, region := range dbRegions {
+		regions[region] = struct{}{}
+	}
+
+	for _, member := range desc.EnumMembers {
+		if isBeingDropped(&member) {
+			continue
+		}
+		enumRegion := descpb.RegionName(member.LogicalRepresentation)
+		if _, ok := regions[enumRegion]; !ok {
+			vea.Report(errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion))
+		}
+	}
+
+	dbPrimaryRegion, err := dbDesc.PrimaryRegionName()
+	if err != nil {
+		vea.Report(err)
+	}
+	primaryRegion, err := desc.PrimaryRegionName()
+	if err != nil {
+		vea.Report(err)
+	}
+	if dbPrimaryRegion != primaryRegion {
+		vea.Report(errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
+			dbPrimaryRegion, primaryRegion))
+	}
+}
+
+// ValidateTxnCommit implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateTxnCommit(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+	// No-op.
 }
 
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.

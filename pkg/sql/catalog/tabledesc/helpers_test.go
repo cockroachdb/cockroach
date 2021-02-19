@@ -11,29 +11,9 @@
 package tabledesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
-
-func ValidateTable(ctx context.Context, immI catalog.TableDescriptor) error {
-	imm, ok := immI.(*immutable)
-	if !ok {
-		return errors.Errorf("expected immutable descriptor")
-	}
-	return imm.ValidateSelf(ctx)
-}
-
-func ValidateCrossReferences(
-	ctx context.Context, dg catalog.DescGetter, immI catalog.TableDescriptor,
-) error {
-	imm, ok := immI.(*immutable)
-	if !ok {
-		return errors.Errorf("expected immutable descriptor")
-	}
-	return imm.validateCrossReferences(ctx, dg)
-}
 
 func ValidatePartitioning(immI catalog.TableDescriptor) error {
 	imm, ok := immI.(*immutable)

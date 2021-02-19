@@ -929,11 +929,6 @@ type ExecutorTestingKnobs struct {
 	// a given table id.
 	RunAfterSCJobsCacheLookup func(*jobs.Job)
 
-	// TestingDescriptorValidation dictates if stronger descriptor validation
-	// should be performed (typically turned on during tests only to guard against
-	// wild descriptors which are corrupted due to bugs).
-	TestingDescriptorValidation bool
-
 	// TestingSaveFlows, if set, will be called with the given stmt. The resulting
 	// function will be called with the physical plan of that statement's main
 	// query (i.e. no subqueries). The physical plan is only safe for use for the

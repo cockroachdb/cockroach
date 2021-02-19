@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -281,7 +280,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-					info, infoErr := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+					info, infoErr := n.tableDesc.GetConstraintInfo()
 					if infoErr != nil {
 						err = infoErr
 						return
@@ -663,14 +662,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
-			if err := n.tableDesc.Validate(
-				params.ctx, catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec),
-			); err != nil {
+
+			if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
 				return err
 			}
 
 		case *tree.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -692,14 +690,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			if err := n.tableDesc.Validate(
-				params.ctx, catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec),
-			); err != nil {
+			if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
 				return err
 			}
 
 		case *tree.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -889,7 +885,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -1106,7 +1102,7 @@ func applyColumnMutation(
 			}
 		}
 
-		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		info, err := tableDesc.GetConstraintInfo()
 		if err != nil {
 			return err
 		}
@@ -1141,7 +1137,7 @@ func applyColumnMutation(
 					"constraint in the middle of being dropped")
 			}
 		}
-		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		info, err := tableDesc.GetConstraintInfo()
 		if err != nil {
 			return err
 		}
