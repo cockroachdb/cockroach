@@ -363,28 +363,69 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		if !enumHasNonPublic(&typeDesc.Immutable) {
 			return nil
 		}
-		// First, deal with all members that we initially hoped to remove but
+
+		// First, we deal with cleanup specific to the multi-region enum.
+		// TODO(arul): This can go away once we stop copying regions on the dataabse
+		// descriptor.
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			for _, member := range typeDesc.EnumMembers {
+				if t.isTransitioningInCurrentJob(&member) {
+					_, dbDesc, err := descsCol.GetMutableDatabaseByID(
+						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+					if err != nil {
+						return err
+					}
+
+					// If the enum member was being removed, we need to add it back to the
+					// database region config.
+					if enumMemberIsRemoving(&member) {
+						err = addRegionToRegionConfig(dbDesc, descpb.RegionName(member.LogicalRepresentation))
+						if err != nil {
+							return err
+						}
+						if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
+							return err
+						}
+					}
+
+					// If the enum member was being added, we must remove it from the
+					// database region config.
+					if enumMemberIsAdding(&member) {
+						idx := 0
+						found := false
+						for i, region := range dbDesc.RegionConfig.Regions {
+							if region.Name == descpb.RegionName(member.LogicalRepresentation) {
+								idx = i
+								found = true
+								break
+							}
+						}
+
+						if !found {
+							// This shouldn't happen and is simply a sanity check to ensure the
+							// database descriptor regions and multi-region enum regions are
+							// in sync.
+							return errors.AssertionFailedf(
+								"expected to find region on database %d during cleanup", dbDesc.GetID(),
+							)
+						}
+						dbDesc.RegionConfig.Regions = append(dbDesc.RegionConfig.Regions[:idx],
+							dbDesc.RegionConfig.Regions[idx+1:]...)
+						if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
+		// Next, deal with all members that we initially hoped to remove but
 		// now need to be promoted back to writable.
 		for i := range typeDesc.EnumMembers {
 			member := &typeDesc.EnumMembers[i]
 			if t.isTransitioningInCurrentJob(member) && enumMemberIsRemoving(member) {
 				member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 				member.Direction = descpb.TypeDescriptor_EnumMember_NONE
-
-				if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-					_, dbDesc, err := descsCol.GetMutableDatabaseByID(
-						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
-					if err != nil {
-						return err
-					}
-					err = addRegionToRegionConfig(dbDesc, descpb.RegionName(member.LogicalRepresentation))
-					if err != nil {
-						return err
-					}
-					if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
-						return err
-					}
-				}
 			}
 		}
 		// Now deal with all members that we initially hoped to add but now need
