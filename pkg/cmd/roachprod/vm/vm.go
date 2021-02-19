@@ -89,6 +89,19 @@ func (vm *VM) Locality() string {
 	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
 }
 
+// ZoneEntry returns a line representing the VMs DNS zone entry
+func (vm VM) ZoneEntry() (string, error) {
+	if len(vm.Name) >= 60 {
+		return "", errors.Errorf("Name too long: %s", vm.Name)
+	}
+	if vm.PublicIP == "" {
+		return "", errors.Errorf("Missing IP address: %s", vm.Name)
+	}
+	// TODO(rail): We should probably skip local VMs too. They add a bunch of
+	// entries for localhost.roachprod.crdb.io pointing to 127.0.0.1.
+	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
+}
+
 // List represents a list of VMs.
 type List []VM
 

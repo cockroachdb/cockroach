@@ -472,7 +472,12 @@ func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error 
 		}
 	}
 
-	for _, resolvedSpan := range ca.spansToFlush {
+	// Iterate the spans in reverse so that if there are a very large number of
+	// spans which we're propagating upwards get processed in newest to oldest
+	// order. This will ultimately improve the efficiency of the checkpointing
+	// code which wants to checkpoint whenever the frontier changes.
+	for i := len(ca.spansToFlush) - 1; i >= 0; i-- {
+		resolvedSpan = ca.spansToFlush[i]
 		resolvedBytes, err := protoutil.Marshal(resolvedSpan)
 		if err != nil {
 			return err
