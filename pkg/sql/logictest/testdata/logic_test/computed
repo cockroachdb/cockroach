@@ -1,3 +1,6 @@
+# Note: this file does not contain tests for virtual computed columns; those
+# are in a separate test file.
+
 statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
@@ -267,26 +270,18 @@ DROP TABLE x
 # statement ok
 # DROP TABLE x
 
-statement error use AS \( <expr> \) STORED
+statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
   a INT AS 3 STORED
 )
 
-statement error use AS \( <expr> \) STORED
+statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
   a INT AS (3)
 )
 
-statement error unimplemented: virtual computed columns
-CREATE TABLE y (
-  a INT AS (3) VIRTUAL
-)
-
 statement ok
 CREATE TABLE tmp (x INT)
-
-statement error unimplemented: virtual computed columns
-ALTER TABLE tmp ADD COLUMN y INT AS (x+1) VIRTUAL
 
 statement ok
 DROP TABLE tmp

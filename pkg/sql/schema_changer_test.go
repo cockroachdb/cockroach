@@ -4571,7 +4571,6 @@ func TestNoBackfillForVirtualColumn(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1), (2), (3)`)
-	sqlDB.Exec(t, `SET experimental_enable_virtual_columns = true`)
 
 	sawBackfill = false
 	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN b INT AS (a + 5) VIRTUAL`)

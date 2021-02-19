@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -435,7 +434,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		// information over.
 		if sp := tracing.SpanFromContext(ctx); sp != nil {
 			sp.SetSpanStats(&execinfrapb.ComponentStats{
-				Component: execinfrapb.FlowComponentID(roachpb.NodeID(f.NodeID.SQLInstanceID()), f.FlowCtx.ID),
+				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage: optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
 				},

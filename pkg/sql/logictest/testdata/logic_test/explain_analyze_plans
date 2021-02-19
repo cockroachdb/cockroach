@@ -69,17 +69,20 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • group
+│ cluster nodes: <hidden>
 │ actual row count: 5
 │ group by: k
 │ ordered: +k
 │
 └── • merge join
+    │ cluster nodes: <hidden>
     │ actual row count: 5
     │ equality: (k) = (k)
     │ left cols are key
     │ right cols are key
     │
     ├── • scan
+    │     cluster nodes: <hidden>
     │     actual row count: 5
     │     KV rows read: 5
     │     KV bytes read: 40 B
@@ -88,6 +91,7 @@ network usage: <hidden>
     │     spans: FULL SCAN
     │
     └── • scan
+          cluster nodes: <hidden>
           actual row count: 5
           KV rows read: 5
           KV bytes read: 40 B
@@ -110,19 +114,23 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • sort
+│ cluster nodes: <hidden>
 │ actual row count: 5
 │ order: +w
 │
 └── • distinct
+    │ cluster nodes: <hidden>
     │ actual row count: 5
     │ distinct on: w
     │
     └── • hash join
+        │ cluster nodes: <hidden>
         │ actual row count: 5
         │ equality: (k) = (w)
         │ left cols are key
         │
         ├── • scan
+        │     cluster nodes: <hidden>
         │     actual row count: 5
         │     KV rows read: 5
         │     KV bytes read: 40 B
@@ -131,6 +139,7 @@ network usage: <hidden>
         │     spans: FULL SCAN
         │
         └── • scan
+              cluster nodes: <hidden>
               actual row count: 5
               KV rows read: 5
               KV bytes read: 40 B
@@ -153,12 +162,15 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • cross join
+│ cluster nodes: <hidden>
 │ actual row count: 25
 │
 ├── • ordinality
+│   │ cluster nodes: <hidden>
 │   │ actual row count: 5
 │   │
 │   └── • scan
+│         cluster nodes: <hidden>
 │         actual row count: 5
 │         KV rows read: 5
 │         KV bytes read: 40 B
@@ -167,9 +179,11 @@ network usage: <hidden>
 │         spans: FULL SCAN
 │
 └── • ordinality
+    │ cluster nodes: <hidden>
     │ actual row count: 5
     │
     └── • scan
+          cluster nodes: <hidden>
           actual row count: 5
           KV rows read: 5
           KV bytes read: 40 B
@@ -212,9 +226,11 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • window
+│ cluster nodes: <hidden>
 │ actual row count: 5
 │
 └── • scan
+      cluster nodes: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -237,6 +253,7 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 ·
 • scan
+  cluster nodes: <hidden>
   actual row count: 0
   KV rows read: 0
   KV bytes read: 0 B
@@ -265,6 +282,7 @@ network usage: <hidden>
 • root
 │
 ├── • insert
+│   │ cluster nodes: <hidden>
 │   │ actual row count: 1
 │   │ into: child(c, p)
 │   │
@@ -280,9 +298,11 @@ network usage: <hidden>
 │   │ exec mode: one row
 │   │
 │   └── • group (scalar)
+│       │ cluster nodes: <hidden>
 │       │ actual row count: 1
 │       │
 │       └── • scan
+│             cluster nodes: <hidden>
 │             actual row count: 1
 │             KV rows read: 1
 │             KV bytes read: 8 B
@@ -294,9 +314,11 @@ network usage: <hidden>
 └── • constraint-check
     │
     └── • error if rows
+        │ cluster nodes: <hidden>
         │ actual row count: 0
         │
         └── • lookup join (anti)
+            │ cluster nodes: <hidden>
             │ actual row count: 0
             │ KV rows read: 1
             │ KV bytes read: 8 B
@@ -305,10 +327,12 @@ network usage: <hidden>
             │ equality cols are key
             │
             └── • filter
+                │ cluster nodes: <hidden>
                 │ actual row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
+                      cluster nodes: <hidden>
                       actual row count: 1
                       label: buffer 1
 ·

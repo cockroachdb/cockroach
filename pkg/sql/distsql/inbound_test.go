@@ -92,6 +92,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 			NodeDialer: nodedialer.New(rpcContext, staticAddressResolver(ln.Addr())),
 			Stopper:    outboxStopper,
 		},
+		NodeID: base.TestingIDContainer,
 	}
 
 	streamID := execinfrapb.StreamID(1)

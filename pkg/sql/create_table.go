@@ -1704,9 +1704,6 @@ func NewTableDesc(
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
 			if d.IsVirtual() {
-				if !sessionData.VirtualColumnsEnabled {
-					return nil, unimplemented.NewWithIssue(57608, "virtual computed columns")
-				}
 				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.VirtualComputedColumns) {
 					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 						"version %v must be finalized to use virtual columns",

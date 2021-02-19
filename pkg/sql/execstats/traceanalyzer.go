@@ -13,6 +13,7 @@ package execstats
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -20,11 +21,13 @@ import (
 )
 
 type processorStats struct {
+	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
 	nodeID roachpb.NodeID
 	stats  *execinfrapb.ComponentStats
 }
 
 type streamStats struct {
+	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
 	originNodeID      roachpb.NodeID
 	destinationNodeID roachpb.NodeID
 	stats             *execinfrapb.ComponentStats
@@ -51,7 +54,7 @@ type FlowsMetadata struct {
 	// flowStats maps a node ID to flow level stats extracted from a trace. Note
 	// that the key is not a FlowID because the same FlowID is used across
 	// nodes.
-	flowStats map[roachpb.NodeID]*flowStats
+	flowStats map[base.SQLInstanceID]*flowStats
 }
 
 // NewFlowsMetadata creates a FlowsMetadata for the given physical plan
@@ -60,12 +63,12 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 	a := &FlowsMetadata{
 		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
 		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
-		flowStats:      make(map[roachpb.NodeID]*flowStats),
+		flowStats:      make(map[base.SQLInstanceID]*flowStats),
 	}
 
 	// Annotate the maps with physical plan information.
 	for nodeID, flow := range flows {
-		a.flowStats[nodeID] = &flowStats{}
+		a.flowStats[base.SQLInstanceID(nodeID)] = &flowStats{}
 		for _, proc := range flow.Processors {
 			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
 			for _, output := range proc.Output {
@@ -87,13 +90,13 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 // TODO(asubiotto): Flatten this struct, we're currently allocating a map per
 //  stat.
 type NodeLevelStats struct {
-	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
-	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
-	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
-	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
-	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
-	NetworkMessagesGroupedByNode  map[roachpb.NodeID]int64
-	ContentionTimeGroupedByNode   map[roachpb.NodeID]time.Duration
+	NetworkBytesSentGroupedByNode map[base.SQLInstanceID]int64
+	MaxMemoryUsageGroupedByNode   map[base.SQLInstanceID]int64
+	KVBytesReadGroupedByNode      map[base.SQLInstanceID]int64
+	KVRowsReadGroupedByNode       map[base.SQLInstanceID]int64
+	KVTimeGroupedByNode           map[base.SQLInstanceID]time.Duration
+	NetworkMessagesGroupedByNode  map[base.SQLInstanceID]int64
+	ContentionTimeGroupedByNode   map[base.SQLInstanceID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
@@ -162,12 +165,12 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 			streamStats.stats = componentStats
 
 		case execinfrapb.ComponentID_FLOW:
-			flowStats := a.flowStats[component.NodeID]
+			flowStats := a.flowStats[component.SQLInstanceID]
 			if flowStats == nil {
 				return errors.Errorf(
 					"trace has span for flow %s on node %s but the flow does not exist in the physical plan",
 					component.FlowID,
-					component.NodeID,
+					component.SQLInstanceID,
 				)
 			}
 			flowStats.stats = append(flowStats.stats, componentStats)
@@ -184,13 +187,13 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 func (a *TraceAnalyzer) ProcessStats() error {
 	// Process node level stats.
 	a.nodeLevelStats = NodeLevelStats{
-		NetworkBytesSentGroupedByNode: make(map[roachpb.NodeID]int64),
-		MaxMemoryUsageGroupedByNode:   make(map[roachpb.NodeID]int64),
-		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
-		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
-		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
-		NetworkMessagesGroupedByNode:  make(map[roachpb.NodeID]int64),
-		ContentionTimeGroupedByNode:   make(map[roachpb.NodeID]time.Duration),
+		NetworkBytesSentGroupedByNode: make(map[base.SQLInstanceID]int64),
+		MaxMemoryUsageGroupedByNode:   make(map[base.SQLInstanceID]int64),
+		KVBytesReadGroupedByNode:      make(map[base.SQLInstanceID]int64),
+		KVRowsReadGroupedByNode:       make(map[base.SQLInstanceID]int64),
+		KVTimeGroupedByNode:           make(map[base.SQLInstanceID]time.Duration),
+		NetworkMessagesGroupedByNode:  make(map[base.SQLInstanceID]int64),
+		ContentionTimeGroupedByNode:   make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
 
@@ -199,10 +202,11 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		a.nodeLevelStats.KVBytesReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.BytesRead.Value())
-		a.nodeLevelStats.KVRowsReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.TuplesRead.Value())
-		a.nodeLevelStats.KVTimeGroupedByNode[stats.nodeID] += stats.stats.KV.KVTime.Value()
-		a.nodeLevelStats.ContentionTimeGroupedByNode[stats.nodeID] += stats.stats.KV.ContentionTime.Value()
+		instanceID := base.SQLInstanceID(stats.nodeID)
+		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.stats.KV.BytesRead.Value())
+		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.stats.KV.TuplesRead.Value())
+		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.stats.KV.KVTime.Value()
+		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.stats.KV.ContentionTime.Value()
 	}
 
 	// Process streamStats.
@@ -210,13 +214,14 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
+		originInstanceID := base.SQLInstanceID(stats.originNodeID)
 
 		// Set networkBytesSentGroupedByNode.
 		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating network bytes sent"))
 		} else {
-			a.nodeLevelStats.NetworkBytesSentGroupedByNode[stats.originNodeID] += bytes
+			a.nodeLevelStats.NetworkBytesSentGroupedByNode[originInstanceID] += bytes
 		}
 
 		// The row execution flow attaches this stat to a stream stat with the
@@ -228,8 +233,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		// removed, getting maxMemUsage from streamStats should be removed as
 		// well.
 		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
-			if memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] {
-				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] = memUsage
+			memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value())
+			if memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] {
+				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] = memUsage
 			}
 		}
 
@@ -237,12 +243,12 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
 		} else {
-			a.nodeLevelStats.NetworkMessagesGroupedByNode[stats.originNodeID] += numMessages
+			a.nodeLevelStats.NetworkMessagesGroupedByNode[originInstanceID] += numMessages
 		}
 	}
 
 	// Process flowStats.
-	for nodeID, stats := range a.flowStats {
+	for instanceID, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
@@ -251,8 +257,8 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		// span, so we need to check flow stats for max memory usage.
 		for _, v := range stats.stats {
 			if v.FlowStats.MaxMemUsage.HasValue() {
-				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] {
-					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] = memUsage
+				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] {
+					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] = memUsage
 				}
 			}
 		}

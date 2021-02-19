@@ -331,6 +331,9 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
+		if len(s.Nodes) > 0 {
+			e.ob.AddNonDeterministicField("cluster nodes", strings.Join(s.Nodes, ", "))
+		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
 		}

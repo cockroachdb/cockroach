@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -26,29 +26,35 @@ import (
 )
 
 // ProcessorComponentID returns a ComponentID for the given processor in a flow.
-func ProcessorComponentID(flowID FlowID, processorID int32) ComponentID {
+func ProcessorComponentID(
+	instanceID base.SQLInstanceID, flowID FlowID, processorID int32,
+) ComponentID {
 	return ComponentID{
-		FlowID: flowID,
-		Type:   ComponentID_PROCESSOR,
-		ID:     processorID,
+		FlowID:        flowID,
+		Type:          ComponentID_PROCESSOR,
+		ID:            processorID,
+		SQLInstanceID: instanceID,
 	}
 }
 
 // StreamComponentID returns a ComponentID for the given stream in a flow.
-func StreamComponentID(flowID FlowID, streamID StreamID) ComponentID {
+func StreamComponentID(
+	originInstanceID base.SQLInstanceID, flowID FlowID, streamID StreamID,
+) ComponentID {
 	return ComponentID{
-		FlowID: flowID,
-		Type:   ComponentID_STREAM,
-		ID:     int32(streamID),
+		FlowID:        flowID,
+		Type:          ComponentID_STREAM,
+		ID:            int32(streamID),
+		SQLInstanceID: originInstanceID,
 	}
 }
 
 // FlowComponentID returns a ComponentID for the given flow.
-func FlowComponentID(nodeID roachpb.NodeID, flowID FlowID) ComponentID {
+func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID) ComponentID {
 	return ComponentID{
-		FlowID: flowID,
-		Type:   ComponentID_FLOW,
-		NodeID: nodeID,
+		FlowID:        flowID,
+		Type:          ComponentID_FLOW,
+		SQLInstanceID: instanceID,
 	}
 }
 

@@ -1200,23 +1200,6 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// CockroachDB extension.
-	`experimental_enable_virtual_columns`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_virtual_columns`),
-		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar(`experimental_enable_virtual_columns`, s)
-			if err != nil {
-				return err
-			}
-			m.SetVirtualColumnsEnabled(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.VirtualColumnsEnabled)
-		},
-		GlobalDefault: globalFalse,
-	},
-
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {
