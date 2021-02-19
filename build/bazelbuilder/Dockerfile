@@ -6,7 +6,6 @@ RUN apt-get update \
     autoconf \
     bison \
     ca-certificates \
-    clang-10 \
     cmake \
     curl \
     flex \
@@ -14,9 +13,8 @@ RUN apt-get update \
     gnupg2 \
     libncurses-dev \
     make \
+    python3 \
     unzip \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
  && apt-get clean
 
 # We need a newer version of cmake.
