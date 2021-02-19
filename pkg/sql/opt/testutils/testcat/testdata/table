@@ -154,10 +154,18 @@ TABLE part2
       ├── c int not null
       ├── a string not null
       ├── b string not null
-      └── partition by list prefixes
-           ├── (1)
-           ├── (3)
-           └── (4)
+      ├── partition by list prefixes
+      │    ├── (1)
+      │    ├── (3)
+      │    └── (4)
+      └── partitions
+           ├── pi1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── pi2
+                └── partition by list prefixes
+                     ├── (3)
+                     └── (4)
 
 exec-ddl
 CREATE TABLE inv (

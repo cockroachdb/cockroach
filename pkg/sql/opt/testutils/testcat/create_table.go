@@ -12,6 +12,7 @@ package testcat
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -603,10 +605,6 @@ func (tt *Table) addIndexWithVersion(
 		version:  version,
 	}
 
-	if def.PartitionByIndex != nil {
-		idx.partitionBy = def.PartitionByIndex.PartitionBy
-	}
-
 	// Look for name suffixes indicating this is a mutation index.
 	if name, ok := extractWriteOnlyIndex(def); ok {
 		idx.IdxName = name
@@ -763,6 +761,39 @@ func (tt *Table) addIndexWithVersion(
 	// Add partial index predicate.
 	if def.Predicate != nil {
 		idx.predicate = tree.Serialize(def.Predicate)
+	}
+
+	// Add partitions.
+	if def.PartitionByIndex != nil {
+		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext()
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+		idx.partitionBy = def.PartitionByIndex.PartitionBy
+		if len(idx.partitionBy.List) > 0 {
+			idx.partitions = make([]Partition, len(idx.partitionBy.List))
+			for i := range idx.partitionBy.Fields {
+				if i >= len(idx.Columns) || idx.partitionBy.Fields[i] != idx.Columns[i].ColName() {
+					panic("partition by columns must be a prefix of the index columns")
+				}
+			}
+			for i := range idx.partitionBy.List {
+				p := &idx.partitionBy.List[i]
+				idx.partitions[i] = Partition{
+					name:   string(p.Name),
+					zone:   &zonepb.ZoneConfig{},
+					datums: make([]tree.Datums, 0, len(p.Exprs)),
+				}
+
+				// Get the partition values.
+				for _, e := range p.Exprs {
+					d := idx.partitionByListExprToDatums(ctx, &evalCtx, &semaCtx, e)
+					if d != nil {
+						idx.partitions[i].datums = append(idx.partitions[i].datums, d)
+					}
+				}
+			}
+		}
 	}
 
 	idx.ordinal = len(tt.Indexes)

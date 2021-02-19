@@ -257,6 +257,14 @@ type Index interface {
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion
+
+	// PartitionCount returns the number of PARTITION BY LIST partitions defined
+	// on this index.
+	PartitionCount() int
+
+	// Partition returns the ith PARTITION BY LIST partition within the index
+	// definition, where i < PartitionCount.
+	Partition(i int) Partition
 }
 
 // IndexColumn describes a single column that is part of an index definition.
@@ -274,4 +282,38 @@ type IndexColumn struct {
 // the given ordinal position is a mutation index.
 func IsMutationIndex(table Table, ord IndexOrdinal) bool {
 	return ord >= table.IndexCount()
+}
+
+// Partition is an interface to a PARTITION BY LIST partition of an index. The
+// intended use is to support planning of scans or lookup joins that will use
+// locality optimized search. Locality optimized search can be planned when the
+// maximum number of rows returned by a scan or lookup join is known, but the
+// specific region in which the rows are located is unknown. In this case, the
+// optimizer will plan a scan or lookup join in which local nodes (i.e., nodes
+// in the gateway region) are searched for matching rows before remote nodes, in
+// the hope that the execution engine can avoid visiting remote nodes.
+type Partition interface {
+	// Name is the name of this partition.
+	Name() string
+
+	// Zone returns the zone which constrains placement of this partition's
+	// replicas. If this partition does not have an associated zone, the returned
+	// zone is empty, but non-nil.
+	Zone() Zone
+
+	// PartitionByListPrefixes returns the values of this partition.
+	//
+	// Example:
+	//
+	// CREATE INDEX idx ON t(region,subregion,val) PARTITION BY LIST (region,subregion) (
+	//     PARTITION westcoast VALUES IN (('us', 'seattle'), ('us', 'cali')),
+	//     PARTITION us VALUES IN (('us', DEFAULT)),
+	//     PARTITION eu VALUES IN (('eu', DEFAULT)),
+	//     PARTITION default VALUES IN (DEFAULT)
+	// );
+	//
+	// If this is the westcoast partition, PartitionByListPrefixes() returns
+	//  ('us', 'seattle'),
+	//  ('us', 'cali')
+	PartitionByListPrefixes() []tree.Datums
 }
