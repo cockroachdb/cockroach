@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func (s *Store) Transport() *RaftTransport {
@@ -282,6 +283,24 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftLastIndexLocked()
+}
+
+// CheckAppliedState determines if the followers have the same applied
+// state as the leader. If the state is not the same an error is returned.
+func (r *Replica) CheckAppliedState() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	minIndex := r.mu.internalRaftGroup.BasicStatus().Applied
+	var err error
+	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
+		_, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
+		if !ok {
+			err = errors.Errorf("Replica %s not found", id)
+		} else if progress.Match != minIndex {
+			err = errors.Errorf("Replica %s is behind leader expected %d but was %d", id, minIndex, progress.Match)
+		}
+	})
+	return err
 }
 
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
