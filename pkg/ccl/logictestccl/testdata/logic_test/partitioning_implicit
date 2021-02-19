@@ -551,6 +551,9 @@ CREATE TABLE public.t (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+statement error changing partition of table with PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION BY NOTHING
+
 subtest unique-checks
 
 # We should plan uniqueness checks for all implicitly partitioned unique indexes.

@@ -1635,6 +1635,9 @@ func NewTableDesc(
 					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
 				)
 			}
+			if err := checkClusterSupportsPartitionByAll(evalCtx); err != nil {
+				return nil, err
+			}
 			desc.PartitionAllBy = true
 			partitionAllBy = n.PartitionByTable.PartitionBy
 		}
@@ -2735,4 +2738,14 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
 	return c
+}
+
+func checkClusterSupportsPartitionByAll(evalCtx *tree.EvalContext) error {
+	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			`cannot use PARTITION ALL BY until the cluster upgrade is finalized`,
+		)
+	}
+	return nil
 }

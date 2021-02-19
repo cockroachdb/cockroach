@@ -321,6 +321,9 @@ func (p *planner) createRegionConfig(
 	if primaryRegion == "" && len(regions) == 0 {
 		return nil, nil
 	}
+	if err := checkClusterSupportsMultiRegion(p.EvalContext()); err != nil {
+		return nil, err
+	}
 	var regionConfig descpb.DatabaseDescriptor_RegionConfig
 	var err error
 	regionConfig.SurvivalGoal, err = translateSurvivalGoal(survivalGoal)
@@ -397,4 +400,14 @@ func (p *planner) createRegionConfig(
 		return nil, err
 	}
 	return &regionConfig, nil
+}
+
+func checkClusterSupportsMultiRegion(evalCtx *tree.EvalContext) error {
+	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			`cannot add regions to a database until the cluster upgrade is finalized`,
+		)
+	}
+	return nil
 }
