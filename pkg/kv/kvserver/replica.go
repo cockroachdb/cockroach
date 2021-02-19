@@ -1243,6 +1243,7 @@ func (r *Replica) checkExecutionCanProceed(
 			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
 				return st, err
 			}
+			err = nil // ignoring error
 		}
 	}
 
