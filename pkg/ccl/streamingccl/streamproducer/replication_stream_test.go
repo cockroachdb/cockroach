@@ -233,7 +233,8 @@ func newReplicationHelper(t *testing.T) (*replicationHelper, func()) {
 	_, err := db.Exec(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
+SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
+SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = true
 `)
 	require.NoError(t, err)
 
@@ -285,7 +286,9 @@ INSERT INTO d.t2 VALUES (2);
 
 	t.Run("cannot-stream-tenant-from-tenant", func(t *testing.T) {
 		// Cannot replicate stream from inside the tenant
-		_, err := h.tenant.sql.DB.ExecContext(context.Background(), streamTenantQuery)
+		_, err := h.tenant.sql.DB.ExecContext(context.Background(), `SET enable_experimental_stream_replication = true`)
+		require.NoError(t, err)
+		_, err = h.tenant.sql.DB.ExecContext(context.Background(), streamTenantQuery)
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})
 

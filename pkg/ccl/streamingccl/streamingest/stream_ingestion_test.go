@@ -100,6 +100,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	defer close(errCh)
 	_, err := conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
+	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
+	require.NoError(t, err)
 	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`, streamAddr)
 	go func() {
 		_, err := conn.Exec(query)
