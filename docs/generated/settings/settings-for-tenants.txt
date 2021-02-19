@@ -1,4 +1,5 @@
 Setting	Type	Default	Description
+bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
 cloudstorage.gs.default.key	string		if set, JSON key to use during Google Cloud Storage operations
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
@@ -52,7 +53,7 @@ server.oidc_authentication.client_secret	string		sets OIDC client secret (this f
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console (this feature is experimental)
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract) (this feature is experimental)
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve) (this feature is experimental)
-server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL (base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) (this feature is experimental)
+server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) (this feature is experimental)
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`) (this feature is experimental)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.remote_debugging.mode	string	local	set to enable remote debugging, localhost-only or disable (any, local, off)
@@ -68,7 +69,7 @@ sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to o
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
 sql.defaults.results_buffer.size	byte size	16 KiB	default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
-sql.defaults.serial_normalization	enumeration	rowid	default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2]
+sql.defaults.serial_normalization	enumeration	rowid	default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3]
 sql.distsql.max_running_flows	integer	500	maximum number of concurrent flows that can be run on a node
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.
 sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.
@@ -98,4 +99,4 @@ timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.lightstep.token	string		if set, traces go to Lightstep using this token
 trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set
-version	version	20.2-16	set the active cluster version in the format '<major>.<minor>'
+version	version	20.2-36	set the active cluster version in the format '<major>.<minor>'
