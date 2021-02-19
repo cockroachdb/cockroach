@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func (s *Store) Transport() *RaftTransport {
@@ -282,6 +283,18 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftLastIndexLocked()
+}
+
+// WithRaftGroupProgress calls internalRaftGroup.WithProgress on the replica while
+// holding the mu lock.
+func (r *Replica) WithRaftGroupProgress(
+	visitor func(id uint64, progressType raft.ProgressType, progress tracker.Progress),
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.internalRaftGroup.WithProgress(func(id uint64, progressType raft.ProgressType, progress tracker.Progress) {
+		visitor(id, progressType, progress)
+	})
 }
 
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
