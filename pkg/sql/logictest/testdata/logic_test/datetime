@@ -1703,3 +1703,56 @@ query TT
 SELECT 'infinity'::timestamp, '-infinity'::timestamptz
 ----
 294276-12-31 23:59:59.999999 +0000 +0000  -4713-11-24 00:00:00 +0000 +0000
+
+query T
+SELECT parse_timestamp('2020-01-02 01:02:03')
+----
+2020-01-02 01:02:03 +0000 +0000
+
+query error could not parse
+SELECT parse_timestamp('foo')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('now')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('tomorrow')
+
+# Verify that parse_timestamp can be used in computed column expressions.
+statement ok
+CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
+
+query error parse_timestamp\(\): relative timestamps are not supported
+INSERT INTO timestamps VALUES ('tomorrow')
+
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+SET TIME ZONE 'America/New_York'
+
+# Insert the same values again (stored columns are computed on insert).
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+RESET TIME ZONE
