@@ -1,0 +1,28 @@
+# LogicTest: local-mixed-20.2-21.1
+
+statement error cannot add regions to a database until the cluster upgrade is finalized
+CREATE DATABASE d PRIMARY REGION "us-west1"
+
+statement ok
+CREATE DATABASE d
+
+statement error cannot add region "us-east1" to database d\nHINT: you must add a PRIMARY REGION first using ALTER DATABASE d PRIMARY REGION "us-east1"
+ALTER DATABASE d ADD REGION "us-east1"
+
+statement error database has no regions to drop
+ALTER DATABASE d DROP REGION "us-east1"
+
+statement error cannot add regions to a database until the cluster upgrade is finalized
+ALTER DATABASE d PRIMARY REGION "us-east1"
+
+statement error  database must have associated regions before a survival goal can be set\nHINT: you must first add a primary region to the database using ALTER DATABASE d PRIMARY REGION <region_name>
+ALTER DATABASE d SURVIVE ZONE FAILURE
+
+statement error database test is not multi-region enabled, but table t has locality REGIONAL BY TABLE IN PRIMARY REGION set
+CREATE TABLE t () LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE TABLE t()
+
+statement error cannot alter a table's LOCALITY if its database is not multi-region enabled
+ALTER TABLE t SET LOCALITY REGIONAL BY ROW

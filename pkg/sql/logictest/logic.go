@@ -501,7 +501,7 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:                "local-mixed-20.2-20.1",
+		name:                "local-mixed-20.2-21.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",

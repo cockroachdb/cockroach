@@ -1,0 +1,19 @@
+# LogicTest: local-mixed-20.2-21.1
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY) PARTITION BY LIST (id) (
+  PARTITION one VALUES IN (1)
+)
+
+statement error cannot use implicit column partitioning until the cluster upgrade is finalized
+CREATE TABLE t2 (id INT PRIMARY KEY, b int) PARTITION BY LIST (b) (
+  PARTITION one VALUES IN (1)
+)
+
+statement error cannot use PARTITION ALL BY until the cluster upgrade is finalized
+CREATE TABLE t2 (id INT PRIMARY KEY, b int) PARTITION ALL BY LIST (b) (
+  PARTITION one VALUES IN (1)
+)
