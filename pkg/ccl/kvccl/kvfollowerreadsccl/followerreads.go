@@ -92,12 +92,6 @@ func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Dur
 	return getFollowerReadLag(st), nil
 }
 
-// batchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
-// requests that can be evaluated on a follower replica.
-func batchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
-	return ba.Txn != nil && !ba.IsLocking() && ba.IsAllTransactional()
-}
-
 // closedTimestampLikelySufficient determines if a request with a given required
 // frontier timestamp is likely to be below a follower's closed timestamp and
 // serviceable as a follower read were the request to be sent to a follower
@@ -131,7 +125,7 @@ func canSendToFollower(
 	ba roachpb.BatchRequest,
 ) bool {
 	return checkFollowerReadsEnabled(clusterID, st) &&
-		batchCanBeEvaluatedOnFollower(ba) &&
+		kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
 		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.Txn.RequiredFrontier())
 }
 

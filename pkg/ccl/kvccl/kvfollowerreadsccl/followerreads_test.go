@@ -122,6 +122,16 @@ func TestCanSendToFollower(t *testing.T) {
 			exp:  false,
 		},
 		{
+			name: "stale heartbeat txn",
+			ba:   batch(txn(stale), &roachpb.HeartbeatTxnRequest{}),
+			exp:  false,
+		},
+		{
+			name: "stale end txn",
+			ba:   batch(txn(stale), &roachpb.EndTxnRequest{}),
+			exp:  false,
+		},
+		{
 			name: "stale non-txn request",
 			ba:   batch(txn(stale), &roachpb.QueryTxnRequest{}),
 			exp:  false,
@@ -167,6 +177,18 @@ func TestCanSendToFollower(t *testing.T) {
 		{
 			name:     "stale write, global reads policy",
 			ba:       batch(txn(stale), &roachpb.PutRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale heartbeat txn, global reads policy",
+			ba:       batch(txn(stale), &roachpb.HeartbeatTxnRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale end txn, global reads policy",
+			ba:       batch(txn(stale), &roachpb.EndTxnRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},

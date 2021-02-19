@@ -151,6 +151,10 @@ func (r *Replica) evalAndPropose(
 
 	// Attach information about the proposer to the command.
 	proposal.command.ProposerLeaseSequence = st.Lease.Sequence
+	// Perform a sanity check that the lease is owned by this replica.
+	if !st.Lease.OwnedBy(r.store.StoreID()) && !ba.IsLeaseRequest() {
+		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
+	}
 
 	// Once a command is written to the raft log, it must be loaded into memory
 	// and replayed on all replicas. If a command is too big, stop it here. If
