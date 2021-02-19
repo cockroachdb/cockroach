@@ -368,7 +368,7 @@ insert uniq
 # TODO(rytaft): we should be able to remove the unique check for w in this case
 # (see #59119).
 build
-INSERT INTO UNIQ VALUES (1, 2, 3, 4, 5) ON CONFLICT (W) DO NOTHING
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
@@ -893,6 +893,150 @@ insert uniq_partial
       ├── (1, NULL::INT8, 1)
       └── (2, NULL::INT8, 2)
 
+# Use all the unique constraint as an arbiter for DO NOTHING with no conflict
+# columns.
+# TODO(rytaft/mgartner): we should be able to remove the unique checks in this
+# case (see #59119).
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3), (2, 2, 3) ON CONFLICT DO NOTHING
+----
+insert uniq_partial
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── arbiter constraints: unique_a
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial.k:1
+ │    ├── column2:6 => uniq_partial.a:2
+ │    └── column3:7 => uniq_partial.b:3
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    └── upsert-distinct-on
+ │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:16
+ │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:16
+ │         ├── project
+ │         │    ├── columns: arbiter_unique_a_distinct:16 column1:5!null column2:6!null column3:7!null
+ │         │    ├── upsert-distinct-on
+ │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    ├── grouping columns: column1:5!null
+ │         │    │    ├── anti-join (hash)
+ │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    ├── anti-join (hash)
+ │         │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    │    ├── values
+ │         │    │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    │    │    ├── (1, 2, 3)
+ │         │    │    │    │    │    └── (2, 2, 3)
+ │         │    │    │    │    ├── scan uniq_partial
+ │         │    │    │    │    │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
+ │         │    │    │    │    └── filters
+ │         │    │    │    │         └── column1:5 = uniq_partial.k:8
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14!null
+ │         │    │    │    │    ├── scan uniq_partial
+ │         │    │    │    │    │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
+ │         │    │    │    │    └── filters
+ │         │    │    │    │         └── uniq_partial.b:14 > 0
+ │         │    │    │    └── filters
+ │         │    │    │         ├── column2:6 = uniq_partial.a:13
+ │         │    │    │         └── column3:7 > 0
+ │         │    │    └── aggregations
+ │         │    │         ├── first-agg [as=column2:6]
+ │         │    │         │    └── column2:6
+ │         │    │         └── first-agg [as=column3:7]
+ │         │    │              └── column3:7
+ │         │    └── projections
+ │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:16]
+ │         └── aggregations
+ │              ├── first-agg [as=column1:5]
+ │              │    └── column1:5
+ │              └── first-agg [as=column3:7]
+ │                   └── column3:7
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(a)
+           └── semi-join (hash)
+                ├── columns: k:21!null a:22!null b:23!null
+                ├── with-scan &1
+                │    ├── columns: k:21!null a:22!null b:23!null
+                │    └── mapping:
+                │         ├──  column1:5 => k:21
+                │         ├──  column2:6 => a:22
+                │         └──  column3:7 => b:23
+                ├── scan uniq_partial
+                │    └── columns: uniq_partial.k:17!null uniq_partial.a:18 uniq_partial.b:19
+                └── filters
+                     ├── a:22 = uniq_partial.a:18
+                     ├── b:23 > 0
+                     ├── uniq_partial.b:19 > 0
+                     └── k:21 != uniq_partial.k:17
+
+# Error when there is no arbiter predicate to match the partial unique
+# constraint predicate.
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) DO NOTHING
+----
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+# On conflict clause references unique without index constraint.
+# TODO(rytaft/mgartner): we should be able to remove the unique check for a in
+# this case (see #59119).
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) WHERE b > 0 DO NOTHING
+----
+insert uniq_partial
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial.k:1
+ │    ├── column2:6 => uniq_partial.a:2
+ │    └── column3:7 => uniq_partial.b:3
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    └── upsert-distinct-on
+ │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:12
+ │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:12
+ │         ├── project
+ │         │    ├── columns: arbiter_unique_a_distinct:12 column1:5!null column2:6!null column3:7!null
+ │         │    ├── anti-join (hash)
+ │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    ├── values
+ │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    └── (1, 2, 3)
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10!null
+ │         │    │    │    ├── scan uniq_partial
+ │         │    │    │    │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
+ │         │    │    │    └── filters
+ │         │    │    │         └── uniq_partial.b:10 > 0
+ │         │    │    └── filters
+ │         │    │         ├── column2:6 = uniq_partial.a:9
+ │         │    │         └── column3:7 > 0
+ │         │    └── projections
+ │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:12]
+ │         └── aggregations
+ │              ├── first-agg [as=column1:5]
+ │              │    └── column1:5
+ │              └── first-agg [as=column3:7]
+ │                   └── column3:7
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(a)
+           └── semi-join (hash)
+                ├── columns: k:17!null a:18!null b:19!null
+                ├── with-scan &1
+                │    ├── columns: k:17!null a:18!null b:19!null
+                │    └── mapping:
+                │         ├──  column1:5 => k:17
+                │         ├──  column2:6 => a:18
+                │         └──  column3:7 => b:19
+                ├── scan uniq_partial
+                │    └── columns: uniq_partial.k:13!null uniq_partial.a:14 uniq_partial.b:15
+                └── filters
+                     ├── a:18 = uniq_partial.a:14
+                     ├── b:19 > 0
+                     ├── uniq_partial.b:15 > 0
+                     └── k:17 != uniq_partial.k:13
+
 # Insert with non-constant input.
 build
 INSERT INTO uniq_partial SELECT k, v, w FROM other
@@ -1174,3 +1318,247 @@ insert uniq_partial_hidden_pk
                      ├── c:22 > 0
                      ├── uniq_partial_hidden_pk.c:17 > 0
                      └── rowid:23 != uniq_partial_hidden_pk.rowid:18
+
+exec-ddl
+CREATE TABLE uniq_partial_constraint_and_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE true,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 10
+)
+----
+
+# Use a pseudo-partial index as the only arbiter. Note that we use the "norm"
+# directive instead of "build" to ensure that partial index predicates are fully
+# normalized when choosing arbiter indexes.
+norm
+INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 10 DO NOTHING
+----
+insert uniq_partial_constraint_and_index
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial_constraint_and_index.k:1
+ │    ├── column2:6 => uniq_partial_constraint_and_index.a:2
+ │    └── column3:7 => uniq_partial_constraint_and_index.b:3
+ ├── partial index put columns: partial_index_put1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:13!null column1:5!null column2:6!null column3:7!null
+ │    ├── anti-join (cross)
+ │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    └── (1, 1, 1)
+ │    │    ├── select
+ │    │    │    ├── columns: uniq_partial_constraint_and_index.a:9!null
+ │    │    │    ├── scan uniq_partial_constraint_and_index
+ │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:9
+ │    │    │    │    └── partial index predicates
+ │    │    │    │         └── secondary: filters (true)
+ │    │    │    └── filters
+ │    │    │         └── uniq_partial_constraint_and_index.a:9 = 1
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── true [as=partial_index_put1:13]
+ └── unique-checks
+      └── unique-checks-item: uniq_partial_constraint_and_index(a)
+           └── semi-join (hash)
+                ├── columns: k:18!null a:19!null b:20!null
+                ├── select
+                │    ├── columns: k:18!null a:19!null b:20!null
+                │    ├── with-scan &1
+                │    │    ├── columns: k:18!null a:19!null b:20!null
+                │    │    └── mapping:
+                │    │         ├──  column1:5 => k:18
+                │    │         ├──  column2:6 => a:19
+                │    │         └──  column3:7 => b:20
+                │    └── filters
+                │         └── b:20 > 10
+                ├── select
+                │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16!null
+                │    ├── scan uniq_partial_constraint_and_index
+                │    │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16
+                │    │    └── partial index predicates
+                │    │         └── secondary: filters (true)
+                │    └── filters
+                │         └── uniq_partial_constraint_and_index.b:16 > 10
+                └── filters
+                     ├── a:19 = uniq_partial_constraint_and_index.a:15
+                     └── k:18 != uniq_partial_constraint_and_index.k:14
+
+exec-ddl
+CREATE TABLE uniq_constraint_and_partial_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (a) WHERE true
+)
+----
+
+# Use a pseudo-partial constraint as the only arbiter. Note that we use the
+# "norm" directive instead of "build" to ensure that partial index predicates
+# are fully normalized when choosing arbiter indexes.
+norm
+INSERT INTO uniq_constraint_and_partial_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 0 DO NOTHING
+----
+insert uniq_constraint_and_partial_index
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_constraint_and_partial_index.k:1
+ │    ├── column2:6 => uniq_constraint_and_partial_index.a:2
+ │    └── column3:7 => uniq_constraint_and_partial_index.b:3
+ ├── partial index put columns: partial_index_put1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:13!null column1:5!null column2:6!null column3:7!null
+ │    ├── anti-join (cross)
+ │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    └── (1, 1, 1)
+ │    │    ├── select
+ │    │    │    ├── columns: uniq_constraint_and_partial_index.a:9!null
+ │    │    │    ├── scan uniq_constraint_and_partial_index
+ │    │    │    │    ├── columns: uniq_constraint_and_partial_index.a:9
+ │    │    │    │    └── partial index predicates
+ │    │    │    │         └── secondary: filters
+ │    │    │    │              └── uniq_constraint_and_partial_index.b:10 > 0
+ │    │    │    └── filters
+ │    │    │         └── uniq_constraint_and_partial_index.a:9 = 1
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── column3:7 > 0 [as=partial_index_put1:13]
+ └── unique-checks
+      └── unique-checks-item: uniq_constraint_and_partial_index(a)
+           └── semi-join (hash)
+                ├── columns: k:18!null a:19!null b:20!null
+                ├── with-scan &1
+                │    ├── columns: k:18!null a:19!null b:20!null
+                │    └── mapping:
+                │         ├──  column1:5 => k:18
+                │         ├──  column2:6 => a:19
+                │         └──  column3:7 => b:20
+                ├── scan uniq_constraint_and_partial_index
+                │    ├── columns: uniq_constraint_and_partial_index.k:14!null uniq_constraint_and_partial_index.a:15
+                │    └── partial index predicates
+                │         └── secondary: filters
+                │              └── uniq_constraint_and_partial_index.b:16 > 0
+                └── filters
+                     ├── a:19 = uniq_constraint_and_partial_index.a:15
+                     └── k:18 != uniq_constraint_and_partial_index.k:14
+
+exec-ddl
+CREATE TABLE uniq_partial_constraint_and_partial_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 10
+)
+----
+
+# Use both a partial index and partial constraint as arbiters when both
+# predicates are implied by the arbiter predicate.
+build
+INSERT INTO uniq_partial_constraint_and_partial_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 10 DO NOTHING
+----
+insert uniq_partial_constraint_and_partial_index
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── arbiter constraints: unique_a
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial_constraint_and_partial_index.k:1
+ │    ├── column2:6 => uniq_partial_constraint_and_partial_index.a:2
+ │    └── column3:7 => uniq_partial_constraint_and_partial_index.b:3
+ ├── partial index put columns: partial_index_put1:18
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:18!null column1:5!null column2:6!null column3:7!null
+ │    ├── project
+ │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    └── upsert-distinct-on
+ │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:17
+ │    │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:17
+ │    │         ├── project
+ │    │         │    ├── columns: arbiter_unique_a_distinct:17 column1:5!null column2:6!null column3:7!null
+ │    │         │    ├── project
+ │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │         │    │    └── upsert-distinct-on
+ │    │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_secondary_distinct:16
+ │    │         │    │         ├── grouping columns: column2:6!null arbiter_secondary_distinct:16
+ │    │         │    │         ├── project
+ │    │         │    │         │    ├── columns: arbiter_secondary_distinct:16 column1:5!null column2:6!null column3:7!null
+ │    │         │    │         │    ├── anti-join (hash)
+ │    │         │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │         │    │         │    │    ├── anti-join (hash)
+ │    │         │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │         │    │         │    │    │    ├── values
+ │    │         │    │         │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │         │    │         │    │    │    │    └── (1, 1, 1)
+ │    │         │    │         │    │    │    ├── select
+ │    │         │    │         │    │    │    │    ├── columns: uniq_partial_constraint_and_partial_index.k:8!null uniq_partial_constraint_and_partial_index.a:9 uniq_partial_constraint_and_partial_index.b:10!null
+ │    │         │    │         │    │    │    │    ├── scan uniq_partial_constraint_and_partial_index
+ │    │         │    │         │    │    │    │    │    ├── columns: uniq_partial_constraint_and_partial_index.k:8!null uniq_partial_constraint_and_partial_index.a:9 uniq_partial_constraint_and_partial_index.b:10
+ │    │         │    │         │    │    │    │    │    └── partial index predicates
+ │    │         │    │         │    │    │    │    │         └── secondary: filters
+ │    │         │    │         │    │    │    │    │              └── uniq_partial_constraint_and_partial_index.b:10 > 0
+ │    │         │    │         │    │    │    │    └── filters
+ │    │         │    │         │    │    │    │         └── uniq_partial_constraint_and_partial_index.b:10 > 0
+ │    │         │    │         │    │    │    └── filters
+ │    │         │    │         │    │    │         ├── column2:6 = uniq_partial_constraint_and_partial_index.a:9
+ │    │         │    │         │    │    │         └── column3:7 > 0
+ │    │         │    │         │    │    ├── select
+ │    │         │    │         │    │    │    ├── columns: uniq_partial_constraint_and_partial_index.k:12!null uniq_partial_constraint_and_partial_index.a:13 uniq_partial_constraint_and_partial_index.b:14!null
+ │    │         │    │         │    │    │    ├── scan uniq_partial_constraint_and_partial_index
+ │    │         │    │         │    │    │    │    ├── columns: uniq_partial_constraint_and_partial_index.k:12!null uniq_partial_constraint_and_partial_index.a:13 uniq_partial_constraint_and_partial_index.b:14
+ │    │         │    │         │    │    │    │    └── partial index predicates
+ │    │         │    │         │    │    │    │         └── secondary: filters
+ │    │         │    │         │    │    │    │              └── uniq_partial_constraint_and_partial_index.b:14 > 0
+ │    │         │    │         │    │    │    └── filters
+ │    │         │    │         │    │    │         └── uniq_partial_constraint_and_partial_index.b:14 > 10
+ │    │         │    │         │    │    └── filters
+ │    │         │    │         │    │         ├── column2:6 = uniq_partial_constraint_and_partial_index.a:13
+ │    │         │    │         │    │         └── column3:7 > 10
+ │    │         │    │         │    └── projections
+ │    │         │    │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_secondary_distinct:16]
+ │    │         │    │         └── aggregations
+ │    │         │    │              ├── first-agg [as=column1:5]
+ │    │         │    │              │    └── column1:5
+ │    │         │    │              └── first-agg [as=column3:7]
+ │    │         │    │                   └── column3:7
+ │    │         │    └── projections
+ │    │         │         └── (column3:7 > 10) OR NULL::BOOL [as=arbiter_unique_a_distinct:17]
+ │    │         └── aggregations
+ │    │              ├── first-agg [as=column1:5]
+ │    │              │    └── column1:5
+ │    │              └── first-agg [as=column3:7]
+ │    │                   └── column3:7
+ │    └── projections
+ │         └── column3:7 > 0 [as=partial_index_put1:18]
+ └── unique-checks
+      └── unique-checks-item: uniq_partial_constraint_and_partial_index(a)
+           └── semi-join (hash)
+                ├── columns: k:23!null a:24!null b:25!null
+                ├── with-scan &1
+                │    ├── columns: k:23!null a:24!null b:25!null
+                │    └── mapping:
+                │         ├──  column1:5 => k:23
+                │         ├──  column2:6 => a:24
+                │         └──  column3:7 => b:25
+                ├── scan uniq_partial_constraint_and_partial_index
+                │    ├── columns: uniq_partial_constraint_and_partial_index.k:19!null uniq_partial_constraint_and_partial_index.a:20 uniq_partial_constraint_and_partial_index.b:21
+                │    └── partial index predicates
+                │         └── secondary: filters
+                │              └── uniq_partial_constraint_and_partial_index.b:21 > 0
+                └── filters
+                     ├── a:24 = uniq_partial_constraint_and_partial_index.a:20
+                     ├── b:25 > 10
+                     ├── uniq_partial_constraint_and_partial_index.b:21 > 10
+                     └── k:23 != uniq_partial_constraint_and_partial_index.k:19

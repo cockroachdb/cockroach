@@ -577,8 +577,8 @@ insert xyz
       │    │    │    ├── scan xyz
       │    │    │    │    └── columns: x:16!null y:17 z:18
       │    │    │    └── filters
-      │    │    │         ├── column3:7 = z:18
-      │    │    │         └── column2:6 = y:17
+      │    │    │         ├── column2:6 = y:17
+      │    │    │         └── column3:7 = z:18
       │    │    └── aggregations
       │    │         ├── first-agg [as=column2:6]
       │    │         │    └── column2:6
