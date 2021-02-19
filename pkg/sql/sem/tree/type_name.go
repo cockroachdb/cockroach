@@ -147,6 +147,8 @@ var _ ResolvableTypeReference = &UnresolvedObjectName{}
 var _ ResolvableTypeReference = &ArrayTypeReference{}
 var _ ResolvableTypeReference = &types.T{}
 var _ ResolvableTypeReference = &OIDTypeReference{}
+var _ NodeFormatter = &UnresolvedName{}
+var _ NodeFormatter = &ArrayTypeReference{}
 
 // ResolveType converts a ResolvableTypeReference into a *types.T.
 func ResolveType(
@@ -180,21 +182,34 @@ func ResolveType(
 
 // FormatTypeReference formats a ResolvableTypeReference.
 func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
-	if ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes) {
-		switch t := ref.(type) {
-		case *types.T:
-			if t.UserDefined() {
+	switch t := ref.(type) {
+	case *types.T:
+		if t.UserDefined() {
+			if ctx.HasFlags(FmtAnonymize) {
+				ctx.WriteByte('_')
+				return
+			} else if ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes) {
 				idRef := OIDTypeReference{OID: t.Oid()}
 				ctx.WriteString(idRef.SQLString())
 				return
 			}
 		}
+		ctx.WriteString(t.SQLString())
+
+	case *OIDTypeReference:
+		if ctx.indexedTypeFormatter != nil {
+			ctx.indexedTypeFormatter(ctx, t)
+			return
+		}
+		ctx.WriteString(ref.SQLString())
+
+	// All other ResolvableTypeReferences must implement NodeFormatter.
+	case NodeFormatter:
+		ctx.FormatNode(t)
+
+	default:
+		panic(errors.AssertionFailedf("type reference must implement NodeFormatter"))
 	}
-	if idRef, ok := ref.(*OIDTypeReference); ok && ctx.indexedTypeFormatter != nil {
-		ctx.indexedTypeFormatter(ctx, idRef)
-		return
-	}
-	ctx.WriteString(ref.SQLString())
 }
 
 // GetStaticallyKnownType possibly promotes a ResolvableTypeReference into a
@@ -231,16 +246,20 @@ type ArrayTypeReference struct {
 	ElementType ResolvableTypeReference
 }
 
-// SQLString implements the ResolvableTypeReference interface.
-func (node *ArrayTypeReference) SQLString() string {
-	var ctx FmtCtx
+// Format implements the NodeFormatter interface.
+func (node *ArrayTypeReference) Format(ctx *FmtCtx) {
 	if typ, ok := GetStaticallyKnownType(node.ElementType); ok {
-		ctx.WriteString(types.MakeArray(typ).SQLString())
+		ctx.FormatTypeReference(types.MakeArray(typ))
 	} else {
-		ctx.WriteString(node.ElementType.SQLString())
+		ctx.FormatTypeReference(node.ElementType)
 		ctx.WriteString("[]")
 	}
-	return ctx.String()
+}
+
+// SQLString implements the ResolvableTypeReference interface.
+func (node *ArrayTypeReference) SQLString() string {
+	// FmtBareIdentifiers prevents the TypeName string from being wrapped in quotations.
+	return AsStringWithFlags(node, FmtBareIdentifiers)
 }
 
 // SQLString implements the ResolvableTypeReference interface.
