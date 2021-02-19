@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
