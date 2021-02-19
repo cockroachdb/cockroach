@@ -410,13 +410,7 @@ func (p *planner) alterTypeOwner(
 	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
 ) error {
 	typeDesc := n.desc
-
-	privs := typeDesc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner() {
-		return nil
-	}
+	oldOwner := typeDesc.GetPrivileges().Owner()
 
 	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
 	if err != nil {
@@ -425,6 +419,11 @@ func (p *planner) alterTypeOwner(
 
 	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
 		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
 	}
 
 	if err := p.writeTypeSchemaChange(

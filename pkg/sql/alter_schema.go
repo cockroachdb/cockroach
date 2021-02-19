@@ -131,15 +131,15 @@ func (p *planner) alterSchemaOwner(
 	newOwner security.SQLUsername,
 	jobDescription string,
 ) error {
-	privs := scDesc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner() {
-		return nil
-	}
+	oldOwner := scDesc.GetPrivileges().Owner()
 
 	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
 	}
 
 	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
