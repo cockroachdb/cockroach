@@ -812,12 +812,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTablePartitionByTable:
 			if t.All {
-				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
+				return unimplemented.NewWithIssue(58736, "PARTITION ALL BY not yet implemented")
+			}
+			if n.tableDesc.IsPartitionAllBy() {
+				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
 			}
 			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
 			if oldPartitioning.NumImplicitColumns > 0 {
-				return unimplemented.New(
-					"ALTER TABLE PARTITION BY",
+				return unimplemented.NewWithIssue(
+					58731,
 					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
 				)
 			}
@@ -835,8 +838,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			if newPrimaryIndex.Partitioning.NumImplicitColumns > 0 {
-				return unimplemented.New(
-					"ALTER TABLE PARTITION BY",
+				return unimplemented.NewWithIssue(
+					58731,
 					"cannot ALTER TABLE and change the partitioning to contain implicit columns",
 				)
 			}

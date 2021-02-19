@@ -270,6 +270,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	); err != nil {
 		return nil, err
 	}
+
 	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
@@ -700,6 +701,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 	); err != nil {
 		return nil, err
 	}
+
 	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
 		tree.DatabaseLookupFlags{Required: true},
 	)
