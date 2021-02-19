@@ -178,6 +178,11 @@ type LocalOnlySessionData struct {
 	// OptimizerUseMultiColStats indicates whether we should use multi-column
 	// statistics for cardinality estimation in the optimizer.
 	OptimizerUseMultiColStats bool
+	// LocalityOptimizedSearch indicates that the optimizer will try to plan scans
+	// and lookup joins in which local nodes (i.e., nodes in the gateway region)
+	// are searched for matching rows before remote nodes, in the hope that the
+	// execution engine can avoid visiting remote nodes.
+	LocalityOptimizedSearch bool
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
