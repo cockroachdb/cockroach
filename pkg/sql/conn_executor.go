@@ -371,9 +371,8 @@ func (s *Server) GetUnscrubbedStmtStats() []roachpb.CollectedStatementStatistics
 	return s.sqlStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
-// GetUnscrubbedTxnStats returns the same transaction statistics by app, with
-// the queries scrubbed of their identifiers. Any statement which cannot be
-// scrubbed will be omitted from the returned map.
+// GetUnscrubbedTxnStats returns the same transaction statistics by app.
+// Identifiers (e.g. table and column names) aren't scrubbed from the statements.
 func (s *Server) GetUnscrubbedTxnStats() []roachpb.CollectedTransactionStatistics {
 	return s.sqlStats.getUnscrubbedTxnStats()
 }
@@ -382,12 +381,6 @@ func (s *Server) GetUnscrubbedTxnStats() []roachpb.CollectedTransactionStatistic
 // returns statistics from the reported stats pool.
 func (s *Server) GetScrubbedReportingStats() []roachpb.CollectedStatementStatistics {
 	return s.reportedStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
-}
-
-// GetUnscrubbedReportingStats does the same thing as GetUnscrubbedStmtStats but
-// returns statistics from the reported stats pool.
-func (s *Server) GetUnscrubbedReportingStats() []roachpb.CollectedStatementStatistics {
-	return s.reportedStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
 // GetStmtStatsLastReset returns the time at which the statement statistics were
