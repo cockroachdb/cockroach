@@ -117,7 +117,11 @@ type JSON interface {
 	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
 	AsText() (*string, error)
 
-	// Exists implements the `?` operator.
+	// Exists implements the `?` operator: does the string exist as a top-level
+	// key within the JSON value?
+	//
+	// If the object is a JSON array, returns true when the key is a top-level
+	// element of the array.
 	Exists(string) (bool, error)
 
 	// StripNulls returns the JSON document with all object fields that have null values omitted
