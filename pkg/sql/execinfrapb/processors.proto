@@ -119,6 +119,7 @@ message ProcessorCoreUnion {
   optional FiltererSpec filterer = 34;
   optional StreamIngestionDataSpec streamIngestionData = 35;
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
+  optional StreamIngestionPollingSpec streamIngestionPolling = 37;
 
   reserved 6, 12;
 }

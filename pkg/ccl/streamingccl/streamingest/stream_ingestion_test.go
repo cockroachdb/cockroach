@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,9 +36,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func getHighWaterFromProgress(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, streamJobID string,
+) hlc.Timestamp {
+	progress := &jobspb.Progress{}
+	var streamProgress []byte
+	sqlDB.QueryRow(
+		t, `SELECT progress FROM system.jobs WHERE id=$1`, streamJobID,
+	).Scan(&streamProgress)
+
+	if err := protoutil.Unmarshal(streamProgress, progress); err != nil {
+		t.Fatal("cannot unmarshal job progress from system.jobs")
+	}
+	highWaterTimestamp := progress.GetHighWater()
+	if highWaterTimestamp == nil {
+		t.Fatal(errors.New("expected the highWaterTimestamp written to progress to be non-nil"))
+	}
+	return *highWaterTimestamp
+}
 
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
 // fed KVs from the random stream client. After receiving a certain number of
@@ -121,15 +142,16 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	<-cancelJobCh
 	close(cancelJobCh)
 
-	// Canceling the job should shutdown the ingestion processors via a context
-	// cancellation, and subsequently rollback data above our frontier
-	// timestamp.
-	// TODO(adityamaru): Change this to cutover once we have cutover logic in
-	// place.
-	_, err = conn.Exec(`CANCEL JOB $1`, streamJobID)
+	curHighWater := getHighWaterFromProgress(t, sqlDB, streamJobID)
+	tz := timeutil.Unix(0, curHighWater.WallTime).UTC()
+
+	// Signaling the job to cutover should shutdown the ingestion processors and
+	// trigger a revert range.
+	_, err = conn.Exec(`SELECT crdb_internal.complete_stream_ingestion_job($1,$2)`, streamJobID,
+		tz)
 	require.NoError(t, err)
 	// We expect the statement to fail.
-	if err := <-errCh; err == nil {
+	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,27 +159,11 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		var status string
 		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, streamJobID).Scan(&status)
-		if jobs.Status(status) != jobs.StatusCanceled {
-			return errors.New("job not in canceled state")
+		if jobs.Status(status) != jobs.StatusSucceeded {
+			return errors.New("job not in a succeeded state")
 		}
 		return nil
 	})
-
-	progress := &jobspb.Progress{}
-	var streamProgress []byte
-	sqlDB.QueryRow(
-		t, `SELECT progress FROM system.jobs WHERE id=$1`, streamJobID,
-	).Scan(&streamProgress)
-
-	if err := protoutil.Unmarshal(streamProgress, progress); err != nil {
-		t.Fatal("cannot unmarshal job progress from system.jobs")
-	}
-	highWaterTimestamp := progress.GetHighWater()
-	if highWaterTimestamp == nil {
-		t.Fatal(errors.New("expected the highWaterTimestamp written to progress to be non-nil"))
-	}
-	ts := *highWaterTimestamp
-	require.True(t, !ts.IsEmpty())
 
 	// Check the validator for any failures.
 	for _, err := range streamValidator.failures() {
@@ -165,6 +171,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	}
 
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(tenantID)))
+	ts := hlc.Timestamp{WallTime: tz.UnixNano()}
 	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, ts, tenantPrefix)
 
 	//Sanity check that the max ts in the store is less than the ts stored in the

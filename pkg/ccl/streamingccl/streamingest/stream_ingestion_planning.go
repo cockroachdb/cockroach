@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -81,8 +82,9 @@ func ingestionPlanHook(
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: streamingccl.StreamAddress(from[0]),
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
-			// TODO: Figure out what the initial ts should be.
-			StartTime: hlc.Timestamp{},
+			// TODO(adityamaru): This will change to the time the RESTORE was run at
+			// before starting the ingestion strea.
+			StartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)

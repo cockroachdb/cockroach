@@ -31,7 +31,16 @@ func distStreamIngestionPlanSpecs(
 	topology streamingccl.Topology,
 	nodes []roachpb.NodeID,
 	initialHighWater hlc.Timestamp,
-) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
+	jobID int64,
+) (
+	*execinfrapb.StreamIngestionPollingSpec,
+	[]*execinfrapb.StreamIngestionDataSpec,
+	*execinfrapb.StreamIngestionFrontierSpec,
+	error,
+) {
+	// Create a spec for the StreamIngestionPolling processor on the coordinator
+	// node.
+	streamIngestionPollingSpec := &execinfrapb.StreamIngestionPollingSpec{JobID: jobID}
 
 	// For each stream partition in the topology, assign it to a node.
 	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(nodes))
@@ -66,7 +75,7 @@ func distStreamIngestionPlanSpecs(
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
 		HighWaterAtStart: initialHighWater, TrackedSpans: trackedSpans}
 
-	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
+	return streamIngestionPollingSpec, streamIngestionSpecs, streamIngestionFrontierSpec, nil
 }
 
 func distStreamIngest(
@@ -78,6 +87,7 @@ func distStreamIngest(
 	dsp *sql.DistSQLPlanner,
 	streamIngestionSpecs []*execinfrapb.StreamIngestionDataSpec,
 	streamIngestionFrontierSpec *execinfrapb.StreamIngestionFrontierSpec,
+	streamIngestionPollingSpec *execinfrapb.StreamIngestionPollingSpec,
 ) error {
 	ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 	evalCtx := execCtx.ExtendedEvalContext()
@@ -87,29 +97,86 @@ func distStreamIngest(
 		return nil
 	}
 
-	// Setup a one-stage plan with one proc per input spec.
-	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-	for i := range streamIngestionSpecs {
-		corePlacement[i].NodeID = nodes[i]
-		corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
-	}
-
-	p := planCtx.NewPhysicalPlan()
-	p.AddNoInputStage(
-		corePlacement,
-		execinfrapb.PostProcessSpec{},
-		streamIngestionResultTypes,
-		execinfrapb.Ordering{},
-	)
-
 	execCfg := execCtx.ExecCfg()
 	gatewayNodeID, err := execCfg.NodeID.OptionalNodeIDErr(48274)
 	if err != nil {
 		return err
 	}
 
-	// The ResultRouters from the previous stage will feed in to the
-	// StreamIngestionFrontier processor.
+	p := planCtx.NewPhysicalPlan()
+
+	// Plan the stream ingestion polling processor on the coordinator node. This
+	// processor does not take any input and uses a "mirror router" to replicate
+	// its output to all output streams.
+	var pollingProc physicalplan.Processor
+	if len(streamIngestionSpecs) == 1 {
+		pollingProc = physicalplan.Processor{
+			Node: gatewayNodeID,
+			Spec: execinfrapb.ProcessorSpec{
+				Core: execinfrapb.ProcessorCoreUnion{StreamIngestionPolling: streamIngestionPollingSpec},
+				Post: execinfrapb.PostProcessSpec{},
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				}},
+				StageID:     p.NewStage(false /* containsRemoteProcessor */),
+				ResultTypes: streamIngestionResultTypes,
+			},
+		}
+	} else {
+		pollingProc = physicalplan.Processor{
+			Node: gatewayNodeID,
+			Spec: execinfrapb.ProcessorSpec{
+				Core: execinfrapb.ProcessorCoreUnion{StreamIngestionPolling: streamIngestionPollingSpec},
+				Post: execinfrapb.PostProcessSpec{},
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type: execinfrapb.OutputRouterSpec_MIRROR,
+				}},
+				StageID:     p.NewStage(false /* containsRemoteProcessor */),
+				ResultTypes: streamIngestionResultTypes,
+			},
+		}
+	}
+	pollingProcIdx := p.AddProcessor(pollingProc)
+
+	// Plan the stream ingestion data processors.
+	streamIngestionStageID := p.NewStageOnNodes(nodes[:len(streamIngestionSpecs)])
+	streamIngestionProcs := make(map[roachpb.NodeID]physicalplan.ProcessorIdx)
+	for i, n := range nodes {
+		// We can have more nodes than stream ingestion processors to setup.
+		if i >= len(streamIngestionSpecs) {
+			break
+		}
+		streamIngestionProc := physicalplan.Processor{
+			Node: n,
+			Spec: execinfrapb.ProcessorSpec{
+				Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: streamIngestionResultTypes}},
+				Core:        execinfrapb.ProcessorCoreUnion{StreamIngestionData: streamIngestionSpecs[i]},
+				Post:        execinfrapb.PostProcessSpec{},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     streamIngestionStageID,
+				ResultTypes: streamIngestionResultTypes,
+			},
+		}
+		pIdx := p.AddProcessor(streamIngestionProc)
+		streamIngestionProcs[n] = pIdx
+		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+
+	// Setup the streams from the polling processor to the stream ingestion
+	// processors.
+	slot := 0
+	for _, destProc := range streamIngestionProcs {
+		p.Streams = append(p.Streams, physicalplan.Stream{
+			SourceProcessor:  pollingProcIdx,
+			SourceRouterSlot: slot,
+			DestProcessor:    destProc,
+			DestInput:        0,
+		})
+		slot++
+	}
+
+	// Plan the frontier processor. The ResultRouters from the stream ingestion
+	// processors will be merged and fed into this processor.
 	p.AddSingleGroupStage(gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)

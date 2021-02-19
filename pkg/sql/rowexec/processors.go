@@ -268,13 +268,14 @@ func NewProcessor(
 		return NewRestoreDataProcessor(flowCtx, processorID, *core.RestoreData, post, inputs[0], outputs[0])
 	}
 	if core.StreamIngestionData != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		if NewStreamIngestionDataProcessor == nil {
 			return nil, errors.New("StreamIngestionData processor unimplemented")
 		}
-		return NewStreamIngestionDataProcessor(flowCtx, processorID, *core.StreamIngestionData, post, outputs[0])
+		return NewStreamIngestionDataProcessor(flowCtx, processorID, *core.StreamIngestionData,
+			inputs[0], post, outputs[0])
 	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -365,6 +366,12 @@ func NewProcessor(
 		}
 		return NewStreamIngestionFrontierProcessor(flowCtx, processorID, *core.StreamIngestionFrontier, inputs[0], post, outputs[0])
 	}
+	if core.StreamIngestionPolling != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return NewStreamIngestionPollingProcessor(flowCtx, processorID, *core.StreamIngestionPolling, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -381,7 +388,7 @@ var NewSplitAndScatterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.Spli
 var NewRestoreDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.RestoreDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewStreamIngestionDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewStreamIngestionDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewStreamIngestionDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
@@ -394,3 +401,6 @@ var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.Chang
 
 // NewStreamIngestionFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewStreamIngestionFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewStreamIngestionPollingProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewStreamIngestionPollingProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionPollingSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

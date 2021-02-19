@@ -63,20 +63,15 @@ func ingest(
 	}
 
 	// Construct stream ingestion processor specs.
-	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, nodes, initialHighWater)
+	streamIngestionPollingSpec, streamIngestionSpecs, streamIngestionFrontierSpec,
+		err := distStreamIngestionPlanSpecs(streamAddress, topology, nodes, initialHighWater, jobID)
 	if err != nil {
 		return err
 	}
 
 	// Plan and run the DistSQL flow.
-	err = distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
-		streamIngestionFrontierSpec)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
+		streamIngestionFrontierSpec, streamIngestionPollingSpec)
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -87,6 +82,16 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
 		*s.job.ID())
 	if err != nil {
+		if errors.Is(err, errCutoverRequested) {
+			revertErr := s.revertToLatestResolvedTimestamp(ctx, execCtx)
+			if revertErr != nil {
+				return errors.Wrap(revertErr, "error while reverting stream ingestion job")
+			}
+			// The job should transition to a succeeded state once the cutover is
+			// complete.
+
+			return nil
+		}
 		return err
 	}
 
@@ -97,40 +102,64 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	return nil
 }
 
-// OnFailOrCancel is part of the jobs.Resumer interface.
-func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+// revertToLatestResolvedTimestamp reads the job progress for the high watermark
+// and issues a RevertRangeRequest with the target time set to that high
+// watermark.
+func (s *streamIngestionResumer) revertToLatestResolvedTimestamp(
+	ctx context.Context, execCtx interface{},
+) error {
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, *s.job.ID())
+	if err != nil {
+		return err
+	}
+	details := j.Details()
+	var sd jobspb.StreamIngestionDetails
+	var ok bool
+	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
+		return errors.Newf("unknown details type %T in stream ingestion job %d",
+			details, *s.job.ID())
+	}
+	progress := j.Progress()
+	streamIngestProgress := progress.GetStreamIngest()
 
-	resolvedTime := details.StartTime
-	prog := s.job.Progress()
-	if highWatermark := prog.GetHighWater(); highWatermark != nil {
-		if highWatermark.Less(resolvedTime) {
-			return errors.Newf("progress timestamp %+v cannot be older than start time %+v",
-				highWatermark, resolvedTime)
-		}
-		resolvedTime = *highWatermark
+	revertTargetTime := sd.StartTime
+	if streamIngestProgress != nil {
+		revertTargetTime = streamIngestProgress.CutoverTime
 	}
 
-	// TODO(adityamaru): If the job progress was not set then we should
-	// probably ClearRange. Take this into account when writing the ClearRange
-	// OnFailOrCancel().
-	if resolvedTime.IsEmpty() {
-		return nil
+	if highWatermark := progress.GetHighWater(); highWatermark != nil {
+		if highWatermark.Less(revertTargetTime) {
+			return errors.Newf("progress timestamp %+v cannot be older than the requested "+
+				"cutover time %+v", highWatermark, revertTargetTime)
+		}
+	}
+
+	// Sanity check that the resolvedTime is not less than the time at which the
+	// ingestion job was started.
+	if revertTargetTime.Less(sd.StartTime) {
+		return errors.Newf("revert target time %+v cannot be older than the start time "+
+			"cutover time %+v", revertTargetTime, sd.StartTime)
 	}
 
 	var b kv.Batch
 	b.AddRawRequest(&roachpb.RevertRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:    details.Span.Key,
-			EndKey: details.Span.EndKey,
+			Key:    sd.Span.Key,
+			EndKey: sd.Span.EndKey,
 		},
-		TargetTime:                          resolvedTime,
+		TargetTime:                          revertTargetTime,
 		EnableTimeBoundIteratorOptimization: true,
 	})
 	b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
 	return db.Run(ctx, &b)
+}
+
+// OnFailOrCancel is part of the jobs.Resumer interface.
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	// TODO(adityamaru): Add ClearRange logic.
+	return nil
 }
 
 var _ jobs.Resumer = &streamIngestionResumer{}

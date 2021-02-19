@@ -626,7 +626,6 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	if mm.mu.maxAllocated < mm.mu.curAllocated {
 		mm.mu.maxAllocated = mm.mu.curAllocated
 	}
-
 	// Report "large" queries to the log for further investigation.
 	if log.V(1) {
 		if mm.mu.curAllocated > mm.noteworthyUsageBytes {
