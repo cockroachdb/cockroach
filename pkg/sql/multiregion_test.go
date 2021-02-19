@@ -204,3 +204,62 @@ CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 		t.Fatal("expected crdb_internal_region to be present in system.namespace")
 	}
 }
+
+// TODO(arul): Currently, database level zone configurations aren't rolled back.
+// When we fix this limitation we should also update this test to check for that.
+func TestRollbackDuringAddRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	numServers := 2
+	serverArgs := make(map[int]base.TestServerArgs)
+
+	regionNames := make([]string, numServers)
+	for i := 0; i < numServers; i++ {
+		// "us-east1", "us-east2"...
+		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	}
+
+	for i := 0; i < numServers; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					RunBeforeExec: func() error {
+						return errors.New("boom")
+					},
+				},
+			},
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
+			},
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := tc.ServerConn(0)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1"`)
+	require.NoError(t, err)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = sqlDB.Exec(`ALTER DATABASE db ADD REGION "us-east2"`)
+	require.Error(t, err, "boom")
+
+	var jobStatus string
+	var jobErr string
+	row := sqlDB.QueryRow("SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'TYPEDESC SCHEMA CHANGE'")
+	require.NoError(t, row.Scan(&jobStatus, &jobErr))
+	require.Regexp(t, "boom", jobErr)
+	require.Regexp(t, "failed", jobStatus)
+}

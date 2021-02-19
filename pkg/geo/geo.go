@@ -831,6 +831,7 @@ func validateGeomT(t geom.T) error {
 			}
 		}
 	case *geom.GeometryCollection:
+		// TODO(ayang): verify that the geometries all have the same Layout
 		for i := 0; i < t.NumGeoms(); i++ {
 			if err := validateGeomT(t.Geom(i)); err != nil {
 				return errors.Wrapf(err, "invalid GeometryCollection component at position %d", i+1)
