@@ -161,7 +161,7 @@ func NewTwoInputDiskSpiller(
 // diskSpillerBase is the common base for the one-input and two-input disk
 // spillers.
 type diskSpillerBase struct {
-	NonExplainable
+	colexecbase.NonExplainable
 
 	closerHelper
 
@@ -300,7 +300,7 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
 // NOTE: it is assumed that secondSource is the input to firstSource.
 type bufferExportingOperator struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	firstSource     colexecbase.BufferingInMemoryOperator
 	secondSource    colexecbase.Operator

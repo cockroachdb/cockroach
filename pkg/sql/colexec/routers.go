@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -116,8 +117,8 @@ type routerOutputOp struct {
 		// any subsequent calls to Next will return this error.
 		forwardedErr error
 		cond         *sync.Cond
-		// data is a spillingQueue, a circular buffer backed by a disk queue.
-		data      *spillingQueue
+		// data is a SpillingQueue, a circular buffer backed by a disk queue.
+		data      *colexecutils.SpillingQueue
 		numUnread int
 		blocked   bool
 	}
@@ -194,8 +195,8 @@ func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
 		testingKnobs:        args.testingKnobs,
 	}
 	o.mu.cond = sync.NewCond(&o.mu)
-	o.mu.data = newSpillingQueue(
-		&NewSpillingQueueArgs{
+	o.mu.data = colexecutils.NewSpillingQueue(
+		&colexecutils.NewSpillingQueueArgs{
 			UnlimitedAllocator: args.unlimitedAllocator,
 			Types:              args.types,
 			MemoryLimit:        args.memoryLimit,
@@ -227,7 +228,7 @@ func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
 func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	for o.mu.forwardedErr == nil && o.mu.state == routerOutputOpRunning && o.mu.data.empty() {
+	for o.mu.forwardedErr == nil && o.mu.state == routerOutputOpRunning && o.mu.data.Empty() {
 		// Wait until there is data to read or the output is canceled.
 		o.mu.cond.Wait()
 	}
@@ -237,7 +238,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	if o.mu.state == routerOutputOpDraining {
 		return coldata.ZeroBatch
 	}
-	b, err := o.mu.data.dequeue(ctx)
+	b, err := o.mu.data.Dequeue(ctx)
 	if err == nil && o.testingKnobs.nextTestInducedErrorCb != nil {
 		err = o.testingKnobs.nextTestInducedErrorCb()
 	}
@@ -277,7 +278,7 @@ func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
 
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
 	o.mu.state = routerOutputOpDraining
-	if err := o.mu.data.close(ctx); err != nil {
+	if err := o.mu.data.Close(ctx); err != nil {
 		// This log message is Info instead of Warning because the flow will also
 		// attempt to clean up the parent directory, so this failure might not have
 		// any effect.
@@ -332,7 +333,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch) bool
 	}
 
 	o.mu.numUnread += batch.Length()
-	err := o.mu.data.enqueue(ctx, batch)
+	err := o.mu.data.Enqueue(ctx, batch)
 	if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
 		err = o.testingKnobs.addBatchTestInducedErrorCb()
 	}
@@ -372,7 +373,7 @@ func (o *routerOutputOp) resetForTests(ctx context.Context) {
 	defer o.mu.Unlock()
 	o.mu.state = routerOutputOpRunning
 	o.mu.forwardedErr = nil
-	o.mu.data.reset(ctx)
+	o.mu.data.Reset(ctx)
 	o.mu.numUnread = 0
 	o.mu.blocked = false
 }

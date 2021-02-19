@@ -54,7 +54,7 @@ type ChildStatsCollector interface {
 // returned.
 type batchInfoCollector struct {
 	colexecbase.Operator
-	NonExplainable
+	colexecbase.NonExplainable
 	componentID execinfrapb.ComponentID
 
 	numBatches, numTuples uint64

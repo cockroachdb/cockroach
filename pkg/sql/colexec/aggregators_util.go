@@ -497,7 +497,7 @@ func (h *distinctOrderedAggregatorHelper) performAggregation(
 // used for the first time.
 type singleBatchOperator struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	nexted bool
 	batch  coldata.Batch

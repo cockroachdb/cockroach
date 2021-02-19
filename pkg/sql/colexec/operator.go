@@ -33,14 +33,6 @@ const (
 	OperatorInitialized
 )
 
-// NonExplainable is a marker interface which identifies an Operator that
-// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
-// explain option will override the omitting behavior.
-type NonExplainable interface {
-	// nonExplainableMarker is just a marker method. It should never be called.
-	nonExplainableMarker()
-}
-
 // newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
 func newTwoInputNode(inputOne, inputTwo colexecbase.Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
@@ -128,7 +120,7 @@ func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 
 type noopOperator struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 }
 
 var _ colexecbase.Operator = &noopOperator{}
@@ -154,7 +146,7 @@ func (n *noopOperator) Reset(ctx context.Context) {
 
 type zeroOperator struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 }
 
 var _ colexecbase.Operator = &zeroOperator{}
@@ -174,7 +166,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 
 type fixedNumTuplesNoInputOp struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	batch         coldata.Batch
 	numTuplesLeft int
 }
@@ -212,29 +204,6 @@ func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
 	return s.batch
 }
 
-// FeedOperator is used to feed an Operator chain with input by manually
-// setting the next batch.
-type FeedOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
-	batch coldata.Batch
-}
-
-// NewFeedOperator returns a new feed operator.
-func NewFeedOperator() *FeedOperator {
-	return &FeedOperator{}
-}
-
-// Init implements the colexecbase.Operator interface.
-func (FeedOperator) Init() {}
-
-// Next implements the colexecbase.Operator interface.
-func (o *FeedOperator) Next(context.Context) coldata.Batch {
-	return o.batch
-}
-
-var _ colexecbase.Operator = &FeedOperator{}
-
 // vectorTypeEnforcer is a utility Operator that on every call to Next
 // enforces that non-zero length batch from the input has a vector of the
 // desired type in the desired position. If the width of the batch is less than
@@ -261,7 +230,7 @@ var _ colexecbase.Operator = &FeedOperator{}
 //
 type vectorTypeEnforcer struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator *colmem.Allocator
 	typ       *types.T
@@ -315,7 +284,7 @@ func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator                    *colmem.Allocator
 	typs                         []*types.T

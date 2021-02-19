@@ -21,7 +21,7 @@ import (
 // once per input batch, passing the input batch unmodified along.
 type fnOp struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	fn func()
 }

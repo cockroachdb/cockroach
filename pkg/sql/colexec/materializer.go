@@ -28,7 +28,7 @@ import (
 // Materializer converts an Operator input into a execinfra.RowSource.
 type Materializer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	colexecbase.NonExplainable
 
 	input colexecbase.Operator
 	typs  []*types.T

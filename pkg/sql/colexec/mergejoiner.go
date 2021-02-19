@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -182,7 +183,7 @@ type mergeJoinInput struct {
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
-	distincterInput *FeedOperator
+	distincterInput *colexecbase.FeedOperator
 	distincter      colexecbase.Operator
 	distinctOutput  []bool
 
@@ -439,13 +440,13 @@ func newMergeJoinBase(
 		diskAcc: diskAcc,
 	}
 	var err error
-	base.left.distincterInput = &FeedOperator{}
+	base.left.distincterInput = &colexecbase.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
-	base.right.distincterInput = &FeedOperator{}
+	base.right.distincterInput = &colexecbase.FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
@@ -556,7 +557,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	var (
 		bufferedGroup     *mjBufferedGroup
 		sourceTypes       []*types.T
-		bufferedTuples    *spillingQueue
+		bufferedTuples    *colexecutils.SpillingQueue
 		numBufferedTuples int
 	)
 	if input == &o.left {
@@ -574,8 +575,8 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	}
 	if batch.Length() == 0 || groupLength == 0 {
 		// We have finished appending to this buffered group, so we need to
-		// enqueue a zero-length batch per the contract of the spilling queue.
-		if err := bufferedTuples.enqueue(ctx, coldata.ZeroBatch); err != nil {
+		// Enqueue a zero-length batch per the contract of the spilling queue.
+		if err := bufferedTuples.Enqueue(ctx, coldata.ZeroBatch); err != nil {
 			colexecerror.InternalError(err)
 		}
 		return
@@ -623,7 +624,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		}
 		bufferedGroup.scratchBatch.SetLength(groupLength)
 	})
-	if err := bufferedTuples.enqueue(ctx, bufferedGroup.scratchBatch); err != nil {
+	if err := bufferedTuples.Enqueue(ctx, bufferedGroup.scratchBatch); err != nil {
 		colexecerror.InternalError(err)
 	}
 }
@@ -708,7 +709,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 		// previous iterations had only the matching tuples to the buffered group,
 		// so the distincter - in a sense - compares the incoming tuples to the
 		// first tuple of the first iteration (which we know is the same group).
-		input.distincterInput.batch = batch
+		input.distincterInput.SetBatch(batch)
 		input.distincter.Next(ctx)
 
 		sel = batch.Selection()

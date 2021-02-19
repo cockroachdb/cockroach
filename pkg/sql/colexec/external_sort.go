@@ -114,7 +114,7 @@ const ExternalSorterMinPartitions = 3
 // maxNumberPartitions variable.
 type externalSorter struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	closerHelper
 
 	// mergeUnlimitedAllocator is used to track the memory under the batches
@@ -611,7 +611,7 @@ func newInputPartitioningOperator(
 // reset).
 type inputPartitioningOperator struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	// memoryLimit determines the size of each partition.
 	memoryLimit int64

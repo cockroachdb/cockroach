@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1446,4 +1447,33 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 
 func (c *chunkingBatchSource) Reset(context.Context) {
 	c.curIdx = 0
+}
+
+// MinBatchSize is the minimum acceptable size of batches for tests in colexec*
+// packages.
+const MinBatchSize = 3
+
+// GenerateBatchSize generates somewhat random value to set coldata.BatchSize()
+// to.
+func GenerateBatchSize() int {
+	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
+	if randomizeBatchSize {
+		rng, _ := randutil.NewPseudoRand()
+		// sizesToChooseFrom specifies some predetermined and one random sizes
+		// that we will choose from. Such distribution is chosen due to the
+		// fact that most of our unit tests don't have a lot of data, so in
+		// order to exercise the multi-batch behavior we favor really small
+		// batch sizes. On the other hand, we also want to occasionally
+		// exercise that we handle batch sizes larger than default one
+		// correctly.
+		var sizesToChooseFrom = []int{
+			MinBatchSize,
+			MinBatchSize + 1,
+			MinBatchSize + 2,
+			coldata.BatchSize(),
+			MinBatchSize + rng.Intn(coldata.MaxBatchSize-MinBatchSize),
+		}
+		return sizesToChooseFrom[rng.Intn(len(sizesToChooseFrom))]
+	}
+	return coldata.BatchSize()
 }

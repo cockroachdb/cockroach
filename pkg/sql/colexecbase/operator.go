@@ -170,3 +170,39 @@ type ResettableOperator interface {
 	Operator
 	Resetter
 }
+
+// FeedOperator is used to feed an Operator chain with input by manually
+// setting the next batch.
+type FeedOperator struct {
+	ZeroInputNode
+	NonExplainable
+	batch coldata.Batch
+}
+
+// NewFeedOperator returns a new feed operator.
+func NewFeedOperator() *FeedOperator {
+	return &FeedOperator{}
+}
+
+// Init implements the colexecbase.Operator interface.
+func (FeedOperator) Init() {}
+
+// Next implements the colexecbase.Operator interface.
+func (o *FeedOperator) Next(context.Context) coldata.Batch {
+	return o.batch
+}
+
+// SetBatch sets the next batch to be returned on Next call.
+func (o *FeedOperator) SetBatch(batch coldata.Batch) {
+	o.batch = batch
+}
+
+var _ Operator = &FeedOperator{}
+
+// NonExplainable is a marker interface which identifies an Operator that
+// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
+// explain option will override the omitting behavior.
+type NonExplainable interface {
+	// nonExplainableMarker is just a marker method. It should never be called.
+	nonExplainableMarker()
+}
