@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -140,7 +141,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		keys.PublicSchemaID,
 		"rel",
 		hlc.Timestamp{},
-		&descpb.PrivilegeDescriptor{},
+		descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 		tree.PersistencePermanent,
 	)
 	if err := desc.AllocateIDs(ctx); err != nil {

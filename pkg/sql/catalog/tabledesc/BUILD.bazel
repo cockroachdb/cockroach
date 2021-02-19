@@ -9,6 +9,7 @@ go_library(
         "structured.go",
         "table.go",
         "table_desc.go",
+        "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc",
     visibility = ["//visibility:public"],

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -139,7 +140,7 @@ func (pt *partitioningTest) parse() error {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := pt.parsed.tableDesc.ValidateSelf(ctx); err != nil {
+		if err := catalog.ValidateSelf(pt.parsed.tableDesc); err != nil {
 			return err
 		}
 	}

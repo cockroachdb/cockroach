@@ -404,7 +404,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
 
 	<-childJobStartNotification
 
-	expected := "pq: unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress"
+	expected := `pq: relation "test" \(53\): unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress`
 	sqlDB.ExpectErr(t, expected, `
 ALTER TABLE t.test ADD COLUMN y INT;
 	`)
