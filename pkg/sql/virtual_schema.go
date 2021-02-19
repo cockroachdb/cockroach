@@ -176,7 +176,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		tree.PersistencePermanent,
 	)
 	if err != nil {
-		return mutDesc.TableDescriptor, err
+		return descpb.TableDescriptor{}, err
 	}
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {
 		if index.NumColumns() > 1 {
