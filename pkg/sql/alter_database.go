@@ -57,15 +57,16 @@ func (p *planner) AlterDatabaseOwner(
 }
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
-	privs := n.desc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
 	newOwner := n.n.Owner
-	if newOwner == privs.Owner() {
-		return nil
-	}
+	oldOwner := n.desc.GetPrivileges().Owner()
+
 	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx, n.desc, newOwner); err != nil {
 		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
 	}
 
 	if err := params.p.writeNonDropDatabaseChange(

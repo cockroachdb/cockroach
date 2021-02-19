@@ -365,6 +365,11 @@ func (c *CustomFuncs) CanUnnestJSONFromValues(
 			return false
 		}
 		currJSON := expr.(*memo.ConstExpr).Value.(*tree.DJSON)
+		if currJSON.Type() != json.ObjectJSONType {
+			// This value is not an object. It is important to check, because a JSON
+			// array can pass the checks below (see #60522).
+			return false
+		}
 		iter, err := firstJSON.ObjectIter()
 		if err != nil {
 			return false

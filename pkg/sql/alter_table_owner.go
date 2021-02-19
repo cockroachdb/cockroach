@@ -74,16 +74,15 @@ func (n *alterTableOwnerNode) startExec(params runParams) error {
 	p := params.p
 	tableDesc := n.desc
 	newOwner := n.owner
-
-	privs := n.desc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner() {
-		return nil
-	}
+	oldOwner := n.desc.GetPrivileges().Owner()
 
 	if err := p.checkCanAlterTableAndSetNewOwner(ctx, tableDesc, newOwner); err != nil {
 		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
 	}
 
 	if err := p.writeSchemaChange(
