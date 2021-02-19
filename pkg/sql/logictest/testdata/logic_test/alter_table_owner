@@ -36,6 +36,10 @@ user testuser
 statement error must be owner of table t
 ALTER TABLE t OWNER TO testuser2
 
+# other users must be owner to alter the owner to the current owner again
+statement error must be owner of table t
+ALTER TABLE t OWNER TO root
+
 # Non-superusers also must be a member of the new owning role.
 user root
 
