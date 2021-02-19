@@ -675,9 +675,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	arbiterIndexes, arbiterConstraints := mb.arbiterIndexesAndConstraints(conflictOrds, arbiterPredicate)
-	mb.arbiterIndexes = arbiterIndexes.Ordered()
-	mb.arbiterConstraints = arbiterConstraints.Ordered()
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
 
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
@@ -686,77 +684,27 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
-	// Loop over each arbiter index and constraint, creating an anti-join for
-	// each one.
-	arbiterIndexes.ForEach(func(idx int) {
-		index := mb.tab.Index(idx)
-		var pred tree.Expr
-		if _, isPartial := index.Predicate(); isPartial {
-			pred = mb.parsePartialIndexPredicateExpr(idx)
-		}
-
-		mb.buildAntiJoinForDoNothingArbiter(
-			inScope,
-			getIndexLaxKeyOrdinals(index),
-			pred,
-		)
-	})
-	arbiterConstraints.ForEach(func(uc int) {
-		uniqueConstraint := mb.tab.Unique(uc)
-		var pred tree.Expr
-		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
-			pred = mb.parseUniqueConstraintPredicateExpr(uc)
-		}
-		mb.buildAntiJoinForDoNothingArbiter(
-			inScope,
-			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			pred,
-		)
+	// Create an anti-join for each arbiter.
+	mb.arbiters.ForEach(func(name string, columnOrdinals util.FastIntSet, pred tree.Expr) {
+		mb.buildAntiJoinForDoNothingArbiter(inScope, columnOrdinals, pred)
 	})
 
-	// Loop over each arbiter index and constraint, creating an UpsertDistinctOn
-	// for each one. This must happen after all conflicting rows are removed with
-	// the anti-joins created above, to avoid removing valid rows (see #59125).
-	arbiterIndexes.ForEach(func(idx int) {
-		index := mb.tab.Index(idx)
-
-		// If the index is a partial index, project a new column that allows the
-		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialArbiterDistinctColumn for more
-		// details.
-		var partialIndexDistinctCol *scopeColumn
-		if _, isPartial := index.Predicate(); isPartial {
-			pred := mb.parsePartialIndexPredicateExpr(idx)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
-				insertColScope, pred, string(index.Name()),
+	// Create an UpsertDistinctOn for each arbiter. This must happen after all
+	// conflicting rows are removed with the anti-joins created above, to avoid
+	// removing valid rows (see #59125).
+	mb.arbiters.ForEach(func(name string, columnOrdinals util.FastIntSet, pred tree.Expr) {
+		// If the arbiter has a partial predicate, project a new column that
+		// allows the UpsertDistinctOn to only de-duplicate insert rows that
+		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
+		var partialDistinctCol *scopeColumn
+		if pred != nil {
+			partialDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, name,
 			)
 		}
 
-		mb.buildDistinctOnForDoNothingArbiter(
-			insertColScope,
-			getIndexLaxKeyOrdinals(index),
-			partialIndexDistinctCol,
-		)
-	})
-	arbiterConstraints.ForEach(func(uc int) {
-		uniqueConstraint := mb.tab.Unique(uc)
-
-		// If the constraint is partial, project a new column that allows the
-		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial predicate. See projectPartialArbiterDistinctColumn for more
-		// details.
-		var partialIndexDistinctCol *scopeColumn
-		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
-			pred := mb.parseUniqueConstraintPredicateExpr(uc)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
-				insertColScope, pred, uniqueConstraint.Name(),
-			)
-		}
-		mb.buildDistinctOnForDoNothingArbiter(
-			insertColScope,
-			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			partialIndexDistinctCol,
-		)
+		mb.buildDistinctOnForDoNothingArbiter(insertColScope, columnOrdinals, partialDistinctCol)
 	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
@@ -774,14 +722,16 @@ func (mb *mutationBuilder) buildInputForUpsert(
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	arbiterIndexes, arbiterConstraints := mb.arbiterIndexesAndConstraints(conflictOrds, arbiterPredicate)
-	mb.arbiterIndexes = arbiterIndexes.Ordered()
-	mb.arbiterConstraints = arbiterConstraints.Ordered()
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
+	// TODO(mgartner): Use arbiters.ForEach to iterate over arbiters rather than
+	// directly accessing the index and constraint sets. This will require
+	// support for partial unique constraints in this function.
+	arbiterIndexes := mb.arbiters.indexes
+	arbiterConstraints := mb.arbiters.uniqueConstraints
 
 	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
 	//  similar to buildInputForDoNothing.
-	if arbiterIndexes.Len() > 1 || arbiterConstraints.Len() > 1 ||
-		(!arbiterIndexes.Empty() && !arbiterConstraints.Empty()) {
+	if mb.arbiters.Len() > 1 {
 		panic(unimplemented.NewWithIssue(53170,
 			"there are multiple unique or exclusion constraints matching the ON CONFLICT specification"))
 	}
