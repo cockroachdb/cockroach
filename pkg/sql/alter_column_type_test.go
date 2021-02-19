@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ import (
 func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 60801, "needs to be rewritten to not use RunBeforeChildJobs")
 
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
@@ -97,6 +99,7 @@ ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 60801, "needs to be rewritten to not use RunBeforeChildJobs")
 
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
