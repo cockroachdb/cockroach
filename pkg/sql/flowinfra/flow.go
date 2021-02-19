@@ -437,7 +437,8 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 			sp.SetSpanStats(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(roachpb.NodeID(f.NodeID.SQLInstanceID()), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
-					MaxMemUsage: optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
+					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
+					MaxDiskUsage: optional.MakeUint(uint64(f.FlowCtx.DiskMonitor.MaximumBytes())),
 				},
 			})
 		}

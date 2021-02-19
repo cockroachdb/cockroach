@@ -89,6 +89,7 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 type NodeLevelStats struct {
 	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
 	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
+	MaxDiskUsageGroupedByNode     map[roachpb.NodeID]int64
 	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
 	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
 	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
@@ -102,6 +103,7 @@ type NodeLevelStats struct {
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
+	MaxDiskUsage     int64
 	KVBytesRead      int64
 	KVRowsRead       int64
 	KVTime           time.Duration
@@ -186,6 +188,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	a.nodeLevelStats = NodeLevelStats{
 		NetworkBytesSentGroupedByNode: make(map[roachpb.NodeID]int64),
 		MaxMemoryUsageGroupedByNode:   make(map[roachpb.NodeID]int64),
+		MaxDiskUsageGroupedByNode:     make(map[roachpb.NodeID]int64),
 		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
 		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
 		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
@@ -219,8 +222,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 			a.nodeLevelStats.NetworkBytesSentGroupedByNode[stats.originNodeID] += bytes
 		}
 
-		// The row execution flow attaches this stat to a stream stat with the
-		// last outbox, so we need to check stream stats for max memory usage.
+		// The row execution flow attaches flow stats to a stream stat with the
+		// last outbox, so we need to check stream stats for max memory and disk
+		// usage.
 		// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that
 		// are associated with streams, since it's a flow level stat. However,
 		// due to the row exec engine infrastructure, it is too complicated to
@@ -230,6 +234,11 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
 			if memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] {
 				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] = memUsage
+			}
+		}
+		if stats.stats.FlowStats.MaxDiskUsage.HasValue() {
+			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[stats.originNodeID] {
+				a.nodeLevelStats.MaxDiskUsageGroupedByNode[stats.originNodeID] = diskUsage
 			}
 		}
 
@@ -247,13 +256,17 @@ func (a *TraceAnalyzer) ProcessStats() error {
 			continue
 		}
 
-		// The vectorized flow attaches the MaxMemUsage stat to a flow level
-		// span, so we need to check flow stats for max memory usage.
 		for _, v := range stats.stats {
 			if v.FlowStats.MaxMemUsage.HasValue() {
 				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] {
 					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] = memUsage
 				}
+			}
+			if v.FlowStats.MaxDiskUsage.HasValue() {
+				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[nodeID] {
+					a.nodeLevelStats.MaxDiskUsageGroupedByNode[nodeID] = diskUsage
+				}
+
 			}
 		}
 	}
@@ -268,6 +281,12 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	for _, maxMemUsage := range a.nodeLevelStats.MaxMemoryUsageGroupedByNode {
 		if maxMemUsage > a.queryLevelStats.MaxMemUsage {
 			a.queryLevelStats.MaxMemUsage = maxMemUsage
+		}
+	}
+
+	for _, maxDiskUsage := range a.nodeLevelStats.MaxDiskUsageGroupedByNode {
+		if maxDiskUsage > a.queryLevelStats.MaxDiskUsage {
+			a.queryLevelStats.MaxDiskUsage = maxDiskUsage
 		}
 	}
 

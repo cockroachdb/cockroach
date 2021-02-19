@@ -960,7 +960,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 							span.SetSpanStats(&execinfrapb.ComponentStats{
 								Component: execinfrapb.FlowComponentID(outputStream.OriginNodeID, flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
-									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+									MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+									MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
 								},
 							})
 						}

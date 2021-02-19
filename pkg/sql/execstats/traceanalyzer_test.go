@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -69,6 +70,9 @@ func TestTraceAnalyzer(t *testing.T) {
 							return nil
 						}
 					},
+				},
+				DistSQL: &execinfra.TestingKnobs{
+					ForceDiskSpill: true,
 				},
 			},
 		}})
@@ -161,6 +165,9 @@ func TestTraceAnalyzer(t *testing.T) {
 			)
 			require.Equal(
 				t, numNodes, len(nodeLevelStats.MaxMemoryUsageGroupedByNode), "expected all nodes to have specified maximum memory usage",
+			)
+			require.Equal(
+				t, numNodes, len(nodeLevelStats.MaxDiskUsageGroupedByNode), "expected all nodes to have specified maximum disk usage",
 			)
 
 			queryLevelStats := tc.analyzer.GetQueryLevelStats()
