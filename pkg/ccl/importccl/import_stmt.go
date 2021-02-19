@@ -1280,8 +1280,8 @@ func writeNonDropDatabaseChange(
 
 	queuedJob := []jobspb.JobID{job.ID()}
 	b := txn.NewBatch()
-	dg := catalogkv.NewOneLevelUncachedDescGetter(txn, p.ExecCfg().Codec)
-	if err := desc.Validate(ctx, dg); err != nil {
+	bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, p.ExecCfg().Codec)
+	if err := catalog.ValidateSelfAndCrossReferences(ctx, bdg, desc); err != nil {
 		return nil, err
 	}
 	err = descsCol.WriteDescToBatch(

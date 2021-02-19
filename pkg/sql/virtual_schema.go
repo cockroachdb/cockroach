@@ -645,7 +645,7 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewImmutable(tableDesc)
-			if err := td.ValidateSelf(ctx); err != nil {
+			if err := catalog.ValidateSelf(td); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}
@@ -736,7 +736,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtua
 func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (*virtualDefEntry, error) {
 	entry, ok := vs.defsByID[id]
 	if !ok {
-		return nil, catalog.ErrDescriptorNotFound
+		return nil, catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
 	return entry, nil
 }

@@ -144,6 +144,11 @@ func (p *planner) UnsafeUpsertDescriptor(
 	default:
 		return errors.AssertionFailedf("unknown descriptor type %T for id %d", existing, id)
 	}
+
+	if force {
+		p.Descriptors().SkipValidationOnWrite()
+	}
+
 	{
 		b := p.txn.NewBatch()
 		if err := p.Descriptors().WriteDescToBatch(
@@ -380,32 +385,24 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if val.Value != nil {
 		existingID = descpb.ID(val.ValueInt())
 	}
+	flags := p.CommonLookupFlags(true /* required */)
+	flags.IncludeDropped = true
+	flags.IncludeOffline = true
 	validateDescriptor := func() error {
-		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, descID, p.txn)
+		desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), descID, flags)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
+		invalid := false
 		switch desc.(type) {
 		case nil:
 			return nil
-		case *tabledesc.Mutable, *typedesc.Mutable:
-			if parentID == 0 || parentSchemaID == 0 {
-				return pgerror.Newf(pgcode.InvalidCatalogName,
-					"invalid prefix (%d, %d) for object %d",
-					parentID, parentSchemaID, descID)
-			}
-		case *schemadesc.Mutable:
-			if parentID == 0 || parentSchemaID != 0 {
-				return pgerror.Newf(pgcode.InvalidCatalogName,
-					"invalid prefix (%d, %d) for schema %d",
-					parentID, parentSchemaID, descID)
-			}
-		case *dbdesc.Mutable:
-			if parentID != 0 || parentSchemaID != 0 {
-				return pgerror.Newf(pgcode.InvalidCatalogName,
-					"invalid prefix (%d, %d) for database %d",
-					parentID, parentSchemaID, descID)
-			}
+		case catalog.TableDescriptor, catalog.TypeDescriptor:
+			invalid = parentID == descpb.InvalidID || parentSchemaID == descpb.InvalidID
+		case catalog.SchemaDescriptor:
+			invalid = parentID == descpb.InvalidID || parentSchemaID != descpb.InvalidID
+		case catalog.DatabaseDescriptor:
+			invalid = parentID != descpb.InvalidID || parentSchemaID != descpb.InvalidID
 		default:
 			// The public schema does not have a descriptor.
 			if descID == keys.PublicSchemaID {
@@ -414,15 +411,19 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 			return errors.AssertionFailedf(
 				"unexpected descriptor type %T for descriptor %d", desc, descID)
 		}
+
+		if invalid {
+			return pgerror.Newf(pgcode.InvalidCatalogName,
+				"invalid prefix (%d, %d) for %s %d",
+				parentID, parentSchemaID, desc.TypeName(), descID)
+		}
 		return nil
 	}
 	validateParentDescriptor := func() error {
-		if parentID == 0 {
+		if parentID == descpb.InvalidID {
 			return nil
 		}
-		parent, err := p.Descriptors().GetMutableDescriptorByID(
-			ctx, parentID, p.txn,
-		)
+		parent, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentID, flags)
 		if err != nil {
 			return errors.Wrapf(err, "failed to look up parent %d", parentID)
 		}
@@ -433,12 +434,10 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		return nil
 	}
 	validateParentSchemaDescriptor := func() error {
-		if parentSchemaID == 0 || parentSchemaID == keys.PublicSchemaID {
+		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.Descriptors().GetMutableDescriptorByID(
-			ctx, parentSchemaID, p.txn,
-		)
+		schema, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentSchemaID, flags)
 		if err != nil {
 			return err
 		}
@@ -520,7 +519,10 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 				parentID, parentSchemaID, name, existingID, descID)
 		}
 	}
-	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, descID, p.txn)
+	flags := p.CommonLookupFlags(true /* required */)
+	flags.IncludeDropped = true
+	flags.IncludeOffline = true
+	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, descID, flags)
 	var forceNoticeString string // for the event
 	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 		if force {
@@ -584,6 +586,9 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 		mut.SetDropped()
 		if err := p.Descriptors().AddUncommittedDescriptor(mut); err != nil {
 			return errors.WithAssertionFailure(err)
+		}
+		if force {
+			p.Descriptors().SkipValidationOnWrite()
 		}
 	}
 	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
