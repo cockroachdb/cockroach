@@ -110,11 +110,17 @@ TABLE part1
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX primary
       ├── a int not null
-      └── partition by list prefixes
-           ├── (1)
-           ├── (3)
-           ├── (4)
-           └── (5)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           ├── p2
+           │    └── partition by list prefixes
+           │         ├── (3)
+           │         ├── (4)
+           │         └── (5)
+           └── p3
+                └── partition by list prefixes
 
 exec-ddl
 CREATE TABLE part2 (
@@ -145,19 +151,29 @@ TABLE part2
  │    ├── a string not null
  │    ├── b string not null
  │    ├── c int not null
- │    └── partition by list prefixes
- │         ├── ('foo', 'bar')
- │         ├── ('foo', 'baz')
- │         ├── ('qux', 'qux')
- │         └── ('waldo')
+ │    └── partitions
+ │         ├── p1
+ │         │    └── partition by list prefixes
+ │         │         ├── ('foo', 'bar')
+ │         │         ├── ('foo', 'baz')
+ │         │         └── ('qux', 'qux')
+ │         ├── p2
+ │         │    └── partition by list prefixes
+ │         │         └── ('waldo')
+ │         └── p3
+ │              └── partition by list prefixes
  └── INDEX secondary
       ├── c int not null
       ├── a string not null
       ├── b string not null
-      └── partition by list prefixes
-           ├── (1)
-           ├── (3)
-           └── (4)
+      └── partitions
+           ├── pi1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── pi2
+                └── partition by list prefixes
+                     ├── (3)
+                     └── (4)
 
 exec-ddl
 CREATE TABLE inv (
