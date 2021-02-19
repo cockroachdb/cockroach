@@ -24,7 +24,7 @@ import (
 func NewAndProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
 ) (colexecbase.Operator, error) {
@@ -66,7 +66,7 @@ func NewAndProjOp(
 func NewOrProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
 ) (colexecbase.Operator, error) {
@@ -111,8 +111,8 @@ type andProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -130,7 +130,7 @@ type andProjOp struct {
 func newAndProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &andProjOp{
@@ -195,7 +195,7 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -270,7 +270,7 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
+		o.rightFeedOp.SetBatch(batch)
 		batch = o.rightProjOpChain.Next(ctx)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
@@ -549,8 +549,8 @@ type andRightNullProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -568,7 +568,7 @@ type andRightNullProjOp struct {
 func newAndRightNullProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &andRightNullProjOp{
@@ -633,7 +633,7 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -954,8 +954,8 @@ type andLeftNullProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -973,7 +973,7 @@ type andLeftNullProjOp struct {
 func newAndLeftNullProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &andLeftNullProjOp{
@@ -1038,7 +1038,7 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -1074,7 +1074,7 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
+		o.rightFeedOp.SetBatch(batch)
 		batch = o.rightProjOpChain.Next(ctx)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
@@ -1340,8 +1340,8 @@ type orProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1359,7 +1359,7 @@ type orProjOp struct {
 func newOrProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &orProjOp{
@@ -1424,7 +1424,7 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -1500,7 +1500,7 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
+		o.rightFeedOp.SetBatch(batch)
 		batch = o.rightProjOpChain.Next(ctx)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
@@ -1779,8 +1779,8 @@ type orRightNullProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1798,7 +1798,7 @@ type orRightNullProjOp struct {
 func newOrRightNullProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &orRightNullProjOp{
@@ -1863,7 +1863,7 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -2185,8 +2185,8 @@ type orLeftNullProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftFeedOp       *colexecbase.FeedOperator
+	rightFeedOp      *colexecbase.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -2204,7 +2204,7 @@ type orLeftNullProjOp struct {
 func newOrLeftNullProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &orLeftNullProjOp{
@@ -2269,7 +2269,7 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -2306,7 +2306,7 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
+		o.rightFeedOp.SetBatch(batch)
 		batch = o.rightProjOpChain.Next(ctx)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()

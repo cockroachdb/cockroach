@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -134,7 +135,7 @@ func (c *sortChunksOp) ExportBuffered(context.Context, colexecbase.Operator) col
 	// batch that hasn't been "processed" and should be the first to be exported.
 	firstTupleIdx := c.input.exportState.numProcessedTuplesFromBatch
 	if c.input.batch != nil && firstTupleIdx+c.exportedFromBatch < c.input.batch.Length() {
-		makeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
+		colexecutils.MakeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}
@@ -199,7 +200,7 @@ const (
 // buffer when appropriate.
 type chunker struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from input.
@@ -234,7 +235,7 @@ type chunker struct {
 	// bufferedTuples is a buffer to store tuples when a chunk is bigger than
 	// coldata.BatchSize() or when the chunk is the last in the last read batch
 	// (we don't know yet where the end of such chunk is).
-	bufferedTuples *appendOnlyBufferedBatch
+	bufferedTuples *colexecutils.AppendOnlyBufferedBatch
 
 	readFrom chunkerReadingState
 	state    chunkerState
@@ -278,7 +279,7 @@ func newChunker(
 
 func (s *chunker) init() {
 	s.Input.Init()
-	s.bufferedTuples = newAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
+	s.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
 }
@@ -421,7 +422,7 @@ func (s *chunker) buffer(start int, end int) {
 	}
 	s.allocator.PerformOperation(s.bufferedTuples.ColVecs(), func() {
 		s.exportState.numProcessedTuplesFromBatch = end
-		s.bufferedTuples.append(s.batch, start, end)
+		s.bufferedTuples.AppendTuples(s.batch, start, end)
 	})
 }
 

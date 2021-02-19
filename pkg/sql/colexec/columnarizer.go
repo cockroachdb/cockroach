@@ -45,7 +45,7 @@ const (
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	colexecbase.NonExplainable
 
 	mode       columnarizerMode
 	allocator  *colmem.Allocator

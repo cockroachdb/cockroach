@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -166,7 +167,7 @@ type hashTable struct {
 	// vals stores columns of the build source that are specified in
 	// colsToStore in the constructor. The ID of a tuple at any index of vals
 	// is index + 1.
-	vals *appendOnlyBufferedBatch
+	vals *colexecutils.AppendOnlyBufferedBatch
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
 
@@ -262,7 +263,7 @@ func newHashTable(
 			first: make([]uint64, initialNumHashBuckets),
 		},
 		keys:              make([]coldata.Vec, len(eqCols)),
-		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
+		vals:              colexecutils.NewAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
 		keyCols:           eqCols,
 		numBuckets:        initialNumHashBuckets,
 		loadFactor:        loadFactor,
@@ -363,7 +364,7 @@ func (ht *hashTable) fullBuild(ctx context.Context, input colexecbase.Operator) 
 			break
 		}
 		ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
-			ht.vals.append(batch, 0 /* startIdx */, batch.Length())
+			ht.vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
 	ht.buildFromBufferedTuples(ctx)
@@ -481,7 +482,7 @@ func (ht *hashTable) removeDuplicates(
 func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch) {
 	numBuffered := uint64(ht.vals.Length())
 	ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
-		ht.vals.append(batch, 0 /* startIdx */, batch.Length())
+		ht.vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	})
 	ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:batch.Length()]...)
 	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, uint64(batch.Length()))
