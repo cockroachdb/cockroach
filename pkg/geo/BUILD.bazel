@@ -20,7 +20,7 @@ go_library(
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
-        "//pkg/geo/geos",
+        "//pkg/geo/wkt",
         "//pkg/util",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",

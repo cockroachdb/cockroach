@@ -246,9 +246,8 @@ func TestParseEWKT(t *testing.T) {
 		expectedErr string
 	}{
 		{"POINT Z (1 2 3)", "unimplemented: dimension XYZ is not currently supported"},
-		// GEOS assumes all M coordinates as Z coordinates, so the error message is not great here.
-		{"POINT M (1 2 3)", "unimplemented: dimension XYZ is not currently supported"},
-		{"POINT ZM (1 2 3 4)", "unimplemented: dimension XYZ is not currently supported"},
+		{"POINT M (1 2 3)", "unimplemented: dimension XYM is not currently supported"},
+		{"POINT ZM (1 2 3 4)", "unimplemented: dimension XYZM is not currently supported"},
 	}
 	for _, tc := range errorTestCases {
 		t.Run(string(tc.wkt), func(t *testing.T) {
@@ -372,7 +371,9 @@ func TestParseGeometry(t *testing.T) {
 		{
 			"invalid",
 			Geometry{},
-			"geos error: ParseException: Unknown type: 'INVALID'",
+			`lex error: invalid keyword at pos 0
+invalid
+^`,
 		},
 		{
 			"",
@@ -586,7 +587,9 @@ func TestParseGeography(t *testing.T) {
 		{
 			"invalid",
 			Geography{},
-			"geos error: ParseException: Unknown type: 'INVALID'",
+			`lex error: invalid keyword at pos 0
+invalid
+^`,
 		},
 		{
 			"",

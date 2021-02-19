@@ -24,6 +24,7 @@ const eof = 0
 
 // LexError is an error that occurs during lexing.
 type LexError struct {
+	// TODO(ayang): refactor these two errors into one error type
 	expectedTokType string
 	pos             int
 	str             string
@@ -216,7 +217,7 @@ func (l *wktLex) Lex(yylval *wktSymType) int {
 	default:
 		if unicode.IsLetter(c) {
 			return l.keyword()
-		} else if isNumRune(c) {
+		} else if isValidFirstNumRune(c) {
 			return l.num(yylval)
 		} else {
 			l.next()
@@ -511,10 +512,25 @@ func (l *wktLex) setError(err error) {
 	}
 }
 
+// isValidFirstNumRune returns whether a rune is valid as the first rune in a number (coordinate).
+func isValidFirstNumRune(r rune) bool {
+	switch r {
+	// PostGIS doesn't seem to accept numbers with a leading '+'.
+	case '+':
+		return false
+	// Scientific notation number must have a number before the e.
+	// Checking this case explicitly helps disambiguate between a number and a keyword.
+	case 'e', 'E':
+		return false
+	default:
+		return isNumRune(r)
+	}
+}
+
 // isNumRune returns whether a rune could potentially be a part of a number (coordinate).
 func isNumRune(r rune) bool {
 	switch r {
-	case '-', '.':
+	case '-', '.', 'e', 'E', '+':
 		return true
 	default:
 		return unicode.IsDigit(r)

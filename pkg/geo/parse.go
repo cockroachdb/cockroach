@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/wkt"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/pierrre/geohash"
@@ -168,9 +168,14 @@ func parseEWKT(
 		}
 	}
 
-	ewkb, err := geos.WKTToEWKB(geopb.WKT(str), srid)
-	if err != nil {
-		return geopb.SpatialObject{}, err
+	geom, wktUnmarshalErr := wkt.Unmarshal(string(str))
+	if wktUnmarshalErr != nil {
+		return geopb.SpatialObject{}, wktUnmarshalErr
+	}
+	AdjustGeomTSRID(geom, srid)
+	ewkb, ewkbMarshalErr := ewkb.Marshal(geom, DefaultEWKBEncodingFormat)
+	if ewkbMarshalErr != nil {
+		return geopb.SpatialObject{}, ewkbMarshalErr
 	}
 	return parseEWKBRaw(soType, ewkb)
 }
