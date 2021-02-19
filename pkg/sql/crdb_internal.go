@@ -3835,7 +3835,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 				if descriptor == nil {
 					return nil
 				}
-				err := descriptor.Validate(ctx, fn)
+				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
 				if err == nil {
 					return nil
 				}
@@ -3862,7 +3862,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 				if descriptor == nil {
 					return nil
 				}
-				err = descriptor.Validate(ctx, fn)
+				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
 				if err == nil {
 					return nil
 				}

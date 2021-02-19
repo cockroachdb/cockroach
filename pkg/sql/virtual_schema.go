@@ -645,7 +645,7 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewImmutable(tableDesc)
-			if err := td.ValidateSelf(ctx); err != nil {
+			if err := catalog.ValidateSelf(td); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

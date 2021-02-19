@@ -222,7 +222,7 @@ func requiredError(kind DescriptorKind, id descpb.ID) error {
 // Txn. It will use the transaction to resolve mutable descriptors using
 // GetDescriptorByID but will pass a nil DescGetter into those lookup calls to
 // ensure that the entire graph of dependencies is not traversed.
-func NewOneLevelUncachedDescGetter(txn *kv.Txn, codec keys.SQLCodec) catalog.DescGetter {
+func NewOneLevelUncachedDescGetter(txn *kv.Txn, codec keys.SQLCodec) catalog.BatchDescGetter {
 	return &oneLevelUncachedDescGetter{
 		txn:   txn,
 		codec: codec,
@@ -312,7 +312,11 @@ func unwrapDescriptor(
 		return nil, nil
 	}
 	if validate {
-		if err := unwrapped.Validate(ctx, dg); err != nil {
+		var level catalog.ValidationLevel
+		if dg != nil {
+			level = catalog.ValidationLevelSelfAndCrossReferences
+		}
+		if err := catalog.Validate(ctx, dg, level, unwrapped).CombinedError(); err != nil {
 			return nil, err
 		}
 	}
@@ -329,29 +333,25 @@ func unwrapDescriptorMutable(
 	table, database, typ, schema :=
 		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	var err error
+	var mut catalog.MutableDescriptor
 	switch {
 	case table != nil:
-		mutTable, err := tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
-		if err != nil {
-			return nil, err
-		}
-		if err := mutTable.ValidateSelf(ctx); err != nil {
-			return nil, err
-		}
-		return mutTable, nil
+		mut, err = tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
 	case database != nil:
-		dbDesc := dbdesc.NewExistingMutable(*database)
-		if err := dbDesc.Validate(ctx, dg); err != nil {
-			return nil, err
-		}
-		return dbDesc, nil
+		mut, err = dbdesc.NewExistingMutable(*database), nil
 	case typ != nil:
-		return typedesc.NewExistingMutable(*typ), nil
+		mut, err = typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
-		return schemadesc.NewMutableExisting(*schema), nil
-	default:
-		return nil, nil
+		mut, err = schemadesc.NewMutableExisting(*schema), nil
 	}
+	if mut != nil && err == nil {
+		err = catalog.ValidateSelf(mut)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return mut, nil
 }
 
 // CountUserDescriptors returns the number of descriptors present that were
@@ -416,10 +416,8 @@ func GetAllDescriptors(
 	for _, desc := range descs {
 		dg[desc.GetID()] = desc
 	}
-	for _, desc := range descs {
-		if err := desc.Validate(ctx, dg); err != nil {
-			return nil, err
-		}
+	if err := catalog.ValidateSelfAndCrossReferences(ctx, dg, descs...); err != nil {
+		return nil, err
 	}
 	return descs, nil
 }
