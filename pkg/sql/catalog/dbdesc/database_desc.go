@@ -13,7 +13,6 @@
 package dbdesc
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -107,9 +106,7 @@ func NewImmutable(desc descpb.DatabaseDescriptor) *Immutable {
 // a nil cluster version. This is for a database that is created in the same
 // transaction.
 func NewCreatedMutable(desc descpb.DatabaseDescriptor) *Mutable {
-	return &Mutable{
-		Immutable: makeImmutable(desc),
-	}
+	return &Mutable{Immutable: makeImmutable(desc)}
 }
 
 // NewExistingMutable returns a Mutable from the given database descriptor with
@@ -271,55 +268,76 @@ func (desc *Immutable) ForEachSchemaInfo(
 // ValidateSelf validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *Immutable) ValidateSelf(_ context.Context) error {
-	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
-		return err
-	}
-	if desc.GetID() == 0 {
-		return fmt.Errorf("invalid database ID %d", desc.GetID())
-	}
-
-	if desc.IsMultiRegion() {
-		// Ensure no regions are duplicated.
-		regions := make(map[descpb.RegionName]struct{})
-		dbRegions, err := desc.RegionNames()
-		if err != nil {
-			return err
-		}
-		for _, region := range dbRegions {
-			if _, seen := regions[region]; seen {
-				return errors.AssertionFailedf("region %q seen twice on db %d", region, desc.GetID())
-			}
-			regions[region] = struct{}{}
-		}
-
-		if desc.RegionConfig.PrimaryRegion == "" {
-			return errors.AssertionFailedf("primary region unset on a multi-region db %d", desc.GetID())
-		}
-
-		if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
-			return errors.AssertionFailedf(
-				"primary region not found in list of regions on db %d", desc.GetID())
-		}
+func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+	// Validate local properties of the descriptor.
+	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
+	if desc.GetID() == descpb.InvalidID {
+		vea.Report(fmt.Errorf("invalid database ID %d", errors.Safe(desc.GetID())))
 	}
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
 	// run again and mixed-version clusters always write "good" descriptors.
-	descpb.MaybeFixPrivileges(desc.GetID(), desc.Privileges)
+	descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
 
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID(), privilege.Database)
+	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
+
+	if desc.IsMultiRegion() {
+		desc.validateMultiRegion(vea)
+	}
 }
 
-// Validate punts to ValidateSelf.
-func (desc *Immutable) Validate(ctx context.Context, _ catalog.DescGetter) error {
-	return desc.ValidateSelf(ctx)
+// validateMultiRegion performs checks specific to multi-region DBs.
+func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
+
+	// Ensure no regions are duplicated.
+	regions := make(map[descpb.RegionName]struct{})
+	dbRegions, err := desc.RegionNames()
+	if err != nil {
+		vea.Report(err)
+		return
+	}
+
+	for _, region := range dbRegions {
+		if _, seen := regions[region]; seen {
+			vea.Report(errors.AssertionFailedf(
+				"region %q seen twice on db %d", region, errors.Safe(desc.GetID())))
+		}
+		regions[region] = struct{}{}
+	}
+
+	if desc.RegionConfig.PrimaryRegion == "" {
+		vea.Report(errors.AssertionFailedf(
+			"primary region unset on a multi-region db %d", errors.Safe(desc.GetID())))
+	} else if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
+		vea.Report(errors.AssertionFailedf(
+			"primary region not found in list of regions on db %d", errors.Safe(desc.GetID())))
+	}
 }
 
-// ValidateTxnCommit punts to Validate.
-func (desc *Immutable) ValidateTxnCommit(ctx context.Context, descGetter catalog.DescGetter) error {
-	return desc.Validate(ctx, descGetter)
+// GetReferencedDescIDs returns the IDs of all descriptors referenced by
+// this descriptor, including itself.
+func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+	ids := catalog.MakeDescriptorIDSet(desc.GetID())
+	if id, err := desc.MultiRegionEnumID(); err == nil {
+		ids.Add(id)
+	}
+	return ids
+}
+
+// ValidateCrossReferences implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateCrossReferences(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+	// No-op.
+}
+
+// ValidateTxnCommit implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateTxnCommit(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+	// No-op.
 }
 
 // SchemaMeta implements the tree.SchemaMeta interface.

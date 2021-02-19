@@ -126,12 +126,6 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Validate the type descriptor after the changes.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := n.desc.Validate(params.ctx, dg); err != nil {
-		return err
-	}
-
 	if !eventLogDone {
 		// Write a log event.
 		if err := params.p.logEvent(params.ctx,

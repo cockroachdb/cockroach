@@ -25,40 +25,33 @@ type DescGetter interface {
 // BatchDescGetter is like DescGetter but retrieves batches of descriptors,
 // which for some implementation may make more sense performance-wise.
 type BatchDescGetter interface {
+	DescGetter
 	GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error)
 }
 
-// GetDescs retrieves multiple descriptors using a DescGetter.
-// If the latter is also a BatchDescGetter, it will delegate to its GetDescs
-// method.
-func GetDescs(ctx context.Context, descGetter DescGetter, reqs []descpb.ID) ([]Descriptor, error) {
-	if bdg, ok := descGetter.(BatchDescGetter); ok {
-		return bdg.GetDescs(ctx, reqs)
-	}
-	ret := make([]Descriptor, len(reqs))
+type wrappedDescGetter struct {
+	DescGetter
+}
+
+func (w wrappedDescGetter) GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error) {
+	resps := make([]Descriptor, len(reqs))
 	for i, id := range reqs {
-		desc, err := descGetter.GetDesc(ctx, id)
+		desc, err := w.GetDesc(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		ret[i] = desc
+		resps[i] = desc
 	}
-	return ret, nil
+	return resps, nil
 }
 
-// GetTypeDescFromID retrieves the type descriptor for the type ID passed
-// in using an existing descGetter. It returns an error if the descriptor
-// doesn't exist or if it exists and is not a type descriptor.
-func GetTypeDescFromID(ctx context.Context, dg DescGetter, id descpb.ID) (TypeDescriptor, error) {
-	desc, err := dg.GetDesc(ctx, id)
-	if err != nil {
-		return nil, err
+// AsBatchDescGetter is a convenience function for turning a DescGetter into a
+// BatchDescGetter.
+func AsBatchDescGetter(dg DescGetter) BatchDescGetter {
+	if bdg, ok := dg.(BatchDescGetter); ok {
+		return bdg
 	}
-	typ, ok := desc.(TypeDescriptor)
-	if !ok {
-		return nil, ErrDescriptorNotFound
-	}
-	return typ, nil
+	return wrappedDescGetter{dg}
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table

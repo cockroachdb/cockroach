@@ -404,8 +404,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := desc.Validate(params.ctx, dg); err != nil {
+	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
 		return err
 	}
 
@@ -751,7 +750,7 @@ func ResolveUniqueWithoutIndexConstraint(
 	}
 
 	// Verify we are not writing a constraint over the same name.
-	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	constraintInfo, err := tbl.GetConstraintInfo()
 	if err != nil {
 		return err
 	}
@@ -950,7 +949,7 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	constraintInfo, err := tbl.GetConstraintInfo()
 	if err != nil {
 		return err
 	}
@@ -2279,8 +2278,8 @@ func NewTableDesc(
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
 		}
 
-		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
-		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
+		bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
+		if err := catalog.ValidateSelfAndCrossReferences(ctx, bdg, &desc); err != nil {
 			return nil, err
 		}
 	}

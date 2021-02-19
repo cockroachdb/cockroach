@@ -11,6 +11,7 @@
 package dbdesc
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -77,5 +78,74 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	}
 	if len(desc.GetPrivileges().Users) != 2 {
 		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
+	}
+}
+
+func TestValidateDatabaseDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		err  string
+		desc *Immutable
+	}{
+		{`invalid database ID 0`,
+			NewImmutable(descpb.DatabaseDescriptor{
+				Name:       "db",
+				ID:         0,
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+			}),
+		},
+		{
+			`region "us-east-1" seen twice on db 200`,
+			NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+						{Name: "us-east-1"},
+					},
+					PrimaryRegion: "us-east-1",
+				},
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+			}),
+		},
+		{
+			`primary region unset on a multi-region db 200`,
+			NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+					},
+				},
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+			}),
+		},
+		{
+			`primary region not found in list of regions on db 200`,
+			NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+					},
+					PrimaryRegion: "us-east-2",
+				},
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+			}),
+		},
+	}
+	for i, d := range testData {
+		t.Run(d.err, func(t *testing.T) {
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", d.desc.TypeName(), d.desc.GetName(), d.desc.GetID(), d.err)
+			if err := catalog.ValidateSelf(d.desc); err == nil {
+				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
+			} else if expectedErr != err.Error() {
+				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
+			}
+		})
 	}
 }

@@ -177,16 +177,8 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 }
 
 // GetConstraintInfo returns a summary of all constraints on the table.
-func (desc *wrapper) GetConstraintInfo(
-	ctx context.Context, dg catalog.DescGetter,
-) (map[string]descpb.ConstraintDetail, error) {
-	var tableLookup catalog.TableLookupFn
-	if dg != nil {
-		tableLookup = func(id descpb.ID) (catalog.TableDescriptor, error) {
-			return catalog.GetTableDescFromID(ctx, dg, id)
-		}
-	}
-	return desc.collectConstraintInfo(tableLookup)
+func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
+	return desc.collectConstraintInfo(nil)
 }
 
 // GetConstraintInfoWithLookup returns a summary of all constraints on the

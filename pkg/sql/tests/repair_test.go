@@ -98,7 +98,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		_, err = db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
-		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
+		require.Regexp(t, `pq: relation "foo" \(53\): referenced database descriptor 52 not found`, err)
 
 		// In this case, we're treating the injected descriptor as having no data
 		// so we can clean it up by just deleting the erroneous descriptor and
@@ -151,7 +151,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		_, err = db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
-		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
+		require.Regexp(t, `pq: relation "foo" \(53\): referenced database descriptor 52 not found`, err)
 
 		// In this case, we're going to inject a parent database
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
@@ -339,7 +339,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				upsertInvalidateDuplicateColumnDescriptor,
 			},
 			op:       `SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52);`,
-			expErrRE: `failed to retrieve descriptor 52: duplicate column name: "i"`,
+			expErrRE: `relation "foo" \(52\): duplicate column name: "i"`,
 		},
 		{
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
@@ -351,7 +351,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_upsert_namespace_entry",
-					info: `"Force":true,"FailedValidation":true,"ValidationErrors":"failed to retrieve descriptor 52: duplicate column name: \\"i\\""`,
+					info: `"Force":true,"FailedValidation":true,"ValidationErrors":".*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -363,7 +363,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_descriptor(52);`,
-			expErrRE: `duplicate column name: "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_delete_descriptor\(\): relation "foo" \(52\): duplicate column name: "i"`,
 		},
 		{
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -376,7 +376,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_delete_descriptor",
-					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
+					info: `"Force":true,"ForceNotice":".*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -388,7 +388,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
 			},
 			op:       updateInvalidateDuplicateColumnDescriptorNoForce,
-			expErrRE: `duplicate column name: "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation "foo" \(52\): duplicate column name: "i"`,
 		},
 		{
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -401,7 +401,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_upsert_descriptor",
-					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
+					info: `"Force":true,"ForceNotice":".*duplicate column name: \\"i\\""`,
 				},
 			},
 			after: []string{
@@ -417,7 +417,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry(50, 29, 'foo', 52);`,
-			expErrRE: `duplicate column name: "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_delete_namespace_entry\(\): failed to retrieve descriptor 52: relation "foo" \(52\): duplicate column name: "i"`,
 		},
 		{
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -430,7 +430,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_delete_namespace_entry",
-					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
+					info: `"Force":true,"ForceNotice":".*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
