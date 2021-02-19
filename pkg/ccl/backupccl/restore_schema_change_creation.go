@@ -124,7 +124,7 @@ func createTypeChangeJobFromDesc(
 	txn *kv.Txn,
 	username security.SQLUsername,
 	typ catalog.TypeDescriptor,
-) (*jobs.StartableJob, error) {
+) error {
 	// Any non-public members in the type descriptor are accumulated as
 	// "transitioning" and their promotion or removal will be handled in a
 	// single job.
@@ -146,17 +146,18 @@ func createTypeChangeJobFromDesc(
 		// Type change jobs are not cancellable.
 		NonCancelable: true,
 	}
-	job, err := jr.CreateStartableJobWithTxn(ctx, record, txn)
+	job, err := jr.CreateJobWithTxn(ctx, record, txn)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return job, nil
+	log.Infof(ctx, "queued new type schema change job %d for type %d", *job.ID(), typ.GetID())
+	return nil
 }
 
-// createSchemaChangeJobsFromMutations creates and runs jobs for any mutations
-// on the table descriptor. It also updates tableDesc's MutationJobs to
-// reference the new jobs. This is only used to reconstruct a job based off a
-// mutation, namely during RESTORE.
+// createSchemaChangeJobsFromMutations creates jobs for any mutations on the
+// table descriptor. It also updates tableDesc's MutationJobs to reference the
+// new jobs. This is only used to reconstruct a job based off a mutation, namely
+// during RESTORE.
 func createSchemaChangeJobsFromMutations(
 	ctx context.Context,
 	jr *jobs.Registry,
@@ -164,9 +165,8 @@ func createSchemaChangeJobsFromMutations(
 	txn *kv.Txn,
 	username security.SQLUsername,
 	tableDesc *tabledesc.Mutable,
-) ([]*jobs.StartableJob, error) {
+) error {
 	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
-	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.Mutations))
 	seenMutations := make(map[descpb.MutationID]bool)
 	for _, mutation := range tableDesc.Mutations {
 		if seenMutations[mutation.MutationID] {
@@ -178,7 +178,7 @@ func createSchemaChangeJobsFromMutations(
 		seenMutations[mutationID] = true
 		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc.TableDesc(), mutationID)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		spanList := make([]jobspb.ResumeSpanList, mutationCount)
 		for i := range spanList {
@@ -201,20 +201,19 @@ func createSchemaChangeJobsFromMutations(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := jr.CreateStartableJobWithTxn(ctx, jobRecord, txn)
+		newJob, err := jr.CreateJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		newMutationJob := descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
 			JobID:      *newJob.ID(),
 		}
 		mutationJobs = append(mutationJobs, newMutationJob)
-		newJobs = append(newJobs, newJob)
 
 		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
-			newJob.ID(), tableDesc.ID, mutationID)
+			*newJob.ID(), tableDesc.ID, mutationID)
 	}
 	tableDesc.MutationJobs = mutationJobs
-	return newJobs, nil
+	return nil
 }
