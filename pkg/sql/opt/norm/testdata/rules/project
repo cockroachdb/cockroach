@@ -1478,3 +1478,20 @@ project
  │    └── ('{"y": "three"}',)
  └── projections
       └── column1:1::JSONB->'x' [as=x:2, outer=(1), immutable]
+
+# Verify that the rule doesn't fire because of an array that has the right key
+# as an element (#60522).
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j->'foo' FROM (VALUES ('{"foo": "bar"}'::JSONB), ('["foo", "baz"]'::JSONB)) AS v(j)
+----
+project
+ ├── columns: "?column?":2
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('{"foo": "bar"}',)
+ │    └── ('["foo", "baz"]',)
+ └── projections
+      └── column1:1->'foo' [as="?column?":2, outer=(1), immutable]
