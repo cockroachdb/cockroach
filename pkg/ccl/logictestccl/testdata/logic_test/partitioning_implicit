@@ -149,6 +149,73 @@ CREATE TABLE public.t (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── pk int not null
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key bytes not null [virtual-inverted]
+ ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+ ├── PRIMARY INDEX primary
+ │    ├── a int not null (implicit)
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── pk_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── INDEX t_b_idx
+ │    ├── a int not null (implicit)
+ │    ├── b int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── b_implicit
+ │              └── partition by list prefixes
+ │                   └── (2)
+ ├── UNIQUE INDEX t_c_key
+ │    ├── a int not null (implicit)
+ │    ├── c int
+ │    ├── pk int not null (storing)
+ │    └── partitions
+ │         └── c_implicit
+ │              └── partition by list prefixes
+ │                   └── (3)
+ ├── INDEX t_a_b_c_idx
+ │    ├── d int (implicit)
+ │    ├── a int not null
+ │    ├── b int
+ │    ├── c int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── a_b_c_implicit
+ │              └── partition by list prefixes
+ │                   └── (4)
+ ├── INVERTED INDEX t_j_idx
+ │    ├── a int not null (implicit)
+ │    ├── j_inverted_key bytes not null [virtual-inverted]
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── j_implicit
+ │              └── partition by list prefixes
+ │                   └── (5)
+ ├── INDEX new_idx
+ │    ├── a int not null (implicit)
+ │    ├── d int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── d_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (c)
+scan t
+
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4, 5)
 

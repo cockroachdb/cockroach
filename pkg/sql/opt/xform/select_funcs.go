@@ -636,7 +636,10 @@ func (c *CustomFuncs) partitionValuesFilters(
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
 	// Find all the partition values
-	partitionValues := index.PartitionByListPrefixes()
+	partitionValues := make([]tree.Datums, 0, index.PartitionCount())
+	for i, n := 0, index.PartitionCount(); i < n; i++ {
+		partitionValues = append(partitionValues, index.Partition(i).PartitionByListPrefixes()...)
+	}
 	if len(partitionValues) == 0 {
 		return partitionFilter, inBetweenFilter
 	}

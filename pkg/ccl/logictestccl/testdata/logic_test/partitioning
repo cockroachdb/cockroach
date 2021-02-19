@@ -428,9 +428,13 @@ TABLE ok1
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           ├── (1)
-           └── (2)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── p2
+                └── partition by list prefixes
+                     └── (2)
 scan ok1
 
 statement ok
@@ -472,9 +476,13 @@ TABLE ok2
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           ├── (1)
-           └── (2)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── p2
+                └── partition by list prefixes
+                     └── (2)
 scan ok2
 
 statement ok
@@ -516,8 +524,13 @@ TABLE ok3
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           └── (1)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── p2
+                └── partition by list prefixes
+                     └── ()
 scan ok3
 
 statement ok
@@ -563,10 +576,19 @@ TABLE ok4
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           ├── (1, 1)
-           ├── (1)
-           └── (2, 3)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1, 1)
+           ├── p2
+           │    └── partition by list prefixes
+           │         └── (1)
+           ├── p3
+           │    └── partition by list prefixes
+           │         └── (2, 3)
+           └── p4
+                └── partition by list prefixes
+                     └── ()
 scan ok4
 
 statement ok
@@ -603,9 +625,16 @@ TABLE ok5
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           ├── (1)
-           └── (2)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           ├── p2
+           │    └── partition by list prefixes
+           │         └── (2)
+           └── p3
+                └── partition by list prefixes
+                     └── ()
 scan ok5
 
 query TT
@@ -897,9 +926,13 @@ TABLE ok11
       ├── a int not null
       ├── b int not null
       ├── c int not null
-      └── partition by list prefixes
-           ├── (1)
-           └── (6)
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── p2
+                └── partition by list prefixes
+                     └── (6)
 scan ok11
 
 statement ok
@@ -943,10 +976,16 @@ TABLE ok12
  └── PRIMARY INDEX primary
       ├── a int not null
       ├── b int not null
-      └── partition by list prefixes
-           ├── (NULL)
-           ├── (1)
-           └── (2)
+      └── partitions
+           ├── pu
+           │    └── partition by list prefixes
+           │         └── (NULL)
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── p2
+                └── partition by list prefixes
+                     └── (2)
 scan ok12
 
 # Verify that creating a partition that includes NULL does not change the

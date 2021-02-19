@@ -24,13 +24,21 @@ type Zone interface {
 	// ReplicaConstraintsCount returns the number of replica constraint sets that
 	// are part of this zone.
 	//
-	// TODO(aayush): Go through the callers of the methods here and decide the
-	// right semantics for handling the new `voter_constraints` attribute.
+	// TODO(aayush/rytaft): Go through the callers of the methods here and decide
+	// the right semantics for handling the new `voter_constraints` attribute.
 	ReplicaConstraintsCount() int
 
 	// ReplicaConstraints returns the ith set of replica constraints in the zone,
 	// where i < ReplicaConstraintsCount.
 	ReplicaConstraints(i int) ReplicaConstraints
+
+	// VoterConstraintsCount returns the number of voter replica constraint sets
+	// that are part of this zone.
+	VoterConstraintsCount() int
+
+	// VoterConstraint returns the ith set of voter replica constraints in the
+	// zone, where i < VoterConstraintsCount.
+	VoterConstraint(i int) ReplicaConstraints
 
 	// LeasePreferenceCount returns the number of lease preferences that are part
 	// of this zone.
@@ -90,7 +98,8 @@ type Constraint interface {
 // FormatZone nicely formats a catalog zone using a treeprinter for debugging
 // and testing.
 func FormatZone(zone Zone, tp treeprinter.Node) {
-	if zone.ReplicaConstraintsCount() == 0 && zone.LeasePreferenceCount() == 0 {
+	if zone.ReplicaConstraintsCount() == 0 && zone.VoterConstraintsCount() == 0 &&
+		zone.LeasePreferenceCount() == 0 {
 		return
 	}
 	zoneChild := tp.Childf("ZONE")
@@ -107,6 +116,21 @@ func FormatZone(zone Zone, tp treeprinter.Node) {
 			replicaChild.Childf("%d replicas: %s", numReplicas, constraintStr)
 		} else {
 			replicaChild.Childf("constraints: %s", constraintStr)
+		}
+	}
+
+	voterChild := zoneChild
+	if zone.VoterConstraintsCount() > 1 {
+		voterChild = voterChild.Childf("voter replica constraints")
+	}
+	for i, n := 0, zone.VoterConstraintsCount(); i < n; i++ {
+		voterConstraint := zone.VoterConstraint(i)
+		constraintStr := formatConstraintSet(voterConstraint)
+		if zone.VoterConstraintsCount() > 1 {
+			numReplicas := voterConstraint.ReplicaCount()
+			replicaChild.Childf("%d voter replicas: %s", numReplicas, constraintStr)
+		} else {
+			replicaChild.Childf("voter constraints: %s", constraintStr)
 		}
 	}
 
