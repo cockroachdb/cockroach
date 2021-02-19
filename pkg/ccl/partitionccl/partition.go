@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -377,6 +378,11 @@ func createPartitioning(
 		if err != nil {
 			return indexDesc, err
 		}
+		if numImplicitColumns > 0 {
+			if err := checkClusterSupportsImplicitPartitioning(evalCtx); err != nil {
+				return indexDesc, err
+			}
+		}
 	}
 
 	// If we had implicit column partitioning beforehand, check we have the
@@ -623,4 +629,14 @@ func selectPartitionExprsByName(
 
 func init() {
 	sql.CreatePartitioningCCL = createPartitioning
+}
+
+func checkClusterSupportsImplicitPartitioning(evalCtx *tree.EvalContext) error {
+	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			`cannot use implicit column partitioning until the cluster upgrade is finalized`,
+		)
+	}
+	return nil
 }

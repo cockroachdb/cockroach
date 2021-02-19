@@ -245,6 +245,13 @@ const (
 	// via their IDs instead of their names, which leads to allowing such
 	// sequences to be renamed.
 	SequencesRegclass
+	// ImplicitColumnPartitioning introduces implicit column partitioning to
+	// tables.
+	ImplicitColumnPartitioning
+	// MultiRegionFeatures introduces new multi-region features to the
+	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
+	// on a TABLE.
+	MultiRegionFeatures
 
 	// Step (1): Add new versions here.
 )
@@ -410,6 +417,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     SequencesRegclass,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 30},
+	},
+	{
+		Key:     ImplicitColumnPartitioning,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 32},
+	},
+	{
+		Key:     MultiRegionFeatures,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 34},
 	},
 	// Step (2): Add new versions here.
 })
