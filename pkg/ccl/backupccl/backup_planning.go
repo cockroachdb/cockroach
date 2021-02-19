@@ -840,6 +840,10 @@ func backupPlanHook(
 			return err
 		}
 
+		if err := validateMultiRegionBackup(backupStmt, targetDescs, tables); err != nil {
+			return err
+		}
+
 		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		switch encryptionParams.encryptMode {
