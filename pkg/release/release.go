@@ -109,7 +109,7 @@ func WithMakeReleaseOptionExecFn(r ExecFn) MakeReleaseOption {
 
 // MakeWorkload makes the bin/workload binary.
 func MakeWorkload(pkgDir string) error {
-	cmd := exec.Command("make", "bin/workload")
+	cmd := exec.Command("mkrelease", "amd64-linux-gnu", "bin/workload")
 	cmd.Dir = pkgDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

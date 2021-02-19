@@ -1742,8 +1742,12 @@ bins = \
   bin/uptodate \
   bin/urlcheck \
 	bin/whoownsit \
-  bin/workload \
   bin/zerosum
+
+# `xbins` contains binaries that should be compiled for the target architecture
+# (not the host), and should therefore be built with `xgo`.
+xbins = \
+  bin/workload
 
 testbins = \
   bin/logictest \
@@ -1773,6 +1777,12 @@ $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
 	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
+
+$(xbins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
+	@echo go build -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $*
+	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
+	mv -f $@.d.tmp $@.d
+	$(xgo) build -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
