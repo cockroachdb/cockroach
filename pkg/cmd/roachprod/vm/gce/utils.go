@@ -165,11 +165,12 @@ func SyncDNS(vms vm.List) error {
 
 	var zoneBuilder strings.Builder
 	for _, vm := range vms {
-		if len(vm.Name) < 60 {
-			zoneBuilder.WriteString(fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP))
-		} else {
-			fmt.Printf("WARN: not adding `%s' to the zone file because it is longer than 60 characters\n", vm.Name)
+		entry, err := vm.ZoneEntry()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: skipping: %s\n", err)
+			continue
 		}
+		zoneBuilder.WriteString(entry)
 	}
 	fmt.Fprint(f, zoneBuilder.String())
 	f.Close()

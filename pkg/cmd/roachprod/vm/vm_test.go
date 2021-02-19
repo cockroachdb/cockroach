@@ -68,3 +68,43 @@ func TestExpandZonesFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestVM_ZoneEntry(t *testing.T) {
+	cases := []struct {
+		description string
+		vm          VM
+		expected    string
+		expErr      string
+	}{
+		{
+			description: "Normal length",
+			vm:          VM{Name: "just_a_test", PublicIP: "1.1.1.1"},
+			expected:    "just_a_test 60 IN A 1.1.1.1\n",
+		},
+		{
+			description: "Too long name",
+			vm: VM{
+				Name:     "very_very_very_very_very_very_very_very_very_very_very_very_very_very_long_name",
+				PublicIP: "1.1.1.1",
+			},
+			expErr: "Name too long",
+		},
+		{
+			description: "Missing IP",
+			vm:          VM{Name: "just_a_test"},
+			expErr:      "Missing IP address",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			expanded, err := c.vm.ZoneEntry()
+			if c.expErr != "" {
+				if assert.Error(t, err) {
+					assert.Regexp(t, c.expErr, err.Error())
+				}
+			} else {
+				assert.EqualValues(t, c.expected, expanded)
+			}
+		})
+	}
+}
