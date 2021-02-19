@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -83,7 +84,7 @@ type topKSorter struct {
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	// topK stores the top K rows. It is not sorted internally.
-	topK *appendOnlyBufferedBatch
+	topK *colexecutils.AppendOnlyBufferedBatch
 	// heap is a max heap which stores indices into topK.
 	heap []int
 	// sel is a selection vector which specifies an ordering on topK.
@@ -99,7 +100,7 @@ type topKSorter struct {
 
 func (t *topKSorter) Init() {
 	t.Input.Init()
-	t.topK = newAppendOnlyBufferedBatch(t.allocator, t.inputTypes, nil /* colsToStore */)
+	t.topK = colexecutils.NewAppendOnlyBufferedBatch(t.allocator, t.inputTypes, nil /* colsToStore */)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
 		t.comparators[i] = GetVecComparator(typ, 2)
@@ -153,7 +154,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 		}
 		t.firstUnprocessedTupleIdx = fromLength
 		t.allocator.PerformOperation(t.topK.ColVecs(), func() {
-			t.topK.append(t.inputBatch, 0 /* startIdx */, fromLength)
+			t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		})
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
@@ -288,7 +289,7 @@ func (t *topKSorter) ExportBuffered(context.Context, colexecbase.Operator) colda
 	// Next, we check whether we have exported all tuples from the last read
 	// batch.
 	if t.inputBatch != nil && t.firstUnprocessedTupleIdx+t.exportedFromBatch < t.inputBatch.Length() {
-		makeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
+		colexecutils.MakeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
 		t.exportedFromBatch = t.windowedBatch.Length()
 		return t.windowedBatch
 	}

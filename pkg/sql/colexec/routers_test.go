@@ -206,7 +206,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 				}
 
 				if !mtc.skipExpSpillCheck {
-					require.Equal(t, mtc.expSpill, o.mu.data.spilled())
+					require.Equal(t, mtc.expSpill, o.mu.data.Spilled())
 				}
 			})
 		}
@@ -368,9 +368,9 @@ func TestRouterOutputNext(t *testing.T) {
 				// If a full batch is smaller than our small batch size, reduce it, since
 				// this test relies on multiple batches returned from the Input.
 				smallBatchSize = 2
-				if smallBatchSize >= minBatchSize {
+				if smallBatchSize >= colexectestutils.MinBatchSize {
 					// Sanity check.
-					t.Fatalf("smallBatchSize=%d still too large (must be less than minBatchSize=%d)", smallBatchSize, minBatchSize)
+					t.Fatalf("smallBatchSize=%d still too large (must be less than minBatchSize=%d)", smallBatchSize, colexectestutils.MinBatchSize)
 				}
 				blockThreshold = 1
 			}
@@ -853,7 +853,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 				// If len(sel) == 0, no items will have been enqueued so override an
 				// expected spill if this is the case.
 				mtc.expSpill = mtc.expSpill && len(sel) != 0
-				require.Equal(t, mtc.expSpill, ro.mu.data.spilled())
+				require.Equal(t, mtc.expSpill, ro.mu.data.Spilled())
 			}
 		})
 	}
@@ -1289,10 +1289,10 @@ func BenchmarkHashRouter(b *testing.B) {
 					// Sanity check the spilling queues' memory management.
 					for i := range outputs {
 						sq := outputs[i].(*routerOutputOp).mu.data
-						if sq.spilled() {
+						if sq.Spilled() {
 							b.Fatal("unexpectedly spilling queue spilled to disk")
 						}
-						if sq.unlimitedAllocator.Used() > 0 {
+						if sq.MemoryUsage() > 0 {
 							b.Fatal("unexpectedly spilling queue's allocator has non-zero usage")
 						}
 					}

@@ -111,7 +111,7 @@ const (
 // "fallback" disk-backed strategy (when the recursive repartitioning doesn't
 // seem to make progress in reducing the size of the partitions).
 type hashBasedPartitioner struct {
-	NonExplainable
+	colexecbase.NonExplainable
 	closerHelper
 
 	unlimitedAllocator                 *colmem.Allocator

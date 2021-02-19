@@ -22,7 +22,7 @@ import (
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 
 	projection []uint32
 	batches    map[coldata.Batch]*projectingBatch

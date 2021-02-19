@@ -1789,11 +1789,11 @@ func TestLint(t *testing.T) {
 			"grep",
 			"-nE",
 			// We prohibit usage of Vec.Append outside of the
-			// appendOnlyBufferedBatch.
+			// colexecutils.AppendOnlyBufferedBatch.
 			`(Append)\(`,
 			"--",
 			"sql/col*",
-			":!sql/colexec/utils.go",
+			":!sql/colexec/colexecutils/utils.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1804,7 +1804,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use coldata.Vec.Copy or appendOnlyBufferedGroup", s)
+			t.Errorf("\n%s <- forbidden; use coldata.Vec.Copy or colexecutils.AppendOnlyBufferedGroup", s)
 		}); err != nil {
 			t.Error(err)
 		}

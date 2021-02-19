@@ -51,7 +51,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 	if currentBatch == nil || b.builderState.left.curSrcStartIdx == currentBatch.Length() {
 		// We need to get the next batch to build from if it is the first one or
 		// we have fully processed the previous one.
-		currentBatch, err = b.left.tuples.dequeue(ctx)
+		currentBatch, err = b.left.tuples.Dequeue(ctx)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -213,8 +213,8 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 					}
 				}
 				// We have processed all tuples in the current batch from the
-				// buffered group, so we need to dequeue the next one.
-				currentBatch, err = b.left.tuples.dequeue(ctx)
+				// buffered group, so we need to Dequeue the next one.
+				currentBatch, err = b.left.tuples.Dequeue(ctx)
 				if err != nil {
 					colexecerror.InternalError(err)
 				}
@@ -252,7 +252,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 			for ; b.builderState.right.numRepeatsIdx < b.builderState.setup.rightNumRepeats; b.builderState.right.numRepeatsIdx++ {
 				currentBatch := b.builderState.right.currentBatch
 				if currentBatch == nil {
-					currentBatch, err = b.right.tuples.dequeue(ctx)
+					currentBatch, err = b.right.tuples.Dequeue(ctx)
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
@@ -319,7 +319,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 					}
 					// We have fully processed the current batch, so we need to
 					// get the next one.
-					currentBatch, err = b.right.tuples.dequeue(ctx)
+					currentBatch, err = b.right.tuples.Dequeue(ctx)
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
@@ -334,8 +334,8 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 					}
 				}
 				// We have fully processed all the batches from the right side,
-				// so we need to rewind the queue.
-				if err := b.right.tuples.rewind(); err != nil {
+				// so we need to Rewind the queue.
+				if err := b.right.tuples.Rewind(); err != nil {
 					colexecerror.InternalError(err)
 				}
 				b.builderState.right.currentBatch = nil

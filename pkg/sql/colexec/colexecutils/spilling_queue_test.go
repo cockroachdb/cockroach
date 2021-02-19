@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func TestSpillingQueue(t *testing.T) {
 			// up to their capacity, we cannot use the batches we get when
 			// dequeueing directly. Instead, we are tracking all of the input
 			// tuples and will be comparing against a window into them.
-			var tuples *appendOnlyBufferedBatch
+			var tuples *AppendOnlyBufferedBatch
 			// Create random input.
 			op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 				NumBatches: numBatches,
@@ -97,9 +97,9 @@ func TestSpillingQueue(t *testing.T) {
 						return
 					}
 					if tuples == nil {
-						tuples = newAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
+						tuples = NewAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
 					}
-					tuples.append(b, 0 /* startIdx */, b.Length())
+					tuples.AppendTuples(b, 0 /* startIdx */, b.Length())
 				},
 			})
 			typs := op.Typs()
@@ -117,9 +117,9 @@ func TestSpillingQueue(t *testing.T) {
 			spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
 			// Create queue.
-			var q *spillingQueue
+			var q *SpillingQueue
 			if rewindable {
-				q = newRewindableSpillingQueue(
+				q = NewRewindableSpillingQueue(
 					&NewSpillingQueueArgs{
 						UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 						Types:              typs,
@@ -130,7 +130,7 @@ func TestSpillingQueue(t *testing.T) {
 					},
 				)
 			} else {
-				q = newSpillingQueue(
+				q = NewSpillingQueue(
 					&NewSpillingQueueArgs{
 						UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 						Types:              typs,
@@ -154,7 +154,7 @@ func TestSpillingQueue(t *testing.T) {
 				// Apart from tracking all input tuples we will be tracking all
 				// of the dequeued batches and their lengths separately (without
 				// deep-copying them).
-				// The implementation of dequeue() method is such that if the
+				// The implementation of Dequeue() method is such that if the
 				// queue doesn't spill to disk, we can safely keep the
 				// references to the dequeued batches because a new batch is
 				// allocated whenever it is kept in the in-memory buffer (which
@@ -165,14 +165,14 @@ func TestSpillingQueue(t *testing.T) {
 
 			windowedBatch := coldata.NewMemBatchNoCols(typs, coldata.BatchSize())
 			getNextWindowIntoTuples := func(windowLen int) coldata.Batch {
-				// makeWindowIntoBatch creates a window into tuples in the range
+				// MakeWindowIntoBatch creates a window into tuples in the range
 				// [numAlreadyDequeuedTuples; tuples.length), but we want the
 				// range [numAlreadyDequeuedTuples; numAlreadyDequeuedTuples +
 				// windowLen), so we'll temporarily set the length of tuples to
 				// the desired value and restore it below.
 				numTuples := tuples.Length()
 				tuples.SetLength(numAlreadyDequeuedTuples + windowLen)
-				makeWindowIntoBatch(windowedBatch, tuples, numAlreadyDequeuedTuples, typs)
+				MakeWindowIntoBatch(windowedBatch, tuples, numAlreadyDequeuedTuples, typs)
 				tuples.SetLength(numTuples)
 				numAlreadyDequeuedTuples += windowLen
 				return windowedBatch
@@ -180,12 +180,12 @@ func TestSpillingQueue(t *testing.T) {
 
 			for {
 				b = op.Next(ctx)
-				require.NoError(t, q.enqueue(ctx, b))
+				require.NoError(t, q.Enqueue(ctx, b))
 				if b.Length() == 0 {
 					break
 				}
 				if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-					if b, err = q.dequeue(ctx); err != nil {
+					if b, err = q.Dequeue(ctx); err != nil {
 						t.Fatal(err)
 					} else if b.Length() == 0 {
 						t.Fatal("queue incorrectly considered empty")
@@ -203,7 +203,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 			for i := 0; i < numReadIterations; i++ {
 				for {
-					if b, err = q.dequeue(ctx); err != nil {
+					if b, err = q.Dequeue(ctx); err != nil {
 						t.Fatal(err)
 					} else if b == nil {
 						t.Fatal("unexpectedly dequeued nil batch")
@@ -215,7 +215,7 @@ func TestSpillingQueue(t *testing.T) {
 					dequeuedBatchLengths = append(dequeuedBatchLengths, b.Length())
 				}
 
-				if !q.spilled() {
+				if !q.Spilled() {
 					// Let's verify that all of the dequeued batches equal to
 					// all of the input tuples. We need to unset
 					// numAlreadyDequeuedTuples so that we start getting
@@ -227,7 +227,7 @@ func TestSpillingQueue(t *testing.T) {
 				}
 
 				if rewindable {
-					require.NoError(t, q.rewind())
+					require.NoError(t, q.Rewind())
 					numAlreadyDequeuedTuples = numDequeuedTuplesBeforeReading
 					dequeuedBatches = dequeuedBatches[:numDequeuedBatchesBeforeReading]
 					dequeuedBatchLengths = dequeuedBatchLengths[:numDequeuedBatchesBeforeReading]
@@ -235,7 +235,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			// Close queue.
-			require.NoError(t, q.close(ctx))
+			require.NoError(t, q.Close(ctx))
 
 			// Verify no directories are left over.
 			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
@@ -245,8 +245,8 @@ func TestSpillingQueue(t *testing.T) {
 	}
 }
 
-// TestSpillingQueueDidntSpill verifies that in a scenario when every enqueue()
-// is followed by dequeue() the non-rewindable spilling queue doesn't actually
+// TestSpillingQueueDidntSpill verifies that in a scenario when every Enqueue()
+// is followed by Dequeue() the non-rewindable spilling queue doesn't actually
 // spill to disk.
 func TestSpillingQueueDidntSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -262,7 +262,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
 	op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 		// TODO(yuzefovich): for some types (e.g. types.MakeArray(types.Int))
-		// the memory estimation diverges from 0 after enqueue() / dequeue()
+		// the memory estimation diverges from 0 after Enqueue() / Dequeue()
 		// sequence. Figure it out.
 		DeterministicTyps: []*types.T{types.Int},
 		NumBatches:        numBatches,
@@ -286,7 +286,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	defer memAcc.Close(ctx)
 	spillingQueueUnlimitedAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
-	q := newSpillingQueue(
+	q := NewSpillingQueue(
 		&NewSpillingQueueArgs{
 			UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 			Types:              typs,
@@ -299,8 +299,8 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 
 	for {
 		b := op.Next(ctx)
-		require.NoError(t, q.enqueue(ctx, b))
-		b, err := q.dequeue(ctx)
+		require.NoError(t, q.Enqueue(ctx, b))
+		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)
 		if b.Length() == 0 {
 			break
@@ -308,10 +308,10 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	}
 
 	// Ensure that the spilling didn't occur.
-	require.False(t, q.spilled())
+	require.False(t, q.Spilled())
 
 	// Close queue.
-	require.NoError(t, q.close(ctx))
+	require.NoError(t, q.Close(ctx))
 
 	// Verify no directories are left over.
 	directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
@@ -319,8 +319,10 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	require.Equal(t, 0, len(directories))
 }
 
+const defaultMemoryLimit = 64 << 20 /* 64 MiB */
+
 // TestSpillingQueueMemoryAccounting is a simple check of the memory accounting
-// of the spilling queue that performs a series of enqueue() and dequeue()
+// of the spilling queue that performs a series of Enqueue() and Dequeue()
 // operations and verifies that the reported memory usage is as expected.
 //
 // Note that this test intentionally doesn't randomize many things (e.g. the
@@ -342,7 +344,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 		for _, dequeueProbability := range []float64{0, 0.2} {
 			if rewindable && dequeueProbability != 0 {
 				// For rewindable queues we require that all enqueues occur
-				// before any dequeue() call.
+				// before any Dequeue() call.
 				continue
 			}
 			// We need to create a separate unlimited allocator for the spilling
@@ -361,16 +363,16 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				FDSemaphore:        colexecbase.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
 			}
-			var q *spillingQueue
+			var q *SpillingQueue
 			if rewindable {
-				q = newRewindableSpillingQueue(newQueueArgs)
+				q = NewRewindableSpillingQueue(newQueueArgs)
 			} else {
-				q = newSpillingQueue(newQueueArgs)
+				q = NewSpillingQueue(newQueueArgs)
 			}
 
 			numInputBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
 			numDequeuedBatches := 0
-			batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), coldata.BatchSize(), nullProbability)
+			batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), coldata.BatchSize(), 0.1 /* nullProbability */)
 			batchSize := colmem.GetBatchMemSize(batch)
 			getExpectedMemUsage := func(numEnqueuedBatches int) int64 {
 				batchesAccountedFor := numEnqueuedBatches
@@ -386,18 +388,18 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				return int64(batchesAccountedFor) * batchSize
 			}
 			for numEnqueuedBatches := 1; numEnqueuedBatches <= numInputBatches; numEnqueuedBatches++ {
-				require.NoError(t, q.enqueue(ctx, batch))
+				require.NoError(t, q.Enqueue(ctx, batch))
 				if rng.Float64() < dequeueProbability {
-					b, err := q.dequeue(ctx)
+					b, err := q.Dequeue(ctx)
 					require.NoError(t, err)
 					coldata.AssertEquivalentBatches(t, batch, b)
 					numDequeuedBatches++
 				}
 				require.Equal(t, getExpectedMemUsage(numEnqueuedBatches), q.unlimitedAllocator.Used())
 			}
-			require.NoError(t, q.enqueue(ctx, coldata.ZeroBatch))
+			require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
 			for {
-				b, err := q.dequeue(ctx)
+				b, err := q.Dequeue(ctx)
 				require.NoError(t, err)
 				numDequeuedBatches++
 				require.Equal(t, getExpectedMemUsage(numInputBatches), q.unlimitedAllocator.Used())
@@ -408,8 +410,8 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 			}
 
 			// Some sanity checks.
-			require.False(t, q.spilled())
-			require.NoError(t, q.close(ctx))
+			require.False(t, q.Spilled())
+			require.NoError(t, q.Close(ctx))
 			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 			require.NoError(t, err)
 			require.Equal(t, 0, len(directories))
@@ -464,29 +466,29 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			FDSemaphore:        colexecbase.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
 		}
-		q := newSpillingQueue(newQueueArgs)
+		q := NewSpillingQueue(newQueueArgs)
 
 		var expectedBatchSequence []int64
 
 		for i := 0; i < numInputBatches; i++ {
-			// enqueue deeply copies the batch, so we can reuse the same
+			// Enqueue deeply copies the batch, so we can reuse the same
 			// one.
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.enqueue(ctx, batch))
+			require.NoError(t, q.Enqueue(ctx, batch))
 		}
 		// All enqueued batches should fit under the memory limit (to be
 		// precise, the last enqueued batch has just crossed the limit, but
 		// the spilling hasn't occurred yet).
-		require.False(t, q.spilled())
+		require.False(t, q.Spilled())
 
 		numExtraInputBatches := 0
 		if enqueueExtra {
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.enqueue(ctx, batch))
+			require.NoError(t, q.Enqueue(ctx, batch))
 			numExtraInputBatches = 1
 		} else {
 			require.NoError(t, q.maybeSpillToDisk(ctx))
@@ -494,17 +496,17 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 
 		// Now the spilling must have occurred with all batches moved to the
 		// disk queue.
-		require.True(t, q.spilled())
+		require.True(t, q.Spilled())
 		require.Equal(t, 0, q.numInMemoryItems)
 		require.Equal(t, int64(0), q.unlimitedAllocator.Used())
 		require.Equal(t, numInputBatches+numExtraInputBatches, q.numOnDiskItems)
 
-		require.NoError(t, q.enqueue(ctx, coldata.ZeroBatch))
+		require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
 
 		// Now check that all the batches are in the correct order.
 		batchCount := 0
 		for {
-			b, err := q.dequeue(ctx)
+			b, err := q.Dequeue(ctx)
 			require.NoError(t, err)
 			if b.Length() == 0 {
 				break
@@ -515,7 +517,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 		require.Equal(t, batchCount, numInputBatches+numExtraInputBatches)
 
 		// Some sanity checks.
-		require.NoError(t, q.close(ctx))
+		require.NoError(t, q.Close(ctx))
 		directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 		require.NoError(t, err)
 		require.Equal(t, 0, len(directories))

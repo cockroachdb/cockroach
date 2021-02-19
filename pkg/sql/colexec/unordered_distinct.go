@@ -112,7 +112,7 @@ func (op *unorderedDistinct) Reset(ctx context.Context) {
 // tuples already emitted by the unordered distinct.
 type unorderedDistinctFilterer struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	ht *hashTable
 	// seenBatch tracks whether the operator has already read at least one

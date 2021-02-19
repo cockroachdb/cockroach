@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -167,7 +168,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	if needLeftTuples {
 		for {
 			batch := c.inputOne.Next(ctx)
-			if err := c.left.tuples.enqueue(ctx, batch); err != nil {
+			if err := c.left.tuples.Enqueue(ctx, batch); err != nil {
 				colexecerror.InternalError(err)
 			}
 			if batch.Length() == 0 {
@@ -179,7 +180,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	if needRightTuples {
 		for {
 			batch := c.inputTwo.Next(ctx)
-			if err := c.right.tuples.enqueue(ctx, batch); err != nil {
+			if err := c.right.tuples.Enqueue(ctx, batch); err != nil {
 				colexecerror.InternalError(err)
 			}
 			if batch.Length() == 0 {
@@ -270,8 +271,8 @@ func newCrossJoinerBase(
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 leftTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
-			tuples: newSpillingQueue(
-				&NewSpillingQueueArgs{
+			tuples: colexecutils.NewSpillingQueue(
+				&colexecutils.NewSpillingQueueArgs{
 					UnlimitedAllocator: unlimitedAllocator,
 					Types:              leftTypes,
 					MemoryLimit:        memoryLimit,
@@ -285,8 +286,8 @@ func newCrossJoinerBase(
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 rightTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
-			tuples: newRewindableSpillingQueue(
-				&NewSpillingQueueArgs{
+			tuples: colexecutils.NewRewindableSpillingQueue(
+				&colexecutils.NewSpillingQueueArgs{
 					UnlimitedAllocator: unlimitedAllocator,
 					Types:              rightTypes,
 					MemoryLimit:        memoryLimit,
@@ -421,10 +422,10 @@ func (b *crossJoinerBase) calculateOutputCount() int {
 
 func (b *crossJoinerBase) Reset(ctx context.Context) {
 	if b.left.tuples != nil {
-		b.left.tuples.reset(ctx)
+		b.left.tuples.Reset(ctx)
 	}
 	if b.right.tuples != nil {
-		b.right.tuples.reset(ctx)
+		b.right.tuples.Reset(ctx)
 	}
 	b.left.numTuples = 0
 	b.right.numTuples = 0
@@ -435,10 +436,10 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 func (b *crossJoinerBase) Close(ctx context.Context) error {
 	var lastErr error
 	if b.left.tuples != nil {
-		lastErr = b.left.tuples.close(ctx)
+		lastErr = b.left.tuples.Close(ctx)
 	}
 	if b.right.tuples != nil {
-		if err := b.right.tuples.close(ctx); err != nil {
+		if err := b.right.tuples.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}
@@ -449,7 +450,7 @@ type cjState struct {
 	unlimitedAllocator    *colmem.Allocator
 	types                 []*types.T
 	canonicalTypeFamilies []types.Family
-	tuples                *spillingQueue
+	tuples                *colexecutils.SpillingQueue
 	numTuples             int
 }
 

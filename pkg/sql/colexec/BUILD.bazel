@@ -49,7 +49,6 @@ go_library(
         "sort.go",
         "sort_chunks.go",
         "sorttopk.go",
-        "spilling_queue.go",
         "stats.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
@@ -70,6 +69,7 @@ go_library(
         "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecbase",
         "//pkg/sql/colexecbase/colexecerror",
@@ -82,7 +82,6 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
-        "//pkg/util",
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
@@ -152,7 +151,6 @@ go_test(
         "sort_test.go",
         "sort_utils_test.go",
         "sorttopk_test.go",
-        "spilling_queue_test.go",
         "stats_test.go",
         "types_integration_test.go",
         "window_functions_test.go",
@@ -172,6 +170,7 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecbase",
         "//pkg/sql/colexecbase/colexecerror",
@@ -192,7 +191,6 @@ go_test(
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",
         "//pkg/util/encoding",
-        "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",

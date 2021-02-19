@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -99,14 +100,14 @@ type spooler interface {
 // by the general sorter over the whole input.
 type allSpooler struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []*types.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this batch is the entire column from the input.
-	bufferedTuples *appendOnlyBufferedBatch
+	bufferedTuples *colexecutils.AppendOnlyBufferedBatch
 	// spooled indicates whether spool() has already been called.
 	spooled       bool
 	windowedBatch coldata.Batch
@@ -127,7 +128,7 @@ func newAllSpooler(
 
 func (p *allSpooler) init() {
 	p.Input.Init()
-	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
+	p.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
 	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
 
@@ -138,7 +139,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 	p.spooled = true
 	for batch := p.Input.Next(ctx); batch.Length() != 0; batch = p.Input.Next(ctx) {
 		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
-			p.bufferedTuples.append(batch, 0 /* startIdx */, batch.Length())
+			p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
 }

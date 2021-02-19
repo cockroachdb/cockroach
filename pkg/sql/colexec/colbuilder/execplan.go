@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
@@ -844,7 +845,7 @@ func NewColOperator(
 					var inMemoryHashAggregator colexecbase.Operator
 					inMemoryHashAggregator, err = colexec.NewHashAggregator(
 						newAggArgs,
-						&colexec.NewSpillingQueueArgs{
+						&colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
 							Types:              inputTypes,
 							MemoryLimit:        totalMemLimit / 2,
@@ -2169,8 +2170,8 @@ func planLogicalProjectionOp(
 		leftProjOpChain, rightProjOpChain colexecbase.Operator
 		leftIdx, rightIdx                 int
 	)
-	leftFeedOp := colexec.NewFeedOperator()
-	rightFeedOp := colexec.NewFeedOperator()
+	leftFeedOp := colexecbase.NewFeedOperator()
+	rightFeedOp := colexecbase.NewFeedOperator()
 	switch t := expr.(type) {
 	case *tree.AndExpr:
 		typedLeft = t.TypedLeft()

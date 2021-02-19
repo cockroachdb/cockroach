@@ -26,7 +26,7 @@ import (
 // selection vector, it is a noop.
 type deselectorOp struct {
 	colexecbase.OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	allocator  *colmem.Allocator
 	inputTypes []*types.T
 
