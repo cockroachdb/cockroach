@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexechash
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 )
@@ -32,9 +33,9 @@ import (
 // TODO(asubiotto): Once https://go-review.googlesource.com/c/go/+/155118/ is
 // in, we should use the public API.
 
-// defaultInitHashValue is the default initValue to be used in initHash
+// DefaultInitHashValue is the default initValue to be used in initHash
 // function.
-const defaultInitHashValue = 1
+const DefaultInitHashValue = 1
 
 var (
 	uint64OneColumn []uint64
@@ -101,13 +102,13 @@ func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
 	}
 }
 
-// tupleHashDistributor is a helper struct that distributes tuples from batches
+// TupleHashDistributor is a helper struct that distributes tuples from batches
 // according to the corresponding hashes. The "distribution" occurs by
 // populating selection vectors which the caller needs to use accordingly.
-type tupleHashDistributor struct {
-	// initHashValue is the value used to initialize the hash buckets. Different
+type TupleHashDistributor struct {
+	// InitHashValue is the value used to initialize the hash buckets. Different
 	// values can be used to define different hash functions.
-	initHashValue uint64
+	InitHashValue uint64
 	// buckets will contain the computed hash value of a group of columns with
 	// the same index in the current batch.
 	buckets []uint64
@@ -116,23 +117,24 @@ type tupleHashDistributor struct {
 	selections [][]int
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
-	cancelChecker  CancelChecker
+	cancelChecker  colexecutils.CancelChecker
 	overloadHelper execgen.OverloadHelper
 	datumAlloc     rowenc.DatumAlloc
 }
 
-func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
-	return &tupleHashDistributor{
-		initHashValue: initHashValue,
+// NewTupleHashDistributor returns a new TupleHashDistributor.
+func NewTupleHashDistributor(initHashValue uint64, numOutputs int) *TupleHashDistributor {
+	return &TupleHashDistributor{
+		InitHashValue: initHashValue,
 		selections:    make([][]int, numOutputs),
 	}
 }
 
-// distribute populates selection vectors to route each of the tuples in b to
+// Distribute populates selection vectors to route each of the tuples in b to
 // one of the numOutputs outputs according to the computed on hashCols hash
 // values.
 // NOTE: b is assumed to be non-zero batch.
-func (d *tupleHashDistributor) distribute(
+func (d *TupleHashDistributor) Distribute(
 	ctx context.Context, b coldata.Batch, hashCols []uint32,
 ) [][]int {
 	n := b.Length()
@@ -141,7 +143,7 @@ func (d *tupleHashDistributor) distribute(
 	} else {
 		d.buckets = d.buckets[:n]
 	}
-	initHash(d.buckets, n, d.initHashValue)
+	initHash(d.buckets, n, d.InitHashValue)
 
 	// Check if we received a batch with more tuples than the current
 	// allocation size and increase it if so.
@@ -181,9 +183,9 @@ func (d *tupleHashDistributor) distribute(
 	return d.selections
 }
 
-// resetNumOutputs sets up the tupleHashDistributor to distribute the tuples
+// ResetNumOutputs sets up the TupleHashDistributor to distribute the tuples
 // to a different number of outputs.
-func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
+func (d *TupleHashDistributor) ResetNumOutputs(numOutputs int) {
 	if cap(d.selections) >= numOutputs {
 		d.selections = d.selections[:numOutputs]
 		return

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "colexecutils",
     srcs = [
+        "cancel_checker.go",
         "spilling_queue.go",
         "utils.go",
     ],
@@ -11,10 +12,12 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/sql/colcontainer",
+        "//pkg/sql/colexecbase",
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/cancelchecker",
         "//pkg/util/log",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
@@ -25,6 +28,7 @@ go_library(
 go_test(
     name = "colexecutils_test",
     srcs = [
+        "cancel_checker_test.go",
         "main_test.go",
         "spilling_queue_test.go",
     ],
@@ -44,11 +48,13 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
+        "//pkg/util/cancelchecker",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"context"
@@ -44,21 +44,21 @@ func NewCancelChecker(op colexecbase.Operator) *CancelChecker {
 
 // Next is part of Operator interface.
 func (c *CancelChecker) Next(ctx context.Context) coldata.Batch {
-	c.checkEveryCall(ctx)
+	c.CheckEveryCall(ctx)
 	return c.Input.Next(ctx)
 }
 
-// Interval of check() calls to wait between checks for context cancellation.
+// Interval of Check() calls to wait between checks for context cancellation.
 // The value is a power of 2 to allow the compiler to use bitwise AND instead
 // of division.
 const cancelCheckInterval = 1024
 
-// check panics with a query canceled error if the associated query has been
+// Check panics with a query canceled error if the associated query has been
 // canceled. The check is performed on every cancelCheckInterval'th call. This
 // should be used only during long-running operations.
-func (c *CancelChecker) check(ctx context.Context) {
+func (c *CancelChecker) Check(ctx context.Context) {
 	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
-		c.checkEveryCall(ctx)
+		c.CheckEveryCall(ctx)
 	}
 
 	// Increment. This may rollover when the 32-bit capacity is reached, but
@@ -66,10 +66,10 @@ func (c *CancelChecker) check(ctx context.Context) {
 	c.callsSinceLastCheck++
 }
 
-// checkEveryCall panics with query canceled error (which will be caught at the
+// CheckEveryCall panics with query canceled error (which will be caught at the
 // materializer level and will be propagated forward as metadata) if the
 // associated query has been canceled. The check is performed on every call.
-func (c *CancelChecker) checkEveryCall(ctx context.Context) {
+func (c *CancelChecker) CheckEveryCall(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)

@@ -151,7 +151,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │       └ *colexec.ParallelUnorderedSynchronizer
 │         ├ *colexec.countOp
 │         │ └ *colexec.simpleProjectOp
-│         │   └ *colexec.CancelChecker
+│         │   └ *colexecutils.CancelChecker
 │         │     └ *colfetcher.ColBatchScan
 │         ├ *colrpc.Inbox
 │         ├ *colrpc.Inbox
@@ -162,28 +162,28 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │   └ *colexec.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
     └ *colexec.deselectorOp
       └ *colexec.countOp
         └ *colexec.simpleProjectOp
-          └ *colexec.CancelChecker
+          └ *colexecutils.CancelChecker
             └ *colfetcher.ColBatchScan
 
 query T
@@ -202,7 +202,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         │     │ ├ *colexec.ParallelUnorderedSynchronizer
 │         │     │ │ ├ *colexec.routerOutputOp
 │         │     │ │ │ └ *colexec.HashRouter
-│         │     │ │ │   └ *colexec.CancelChecker
+│         │     │ │ │   └ *colexecutils.CancelChecker
 │         │     │ │ │     └ *colfetcher.ColBatchScan
 │         │     │ │ ├ *colrpc.Inbox
 │         │     │ │ ├ *colrpc.Inbox
@@ -211,7 +211,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         │     │ └ *colexec.ParallelUnorderedSynchronizer
 │         │     │   ├ *colexec.routerOutputOp
 │         │     │   │ └ *colexec.HashRouter
-│         │     │   │   └ *colexec.CancelChecker
+│         │     │   │   └ *colexecutils.CancelChecker
 │         │     │   │     └ *colfetcher.ColBatchScan
 │         │     │   ├ *colrpc.Inbox
 │         │     │   ├ *colrpc.Inbox
@@ -237,7 +237,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colexec.routerOutputOp
 │           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
@@ -246,7 +246,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colexec.routerOutputOp
 │           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colrpc.Inbox
@@ -268,7 +268,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colexec.routerOutputOp
 │           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ ├ *colrpc.Inbox
 │           │ │ └ *colrpc.Inbox
@@ -277,7 +277,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colexec.routerOutputOp
 │           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   ├ *colrpc.Inbox
 │           │   └ *colrpc.Inbox
@@ -299,7 +299,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colexec.routerOutputOp
 │           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ └ *colrpc.Inbox
 │           │ └ *colexec.ParallelUnorderedSynchronizer
@@ -308,7 +308,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colexec.routerOutputOp
 │           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
@@ -330,7 +330,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
             │ │ ├ *colrpc.Inbox
             │ │ └ *colexec.routerOutputOp
             │ │   └ *colexec.HashRouter
-            │ │     └ *colexec.CancelChecker
+            │ │     └ *colexecutils.CancelChecker
             │ │       └ *colfetcher.ColBatchScan
             │ └ *colexec.ParallelUnorderedSynchronizer
             │   ├ *colrpc.Inbox
@@ -339,7 +339,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
             │   ├ *colrpc.Inbox
             │   └ *colexec.routerOutputOp
             │     └ *colexec.HashRouter
-            │       └ *colexec.CancelChecker
+            │       └ *colexecutils.CancelChecker
             │         └ *colfetcher.ColBatchScan
             ├ *colexec.ParallelUnorderedSynchronizer
             ├ *colexec.ParallelUnorderedSynchronizer
