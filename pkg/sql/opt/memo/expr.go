@@ -633,7 +633,8 @@ func (f *WindowFrame) String() string {
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
 		s.Constraint == nil &&
-		s.HardLimit == 0
+		s.HardLimit == 0 &&
+		!s.LocalityOptimized
 }
 
 // IsUnfiltered returns true if the ScanPrivate will produce all rows in the

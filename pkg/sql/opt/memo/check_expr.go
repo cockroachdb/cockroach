@@ -107,7 +107,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	case *SelectExpr:
 		checkFilters(t.Filters)
 
-	case *UnionExpr, *UnionAllExpr:
+	case *UnionExpr, *UnionAllExpr, *LocalityOptimizedSearchExpr:
 		setPrivate := t.Private().(*SetPrivate)
 		outColSet := setPrivate.OutCols.ToSet()
 
