@@ -14,18 +14,22 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func TestMergeResultTypes(t *testing.T) {
+func TestMergeResultTypesForSetOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	empty := []*types.T{}
 	null := []*types.T{types.Unknown}
 	typeInt := []*types.T{types.Int}
+	typeTuple := []*types.T{types.MakeTuple(typeInt)}
 
 	testData := []struct {
 		name     string
@@ -41,10 +45,32 @@ func TestMergeResultTypes(t *testing.T) {
 		{"left null", null, typeInt, &typeInt, false},
 		{"right null", typeInt, null, &typeInt, false},
 		{"both int", typeInt, typeInt, &typeInt, false},
+		{"left null, right tuple", null, typeTuple, &typeTuple, false},
+		{"right null, left tuple", typeTuple, null, &typeTuple, false},
 	}
+	checkUnknownTypesUpdate := func(plan PhysicalPlan, orig, merged []*types.T) {
+		for i, typ := range plan.GetResultTypes() {
+			if orig[i].Family() == types.UnknownFamily {
+				if typ.Family() == types.UnknownFamily && merged[i].Family() == types.TupleFamily {
+					t.Fatal("should have updated types NULL to tuple type on the original plan")
+				}
+				if typ.Family() != types.UnknownFamily && merged[i].Family() != types.TupleFamily {
+					t.Fatal("should have NOT updated types NULL to tuple type on the original plan")
+				}
+			}
+		}
+	}
+	infra := physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), roachpb.NodeID(1))
+	var leftPlan, rightPlan PhysicalPlan
+	leftPlan.PhysicalInfrastructure = &infra
+	rightPlan.PhysicalInfrastructure = &infra
+	leftPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
+	rightPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			result, err := mergeResultTypes(td.left, td.right)
+			leftPlan.Processors[0].Spec.ResultTypes = td.left
+			rightPlan.Processors[1].Spec.ResultTypes = td.right
+			result, err := mergeResultTypesForSetOp(&leftPlan, &rightPlan)
 			if td.err {
 				if err == nil {
 					t.Fatalf("expected error, got %+v", result)
@@ -57,6 +83,8 @@ func TestMergeResultTypes(t *testing.T) {
 			if !reflect.DeepEqual(*td.expected, result) {
 				t.Fatalf("expected %+v, got %+v", *td.expected, result)
 			}
+			checkUnknownTypesUpdate(leftPlan, td.left, result)
+			checkUnknownTypesUpdate(rightPlan, td.right, result)
 		})
 	}
 }
