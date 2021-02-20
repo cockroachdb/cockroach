@@ -26,6 +26,14 @@ SELECT 'SRID=404;POINT(1.0 2.0)'::geometry
 statement error unknown SRID for Geography: 404
 SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 
+statement error pq: object type PointZ does not match column type Point
+INSERT INTO geo_table (id, geom) VALUES
+  (3, 'POINT Z(1 2 3)')
+
+statement error pq: object type PointZ does not match column dimensionality Geometry
+INSERT INTO geo_table (id, geog) VALUES
+  (3, 'POINT Z(1 2 3)')
+
 statement ok
 CREATE INDEX geo_table_geom_idx ON geo_table USING GIST(geom)
 

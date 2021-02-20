@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r1"
@@ -71,12 +70,37 @@ func SpatialObjectFitsColumnMetadata(
 	if srid != 0 && so.SRID != srid {
 		return errors.Newf("object SRID %d does not match column SRID %d", so.SRID, srid)
 	}
-	// Shape_Geometry/Shape_Unset can take in any kind of shape.
+	// Shape_Unset can take in any kind of shape.
+	// Shape_Geometry[ZM] must match dimensions.
 	// Otherwise, shapes must match.
-	if shapeType != geopb.ShapeType_Unset && shapeType != geopb.ShapeType_Geometry && shapeType != so.ShapeType {
-		return errors.Newf("object type %s does not match column type %s", so.ShapeType, shapeType)
+	switch shapeType {
+	case geopb.ShapeType_Unset:
+		break
+	case geopb.ShapeType_Geometry, geopb.ShapeType_GeometryM, geopb.ShapeType_GeometryZ, geopb.ShapeType_GeometryZM:
+		if ShapeTypeToLayout(shapeType) != ShapeTypeToLayout(so.ShapeType) {
+			return errors.Newf("object type %s does not match column dimensionality %s", so.ShapeType, shapeType)
+		}
+	default:
+		if shapeType != so.ShapeType {
+			return errors.Newf("object type %s does not match column type %s", so.ShapeType, shapeType)
+		}
 	}
 	return nil
+}
+
+// ShapeTypeToLayout returns the geom.Layout of the given ShapeType.
+// Note this is not a definition on ShapeType to prevent geopb from importing twpayne/go-geom.
+func ShapeTypeToLayout(s geopb.ShapeType) geom.Layout {
+	switch {
+	case (s&geopb.MShapeTypeFlag > 0) && (s&geopb.ZShapeTypeFlag > 0):
+		return geom.XYZM
+	case s&geopb.ZShapeTypeFlag > 0:
+		return geom.XYZ
+	case s&geopb.MShapeTypeFlag > 0:
+		return geom.XYM
+	default:
+		return geom.XY
+	}
 }
 
 //
@@ -859,17 +883,6 @@ func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.Spa
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	switch t.Layout() {
-	case geom.XY:
-	case geom.NoLayout:
-		if gc, ok := t.(*geom.GeometryCollection); !ok || !gc.Empty() {
-			return geopb.SpatialObject{}, errors.Newf("no layout found on object")
-		}
-	case geom.XYM, geom.XYZ, geom.XYZM:
-		return geopb.SpatialObject{}, unimplemented.NewWithIssueDetailf(53091, t.Layout().String()+"_datum", "dimension %s is not currently supported", t.Layout())
-	default:
-		return geopb.SpatialObject{}, errors.Newf("unexpected layout: %s", geom.XY)
-	}
 	bbox, err := boundingBoxFromGeomT(t, soType)
 	if err != nil {
 		return geopb.SpatialObject{}, err
@@ -884,24 +897,42 @@ func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.Spa
 }
 
 func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
+	var shapeType geopb.ShapeType
 	switch t := t.(type) {
 	case *geom.Point:
-		return geopb.ShapeType_Point, nil
+		shapeType = geopb.ShapeType_Point
 	case *geom.LineString:
-		return geopb.ShapeType_LineString, nil
+		shapeType = geopb.ShapeType_LineString
 	case *geom.Polygon:
-		return geopb.ShapeType_Polygon, nil
+		shapeType = geopb.ShapeType_Polygon
 	case *geom.MultiPoint:
-		return geopb.ShapeType_MultiPoint, nil
+		shapeType = geopb.ShapeType_MultiPoint
 	case *geom.MultiLineString:
-		return geopb.ShapeType_MultiLineString, nil
+		shapeType = geopb.ShapeType_MultiLineString
 	case *geom.MultiPolygon:
-		return geopb.ShapeType_MultiPolygon, nil
+		shapeType = geopb.ShapeType_MultiPolygon
 	case *geom.GeometryCollection:
-		return geopb.ShapeType_GeometryCollection, nil
+		shapeType = geopb.ShapeType_GeometryCollection
 	default:
 		return geopb.ShapeType_Unset, errors.Newf("unknown shape: %T", t)
 	}
+	switch t.Layout() {
+	case geom.NoLayout:
+		if gc, ok := t.(*geom.GeometryCollection); !ok || !gc.Empty() {
+			return geopb.ShapeType_Unset, errors.Newf("no layout found on object")
+		}
+	case geom.XY:
+		break
+	case geom.XYM:
+		shapeType = shapeType | geopb.MShapeTypeFlag
+	case geom.XYZ:
+		shapeType = shapeType | geopb.ZShapeTypeFlag
+	case geom.XYZM:
+		shapeType = shapeType | geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag
+	default:
+		return geopb.ShapeType_Unset, errors.Newf("unknown layout: %s", t.Layout())
+	}
+	return shapeType, nil
 }
 
 // GeomTContainsEmpty returns whether a geom.T contains any empty element.

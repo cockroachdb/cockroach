@@ -31,6 +31,39 @@ enum ShapeType {
   Geometry = 7;
   // GeometryCollection can contain a list of any above type except for Geometry.
   GeometryCollection = 8;
+
+  // Reserve (1 << 29) as M flag.
+  reserved 536870912;
+
+  // Reserve (1 << 30) as Z flag.
+  reserved 1073741824;
+
+  PointM = 536870913;
+  LineStringM = 536870914;
+  PolygonM = 536870915;
+  MultiPointM = 536870916;
+  MultiLineStringM = 536870917;
+  MultiPolygonM = 536870918;
+  GeometryM = 536870919;
+  GeometryCollectionM = 536870920;
+
+  PointZ = 1073741825;
+  LineStringZ = 1073741826;
+  PolygonZ = 1073741827;
+  MultiPointZ = 1073741828;
+  MultiLineStringZ = 1073741829;
+  MultiPolygonZ = 1073741830;
+  GeometryZ = 1073741831;
+  GeometryCollectionZ = 1073741832;
+
+  PointZM = 1610612737;
+  LineStringZM = 1610612738;
+  PolygonZM = 1610612739;
+  MultiPointZM = 1610612740;
+  MultiLineStringZM = 1610612741;
+  MultiPolygonZM = 1610612742;
+  GeometryZM = 1610612743;
+  GeometryCollectionZM = 1610612744;
 }
 
 // SpatialObjectType represents the type of the SpatialObject.
