@@ -90,6 +90,20 @@ CREATE TABLE uniq (
 ----
 
 exec-ddl
+CREATE TABLE uniq_partial (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  x INT,
+  UNIQUE WITHOUT INDEX (v) WHERE w > 0,
+  FAMILY (k),
+  FAMILY (v),
+  FAMILY (w),
+  FAMILY (x)
+)
+----
+
+exec-ddl
 CREATE TABLE uniq_fk_parent (
   k INT PRIMARY KEY,
   a INT UNIQUE WITHOUT INDEX,
@@ -3578,6 +3592,8 @@ upsert checks
            └── column2:7 > upsert_b:16 [as=check3:19, outer=(7,16)]
 
 # Do not prune columns from updates that are needed for unique checks.
+# TODO(mgartner): v and z can be pruned because they are not updated and not
+# needed for uniqueness checks.
 norm expect=PruneMutationInputCols
 UPDATE uniq SET w = 1, x = 2 WHERE k = 3
 ----
@@ -3661,6 +3677,76 @@ update uniq
                      ├── x:40 = uniq.x:33 [outer=(33,40), constraints=(/33: (/NULL - ]; /40: (/NULL - ]), fd=(33)==(40), (40)==(33)]
                      ├── y:41 = uniq.y:34 [outer=(34,41), constraints=(/34: (/NULL - ]; /41: (/NULL - ]), fd=(34)==(41), (41)==(34)]
                      └── k:37 != uniq.k:30 [outer=(30,37), constraints=(/30: (/NULL - ]; /37: (/NULL - ])]
+
+# Do not prune columns from updates that are needed for partial unique checks.
+# TODO(mgartner): x can be pruned because it is not updated and not needed for
+# uniqueness checks.
+norm expect=PruneMutationInputCols
+UPDATE uniq_partial SET v = 1 WHERE k = 3
+----
+update uniq_partial
+ ├── columns: <none>
+ ├── fetch columns: uniq_partial.k:6 uniq_partial.v:7
+ ├── update-mapping:
+ │    └── v_new:11 => uniq_partial.v:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: v_new:11!null uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-9,11)
+ │    ├── select
+ │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-9)
+ │    │    ├── scan uniq_partial
+ │    │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7-9)
+ │    │    └── filters
+ │    │         └── uniq_partial.k:6 = 3 [outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
+ │    └── projections
+ │         └── 1 [as=v_new:11]
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(v)
+           └── semi-join (hash)
+                ├── columns: k:17!null v:18!null w:19!null x:20
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(17-20)
+                ├── select
+                │    ├── columns: k:17!null v:18!null w:19!null x:20
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(17-20)
+                │    ├── with-scan &1
+                │    │    ├── columns: k:17!null v:18!null w:19 x:20
+                │    │    ├── mapping:
+                │    │    │    ├──  uniq_partial.k:6 => k:17
+                │    │    │    ├──  v_new:11 => v:18
+                │    │    │    ├──  uniq_partial.w:8 => w:19
+                │    │    │    └──  uniq_partial.x:9 => x:20
+                │    │    ├── cardinality: [0 - 1]
+                │    │    ├── key: ()
+                │    │    └── fd: ()-->(17-20)
+                │    └── filters
+                │         └── w:19 > 0 [outer=(19), constraints=(/19: [/1 - ]; tight)]
+                ├── select
+                │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14!null
+                │    ├── key: (12)
+                │    ├── fd: (12)-->(13,14)
+                │    ├── scan uniq_partial
+                │    │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14
+                │    │    ├── key: (12)
+                │    │    └── fd: (12)-->(13,14)
+                │    └── filters
+                │         └── uniq_partial.w:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
+                └── filters
+                     ├── v:18 = uniq_partial.v:13 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
+                     └── k:17 != uniq_partial.k:12 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ])]
 
 # Do not prune columns that are needed for foreign key checks or cascades.
 norm expect=PruneMutationInputCols
