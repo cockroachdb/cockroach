@@ -1172,7 +1172,9 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 // TODO(radu): a no-op processor is not ideal if the next processor is on the
 // same node. A fix for that is much more complicated, requiring remembering
 // extra state in the PhysicalPlan.
-func (p *PhysicalPlan) EnsureSingleStreamPerNode(forceSerialization bool) {
+func (p *PhysicalPlan) EnsureSingleStreamPerNode(
+	forceSerialization bool, post execinfrapb.PostProcessSpec,
+) {
 	// Fast path - check if we need to do anything.
 	var nodes util.FastIntSet
 	var foundDuplicates bool
@@ -1217,6 +1219,7 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(forceSerialization bool) {
 					// The other fields will be filled in by MergeResultStreams.
 					ColumnTypes: p.GetResultTypes(),
 				}},
+				Post:        post,
 				Core:        execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 				ResultTypes: p.GetResultTypes(),
@@ -1232,10 +1235,12 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(forceSerialization bool) {
 // Note that if the last stage consists of a single processor planned on a
 // remote node, such stage is considered distributed.
 func (p *PhysicalPlan) GetLastStageDistribution() PlanDistribution {
-	if len(p.ResultRouters) == 1 && p.Processors[p.ResultRouters[0]].Node == p.GatewayNodeID {
-		return LocalPlan
+	for i := range p.ResultRouters {
+		if p.Processors[p.ResultRouters[i]].Node != p.GatewayNodeID {
+			return FullyDistributedPlan
+		}
 	}
-	return FullyDistributedPlan
+	return LocalPlan
 }
 
 // IsLastStageDistributed returns whether the last stage of processors is
