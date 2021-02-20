@@ -135,6 +135,7 @@ type Memo struct {
 	zigzagJoinEnabled       bool
 	useHistograms           bool
 	useMultiColStats        bool
+	localityOptimizedSearch bool
 	safeUpdates             bool
 	preferLookupJoinsForFKs bool
 	saveTablesPrefix        string
@@ -173,6 +174,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		zigzagJoinEnabled:       evalCtx.SessionData.ZigzagJoinEnabled,
 		useHistograms:           evalCtx.SessionData.OptimizerUseHistograms,
 		useMultiColStats:        evalCtx.SessionData.OptimizerUseMultiColStats,
+		localityOptimizedSearch: evalCtx.SessionData.LocalityOptimizedSearch,
 		safeUpdates:             evalCtx.SessionData.SafeUpdates,
 		preferLookupJoinsForFKs: evalCtx.SessionData.PreferLookupJoinsForFKs,
 		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
@@ -281,6 +283,7 @@ func (m *Memo) IsStale(
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
 		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
+		m.localityOptimizedSearch != evalCtx.SessionData.LocalityOptimizedSearch ||
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
 		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix {

@@ -287,6 +287,18 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+// localityOptimizedSearchMode controls the cluster default for the use of
+// locality optimized search. If enabled, the optimizer will try to plan scans
+// and lookup joins in which local nodes (i.e., nodes in the gateway region) are
+// searched for matching rows before remote nodes, in the hope that the
+// execution engine can avoid visiting remote nodes.
+var localityOptimizedSearchMode = settings.RegisterBoolSetting(
+	"sql.defaults.locality_optimized_partitioned_index_scan.enabled",
+	"default value for locality_optimized_partitioned_index_scan session setting; "+
+		"enables searching for rows in the current region before searching remote regions",
+	false,
+)
+
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
@@ -2193,6 +2205,10 @@ func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
+}
+
+func (m *sessionDataMutator) SetLocalityOptimizedSearch(val bool) {
+	m.data.LocalityOptimizedSearch = val
 }
 
 func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
