@@ -102,6 +102,13 @@ type scanNode struct {
 	// containsSystemColumns holds whether or not this scan is expected to
 	// produce any system columns.
 	containsSystemColumns bool
+
+	// localityOptimized is true if this scan is part of a locality optimized
+	// search strategy, which uses a limited UNION ALL operator to try to find a
+	// row on nodes in the gateway's region before fanning out to remote nodes. In
+	// order for this optimization to work, the DistSQL planner must create a
+	// local plan.
+	localityOptimized bool
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.

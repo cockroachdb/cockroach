@@ -164,11 +164,18 @@ define Distinct {
 # SetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL or the
 # DISTINCT version). The left and right nodes must have the same number of
 # columns.
+#
+# HardLimit can only be set for UNION ALL operations. It is used to implement
+# locality optimized search, and instructs the execution engine that it should
+# execute the left node to completion and possibly short-circuit if the limit is
+# reached before executing the right node. The limit is guaranteed but the
+# short-circuit behavior is not.
 define SetOp {
     Typ tree.UnionType
     All bool
     Left exec.Node
     Right exec.Node
+    HardLimit uint64
 }
 
 # Sort performs a resorting of the rows produced by the input node.
