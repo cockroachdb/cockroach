@@ -716,7 +716,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		s.accounts = append(s.accounts, &acc)
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
-	router, outputs := colexec.NewHashRouter(
+	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns,
 		execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore,
 		diskAccounts, metadataSourcesQueue, toClose,
