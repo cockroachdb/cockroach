@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -192,7 +193,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := range toDrain {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
+				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
 					allocators,
 					hashRouterInput,
 					typs,
