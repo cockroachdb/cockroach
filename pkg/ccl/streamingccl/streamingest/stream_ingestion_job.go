@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -19,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,20 +82,52 @@ func ingest(
 	return nil
 }
 
+func waitForSignal(
+	ctx context.Context, jobID int64, registry *jobs.Registry, cancelIngest func(),
+) error {
+	tick := timeutil.NewTimer()
+
+	for {
+		tick.Reset(1 * time.Minute) // Something reasonable.  Read setting.
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			tick.Read = true
+			job, err := registry.LoadJob(ctx, jobID)
+			if err != nil {
+				return err
+			}
+			prog := job.Progress()
+			if !prog.GetDetails().(*jobspb.Progress_StreamIngest).StreamIngest.CutoverTime.IsEmpty() {
+				// Signaled.  Cancel ingestion.
+				cancelIngest()
+				return nil
+			}
+		}
+	}
+}
+
 // Resume is part of the jobs.Resumer interface.
-func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
-		*s.job.ID())
-	if err != nil {
-		return err
-	}
+	ingestCtx, cancelIngest := context.WithCancel(resumeCtx)
+	g := ctxgroup.WithContext(ingestCtx)
+	g.GoCtx(func(ctx context.Context) error {
+		return ingest(resumeCtx, p, details.StreamAddress, s.job.Progress(),
+			*s.job.ID())
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		return waitForSignal(ctx, *s.job.ID(), p.ExecCfg().JobRegistry, cancelIngest)
+	})
 
-	// TODO(adityamaru): We probably want to use the resultsCh to indicate that
-	// the processors have completed setup. We can then return the job ID in the
-	// plan hook similar to how changefeeds do it.
+	err := g.Wait()
+	if err == context.Canceled && resumeCtx.Err() == nil {
+		// We really were signaled due to cutover.  Start revert, etc...
+	}
 
 	return nil
 }
