@@ -41,7 +41,12 @@
       "expectedDataType": "xid"
     },
     "relminmxid": null,
-    "relpartbound": null
+    "relpartbound": {
+      "oid": 25,
+      "dataType": "text",
+      "expectedOid": 194,
+      "expectedDataType": "pg_node_tree"
+    }
   },
   "pg_class_relname_nsp_index": {},
   "pg_collation": {
