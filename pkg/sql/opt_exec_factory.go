@@ -128,6 +128,7 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
+	scan.localityOptimized = params.LocalityOptimized
 	return scan, nil
 }
 
@@ -496,9 +497,9 @@ func (ef *execFactory) ConstructDistinct(
 
 // ConstructSetOp is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node,
+	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
 ) (exec.Node, error) {
-	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
+	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode), hardLimit)
 }
 
 // ConstructSort is part of the exec.Factory interface.

@@ -447,6 +447,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr("already ordered", colinfo.ColumnOrdering(a.Ordering[:p]).String(n.Columns()))
 		}
 
+	case setOpOp:
+		a := n.args.(*setOpArgs)
+		if a.HardLimit > 0 {
+			ob.Attr("limit", a.HardLimit)
+		}
+
 	case indexJoinOp:
 		a := n.args.(*indexJoinArgs)
 		ob.Attrf("table", "%s@%s", a.Table.Name(), a.Table.Index(0).Name())
@@ -720,7 +726,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case simpleProjectOp,
 		serializingProjectOp,
-		setOpOp,
 		ordinalityOp,
 		max1RowOp,
 		explainOptOp,

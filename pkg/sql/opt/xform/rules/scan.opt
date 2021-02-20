@@ -8,3 +8,68 @@
 (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
 =>
 (GenerateIndexScans $scanPrivate)
+
+# GenerateLocalityOptimizedScan plans a LocalityOptimizedSearch operation if
+# possible. LocalityOptimizedSearch is similar to UnionAll, but it is designed
+# to avoid communicating with remote nodes (relative to the gateway region) if
+# at all possible.
+#
+# LocalityOptimizedSearch can be planned under the following conditions:
+#  - A scan is known to produce at most one row.
+#  - The scan contains multiple spans, with some spans targeting partitions on
+#    local nodes (relative to the gateway region), and some targeting partitions
+#    on remote nodes. It is not known which span will produce the row.
+#
+# The result of GenerateLocalityOptimizedScan will be a LocalityOptimizedSearch
+# in which the left child contains a new scan operator with the local spans from
+# the original scan, and the right child contains a new scan operator with the
+# remote spans. The LocalityOptimizedSearch operator ensures that the right
+# child (containing remote spans) is only executed if the left child (containing
+# local spans) does not return any rows.
+#
+# This is a useful optimization if there is locality of access in the workload,
+# such that rows tend to be accessed from the region where they are located.
+# If there is no locality of access, using LocalityOptimizedSearch could be a
+# slight pessimization, since rows residing in remote regions will be fetched
+# slightly more slowly than they would be otherwise.
+#
+# For example, suppose we have a multi-region database with regions 'us-east1',
+# 'us-west1' and 'europe-west1', and we have the following table and query,
+# issued from 'us-east1':
+#
+#   CREATE TABLE tab (
+#     k INT PRIMARY KEY,
+#     v INT
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM tab WHERE k = 10;
+#
+# Normally, this would produce the following plan:
+#
+#   scan tab
+#    └── constraint: /3/1
+#         ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#         ├── [/'us-east1'/10 - /'us-east1'/10]
+#         └── [/'us-west1'/10 - /'us-west1'/10]
+#
+# but if the session setting locality_optimized_partitioned_index_scan is enabled,
+# the optimizer will produce this plan, using locality optimized search:
+#
+#   locality-optimized-search
+#    ├── scan tab
+#    │    └── constraint: /9/7: [/'us-east1'/10 - /'us-east1'/10]
+#    └── scan tab
+#         └── constraint: /14/12
+#              ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#              └── [/'us-west1'/10 - /'us-west1'/10]
+#
+# As long as k = 10 is located in 'us-east1', the second plan will be much faster.
+# But if k = 10 is located in one of the other regions, the first plan would be
+# slightly faster.
+[GenerateLocalityOptimizedScan, Explore]
+(Scan
+    $scanPrivate:* &
+        (CanMaybeGenerateLocalityOptimizedScan $scanPrivate)
+)
+=>
+(GenerateLocalityOptimizedScan $scanPrivate)
