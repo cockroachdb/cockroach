@@ -380,7 +380,7 @@ index-join a
       │    ├── constraint: /2/3/1: [/11/'baz' - /49/'baz']
       │    ├── stats: [rows=107.556429, distinct(1)=107.556429, null(1)=0, distinct(2)=39, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=107.556429, null(2,3)=0]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2,3)
+      │    └── fd: ()-->(3), (1)-->(2)
       └── filters
            └── s:3 = 'baz' [type=bool, outer=(3), constraints=(/3: [/'baz' - /'baz']; tight), fd=()-->(3)]
 
@@ -767,7 +767,7 @@ select
  │    │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
  │    │                <--- 'banana' --- 'cherry' --- 'mango'
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: ()-->(3), (1)-->(2)
  └── filters
       └── s:3 = 'mango' [type=bool, outer=(3), constraints=(/3: [/'mango' - /'mango']; tight), fd=()-->(3)]
 

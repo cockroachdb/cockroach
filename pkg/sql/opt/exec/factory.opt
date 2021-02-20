@@ -169,6 +169,7 @@ define SetOp {
     All bool
     Left exec.Node
     Right exec.Node
+    HardLimit uint64
 }
 
 # Sort performs a resorting of the rows produced by the input node.

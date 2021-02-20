@@ -304,8 +304,7 @@ func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnI
 				break
 			}
 		}
-		// The column must be part of the constraint's "exact prefix".
-		if colOrd != -1 && c.ExactPrefix(evalCtx) > colOrd {
+		if colOrd != -1 {
 			return c.Spans.Get(0).StartKey().Value(colOrd)
 		}
 	}

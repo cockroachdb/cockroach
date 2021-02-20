@@ -285,8 +285,8 @@ func TestExtractConstCols(t *testing.T) {
 		{[]string{`/1/2: [/10/2 - /10/4]`}, vals{1: "10"}},
 		{[]string{`/1/-2: [/10/4 - /10/2]`}, vals{1: "10"}},
 		{[]string{`/1/2: [/10/2 - /10/2]`}, vals{1: "10", 2: "2"}},
-		{[]string{`/1/2: [/10/2 - /12/2]`}, vals{}},
-		{[]string{`/1/2: [/9/2 - /9/2] [/10/2 - /12/2]`}, vals{}},
+		{[]string{`/1/2: [/10/2 - /12/2]`}, vals{2: "2"}},
+		{[]string{`/1/2: [/9/2 - /9/2] [/10/2 - /12/2]`}, vals{2: "2"}},
 		{[]string{`/1: [/10 - /10] [/12 - /12]`}, vals{}},
 		{
 			[]string{
@@ -304,12 +304,11 @@ func TestExtractConstCols(t *testing.T) {
 			vals{2: "4"},
 		},
 		{[]string{`/1: [/10 - /11)`}, vals{}},
-		// TODO(justin): column 1 here is constant but we don't infer it as such.
 		{
 			[]string{
 				`/2/1: [/900/4 - /900/4] [/1000/4 - /1000/4] [/1100/4 - /1100/4] [/1400/4 - /1400/4] [/1500/4 - /1500/4]`,
 			},
-			vals{},
+			vals{1: "4"},
 		},
 		{
 			[]string{

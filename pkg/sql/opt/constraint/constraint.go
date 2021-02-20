@@ -570,11 +570,38 @@ func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
 // ExtractConstCols returns a set of columns which are restricted to be
 // constant by the constraint.
 func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
-	var res opt.ColSet
-	pre := c.ExactPrefix(evalCtx)
-	for i := 0; i < pre; i++ {
-		res.Add(c.Columns.Get(i).ID())
+	if c.IsContradiction() {
+		return opt.ColSet{}
 	}
+
+	var res opt.ColSet
+	for col := 0; col < c.Columns.Count(); col++ {
+		// Check if all spans have the same value for this column.
+		var val tree.Datum
+		allMatch := true
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			if sp.start.Length() <= col || sp.end.Length() <= col {
+				allMatch = false
+				break
+			}
+			startVal := sp.start.Value(col)
+			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
+				allMatch = false
+				break
+			}
+			if i == 0 {
+				val = startVal
+			} else if startVal.Compare(evalCtx, val) != 0 {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			res.Add(c.Columns.Get(col).ID())
+		}
+	}
+
 	return res
 }
 

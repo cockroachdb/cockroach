@@ -76,10 +76,12 @@ type unionNode struct {
 	unionType tree.UnionType
 	// all indicates if the operation is the ALL or DISTINCT version
 	all bool
+
+	hardLimit uint64
 }
 
 func (p *planner) newUnionNode(
-	typ tree.UnionType, all bool, left, right planNode,
+	typ tree.UnionType, all bool, left, right planNode, hardLimit uint64,
 ) (planNode, error) {
 	emitAll := false
 	switch typ {
@@ -137,6 +139,7 @@ func (p *planner) newUnionNode(
 		emitAll:   emitAll,
 		unionType: typ,
 		all:       all,
+		hardLimit: hardLimit,
 	}
 	return node, nil
 }
