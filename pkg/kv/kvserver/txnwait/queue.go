@@ -919,6 +919,7 @@ func (q *Queue) forcePushAbort(
 	forcePush.PushType = roachpb.PUSH_ABORT
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
+	b.Header.Timestamp.Forward(req.PushTo)
 	b.AddRawRequest(&forcePush)
 	if err := q.cfg.DB.Run(ctx, b); err != nil {
 		return nil, b.MustPErr()
