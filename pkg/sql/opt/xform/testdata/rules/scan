@@ -429,3 +429,384 @@ insert fk_b
                 │    ├── key: ()
                 │    └── fd: ()-->(6)
                 └── filters (true)
+
+# --------------------------------------------------
+# GenerateLocalityOptimizedScan
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    t INT NOT NULL CHECK (t IN (1, 2, 3)),
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE WITHOUT INDEX (c),
+    UNIQUE INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+      PARTITION east VALUES IN (('east', 1), ('east', 2)),
+      PARTITION west VALUES IN (('west', DEFAULT)),
+      PARTITION default VALUES IN (DEFAULT)
+    ),
+    INDEX d_idx (r, d) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]'
+----
+
+exec-ddl
+ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── locality-optimized-search
+      ├── columns: a:3!null b:4!null
+      ├── left columns: a:10 b:11
+      ├── right columns: a:17 b:18
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:10!null b:11!null
+      │    ├── constraint: /8/11: [/'east'/1 - /'east'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(10,11)
+      └── scan abc_part@b_idx
+           ├── columns: a:17!null b:18!null
+           ├── constraint: /15/18
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17,18)
+
+opt locality=(region=west) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE b = 1
+----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4!null c:5 d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── left columns: r:8 a:10 b:11
+      ├── right columns: r:15 a:17 b:18
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: r:8!null a:10!null b:11!null
+      │    ├── constraint: /8/11: [/'west'/1 - /'west'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(8,10,11)
+      └── scan abc_part@b_idx
+           ├── columns: r:15!null a:17!null b:18!null
+           ├── constraint: /15/18
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'east'/1 - /'east'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(15,17,18)
+
+opt locality=(region=central) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE b = 1
+----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4!null c:5 d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── left columns: r:8 a:10 b:11
+      ├── right columns: r:15 a:17 b:18
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: r:8!null a:10!null b:11!null
+      │    ├── constraint: /8/11: [/'central'/1 - /'central'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(8,10,11)
+      └── scan abc_part@b_idx
+           ├── columns: r:15!null a:17!null b:18!null
+           ├── constraint: /15/18
+           │    ├── [/'east'/1 - /'east'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(15,17,18)
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
+----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:8 t:9 a:10 c:12
+      ├── right columns: r:15 t:16 a:17 c:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
+      │    ├── constraint: /8/9/12
+      │    │    ├── [/'east'/1/1 - /'east'/1/1]
+      │    │    └── [/'east'/2/1 - /'east'/2/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(8-10,12)
+      └── scan abc_part@c_idx
+           ├── columns: r:15!null t:16!null a:17!null c:19!null
+           ├── constraint: /15/16/19
+           │    ├── [/'central'/1/1 - /'central'/1/1]
+           │    ├── [/'central'/2/1 - /'central'/2/1]
+           │    ├── [/'central'/3/1 - /'central'/3/1]
+           │    ├── [/'east'/3/1 - /'east'/3/1]
+           │    ├── [/'west'/1/1 - /'west'/1/1]
+           │    ├── [/'west'/2/1 - /'west'/2/1]
+           │    └── [/'west'/3/1 - /'west'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(15-17,19)
+
+opt locality=(region=west) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
+----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:8 t:9 a:10 c:12
+      ├── right columns: r:15 t:16 a:17 c:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
+      │    ├── constraint: /8/9/12
+      │    │    ├── [/'west'/1/1 - /'west'/1/1]
+      │    │    ├── [/'west'/2/1 - /'west'/2/1]
+      │    │    └── [/'west'/3/1 - /'west'/3/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(8-10,12)
+      └── scan abc_part@c_idx
+           ├── columns: r:15!null t:16!null a:17!null c:19!null
+           ├── constraint: /15/16/19
+           │    ├── [/'central'/1/1 - /'central'/1/1]
+           │    ├── [/'central'/2/1 - /'central'/2/1]
+           │    ├── [/'central'/3/1 - /'central'/3/1]
+           │    ├── [/'east'/1/1 - /'east'/1/1]
+           │    ├── [/'east'/2/1 - /'east'/2/1]
+           │    └── [/'east'/3/1 - /'east'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(15-17,19)
+
+opt locality=(region=central) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
+----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:8 t:9 a:10 c:12
+      ├── right columns: r:15 t:16 a:17 c:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
+      │    ├── constraint: /8/9/12
+      │    │    ├── [/'central'/1/1 - /'central'/1/1]
+      │    │    ├── [/'central'/2/1 - /'central'/2/1]
+      │    │    ├── [/'central'/3/1 - /'central'/3/1]
+      │    │    └── [/'east'/3/1 - /'east'/3/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(8-10,12)
+      └── scan abc_part@c_idx
+           ├── columns: r:15!null t:16!null a:17!null c:19!null
+           ├── constraint: /15/16/19
+           │    ├── [/'east'/1/1 - /'east'/1/1]
+           │    ├── [/'east'/2/1 - /'east'/2/1]
+           │    ├── [/'west'/1/1 - /'west'/1/1]
+           │    ├── [/'west'/2/1 - /'west'/2/1]
+           │    └── [/'west'/3/1 - /'west'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(15-17,19)
+
+# b is not constrained to a single value.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b IN (1, 2)
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 2]
+ ├── key: (3)
+ └── scan abc_part@b_idx
+      ├── columns: a:3!null b:4!null
+      ├── constraint: /1/4
+      │    ├── [/'central'/1 - /'central'/2]
+      │    ├── [/'east'/1 - /'east'/2]
+      │    └── [/'west'/1 - /'west'/2]
+      ├── cardinality: [0 - 2]
+      ├── key: (3)
+      └── fd: (3)-->(4), (4)-->(3)
+
+# The spans target all remote partitions.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1 AND r IN ('west', 'central')
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── scan abc_part@b_idx
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── constraint: /1/4
+      │    ├── [/'central'/1 - /'central'/1]
+      │    └── [/'west'/1 - /'west'/1]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,3,4)
+
+# The scan is limited.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE d = 1 LIMIT 1
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── scan abc_part@d_idx
+      ├── columns: a:3!null d:6!null
+      ├── constraint: /1/6/3
+      │    ├── [/'central'/1 - /'central'/1]
+      │    ├── [/'east'/1 - /'east'/1]
+      │    └── [/'west'/1 - /'west'/1]
+      ├── limit: 1
+      ├── key: ()
+      └── fd: ()-->(3,6)
+
+# The scan is limited, but b is known to be a key, so the limit is discarded.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1 LIMIT 1
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── locality-optimized-search
+      ├── columns: a:3!null b:4!null
+      ├── left columns: a:10 b:11
+      ├── right columns: a:17 b:18
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:10!null b:11!null
+      │    ├── constraint: /8/11: [/'east'/1 - /'east'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(10,11)
+      └── scan abc_part@b_idx
+           ├── columns: a:17!null b:18!null
+           ├── constraint: /15/18
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17,18)

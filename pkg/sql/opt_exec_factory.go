@@ -128,6 +128,7 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
+	scan.localityOptimized = params.LocalityOptimized
 	return scan, nil
 }
 
@@ -496,9 +497,17 @@ func (ef *execFactory) ConstructDistinct(
 
 // ConstructSetOp is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node,
+	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
 ) (exec.Node, error) {
-	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
+	if hardLimit != 0 && (typ != tree.UnionOp || !all) {
+		return nil, errors.AssertionFailedf("a hard limit on a set operator is only supported for UNION ALL")
+	}
+	if hardLimit > 1 {
+		return nil, errors.AssertionFailedf(
+			"locality optimized search is not yet supported for more than one row at a time",
+		)
+	}
+	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode), hardLimit)
 }
 
 // ConstructSort is part of the exec.Factory interface.

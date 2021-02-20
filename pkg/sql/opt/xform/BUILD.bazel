@@ -58,6 +58,7 @@ go_test(
         "main_test.go",
         "optimizer_test.go",
         "physical_props_test.go",
+        "scan_funcs_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":xform"],

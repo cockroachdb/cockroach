@@ -471,18 +471,22 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
-		// Although we don't yet recommend distributing plans where soft limits
-		// propagate to scan nodes because we don't have infrastructure to only
-		// plan for a few ranges at a time, the propagation of the soft limits
-		// to scan nodes has been added in 20.1 release, so to keep the
-		// previous behavior we continue to ignore the soft limits for now.
-		// TODO(yuzefovich): pay attention to the soft limits.
-		rec := canDistribute
-		// Check if we are doing a full scan.
-		if n.isFull {
-			rec = rec.compose(shouldDistribute)
+		switch {
+		case n.localityOptimized:
+			// This is a locality optimized scan.
+			return cannotDistribute, nil
+		case n.isFull:
+			// This is a full scan.
+			return shouldDistribute, nil
+		default:
+			// Although we don't yet recommend distributing plans where soft limits
+			// propagate to scan nodes because we don't have infrastructure to only
+			// plan for a few ranges at a time, the propagation of the soft limits
+			// to scan nodes has been added in 20.1 release, so to keep the
+			// previous behavior we continue to ignore the soft limits for now.
+			// TODO(yuzefovich): pay attention to the soft limits.
+			return canDistribute, nil
 		}
-		return rec, nil
 
 	case *sortNode:
 		rec, err := checkSupportForPlanNode(n.plan)
@@ -3303,6 +3307,10 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		p.SetMergeOrdering(mergeOrdering)
 
 		if !n.all {
+			if n.hardLimit != 0 {
+				return nil, errors.AssertionFailedf("a hard limit is not supported for UNION (only for UNION ALL)")
+			}
+
 			// TODO(abhimadan): use columns from mergeOrdering to fill in the
 			// OrderingColumns field in DistinctSpec once the unused columns
 			// are projected out.
@@ -3325,12 +3333,36 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// on a single node (which is always the case when there are mutations),
 			// we can fuse everything so there are no concurrent KV operations (see
 			// #40487, #41307).
-			//
-			// Furthermore, in order to disable auto-parallelism that could occur
-			// when merging multiple streams on the same node, we force the
-			// serialization of the merge operation (otherwise, it would be
-			// possible that we have a source of unbounded parallelism, see #51548).
-			p.EnsureSingleStreamPerNode(true /* forceSerialization */)
+
+			if n.hardLimit == 0 {
+				// In order to disable auto-parallelism that could occur when merging
+				// multiple streams on the same node, we force the serialization of the
+				// merge operation (otherwise, it would be possible that we have a
+				// source of unbounded parallelism, see #51548).
+				p.EnsureSingleStreamPerNode(true /* forceSerialization */, execinfrapb.PostProcessSpec{})
+			} else {
+				if p.GetLastStageDistribution() != physicalplan.LocalPlan {
+					return nil, errors.AssertionFailedf("we expect that limited UNION ALL queries are only planned locally")
+				}
+				if len(p.MergeOrdering.Columns) != 0 {
+					return nil, errors.AssertionFailedf(
+						"we expect that limited UNION ALL queries do not require a specific ordering",
+					)
+				}
+				// Here we don't force the serialization so that the unordered
+				// synchronizer is used. Additionally, because the plan will be fully
+				// local, we will use the flowinfra.FuseAggressively option. As a
+				// result, the plan will end up with a serial unordered synchronizer,
+				// which has exactly the behavior that we want (in particular, it won't
+				// execute the right child if the limit is reached by the left child).
+				// TODO(rytaft,yuzefovich): This currently only works with the
+				// vectorized engine. We should consider adding support for the serial
+				// unordered synchronizer in the row-based engine (see #61081).
+				p.EnsureSingleStreamPerNode(
+					false, /* forceSerialization */
+					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
+				)
+			}
 
 			// UNION ALL is special: it doesn't have any required downstream
 			// processor, so its two inputs might have different post-processing
@@ -3341,6 +3373,10 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			}
 		}
 	} else {
+		if n.hardLimit != 0 {
+			return nil, errors.AssertionFailedf("a hard limit is not supported for INTERSECT or EXCEPT")
+		}
+
 		// We plan INTERSECT and EXCEPT queries with joiners. Get the appropriate
 		// join type.
 		joinType := distsqlSetOpJoinType(n.unionType)

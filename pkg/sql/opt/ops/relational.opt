@@ -77,6 +77,17 @@ define ScanPrivate {
     # list will always be empty when part of a ScanPrivate.
     Locking LockingItem
 
+    # LocalityOptimized is true if this scan is a child of a
+    # LocalityOptimizedSearch operator, indicating that it either contains all
+    # local (relative to the gateway region) or all remote spans. The
+    # LocalityOptimizedSearch operator is similar to a UNION ALL, but ensures
+    # that the right child (containing remote spans) is only executed if the
+    # left child (containing local spans) does not return any rows. Therefore,
+    # LocalityOptimized is used as a hint to the coster to reduce the cost of
+    # this scan. It is also used to ensure that the DistSQL planner creates a
+    # local plan.
+    LocalityOptimized bool
+
     # PartitionConstrainedScan records whether or not we were able to use partitions
     # to constrain the lookup spans further. This flag is used to record telemetry
     # about how often this optimization is getting applied.
@@ -880,6 +891,63 @@ define IntersectAll {
 define ExceptAll {
     Left RelExpr
     Right RelExpr
+    _ SetPrivate
+}
+
+# LocalityOptimizedSearch is similar to UnionAll, but it is designed to avoid
+# communicating with remote nodes (relative to the gateway region) if at all
+# possible. LocalityOptimizedSearch can be planned when a scan is known to
+# produce at most one row, but it is not known which region contains that row
+# (if any). In this case, the scan can be split in two, and the resulting scans
+# will become the children of the LocalityOptimizedSearch operator. The left
+# scan should only contain spans targeting partitions on local nodes, and the
+# right scan should contain the remaining spans. The LocalityOptimizedSearch
+# operator ensures that the right child (containing remote spans) is only
+# executed if the left child (containing local spans) does not return any rows.
+#
+# This is a useful optimization if there is locality of access in the workload,
+# such that rows tend to be accessed from the region where they are located.
+# If there is no locality of access, using LocalityOptimizedSearch could be a
+# slight pessimization, since rows residing in remote regions will be fetched
+# slightly more slowly than they would be otherwise.
+#
+# For example, suppose we have a multi-region database with regions 'us-east1',
+# 'us-west1' and 'europe-west1', and we have the following table and query,
+# issued from 'us-east1':
+#
+#   CREATE TABLE tab (
+#     k INT PRIMARY KEY,
+#     v INT
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM tab WHERE k = 10;
+#
+# Normally, this would produce the following plan:
+#
+#   scan tab
+#    └── constraint: /3/1
+#         ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#         ├── [/'us-east1'/10 - /'us-east1'/10]
+#         └── [/'us-west1'/10 - /'us-west1'/10]
+#
+# but if the session setting locality_optimized_partitioned_index_scan is enabled,
+# the optimizer will produce this plan, using locality optimized search:
+#
+#   locality-optimized-search
+#    ├── scan tab
+#    │    └── constraint: /9/7: [/'us-east1'/10 - /'us-east1'/10]
+#    └── scan tab
+#         └── constraint: /14/12
+#              ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#              └── [/'us-west1'/10 - /'us-west1'/10]
+#
+# As long as k = 10 is located in 'us-east1', the second plan will be much faster.
+# But if k = 10 is located in one of the other regions, the first plan would be
+# slightly faster.
+[Relational, Set]
+define LocalityOptimizedSearch {
+    Local RelExpr
+    Remote RelExpr
     _ SetPrivate
 }
 
