@@ -14,12 +14,15 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func TestMergeResultTypes(t *testing.T) {
+func TestMergeResultTypesForSetOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -42,9 +45,24 @@ func TestMergeResultTypes(t *testing.T) {
 		{"right null", typeInt, null, &typeInt, false},
 		{"both int", typeInt, typeInt, &typeInt, false},
 	}
+	checkUnknownTypesAreUpdated := func(plan PhysicalPlan, merged []*types.T) {
+		for i, typ := range plan.GetResultTypes() {
+			if typ.Family() == types.UnknownFamily && merged[i].Family() != types.UnknownFamily {
+				t.Fatal("should have updated types on the original plans")
+			}
+		}
+	}
+	infra := physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), roachpb.NodeID(1))
+	var leftPlan, rightPlan PhysicalPlan
+	leftPlan.PhysicalInfrastructure = &infra
+	rightPlan.PhysicalInfrastructure = &infra
+	leftPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
+	rightPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			result, err := mergeResultTypes(td.left, td.right)
+			leftPlan.Processors[0].Spec.ResultTypes = td.left
+			rightPlan.Processors[1].Spec.ResultTypes = td.right
+			result, err := mergeResultTypesForSetOp(&leftPlan, &rightPlan)
 			if td.err {
 				if err == nil {
 					t.Fatalf("expected error, got %+v", result)
@@ -57,6 +75,8 @@ func TestMergeResultTypes(t *testing.T) {
 			if !reflect.DeepEqual(*td.expected, result) {
 				t.Fatalf("expected %+v, got %+v", *td.expected, result)
 			}
+			checkUnknownTypesAreUpdated(leftPlan, result)
+			checkUnknownTypesAreUpdated(rightPlan, result)
 		})
 	}
 }
