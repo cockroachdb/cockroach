@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 // populateEqChains populates op.scratch.eqChains with indices of tuples from b
 // that belong to the same groups. It returns the number of equality chains.
 // Passed-in sel is updated to include tuples that are "heads" of the
-// corresponding equality chains and op.ht.probeScratch.hashBuffer is adjusted
+// corresponding equality chains and op.ht.ProbeScratch.HashBuffer is adjusted
 // accordingly. headToEqChainsID is a scratch space that must contain all
 // zeroes and be of at least batchLength length.
 const _ = "template_populateEqChains"
@@ -23,23 +23,23 @@ func populateEqChains_false(
 	op *hashAggregator, batchLength int, sel []int, headToEqChainsID []int) int {
 	eqChainsCount := 0
 	// Capture the slices in order for BCE to occur.
-	headIDs := op.ht.probeScratch.headID
-	hashBuffer := op.ht.probeScratch.hashBuffer
-	_ = headIDs[batchLength-1]
+	HeadIDs := op.ht.ProbeScratch.HeadID
+	hashBuffer := op.ht.ProbeScratch.HashBuffer
+	_ = HeadIDs[batchLength-1]
 	_ = hashBuffer[batchLength-1]
 	for i := 0; i < batchLength; i++ {
-		// Since we're essentially probing the batch against itself, headID
+		// Since we're essentially probing the batch against itself, HeadID
 		// cannot be 0, so we don't need to check that. What we have here is
 		// the tuple at position i belongs to the same equality chain as the
-		// tuple at position headID-1.
+		// tuple at position HeadID-1.
 		// We will use a similar to keyID encoding for eqChains slot - all
 		// tuples that should be included in eqChains[i] chain will have
-		// eqChainsID = i + 1. headToEqChainsID is a mapping from headID to
+		// eqChainsID = i + 1. headToEqChainsID is a mapping from HeadID to
 		// eqChainsID that we're currently building in which eqChainsID
 		// indicates that the current tuple is the head of its equality chain.
 		//gcassert:bce
-		headID := headIDs[i]
-		if eqChainsID := headToEqChainsID[headID-1]; eqChainsID == 0 {
+		HeadID := HeadIDs[i]
+		if eqChainsID := headToEqChainsID[HeadID-1]; eqChainsID == 0 {
 			// This tuple is the head of the new equality chain, so we include
 			// it in updated selection vector. We also compact the hash buffer
 			// accordingly.
@@ -49,7 +49,7 @@ func populateEqChains_false(
 			sel[eqChainsCount] = i
 			op.scratch.eqChains[eqChainsCount] = append(op.scratch.eqChains[eqChainsCount], i)
 			eqChainsCount++
-			headToEqChainsID[headID-1] = eqChainsCount
+			headToEqChainsID[HeadID-1] = eqChainsCount
 		} else {
 			op.scratch.eqChains[eqChainsID-1] = append(op.scratch.eqChains[eqChainsID-1], i)
 		}
@@ -61,24 +61,24 @@ func populateEqChains_true(
 	op *hashAggregator, batchLength int, sel []int, headToEqChainsID []int) int {
 	eqChainsCount := 0
 	// Capture the slices in order for BCE to occur.
-	headIDs := op.ht.probeScratch.headID
-	hashBuffer := op.ht.probeScratch.hashBuffer
-	_ = headIDs[batchLength-1]
+	HeadIDs := op.ht.ProbeScratch.HeadID
+	hashBuffer := op.ht.ProbeScratch.HashBuffer
+	_ = HeadIDs[batchLength-1]
 	_ = hashBuffer[batchLength-1]
 	_ = sel[batchLength-1]
 	for i := 0; i < batchLength; i++ {
-		// Since we're essentially probing the batch against itself, headID
+		// Since we're essentially probing the batch against itself, HeadID
 		// cannot be 0, so we don't need to check that. What we have here is
 		// the tuple at position i belongs to the same equality chain as the
-		// tuple at position headID-1.
+		// tuple at position HeadID-1.
 		// We will use a similar to keyID encoding for eqChains slot - all
 		// tuples that should be included in eqChains[i] chain will have
-		// eqChainsID = i + 1. headToEqChainsID is a mapping from headID to
+		// eqChainsID = i + 1. headToEqChainsID is a mapping from HeadID to
 		// eqChainsID that we're currently building in which eqChainsID
 		// indicates that the current tuple is the head of its equality chain.
 		//gcassert:bce
-		headID := headIDs[i]
-		if eqChainsID := headToEqChainsID[headID-1]; eqChainsID == 0 {
+		HeadID := HeadIDs[i]
+		if eqChainsID := headToEqChainsID[HeadID-1]; eqChainsID == 0 {
 			// This tuple is the head of the new equality chain, so we include
 			// it in updated selection vector. We also compact the hash buffer
 			// accordingly.
@@ -90,7 +90,7 @@ func populateEqChains_true(
 			sel[eqChainsCount] = s
 			op.scratch.eqChains[eqChainsCount] = append(op.scratch.eqChains[eqChainsCount], s)
 			eqChainsCount++
-			headToEqChainsID[headID-1] = eqChainsCount
+			headToEqChainsID[HeadID-1] = eqChainsCount
 		} else {
 			//gcassert:bce
 			s := sel[i]
@@ -103,11 +103,11 @@ func populateEqChains_true(
 // populateEqChains populates op.scratch.eqChains with indices of tuples from b
 // that belong to the same groups. It returns the number of equality chains as
 // well as a selection vector that contains "heads" of each of the chains. The
-// method assumes that op.ht.probeScratch.headID has been populated with keyIDs
+// method assumes that op.ht.ProbeScratch.HeadID has been populated with keyIDs
 // of all tuples.
 // NOTE: selection vector of b is modified to include only heads of each of the
 // equality chains.
-// NOTE: op.ht.probeScratch.headID and op.ht.probeScratch.differs are reset.
+// NOTE: op.ht.ProbeScratch.HeadID and op.ht.ProbeScratch.differs are reset.
 func (op *hashAggregator) populateEqChains(
 	b coldata.Batch,
 ) (eqChainsCount int, eqChainsHeadsSel []int) {
@@ -115,15 +115,15 @@ func (op *hashAggregator) populateEqChains(
 	if batchLength == 0 {
 		return
 	}
-	headIDToEqChainsID := op.scratch.intSlice[:batchLength]
-	copy(headIDToEqChainsID, zeroIntColumn)
+	HeadIDToEqChainsID := op.scratch.intSlice[:batchLength]
+	copy(HeadIDToEqChainsID, zeroIntColumn)
 	sel := b.Selection()
 	if sel != nil {
-		eqChainsCount = populateEqChains_true(op, batchLength, sel, headIDToEqChainsID)
+		eqChainsCount = populateEqChains_true(op, batchLength, sel, HeadIDToEqChainsID)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
-		eqChainsCount = populateEqChains_false(op, batchLength, sel, headIDToEqChainsID)
+		eqChainsCount = populateEqChains_false(op, batchLength, sel, HeadIDToEqChainsID)
 	}
 	return eqChainsCount, sel
 }

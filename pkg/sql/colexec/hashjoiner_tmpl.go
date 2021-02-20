@@ -20,10 +20,10 @@ func collectProbeOuter(
 ) int {
 	// Early bounds checks.
 	// Capture the slices in order for BCE to occur.
-	headIDs := hj.ht.probeScratch.headID
+	HeadIDs := hj.ht.ProbeScratch.HeadID
 	startIdx := hj.probeState.prevBatchResumeIdx
-	_ = headIDs[startIdx]
-	_ = headIDs[batchSize-1]
+	_ = HeadIDs[startIdx]
+	_ = HeadIDs[batchSize-1]
 	if useSel {
 		_ = sel[batchSize-1]
 	}
@@ -36,7 +36,7 @@ func collectProbeOuter(
 	_ = probeIdx[maxResults-1]
 	for i := startIdx; i < batchSize; i++ {
 		//gcassert:bce
-		currentID := headIDs[i]
+		currentID := HeadIDs[i]
 
 		for ; nResults < maxResults; nResults++ {
 			rowUnmatched := currentID == 0
@@ -57,9 +57,9 @@ func collectProbeOuter(
 			pIdx := getIdx(i, sel, useSel)
 			//gcassert:bce
 			probeIdx[nResults] = pIdx
-			currentID = hj.ht.same[currentID]
+			currentID = hj.ht.Same[currentID]
 			//gcassert:bce
-			headIDs[i] = currentID
+			HeadIDs[i] = currentID
 
 			if currentID == 0 {
 				nResults++
@@ -95,10 +95,10 @@ func collectProbeNoOuter(
 ) int {
 	// Early bounds checks.
 	// Capture the slices in order for BCE to occur.
-	headIDs := hj.ht.probeScratch.headID
+	HeadIDs := hj.ht.ProbeScratch.HeadID
 	startIdx := hj.probeState.prevBatchResumeIdx
-	_ = headIDs[startIdx]
-	_ = headIDs[batchSize-1]
+	_ = HeadIDs[startIdx]
+	_ = HeadIDs[batchSize-1]
 	if useSel {
 		_ = sel[batchSize-1]
 	}
@@ -108,7 +108,7 @@ func collectProbeNoOuter(
 	_ = probeIdx[maxResults-1]
 	for i := startIdx; i < batchSize; i++ {
 		//gcassert:bce
-		currentID := headIDs[i]
+		currentID := HeadIDs[i]
 		for ; currentID != 0 && nResults < maxResults; nResults++ {
 			// For some reason, BCE doesn't occur for buildIdx slice.
 			// TODO(yuzefovich): figure it out.
@@ -116,9 +116,9 @@ func collectProbeNoOuter(
 			pIdx := getIdx(i, sel, useSel)
 			//gcassert:bce
 			probeIdx[nResults] = pIdx
-			currentID = hj.ht.same[currentID]
+			currentID = hj.ht.Same[currentID]
 			//gcassert:bce
-			headIDs[i] = currentID
+			HeadIDs[i] = currentID
 		}
 
 		if nResults == maxResults {
@@ -152,14 +152,14 @@ func collectLeftAnti(
 ) int {
 	// Early bounds checks.
 	// Capture the slice in order for BCE to occur.
-	headIDs := hj.ht.probeScratch.headID
-	_ = headIDs[batchSize-1]
+	HeadIDs := hj.ht.ProbeScratch.HeadID
+	_ = HeadIDs[batchSize-1]
 	if useSel {
 		_ = sel[batchSize-1]
 	}
 	for i := 0; i < batchSize; i++ {
 		//gcassert:bce
-		currentID := headIDs[i]
+		currentID := HeadIDs[i]
 		if currentID == 0 {
 			// currentID of 0 indicates that ith probing row didn't have a match, so
 			// we include it into the output.
@@ -177,14 +177,14 @@ func collectLeftAnti(
 func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 	// Early bounds checks.
 	// Capture the slice in order for BCE to occur.
-	headIDs := hj.ht.probeScratch.headID
-	_ = headIDs[batchSize-1]
+	HeadIDs := hj.ht.ProbeScratch.HeadID
+	_ = HeadIDs[batchSize-1]
 	for i := 0; i < batchSize; i++ {
 		//gcassert:bce
-		currentID := headIDs[i]
+		currentID := HeadIDs[i]
 		for currentID != 0 {
 			hj.probeState.buildRowMatched[currentID-1] = true
-			currentID = hj.ht.same[currentID]
+			currentID = hj.ht.Same[currentID]
 		}
 	}
 }
@@ -193,7 +193,7 @@ func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel bool) {
 	// Early bounds checks.
 	// Capture the slices in order for BCE to occur.
-	groupIDs := hj.ht.probeScratch.groupID
+	groupIDs := hj.ht.ProbeScratch.GroupID
 	probeRowUnmatched := hj.probeState.probeRowUnmatched
 	buildIdx := hj.probeState.buildIdx
 	probeIdx := hj.probeState.probeIdx
@@ -234,7 +234,7 @@ func distinctCollectProbeNoOuter(
 ) int {
 	// Early bounds checks.
 	// Capture the slice in order for BCE to occur.
-	groupIDs := hj.ht.probeScratch.groupID
+	groupIDs := hj.ht.ProbeScratch.GroupID
 	_ = groupIDs[batchSize-1]
 	if useSel {
 		_ = sel[batchSize-1]
@@ -289,7 +289,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 }
 
 // distinctCollect prepares the batch with the joined output columns where the build
-// row index for each probe row is given in the groupID slice. This function
+// row index for each probe row is given in the GroupID slice. This function
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0

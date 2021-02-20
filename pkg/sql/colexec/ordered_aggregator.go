@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -262,7 +263,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// zero out a.groupCol. This is necessary because distinct ORs the
 			// uniqueness of a value with the groupCol, allowing the operators
 			// to be linked.
-			copy(a.groupCol[:batchLength], zeroBoolColumn)
+			copy(a.groupCol[:batchLength], colexecutils.ZeroBoolColumn)
 
 		case orderedAggregatorReallocating:
 			// The ordered aggregator *cannot* limit the capacities of its
