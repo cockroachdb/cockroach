@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func TestCancelChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	op := NewCancelChecker(NewNoop(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)))
+	op := NewCancelChecker(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs))
 	cancel()
 	err := colexecerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)

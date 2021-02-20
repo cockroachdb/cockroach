@@ -18,7 +18,7 @@
 // Most of the code in this file is copied from the go runtime package. These
 // are the hash functions used for go maps.
 
-package colexec
+package colexechash
 
 import (
 	"math/rand"

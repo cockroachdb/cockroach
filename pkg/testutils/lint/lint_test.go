@@ -1978,7 +1978,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			// This exception is for hash.go, which re-implements runtime.noescape
 			// for efficient hashing.
-			stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
+			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 			stream.GrepNot(`^#`), // comment line
 			// Roachpb's own error package takes ownership of error unwraps
 			// (by enforcing that errors can never been wrapped under a

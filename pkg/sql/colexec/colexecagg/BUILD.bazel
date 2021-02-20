@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecbase:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
@@ -28,6 +28,13 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+go_test(
+    name = "colexecagg_test",
+    srcs = ["dep_test.go"],
+    embed = [":colexecagg"],
+    deps = ["//pkg/testutils/buildutil"],
 )
 
 # Map between target name and relevant template.

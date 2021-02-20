@@ -13,6 +13,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -213,7 +214,7 @@ func (p *windowPeerGrouperAllPeersNoPartitionOp) Next(ctx context.Context) colda
 	} else {
 		// There is only one partition and all tuples within it are peers, so we
 		// need to set 'true' to only the first tuple ever seen.
-		copy(peersCol[:n], zeroBoolColumn[:n])
+		copy(peersCol[:n], colexecutils.ZeroBoolColumn[:n])
 		peersCol[0] = !p.seenFirstTuple
 		p.seenFirstTuple = true
 	}

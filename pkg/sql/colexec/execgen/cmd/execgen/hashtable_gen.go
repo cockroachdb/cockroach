@@ -71,7 +71,7 @@ func (m hashTableMode) IsDeletingProbe() bool {
 var _ = hashTableMode.IsDistinctBuild
 var _ = hashTableMode.IsDeletingProbe
 
-const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
+const hashTableTmpl = "pkg/sql/colexec/colexechash/hashtable_tmpl.go"
 
 func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) error {
 	r := strings.NewReplacer(

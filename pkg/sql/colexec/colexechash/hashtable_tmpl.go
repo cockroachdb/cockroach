@@ -17,12 +17,13 @@
 //
 // */}}
 
-package colexec
+package colexechash
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,7 +68,7 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // _ALLOW_NULL_EQUALITY - a boolean as .AllowNullEquality that determines
 // whether NULL values should be treated as equal.
 // _SELECT_DISTINCT - a boolean as .SelectDistinct that determines whether a
-// probe tuple should be marked as "distinct" if its groupID is zero (meaning
+// probe tuple should be marked as "distinct" if its GroupID is zero (meaning
 // that there is no tuple in the hash table with the same hash code).
 // _USE_PROBE_SEL - a boolean as .UseProbeSel that determines whether there is
 // a selection vector on the probe vector.
@@ -77,8 +78,8 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // false when _USE_BUILD_SEL is true (if we were to add _USE_BUILD_SEL) because
 // such code would never be used.
 // _DELETING_PROBE_MODE - a boolean as .DeletingProbeMode that indicates
-// whether the hash table is used with hashTableDeletingProbeMode probing mode.
-// When it is true, the hashTable uses 'visited' slice to mark previously
+// whether the hash table is used with HashTableDeletingProbeMode probing mode.
+// When it is true, the HashTable uses 'visited' slice to mark previously
 // matched tuples as "deleted" so they won't get matched again.
 func _CHECK_COL_BODY(
 	_PROBE_HAS_NULLS bool,
@@ -94,18 +95,18 @@ func _CHECK_COL_BODY(
 		probeIdx, buildIdx       int
 		probeIsNull, buildIsNull bool
 	)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// keyID of 0 is reserved to represent the end of the next chain.
-		keyID := ht.probeScratch.groupID[toCheck]
+		keyID := ht.ProbeScratch.GroupID[toCheck]
 		if keyID != 0 {
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
 			// {{if .DeletingProbeMode}}
-			if ht.visited[keyID] {
+			if ht.Visited[keyID] {
 				// This build tuple has already been matched, so we treat
 				// it as different from the probe tuple.
-				ht.probeScratch.differs[toCheck] = true
+				ht.ProbeScratch.differs[toCheck] = true
 				continue
 			}
 			// {{end}}
@@ -146,27 +147,27 @@ func _CHECK_COL_BODY(
 				// Only probing value is NULL, so it is different from the build value
 				// (which is non-NULL). We mark it as "different" and proceed to the
 				// next value to check. This behavior is special in case of allowing
-				// null equality because we don't want to reset the groupID of the
+				// null equality because we don't want to reset the GroupID of the
 				// current probing tuple.
-				ht.probeScratch.differs[toCheck] = true
+				ht.ProbeScratch.differs[toCheck] = true
 				continue
 			}
 			// {{end}}
 			if probeIsNull {
-				ht.probeScratch.groupID[toCheck] = 0
+				ht.ProbeScratch.GroupID[toCheck] = 0
 			} else if buildIsNull {
-				ht.probeScratch.differs[toCheck] = true
+				ht.ProbeScratch.differs[toCheck] = true
 			} else {
 				probeVal := probeKeys.Get(probeIdx)
 				buildVal := buildKeys.Get(buildIdx)
 				var unique bool
 				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
-				ht.probeScratch.differs[toCheck] = ht.probeScratch.differs[toCheck] || unique
+				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			}
 		}
 		// {{if .SelectDistinct}}
 		if keyID == 0 {
-			ht.probeScratch.distinct[toCheck] = true
+			ht.ProbeScratch.distinct[toCheck] = true
 		}
 		// {{end}}
 	}
@@ -255,12 +256,12 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 
 // {{if and (not .HashTableMode.IsDistinctBuild) (not .HashTableMode.IsDeletingProbe)}}
 
-// checkCol determines if the current key column in the groupID buckets matches
+// checkCol determines if the current key column in the GroupID buckets matches
 // the specified equality column key. If there is no match, then the key is
 // added to differs. If the bucket has reached the end, the key is rejected. If
-// the hashTable disallows null equality, then if any element in the key is
+// the HashTable disallows null equality, then if any element in the key is
 // null, there is no match.
-func (ht *hashTable) checkCol(
+func (ht *HashTable) checkCol(
 	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
 	// {{with .Overloads}}
@@ -274,7 +275,7 @@ func (ht *hashTable) checkCol(
 
 // checkColAgainstItself is similar to checkCol, but it probes the vector
 // against itself.
-func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel []int) {
+func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel []int) {
 	// {{/*
 	// In order to reuse the same template function as checkCol uses, we use
 	// the same variable names.
@@ -289,12 +290,12 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 // {{if .HashTableMode.IsDeletingProbe}}
 
-// checkColDeleting determines if the current key column in the groupID buckets
+// checkColDeleting determines if the current key column in the GroupID buckets
 // matches the specified equality column key. If there is no match *or* the key
 // has been already used, then the key is added to differs. If the bucket has
-// reached the end, the key is rejected. If the hashTable disallows null
+// reached the end, the key is rejected. If the HashTable disallows null
 // equality, then if any element in the key is null, there is no match.
-func (ht *hashTable) checkColDeleting(
+func (ht *HashTable) checkColDeleting(
 	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
 	// {{with .Overloads}}
@@ -328,7 +329,7 @@ func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(_USE_PROBE_SEL bool) { // */}}
 // {{if .HashTableMode.IsDistinctBuild}}
 // {{with .Overloads}}
 
-func (ht *hashTable) checkColForDistinctTuples(
+func (ht *HashTable) checkColForDistinctTuples(
 	probeVec, buildVec coldata.Vec, nToCheck uint64, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
@@ -380,15 +381,15 @@ func (ht *hashTable) checkColForDistinctTuples(
 // {{/*
 func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 	// {{define "checkBody" -}}
-	toCheckSlice := ht.probeScratch.toCheck
+	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if !ht.probeScratch.differs[toCheck] {
-			// If the current key matches with the probe key, we want to update headID
+		if !ht.ProbeScratch.differs[toCheck] {
+			// If the current key matches with the probe key, we want to update HeadID
 			// with the current key if it has not been set yet.
-			keyID := ht.probeScratch.groupID[toCheck]
+			keyID := ht.ProbeScratch.GroupID[toCheck]
 			// {{if .DeletingProbeMode}}
 			// We need to check whether this key hasn't been "deleted" (we
 			// reuse 'visited' array for tracking which tuples are deleted).
@@ -396,11 +397,11 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 			// "deleted" marks we could be actually removing tuples' keyIDs
 			// from the hash chains. This will require changing our use of
 			// singly linked list 'next' to doubly linked list.
-			if !ht.visited[keyID] {
-				// It hasn't been deleted, so we match it with 'toCheck'
+			if !ht.Visited[keyID] {
+				// It hasn't been deleted, so we match it with 'ToCheck'
 				// probing tuple and "delete" the key.
-				ht.probeScratch.headID[toCheck] = keyID
-				ht.visited[keyID] = true
+				ht.ProbeScratch.HeadID[toCheck] = keyID
+				ht.Visited[keyID] = true
 			} else {
 				// It has been deleted, so we need to continue probing on the
 				// next chain if it's not the end of the chain already.
@@ -412,31 +413,31 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 			}
 			continue
 			// {{else}}
-			if ht.probeScratch.headID[toCheck] == 0 {
-				ht.probeScratch.headID[toCheck] = keyID
+			if ht.ProbeScratch.HeadID[toCheck] == 0 {
+				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
 			// {{if .SelectSameTuples}}
-			firstID := ht.probeScratch.headID[toCheck]
-			if !ht.visited[keyID] {
+			firstID := ht.ProbeScratch.HeadID[toCheck]
+			if !ht.Visited[keyID] {
 				// We can then add this keyID into the same array at the end of the
 				// corresponding linked list and mark this ID as visited. Since there
 				// can be multiple keys that match this probe key, we want to mark
 				// differs at this position to be true. This way, the prober will
 				// continue probing for this key until it reaches the end of the next
 				// chain.
-				ht.probeScratch.differs[toCheck] = true
-				ht.visited[keyID] = true
+				ht.ProbeScratch.differs[toCheck] = true
+				ht.Visited[keyID] = true
 				if firstID != keyID {
-					ht.same[keyID] = ht.same[firstID]
-					ht.same[firstID] = keyID
+					ht.Same[keyID] = ht.Same[firstID]
+					ht.Same[firstID] = keyID
 				}
 			}
 			// {{end}}
 			// {{end}}
 		}
-		if ht.probeScratch.differs[toCheck] {
+		if ht.ProbeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
-			ht.probeScratch.differs[toCheck] = false
+			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
@@ -448,30 +449,30 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 
 // {{/*
 //     Note that both probing modes (when hash table is built in full mode)
-//     are handled by the same check() function, so we will generate it only
+//     are handled by the same Check() function, so we will generate it only
 //     once.
 // */}}
 // {{if .HashTableMode.IsDeletingProbe}}
 
-// check performs an equality check between the current key in the groupID bucket
-// and the probe key at that index. If there is a match, the hashTable's same
+// Check performs an equality check between the current key in the GroupID bucket
+// and the probe key at that index. If there is a match, the HashTable's same
 // array is updated to lazily populate the linked list of identical build
 // table keys. The visited flag for corresponding build table key is also set. A
-// key is removed from toCheck if it has already been visited in a previous
+// key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
-// new length of toCheck is returned by this function.
-func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
+// new length of ToCheck is returned by this function.
+func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	switch ht.probeMode {
-	case hashTableDefaultProbeMode:
-		if ht.same != nil {
+	case HashTableDefaultProbeMode:
+		if ht.Same != nil {
 			_CHECK_BODY(true, false)
 		} else {
 			_CHECK_BODY(false, false)
 		}
-	case hashTableDeletingProbeMode:
-		if ht.same != nil {
+	case HashTableDeletingProbeMode:
+		if ht.Same != nil {
 			_CHECK_BODY(true, true)
 		} else {
 			_CHECK_BODY(false, true)
@@ -486,9 +487,9 @@ func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
-// checkProbeForDistinct performs a column by column check for duplicated tuples
+// CheckProbeForDistinct performs a column by column check for duplicated tuples
 // in the probe table.
-func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
+func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
 	for i := range ht.keyCols {
 		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
@@ -504,25 +505,25 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 	// {{define "updateSelBody" -}}
 	batchLength := b.Length()
 	// Capture the slices in order for BCE to occur.
-	headIDs := ht.probeScratch.headID
-	hashBuffer := ht.probeScratch.hashBuffer
-	_ = headIDs[batchLength-1]
+	HeadIDs := ht.ProbeScratch.HeadID
+	hashBuffer := ht.ProbeScratch.HashBuffer
+	_ = HeadIDs[batchLength-1]
 	_ = hashBuffer[batchLength-1]
 	// Reuse the buffer allocated for distinct.
-	visited := ht.probeScratch.distinct
-	copy(visited, zeroBoolColumn)
+	visited := ht.ProbeScratch.distinct
+	copy(visited, colexecutils.ZeroBoolColumn)
 	distinctCount := 0
 	for i := 0; i < batchLength && distinctCount < batchLength; i++ {
 		//gcassert:bce
-		headID := headIDs[i]
-		if headID != 0 {
-			if hasVisited := visited[headID-1]; !hasVisited {
+		HeadID := HeadIDs[i]
+		if HeadID != 0 {
+			if hasVisited := visited[HeadID-1]; !hasVisited {
 				// {{if .UseSel}}
-				sel[distinctCount] = sel[headID-1]
+				sel[distinctCount] = sel[HeadID-1]
 				// {{else}}
-				sel[distinctCount] = int(headID - 1)
+				sel[distinctCount] = int(HeadID - 1)
 				// {{end}}
-				visited[headID-1] = true
+				visited[HeadID-1] = true
 				// Compacting and deduplicating hash buffer.
 				//gcassert:bce
 				hashBuffer[distinctCount] = hashBuffer[i]
@@ -537,14 +538,14 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
-// updateSel updates the selection vector in the given batch using the headID
-// buffer. For each nonzero keyID in headID, it will be translated to the actual
+// updateSel updates the selection vector in the given batch using the HeadID
+// buffer. For each nonzero keyID in HeadID, it will be translated to the actual
 // key index using the convention keyID = keys.indexOf(key) + 1. If the input
 // batch's selection vector is nil, the key index will be directly used to
 // populate the selection vector. Otherwise, the selection vector's value at the
 // key index will be used. The duplicated keyIDs will be discarded. The
-// hashBuffer will also compact and discard hash values of duplicated keys.
-func (ht *hashTable) updateSel(b coldata.Batch) {
+// HashBuffer will also compact and discard hash values of duplicated keys.
+func (ht *HashTable) updateSel(b coldata.Batch) {
 	if b.Length() == 0 {
 		return
 	}
@@ -557,22 +558,22 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 	}
 }
 
-// distinctCheck determines if the current key in the groupID bucket matches the
+// DistinctCheck determines if the current key in the GroupID bucket matches the
 // equality column key. If there is a match, then the key is removed from
-// toCheck. If the bucket has reached the end, the key is rejected. The toCheck
+// ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
 // list is reconstructed to only hold the indices of the eqCol keys that have
-// not been found. The new length of toCheck is returned by this function.
-func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	ht.checkCols(ht.keys, nToCheck, probeSel)
-	// Select the indices that differ and put them into toCheck.
+// not been found. The new length of ToCheck is returned by this function.
+func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
+	ht.checkCols(ht.Keys, nToCheck, probeSel)
+	// Select the indices that differ and put them into ToCheck.
 	nDiffers := uint64(0)
-	toCheckSlice := ht.probeScratch.toCheck
+	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if ht.probeScratch.differs[toCheck] {
-			ht.probeScratch.differs[toCheck] = false
+		if ht.ProbeScratch.differs[toCheck] {
+			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
 			nDiffers++

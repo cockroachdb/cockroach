@@ -68,6 +68,7 @@ go_test(
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecbase",
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/colfetcher",

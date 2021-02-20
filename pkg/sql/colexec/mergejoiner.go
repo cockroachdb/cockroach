@@ -733,7 +733,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 		}
 
 		// Zero out the distinct output for the next pass.
-		copy(input.distinctOutput[:batchLength], zeroBoolColumn)
+		copy(input.distinctOutput[:batchLength], colexecutils.ZeroBoolColumn)
 		loopStartIndex = 0
 
 		// Buffer all the tuples that are part of the buffered group.

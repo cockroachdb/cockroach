@@ -317,7 +317,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 
 			// First, run the partitioners on our pre-sorted columns to determine the
 			// boundaries of the chunks (stored in s.chunks) to sort further.
-			copy(s.partitionCol, zeroBoolColumn)
+			copy(s.partitionCol, colexecutils.ZeroBoolColumn)
 			for i, orderedCol := range s.alreadySortedCols {
 				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol)), s.partitionCol,
 					s.batch.Length())
@@ -470,7 +470,7 @@ func (s *chunker) getPartitionsCol() []bool {
 			// per spooler's contract, we return nil.
 			return nil
 		}
-		copy(s.partitionCol, zeroBoolColumn)
+		copy(s.partitionCol, colexecutils.ZeroBoolColumn)
 		for i := s.chunksStartIdx; i < len(s.chunks)-1; i++ {
 			// getValues returns a slice starting from s.chunks[s.chunksStartIdx], so
 			// we need to account for that by shifting as well.

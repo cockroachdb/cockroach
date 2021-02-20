@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -131,7 +132,7 @@ type hashBasedPartitioner struct {
 
 	partitioners      []*colcontainer.PartitionedDiskQueue
 	partitionedInputs []*partitionerToOperator
-	tupleDistributor  *tupleHashDistributor
+	tupleDistributor  *colexechash.TupleHashDistributor
 	// maxNumberActivePartitions determines the maximum number of active
 	// partitions that the operator is allowed to have. This number is computed
 	// semi-dynamically and will influence the choice of numBuckets value.
@@ -336,8 +337,8 @@ func (op *hashBasedPartitioner) Init() {
 	// In the processing phase, the in-memory operator will use the default init
 	// hash value, so in order to use a "different" hash function in the
 	// partitioning phase we use a different init hash value.
-	op.tupleDistributor = newTupleHashDistributor(
-		defaultInitHashValue+1, op.numBuckets,
+	op.tupleDistributor = colexechash.NewTupleHashDistributor(
+		colexechash.DefaultInitHashValue+1, op.numBuckets,
 	)
 	op.state = hbpInitialPartitioning
 }
@@ -350,7 +351,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 		return
 	}
 	scratchBatch := op.scratch.batches[inputIdx]
-	selections := op.tupleDistributor.distribute(ctx, batch, op.hashCols[inputIdx])
+	selections := op.tupleDistributor.Distribute(ctx, batch, op.hashCols[inputIdx])
 	for idx, sel := range selections {
 		partitionIdx := op.partitionIdxOffset + idx
 		if len(sel) > 0 {
@@ -447,7 +448,7 @@ StateChanged:
 			}
 			// In order to use a different hash function when repartitioning, we
 			// need to increase the seed value of the tuple distributor.
-			op.tupleDistributor.initHashValue++
+			op.tupleDistributor.InitHashValue++
 			// We're actively will be using op.numBuckets + 1 partitions
 			// (because we're repartitioning one side at a time), so we can set
 			// op.numBuckets higher than in the initial partitioning step.
@@ -455,7 +456,7 @@ StateChanged:
 			// op.numBuckets being a power of two (finalizeHash step is faster
 			// if so).
 			op.numBuckets = op.maxNumberActivePartitions - 1
-			op.tupleDistributor.resetNumOutputs(op.numBuckets)
+			op.tupleDistributor.ResetNumOutputs(op.numBuckets)
 			for parentPartitionIdx, parentPartitionInfo := range op.partitionsToProcessUsingMain {
 				for i := range op.inputs {
 					batch := op.recursiveScratch.batches[i]

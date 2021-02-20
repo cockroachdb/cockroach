@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -54,7 +55,7 @@ func OrderedDistinctColsToOperators(
 	// zero the boolean column on every iteration.
 	input = fnOp{
 		OneInputNode: colexecbase.NewOneInputNode(input),
-		fn:           func() { copy(distinctCol, zeroBoolColumn) },
+		fn:           func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
 	}
 	var (
 		err error

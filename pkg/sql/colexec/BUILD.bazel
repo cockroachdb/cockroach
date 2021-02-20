@@ -8,7 +8,6 @@ go_library(
         "bool_vec_to_sel.go",
         "buffer.go",
         "builtin_funcs.go",
-        "cancel_checker.go",
         "case.go",
         "columnarizer.go",
         "constants.go",
@@ -22,12 +21,9 @@ go_library(
         "external_hash_joiner.go",
         "external_sort.go",
         "fn_op.go",
-        "hash.go",
         "hash_aggregator.go",
         "hash_based_partitioner.go",
-        "hash_utils.go",
         "hashjoiner.go",
-        "hashtable.go",
         "invariants_checker.go",
         "like_ops.go",
         "limit.go",
@@ -69,6 +65,7 @@ go_library(
         "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
+        "//pkg/sql/colexec/colexechash",  # keep
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecbase",
@@ -82,7 +79,6 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
-        "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
         "//pkg/util/humanizeutil",
@@ -108,7 +104,6 @@ go_test(
         "bool_vec_to_sel_test.go",
         "buffer_test.go",
         "builtin_funcs_test.go",
-        "cancel_checker_test.go",
         "case_test.go",
         "cast_test.go",
         "columnarizer_test.go",
@@ -125,7 +120,6 @@ go_test(
         "external_hash_joiner_test.go",
         "external_sort_test.go",
         "hash_aggregator_test.go",
-        "hash_utils_test.go",
         "hashjoiner_test.go",
         "inject_setup_test.go",
         "is_null_ops_test.go",
@@ -188,7 +182,6 @@ go_test(
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/skip",
-        "//pkg/util/cancelchecker",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/humanizeutil",
@@ -220,11 +213,7 @@ targets = [
     ("default_cmp_sel_ops.eg.go", "default_cmp_sel_ops_tmpl.go"),
     ("distinct.eg.go", "distinct_tmpl.go"),
     ("hash_aggregator.eg.go", "hash_aggregator_tmpl.go"),
-    ("hash_utils.eg.go", "hash_utils_tmpl.go"),
     ("hashjoiner.eg.go", "hashjoiner_tmpl.go"),
-    ("hashtable_distinct.eg.go", "hashtable_tmpl.go"),
-    ("hashtable_full_default.eg.go", "hashtable_tmpl.go"),
-    ("hashtable_full_deleting.eg.go", "hashtable_tmpl.go"),
     ("is_null_ops.eg.go", "is_null_ops_tmpl.go"),
     ("mergejoinbase.eg.go", "mergejoinbase_tmpl.go"),
     ("mergejoiner_exceptall.eg.go", "mergejoiner_tmpl.go"),

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -437,7 +438,7 @@ type HashRouter struct {
 
 	// tupleDistributor is used to decide to which output a particular tuple
 	// should be routed.
-	tupleDistributor *tupleHashDistributor
+	tupleDistributor *colexechash.TupleHashDistributor
 }
 
 // NewHashRouter creates a new hash router that consumes coldata.Batches from
@@ -512,7 +513,7 @@ func newHashRouterWithOutputs(
 		// waitForMetadata is a buffered channel to avoid blocking if nobody will
 		// read the metadata.
 		waitForMetadata:  make(chan []execinfrapb.ProducerMetadata, 1),
-		tupleDistributor: newTupleHashDistributor(defaultInitHashValue, len(outputs)),
+		tupleDistributor: colexechash.NewTupleHashDistributor(colexechash.DefaultInitHashValue, len(outputs)),
 	}
 	for i := range outputs {
 		outputs[i].initWithHashRouter(r)
@@ -632,7 +633,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		return true
 	}
 
-	selections := r.tupleDistributor.distribute(ctx, b, r.hashCols)
+	selections := r.tupleDistributor.Distribute(ctx, b, r.hashCols)
 	for i, o := range r.outputs {
 		if len(selections[i]) > 0 {
 			b.SetSelection(true)

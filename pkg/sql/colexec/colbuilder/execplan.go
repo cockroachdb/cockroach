@@ -736,7 +736,7 @@ func NewColOperator(
 			// are extremely fast. However, some of the long-running operators
 			// (for example, sorter) are still responsible for doing the
 			// cancellation check on their own while performing long operations.
-			result.Op = colexec.NewCancelChecker(result.Op)
+			result.Op = colexecutils.NewCancelChecker(result.Op)
 			result.ColumnTypes = scanOp.ResultTypes
 			result.ToClose = append(result.ToClose, scanOp)
 
