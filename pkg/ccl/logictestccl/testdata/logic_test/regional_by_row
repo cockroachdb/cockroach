@@ -183,6 +183,194 @@ ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row
   voter_constraints = '{+region=us-east-1: 2}',
   lease_preferences = '[[+region=us-east-1]]'
 
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table
+----
+TABLE regional_by_row_table
+ ├── pk int not null
+ ├── pk2 int not null
+ ├── a int not null
+ ├── b int not null
+ ├── j jsonb
+ ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key bytes not null [virtual-inverted]
+ ├── FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
+ ├── CHECK (crdb_region IN (b'\x40':::@100054, b'\x80':::@100054, b'\xc0':::@100054))
+ ├── PRIMARY INDEX primary
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── INDEX regional_by_row_table_a_idx
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── a int not null
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── UNIQUE INDEX regional_by_row_table_b_key
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── b int not null
+ │    ├── pk int not null (storing)
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── INVERTED INDEX regional_by_row_table_j_idx
+ │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
+ │    ├── j_inverted_key bytes not null [virtual-inverted]
+ │    ├── pk int not null
+ │    ├── ZONE
+ │    │    ├── replica constraints
+ │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
+ │    │    │    ├── 1 replicas: [+region=ca-central-1]
+ │    │    │    ├── 1 replicas: [+region=us-east-1]
+ │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    └── lease preference: [+region=ca-central-1]
+ │    └── partitions
+ │         ├── ap-southeast-2
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ap-southeast-2')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         └── lease preference: [+region=ap-southeast-2]
+ │         ├── ca-central-1
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('ca-central-1')
+ │         │    └── ZONE
+ │         │         ├── replica constraints
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=us-east-1]
+ │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         └── lease preference: [+region=ca-central-1]
+ │         └── us-east-1
+ │              ├── partition by list prefixes
+ │              │    └── ('us-east-1')
+ │              └── ZONE
+ │                   ├── replica constraints
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ca-central-1]
+ │                   │    ├── 1 replicas: [+region=us-east-1]
+ │                   │    └── voter constraints: [+region=us-east-1]
+ │                   └── lease preference: [+region=us-east-1]
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (b)
+scan regional_by_row_table
+ └── check constraint expressions
+      └── crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
 WHERE descriptor_name = 'regional_by_row_table' AND column_type = 'key'

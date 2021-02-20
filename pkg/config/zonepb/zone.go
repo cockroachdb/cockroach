@@ -784,6 +784,16 @@ func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
 	return &z.Constraints[i]
 }
 
+// VoterConstraintsCount is part of the cat.Zone interface.
+func (z *ZoneConfig) VoterConstraintsCount() int {
+	return len(z.VoterConstraints)
+}
+
+// VoterConstraint is part of the cat.Zone interface.
+func (z *ZoneConfig) VoterConstraint(i int) cat.ReplicaConstraints {
+	return &z.VoterConstraints[i]
+}
+
 // LeasePreferenceCount is part of the cat.Zone interface.
 func (z *ZoneConfig) LeasePreferenceCount() int {
 	return len(z.LeasePreferences)

@@ -77,13 +77,8 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
-		// The populatedSum has changed from 10390885694280604642 to
-		// 7958815789228166749, as of 21.1, due to the addition of the
-		// SeparatedIntentCount field in MVCCStats. This field will not actually
-		// be populated until all nodes are on 21.1, so there isn't a risk of
-		// divergence.
 		emptySum:     615555020845646359,
-		populatedSum: 7958815789228166749,
+		populatedSum: 3253881774919630461,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
