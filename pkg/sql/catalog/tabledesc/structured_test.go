@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -222,8 +223,6 @@ func TestValidateTableDesc(t *testing.T) {
 			descpb.TableDescriptor{ID: 0, Name: "foo"}},
 		{`invalid parent ID 0`,
 			descpb.TableDescriptor{ID: 2, Name: "foo"}},
-		{`table "foo" is encoded using using version 0, but this client only supports version 2 and 3`,
-			descpb.TableDescriptor{ID: 2, ParentID: 1, Name: "foo"}},
 		{`table must contain at least 1 column`,
 			descpb.TableDescriptor{
 				ID:            2,
@@ -239,6 +238,16 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: descpb.FamilyFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 0},
+				},
+				NextColumnID: 2,
+			}},
+		{`table "foo" is encoded using using version 0, but this client only supports version 2 and 3`,
+			descpb.TableDescriptor{
+				ID:       2,
+				ParentID: 1,
+				Name:     "foo",
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
 				},
 				NextColumnID: 2,
 			}},
@@ -284,6 +293,18 @@ func TestValidateTableDesc(t *testing.T) {
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID: 2,
+			}},
+		{`duplicate column name: "bar"`,
+			descpb.TableDescriptor{
+				ID:            catconstants.CrdbInternalBackwardDependenciesTableID,
+				ParentID:      0,
 				Name:          "foo",
 				FormatVersion: descpb.FamilyFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
