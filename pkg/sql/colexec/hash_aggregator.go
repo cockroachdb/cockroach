@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -88,12 +89,12 @@ type hashAggregator struct {
 	}
 
 	// buckets contains all aggregation groups that we have so far. There is
-	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
+	// 1-to-1 mapping between buckets[i] and ht.Vals[i]. Once the output from
 	// the buckets has been flushed, buckets will be sliced up accordingly.
 	buckets []*aggBucket
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
-	ht *hashTable
+	ht *colexechash.HashTable
 
 	// state stores the current state of hashAggregator.
 	state hashAggregatorState
@@ -189,15 +190,15 @@ func (op *hashAggregator) Init() {
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
 	const hashTableNumBuckets = 256
-	op.ht = newHashTable(
+	op.ht = colexechash.NewHashTable(
 		op.allocator,
 		hashTableLoadFactor,
 		hashTableNumBuckets,
 		op.inputTypes,
 		op.spec.GroupCols,
 		true, /* allowNullEquality */
-		hashTableDistinctBuildMode,
-		hashTableDefaultProbeMode,
+		colexechash.HashTableDistinctBuildMode,
+		colexechash.HashTableDefaultProbeMode,
 	)
 }
 
@@ -334,16 +335,16 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].
-//   1. a) compute hash buckets: probeScratch.next = [reserved, 1, 1, 0, 1]
+//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 1, 1, 0, 1]
 //      b) build 'next' chains between hash buckets:
-//           probeScratch.first = [3, 1] (length of first == # of hash buckets)
-//           probeScratch.next = [reserved, 2, 4, 0, 0]
+//           ProbeScratch.first = [3, 1] (length of first == # of hash buckets)
+//           ProbeScratch.next = [reserved, 2, 4, 0, 0]
 //         (Note that we have a hash collision in the bucket with hash 1.)
-//      c) find "equality" buckets (populate headID):
-//           probeScratch.headID = [1, 1, 3, 4]
+//      c) find "equality" buckets (populate HeadID):
+//           ProbeScratch.HeadID = [1, 1, 3, 4]
 //         (This means that tuples at position 0 and 1 are the same, and the
-//          tuple at position headID-1 is the head of the equality chain.)
-//   2. divide all tuples into the equality chains based on headID:
+//          tuple at position HeadID-1 is the head of the equality chain.)
+//   2. divide all tuples into the equality chains based on HeadID:
 //        eqChains[0] = [0, 1]
 //        eqChains[1] = [2]
 //        eqChains[2] = [3]
@@ -354,32 +355,32 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //   After we do so, we will have three buckets and the hash table will contain
 //   three tuples (with buckets and tuples corresponding to each other):
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>]
-//     ht.vals = [-3, -2, -1].
+//     ht.Vals = [-3, -2, -1].
 //   We have fully processed the first batch.
 //
 // II. we get a batch [-4, -1, -1, -4].
-//   1. a) compute hash buckets: probeScratch.next = [reserved, 0, 1, 1, 0]
+//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 0, 1, 1, 0]
 //      b) build 'next' chains between hash buckets:
-//           probeScratch.first = [1, 2]
-//           probeScratch.next = [reserved, 4, 3, 0, 0]
+//           ProbeScratch.first = [1, 2]
+//           ProbeScratch.next = [reserved, 4, 3, 0, 0]
 //      c) find "equality" buckets:
-//           probeScratch.headID = [1, 2, 2, 1]
-//   2. divide all tuples into the equality chains based on headID:
+//           ProbeScratch.HeadID = [1, 2, 2, 1]
+//   2. divide all tuples into the equality chains based on HeadID:
 //        eqChains[0] = [0, 3]
 //        eqChains[1] = [1, 2]
 //      The special "heads of equality chains" selection vector is [0, 1].
 //   3. probe that special "heads" selection vector against the tuples already
 //      present in the hash table:
-//        probeScratch.headID = [0, 3]
+//        ProbeScratch.HeadID = [0, 3]
 //      Value 0 indicates that the first equality chain doesn't have an
 //      existing bucket, but the second chain does and the ID of its bucket is
-//      headID-1 = 2. We aggregate the second equality chain into that bucket.
+//      HeadID-1 = 2. We aggregate the second equality chain into that bucket.
 //   4. the first equality chain contains tuples from a new aggregation group,
 //      so we create a new bucket for it and perform the aggregation.
 //   After we do so, we will have four buckets and the hash table will contain
 //   four tuples:
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>, <bucket for -4>]
-//     ht.vals = [-3, -2, -1, -4].
+//     ht.Vals = [-3, -2, -1, -4].
 //   We have fully processed the second batch.
 //
 //  We have processed the input fully, so we're ready to emit the output.
@@ -391,12 +392,12 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	// Step 1: find "equality" buckets: we compute the hash buckets for all
 	// tuples, build 'next' chains between them, and then find equality buckets
 	// for the tuples.
-	op.ht.computeHashAndBuildChains(ctx, b)
-	op.ht.findBuckets(
-		b, op.ht.keys, op.ht.probeScratch.first, op.ht.probeScratch.next, op.ht.checkProbeForDistinct,
+	op.ht.ComputeHashAndBuildChains(ctx, b)
+	op.ht.FindBuckets(
+		b, op.ht.Keys, op.ht.ProbeScratch.First, op.ht.ProbeScratch.Next, op.ht.CheckProbeForDistinct,
 	)
 
-	// Step 2: now that we have op.ht.probeScratch.headID populated we can
+	// Step 2: now that we have op.ht.ProbeScratch.HeadID populated we can
 	// populate the equality chains.
 	eqChainsCount, eqChainsHeadsSel := op.populateEqChains(b)
 	b.SetLength(eqChainsCount)
@@ -411,15 +412,15 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	// the equality chains (which the selection vector on b currently contains)
 	// against the heads of the existing groups.
 	if len(op.buckets) > 0 {
-		op.ht.findBuckets(
-			b, op.ht.keys, op.ht.buildScratch.first, op.ht.buildScratch.next, op.ht.checkBuildForAggregation,
+		op.ht.FindBuckets(
+			b, op.ht.Keys, op.ht.BuildScratch.First, op.ht.BuildScratch.Next, op.ht.CheckBuildForAggregation,
 		)
-		for eqChainsSlot, headID := range op.ht.probeScratch.headID[:eqChainsCount] {
-			if headID != 0 {
+		for eqChainsSlot, HeadID := range op.ht.ProbeScratch.HeadID[:eqChainsCount] {
+			if HeadID != 0 {
 				// Tuples in this equality chain belong to an already existing
 				// group.
 				eqChain := op.scratch.eqChains[eqChainsSlot]
-				bucket := op.buckets[headID-1]
+				bucket := op.buckets[HeadID-1]
 				op.aggHelper.performAggregation(
 					ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
 				)
@@ -460,7 +461,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
-			op.ht.probeScratch.hashBuffer[newGroupCount] = op.ht.probeScratch.hashBuffer[eqChainSlot]
+			op.ht.ProbeScratch.HashBuffer[newGroupCount] = op.ht.ProbeScratch.HashBuffer[eqChainSlot]
 			newGroupCount++
 			op.scratch.eqChains[eqChainSlot] = op.scratch.eqChains[eqChainSlot][:0]
 		}
@@ -471,7 +472,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 		// buckets to the hash table.
 		copy(b.Selection(), newGroupsHeadsSel)
 		b.SetLength(newGroupCount)
-		op.ht.appendAllDistinct(ctx, b)
+		op.ht.AppendAllDistinct(ctx, b)
 	}
 }
 

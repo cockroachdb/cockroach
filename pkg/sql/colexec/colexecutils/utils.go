@@ -210,3 +210,60 @@ func (b *AppendOnlyBufferedBatch) AppendTuples(batch coldata.Batch, startIdx, en
 	}
 	b.length += endIdx - startIdx
 }
+
+// MaybeAllocateUint64Array makes sure that the passed in array is allocated, of
+// the desired length and zeroed out.
+func MaybeAllocateUint64Array(array []uint64, length int) []uint64 {
+	if cap(array) < length {
+		return make([]uint64, length)
+	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], ZeroUint64Column) {
+	}
+	return array
+}
+
+// MaybeAllocateBoolArray makes sure that the passed in array is allocated, of
+// the desired length and zeroed out.
+func MaybeAllocateBoolArray(array []bool, length int) []bool {
+	if cap(array) < length {
+		return make([]bool, length)
+	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], ZeroBoolColumn) {
+	}
+	return array
+}
+
+// MaybeAllocateLimitedUint64Array is an optimized version of
+// MaybeAllocateUint64Array that can *only* be used when length is at most
+// coldata.MaxBatchSize.
+func MaybeAllocateLimitedUint64Array(array []uint64, length int) []uint64 {
+	if cap(array) < length {
+		return make([]uint64, length)
+	}
+	array = array[:length]
+	copy(array, ZeroUint64Column)
+	return array
+}
+
+// MaybeAllocateLimitedBoolArray is an optimized version of
+// maybeAllocateBool64Array that can *only* be used when length is at most
+// coldata.MaxBatchSize.
+func MaybeAllocateLimitedBoolArray(array []bool, length int) []bool {
+	if cap(array) < length {
+		return make([]bool, length)
+	}
+	array = array[:length]
+	copy(array, ZeroBoolColumn)
+	return array
+}
+
+var (
+	// ZeroBoolColumn is zeroed out boolean slice of coldata.MaxBatchSize
+	// length.
+	ZeroBoolColumn = make([]bool, coldata.MaxBatchSize)
+	// ZeroUint64Column is zeroed out uint64 slice of coldata.MaxBatchSize
+	// length.
+	ZeroUint64Column = make([]uint64, coldata.MaxBatchSize)
+)

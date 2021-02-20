@@ -130,7 +130,7 @@ var distinctTestCases = []distinctTestCase{
 		},
 	},
 	{
-		// This is to test hashTable deduplication with various batch size
+		// This is to test HashTable deduplication with various batch size
 		// boundaries and ensure it always emits the first tuple it encountered.
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Int, types.String},
