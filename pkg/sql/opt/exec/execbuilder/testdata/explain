@@ -208,12 +208,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column78) = (table_id)
+        │ equality: (column79) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column60) = (table_id)
+        │       │ equality: (column61) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -257,12 +257,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column83) = (table_id)
+        │ equality: (column84) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column65) = (table_id)
+        │       │ equality: (column66) = (table_id)
         │       │
         │       ├── • render
         │       │   │
