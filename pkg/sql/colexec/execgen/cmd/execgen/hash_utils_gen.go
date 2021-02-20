@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const hashUtilsTmpl = "pkg/sql/colexec/hash_utils_tmpl.go"
+const hashUtilsTmpl = "pkg/sql/colexec/colexechash/hash_utils_tmpl.go"
 
 func genHashUtils(inputFileContents string, wr io.Writer) error {
 

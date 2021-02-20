@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexechash
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -100,7 +101,7 @@ func _REHASH_BODY(
 		//gcassert:bce
 		buckets[i] = uint64(p)
 	}
-	cancelChecker.checkEveryCall(ctx)
+	cancelChecker.CheckEveryCall(ctx)
 	// {{end}}
 
 	// {{/*
@@ -117,7 +118,7 @@ func rehash(
 	col coldata.Vec,
 	nKeys int,
 	sel []int,
-	cancelChecker CancelChecker,
+	cancelChecker colexecutils.CancelChecker,
 	overloadHelper execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {

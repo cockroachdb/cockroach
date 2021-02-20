@@ -79,7 +79,7 @@ func (p *sort_TYPE_DIR_HANDLES_NULLSOp) heapSort(ctx context.Context, a, b int) 
 
 	// Build heap with greatest element at top.
 	for i := (hi - 1) / 2; i >= 0; i-- {
-		p.cancelChecker.check(ctx)
+		p.cancelChecker.Check(ctx)
 		p.siftDown(i, hi, first)
 	}
 
@@ -210,7 +210,7 @@ func (p *sort_TYPE_DIR_HANDLES_NULLSOp) quickSort(ctx context.Context, a, b, max
 			return
 		}
 		maxDepth--
-		p.cancelChecker.check(ctx)
+		p.cancelChecker.Check(ctx)
 		mlo, mhi := p.doPivot(a, b)
 		// Avoiding recursion on the larger subproblem guarantees
 		// a stack depth of at most lg(b-a).
