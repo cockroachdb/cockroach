@@ -107,14 +107,32 @@ func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 }
 
 // uniqueColsUpdated returns true if any of the columns for a unique
-// constraint are being updated (according to updateColIDs).
+// constraint are being updated (according to updateColIDs). When the unique
+// constraint has a partial predicate, it also returns true if the predicate
+// references any of the columns being updated.
 func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal int) bool {
 	uc := mb.tab.Unique(uniqueOrdinal)
+
 	for i, n := 0, uc.ColumnCount(); i < n; i++ {
 		if ord := uc.ColumnOrdinal(mb.tab, i); mb.updateColIDs[ord] != 0 {
 			return true
 		}
 	}
+
+	if _, isPartial := uc.Predicate(); isPartial {
+		pred := mb.parseUniqueConstraintPredicateExpr(uniqueOrdinal)
+		typedPred := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
+
+		var predCols opt.ColSet
+		mb.b.buildScalar(typedPred, mb.fetchScope, nil, nil, &predCols)
+		for colID, ok := predCols.Next(0); ok; colID, ok = predCols.Next(colID + 1) {
+			ord := mb.md.ColumnMeta(colID).Table.ColumnOrdinal(colID)
+			if mb.updateColIDs[ord] != 0 {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
