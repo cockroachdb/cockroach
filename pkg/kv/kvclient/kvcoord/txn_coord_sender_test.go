@@ -2460,10 +2460,9 @@ func TestTxnManualRefresh(t *testing.T) {
 					r := <-reqCh
 					_, ok := r.ba.GetArg(roachpb.Get)
 					require.True(t, ok)
-					var br roachpb.BatchResponse
+					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn
-					br.Add(&roachpb.GetResponse{})
-					r.respCh <- resp{br: &br}
+					r.respCh <- resp{br: br}
 				}
 				require.NoError(t, <-errCh)
 
@@ -2474,7 +2473,7 @@ func TestTxnManualRefresh(t *testing.T) {
 			},
 		},
 		{
-			name: "refresh occurs due to read",
+			name: "refresh occurs successfully due to read",
 			run: func(
 				ctx context.Context, t *testing.T, db *kv.DB,
 				clock *hlc.ManualClock, reqCh <-chan req,
@@ -2489,10 +2488,9 @@ func TestTxnManualRefresh(t *testing.T) {
 					r := <-reqCh
 					_, ok := r.ba.GetArg(roachpb.Get)
 					require.True(t, ok)
-					var br roachpb.BatchResponse
+					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn
-					br.Add(&roachpb.GetResponse{})
-					r.respCh <- resp{br: &br}
+					r.respCh <- resp{br: br}
 				}
 				require.NoError(t, <-errCh)
 
@@ -2503,14 +2501,12 @@ func TestTxnManualRefresh(t *testing.T) {
 					r := <-reqCh
 					_, ok := r.ba.GetArg(roachpb.Put)
 					require.True(t, ok)
-					var br roachpb.BatchResponse
+					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn.Clone()
 					// Push the WriteTimestamp simulating an interaction with the
 					// timestamp cache.
-					br.Txn.WriteTimestamp =
-						br.Txn.WriteTimestamp.Add(time.Millisecond.Nanoseconds(), 0)
-					br.Add(&roachpb.PutResponse{})
-					r.respCh <- resp{br: &br}
+					br.Txn.WriteTimestamp = db.Clock().Now()
+					r.respCh <- resp{br: br}
 				}
 				require.NoError(t, <-errCh)
 
@@ -2521,16 +2517,67 @@ func TestTxnManualRefresh(t *testing.T) {
 					r := <-reqCh
 					_, ok := r.ba.GetArg(roachpb.Refresh)
 					require.True(t, ok)
-					var br roachpb.BatchResponse
+					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn.Clone()
-					br.Add(&roachpb.RefreshResponse{})
-					r.respCh <- resp{br: &br}
+					r.respCh <- resp{br: br}
 				}
 				require.NoError(t, <-errCh)
 
 				// Now a refresh should be a no-op which is indicated by the fact that
 				// this call does not block to send requests.
 				require.NoError(t, txn.ManualRefresh(ctx))
+			},
+		},
+		{
+			name: "refresh occurs unsuccessfully due to read",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.Put(ctx, "bar", "baz")
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Put)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn.Clone()
+					// Push the WriteTimestamp simulating an interaction with the
+					// timestamp cache.
+					br.Txn.WriteTimestamp = db.Clock().Now()
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.ManualRefresh(ctx)
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Refresh)
+					require.True(t, ok)
+					// Rejects the refresh due to a conflicting write.
+					pErr := roachpb.NewErrorf("encountered recently written key")
+					r.respCh <- resp{pErr: pErr}
+				}
+				require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, <-errCh)
 			},
 		},
 	}
