@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
@@ -28,7 +29,12 @@ import (
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
 func splitPreApply(
-	ctx context.Context, readWriter storage.ReadWriter, split roachpb.SplitTrigger, r *Replica,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	split roachpb.SplitTrigger,
+	r *Replica,
+	// The closed timestamp used to initialize the RHS.
+	closedTS hlc.Timestamp,
 ) {
 	// Sanity check that the store is in the split.
 	//
@@ -114,6 +120,11 @@ func splitPreApply(
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatalf(ctx, "%v", err)
+	}
+
+	// Persist the closed timestamp.
+	if err := rsl.SetClosedTimestamp(ctx, readWriter, closedTS); err != nil {
+		log.Fatalf(ctx, "%s", err)
 	}
 
 	// The initialMaxClosed is assigned to the RHS replica to ensure that

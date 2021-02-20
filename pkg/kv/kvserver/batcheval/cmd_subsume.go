@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,16 +91,18 @@ func Subsume(
 	}
 
 	// Sanity check the caller has initiated a merge transaction by checking for
-	// a deletion intent on the local range descriptor.
+	// a deletion intent on the local range descriptor. Read inconsistently at
+	// the maximum timestamp to ensure that we see an intent if one exists,
+	// regardless of what timestamp it is written at.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, cArgs.Header.Timestamp,
+	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return result.Result{}, errors.Errorf("fetching local range descriptor: %s", err)
 	} else if intent == nil {
 		return result.Result{}, errors.AssertionFailedf("range missing intent on its local descriptor")
 	}
-	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, cArgs.Header.Timestamp, intent.Txn)
+	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
 		return result.Result{}, errors.Errorf("fetching local range descriptor as txn: %s", err)
 	} else if val != nil {
@@ -151,6 +154,15 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
+	// FrozenClosedTimestamp might return an empty timestamp if the Raft-based
+	// closed timestamp transport hasn't been enabled yet. That's OK because, if
+	// the new transport is not enabled, then ranges with leading closed
+	// timestamps can't exist yet, and so the closed timestamp must be below the
+	// FreezeStart. The FreezeStart is used by Store.MergeRange to bump the RHS'
+	// ts cache if LHS/RHS leases are not collocated. The case when the leases are
+	// collocated also works out because then the closed timestamp (according to
+	// the old mechanism) is the same for both ranges being merged.
+	reply.ClosedTimestamp = cArgs.EvalCtx.FrozenClosedTimestamp(ctx)
 
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},

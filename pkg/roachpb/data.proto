@@ -144,12 +144,27 @@ message MergeTrigger {
   ];
 
   // FreezeStart is a timestamp that is guaranteed to be greater than the
-  // timestamps at which any requests were serviced by the responding replica
+  // timestamps at which any requests were serviced by the right-hand side range
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
   // mark for the keys previously owned by the subsumed range.
   util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // right_closed_timestamp is the closed timestamp of the RHS at the moment of
+  // the subsumption. Because the SubsumeRequest synchronizes with all other
+  // requests, the range's closed timestamp does not advance past the snapshot
+  // captured here.
+  //
+  // Like the freeze_start, this is used by the merged range to conditionally
+  // bump the timestamp cache for the keys previously owned by the subsumed
+  // range.
+  //
+  // Note that the closed timestamp is also reflected in the right_read_summary.
+  // However, we carry it explicitly too because, in case the leaseholders of
+  // the two sides are collocated at merge time, we don't need to use the
+  // read_summary and simply use this field.
+  util.hlc.Timestamp right_closed_timestamp = 6 [(gogoproto.nullable) = false];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

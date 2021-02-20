@@ -218,16 +218,25 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			fmt.Fprintf(&buf, " (storing)")
 		}
 
+		if i < idx.ImplicitPartitioningColumnCount() {
+			fmt.Fprintf(&buf, " (implicit)")
+		}
+
 		child.Child(buf.String())
 	}
 
 	FormatZone(idx.Zone(), child)
 
-	partPrefixes := idx.PartitionByListPrefixes()
-	if len(partPrefixes) != 0 {
-		c := child.Child("partition by list prefixes")
-		for i := range partPrefixes {
-			c.Child(partPrefixes[i].String())
+	if n := idx.PartitionCount(); n > 0 {
+		c := child.Child("partitions")
+		for i := 0; i < n; i++ {
+			p := idx.Partition(i)
+			part := c.Child(p.Name())
+			prefixes := part.Child("partition by list prefixes")
+			for _, datums := range p.PartitionByListPrefixes() {
+				prefixes.Child(datums.String())
+			}
+			FormatZone(p.Zone(), part)
 		}
 	}
 	if n := idx.InterleaveAncestorCount(); n > 0 {

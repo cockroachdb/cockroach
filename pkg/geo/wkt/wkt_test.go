@@ -30,6 +30,11 @@ func TestUnmarshal(t *testing.T) {
 			expected:    geom.NewPointFlat(geom.XY, []float64{0, 1}),
 		},
 		{
+			desc:        "parse 2D point with scientific notation",
+			equivInputs: []string{"POINT(1e-2 2e3)", "POINT(0.1e-1 2e3)", "POINT(0.01e-0 2e+3)", "POINT(0.01 2000)"},
+			expected:    geom.NewPointFlat(geom.XY, []float64{1e-2, 2e3}),
+		},
+		{
 			desc:        "parse 2D+M point",
 			equivInputs: []string{"POINT M (-2 0 0.5)", "POINTM(-2 0 0.5)", "POINTM(-2 0 .5)"},
 			expected:    geom.NewPointFlat(geom.XYM, []float64{-2, 0, 0.5}),
@@ -620,6 +625,27 @@ DOT(0 0)
 			expectedErrStr: `lex error: invalid number at pos 8
 POINT(2 2.3.7)
         ^`,
+		},
+		{
+			desc:  "invalid scientific notation number missing number before the e",
+			input: "POINT(e-1 2)",
+			expectedErrStr: `lex error: invalid keyword at pos 6
+POINT(e-1 2)
+      ^`,
+		},
+		{
+			desc:  "invalid scientific notation number with non-integer power",
+			input: "POINT(5e-1.5 2)",
+			expectedErrStr: `lex error: invalid number at pos 6
+POINT(5e-1.5 2)
+      ^`,
+		},
+		{
+			desc:  "invalid number with a + at the start (PostGIS does not allow this)",
+			input: "POINT(+1 2)",
+			expectedErrStr: `lex error: invalid character at pos 6
+POINT(+1 2)
+      ^`,
 		},
 		{
 			desc:  "invalid keyword when extraneous spaces are present in ZM",

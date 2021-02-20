@@ -738,16 +738,25 @@ func newOptTable(
 			idxDesc = secondaryIndexes[i-1].IndexDesc()
 		}
 
-		// If there is a subzone that applies to the entire index, use that,
-		// else use the table zone. Skip subzones that apply to partitions,
-		// since they apply only to a subset of the index.
+		// If there is a subzone that applies to the entire index, use that, else
+		// use the table zone. Save subzones that apply to partitions, since we will
+		// use those later when initializing partitions in the index.
 		idxZone := tblZone
+		partZones := make(map[string]*zonepb.ZoneConfig)
 		for j := range tblZone.Subzones {
 			subzone := &tblZone.Subzones[j]
-			if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
-				copyZone := subzone.Config
-				copyZone.InheritFromParent(tblZone)
-				idxZone = &copyZone
+			if subzone.IndexID == uint32(idxDesc.ID) {
+				if subzone.PartitionName == "" {
+					// Subzone applies to the whole index.
+					copyZone := subzone.Config
+					copyZone.InheritFromParent(tblZone)
+					idxZone = &copyZone
+				} else {
+					// Subzone applies to a partition.
+					copyZone := subzone.Config
+					copyZone.InheritFromParent(tblZone)
+					partZones[subzone.PartitionName] = &copyZone
+				}
 			}
 		}
 		if idxDesc.Type == descpb.IndexDescriptor_INVERTED {
@@ -770,9 +779,9 @@ func newOptTable(
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
-			ot.indexes[i].init(ot, i, idxDesc, idxZone, virtualColOrd)
+			ot.indexes[i].init(ot, i, idxDesc, idxZone, partZones, virtualColOrd)
 		} else {
-			ot.indexes[i].init(ot, i, idxDesc, idxZone, -1 /* virtualColOrd */)
+			ot.indexes[i].init(ot, i, idxDesc, idxZone, partZones, -1 /* virtualColOrd */)
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
@@ -1108,6 +1117,10 @@ type optIndex struct {
 	numKeyCols    int
 	numLaxKeyCols int
 
+	// partitions stores zone information and datums for PARTITION BY LIST
+	// partitions.
+	partitions []optPartition
+
 	// invertedVirtualColOrd is used if this is an inverted index; it stores the
 	// ordinal of the virtual column created to refer to the key of this index.
 	// It is -1 if this is not an inverted index.
@@ -1123,6 +1136,7 @@ func (oi *optIndex) init(
 	indexOrdinal int,
 	desc *descpb.IndexDescriptor,
 	zone *zonepb.ZoneConfig,
+	partZones map[string]*zonepb.ZoneConfig,
 	invertedVirtualColOrd int,
 ) {
 	oi.tab = tab
@@ -1150,6 +1164,38 @@ func (oi *optIndex) init(
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
+	}
+
+	// Collect information about the partitions.
+	oi.partitions = make([]optPartition, len(desc.Partitioning.List))
+	for i := range desc.Partitioning.List {
+		p := &desc.Partitioning.List[i]
+		oi.partitions[i] = optPartition{
+			name:   p.Name,
+			zone:   &zonepb.ZoneConfig{},
+			datums: make([]tree.Datums, 0, len(p.Values)),
+		}
+
+		// Get the zone.
+		if zone, ok := partZones[p.Name]; ok {
+			oi.partitions[i].zone = zone
+		}
+
+		// Get the partition values.
+		var a rowenc.DatumAlloc
+		for _, valueEncBuf := range p.Values {
+			t, _, err := rowenc.DecodePartitionTuple(
+				&a, oi.tab.codec, oi.tab.desc, oi.desc, &oi.desc.Partitioning,
+				valueEncBuf, nil, /* prefixDatums */
+			)
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+			}
+			oi.partitions[i].datums = append(oi.partitions[i].datums, t.Datums)
+			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
+			// Note that this functionality should be kept in sync with the test catalog
+			// implementation (test_catalog.go).
+		}
 	}
 
 	if desc.Unique {
@@ -1296,35 +1342,6 @@ func (oi *optIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// PartitionByListPrefixes is part of the cat.Index interface.
-func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
-	list := oi.desc.Partitioning.List
-	if len(list) == 0 {
-		return nil
-	}
-	res := make([]tree.Datums, 0, len(list))
-	var a rowenc.DatumAlloc
-	for i := range list {
-		for _, valueEncBuf := range list[i].Values {
-			t, _, err := rowenc.DecodePartitionTuple(
-				&a, oi.tab.codec, oi.tab.desc, oi.desc, &oi.desc.Partitioning,
-				valueEncBuf, nil, /* prefixDatums */
-			)
-			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
-			}
-			// Ignore the DEFAULT case, where there is nothing to return.
-			if len(t.Datums) > 0 {
-				res = append(res, t.Datums)
-			}
-			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
-			// Note that this functionality should be kept in sync with the test catalog
-			// implementation (test_catalog.go).
-		}
-	}
-	return res
-}
-
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ImplicitPartitioningColumnCount() int {
 	return int(oi.desc.Partitioning.NumImplicitColumns)
@@ -1360,6 +1377,41 @@ func (oi *optIndex) GeoConfig() *geoindex.Config {
 // Version is part of the cat.Index interface.
 func (oi *optIndex) Version() descpb.IndexDescriptorVersion {
 	return oi.desc.Version
+}
+
+// PartitionCount is part of the cat.Index interface.
+func (oi *optIndex) PartitionCount() int {
+	return len(oi.partitions)
+}
+
+// Partition is part of the cat.Index interface.
+func (oi *optIndex) Partition(i int) cat.Partition {
+	return &oi.partitions[i]
+}
+
+// optPartition implements cat.Partition and represents a PARTITION BY LIST
+// partition of an index.
+type optPartition struct {
+	name   string
+	zone   *zonepb.ZoneConfig
+	datums []tree.Datums
+}
+
+var _ cat.Partition = &optPartition{}
+
+// Name is part of the cat.Partition interface.
+func (op *optPartition) Name() string {
+	return op.name
+}
+
+// Zone is part of the cat.Partition interface.
+func (op *optPartition) Zone() cat.Zone {
+	return op.zone
+}
+
+// PartitionByListPrefixes is part of the cat.Partition interface.
+func (op *optPartition) PartitionByListPrefixes() []tree.Datums {
+	return op.datums
 }
 
 type optTableStat struct {
@@ -2042,11 +2094,6 @@ func (oi *optVirtualIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// PartitionByListPrefixes is part of the cat.Index interface.
-func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
-	return nil
-}
-
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 	return 0
@@ -2080,6 +2127,16 @@ func (oi *optVirtualIndex) GeoConfig() *geoindex.Config {
 // Version is part of the cat.Index interface.
 func (oi *optVirtualIndex) Version() descpb.IndexDescriptorVersion {
 	return 0
+}
+
+// PartitionCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) PartitionCount() int {
+	return 0
+}
+
+// Partition is part of the cat.Index interface.
+func (oi *optVirtualIndex) Partition(i int) cat.Partition {
+	return nil
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

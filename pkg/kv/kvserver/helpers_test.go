@@ -514,6 +514,14 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
 }
 
+// ClosedTimestampPolicy returns the closed timestamp policy of the range, which
+// is updated asynchronously through gossip of zone configurations.
+func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.closedTimestampPolicyRLocked()
+}
+
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(

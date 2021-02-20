@@ -167,6 +167,7 @@ func TestReplicaRangefeed(t *testing.T) {
 				}
 
 				events = stream.Events()
+				// Filter out checkpoints. Those are not deterministic; they can come at any time.
 				var filteredEvents []*roachpb.RangeFeedEvent
 				for _, e := range events {
 					if e.Checkpoint != nil {

@@ -266,19 +266,6 @@ func statusToError(s C.CR_GEOS_Status) error {
 	return &Error{msg: string(cStringToSafeGoBytes(s))}
 }
 
-// WKTToEWKB parses a WKT into WKB using the GEOS library.
-func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
-	g, err := ensureInitInternal()
-	if err != nil {
-		return nil, err
-	}
-	var cEWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_WKTToEWKB(g, goToCSlice([]byte(wkt)), C.int(srid), &cEWKB)); err != nil {
-		return nil, err
-	}
-	return cStringToSafeGoBytes(cEWKB), nil
-}
-
 // BufferParamsJoinStyle maps to the GEOSBufJoinStyles enum in geos_c.h.in.
 type BufferParamsJoinStyle int
 

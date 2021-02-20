@@ -44,7 +44,7 @@ func TestRemoveRepeatedPoints(t *testing.T) {
 			"MULTILINESTRING ((1 2, 3 4, 1 2), EMPTY, (1 2, 3 4))",
 		},
 		{
-			"MULTILINESTRING ((1 2, 1 2, 3 4), (1 2, 3 4, 3 4), (1 2, 1 2, 1 2, 1 2)))",
+			"MULTILINESTRING ((1 2, 1 2, 3 4), (1 2, 3 4, 3 4), (1 2, 1 2, 1 2, 1 2))",
 			"MULTILINESTRING ((1 2, 3 4), (1 2, 3 4), (1 2, 1 2))",
 		},
 		{"POLYGON EMPTY", "POLYGON EMPTY"},

@@ -85,6 +85,11 @@ type Tracker interface {
 	// make is that, if no synthethic timestamp is inserted into the tracked set
 	// for a while, eventually the LowerBound value will not be synthetic.
 	LowerBound(context.Context) hlc.Timestamp
+
+	// Count returns the current size of the tracked set.
+	//
+	// Count cannot be called concurrently with other methods.
+	Count() int
 }
 
 // RemovalToken represents the result of Track: a token to be later used with

@@ -175,3 +175,78 @@ TABLE abc
       ├── a int not null (storing)
       └── ZONE
            └── constraints: [+dc=west]
+
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west')),
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    UNIQUE WITHOUT INDEX (b, c),
+    UNIQUE INDEX bc_idx (r, b, c) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west'))
+    ),
+    INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west'))
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@bc_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@bc_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+SHOW CREATE abc_part
+----
+TABLE abc_part
+ ├── r string not null
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── CHECK (r IN ('east', 'west'))
+ ├── PRIMARY INDEX primary
+ │    └── a int not null
+ ├── UNIQUE INDEX bc_idx
+ │    ├── r string not null
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── partitions
+ │         ├── east
+ │         │    ├── partition by list prefixes
+ │         │    │    └── ('east')
+ │         │    └── ZONE
+ │         │         ├── voter constraints: [+region=east]
+ │         │         └── lease preference: [+region=east]
+ │         └── west
+ │              ├── partition by list prefixes
+ │              │    └── ('west')
+ │              └── ZONE
+ │                   ├── voter constraints: [+region=west]
+ │                   └── lease preference: [+region=west]
+ ├── INDEX b_idx
+ │    ├── r string not null
+ │    ├── b int
+ │    ├── a int not null
+ │    └── partitions
+ │         ├── east
+ │         │    └── partition by list prefixes
+ │         │         └── ('east')
+ │         └── west
+ │              └── partition by list prefixes
+ │                   └── ('west')
+ └── UNIQUE WITHOUT INDEX (b, c)
