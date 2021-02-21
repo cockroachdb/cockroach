@@ -55,7 +55,7 @@ func CreateCACertAndKey(lifespan time.Duration, service string) (certPEM []byte,
 	// Create random serial number for CA.
 	serialNumber, err := createCertificateSerialNumber()
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	// Create short lived initial CA template.
@@ -77,31 +77,42 @@ func CreateCACertAndKey(lifespan time.Duration, service string) (certPEM []byte,
 	// Create private and public key for CA.
 	caPrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	caPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(caPrivKeyPEM, &pem.Block{
+	caPrivKeyPEMBytes, err := x509.MarshalPKCS8PrivateKey(caPrivKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = pem.Encode(caPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
+		Bytes: caPrivKeyPEMBytes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Create CA certificate then PEM encode it.
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	caPEM := new(bytes.Buffer)
-	pem.Encode(caPEM, &pem.Block{
+	err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 
 	certPEM = caPEM.Bytes()
 	keyPEM = caPrivKeyPEM.Bytes()
 
-	return
+	return certPEM, keyPEM, nil
 }
 
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
@@ -114,31 +125,31 @@ func CreateServiceCertAndKey(lifespan time.Duration, service, hostname string, c
 	// Create random serial number for CA.
 	serialNumber, err := createCertificateSerialNumber()
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	caCertBlock, _ := pem.Decode(caCertPEM)
 	if caCertBlock == nil {
 		err = errors.New("failed to parse valid PEM from CaCertificate blob")
-		return
+		return nil, nil, err
 	}
 
 	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
 	if err != nil {
 		err = errors.New("failed to parse valid Certificate from PEM blob")
-		return
+		return nil, nil, err
 	}
 
 	caKeyBlock, _ := pem.Decode(caKeyPEM)
 	if caKeyBlock == nil {
 		err = errors.New("failed to parse valid PEM from CaKey blob")
-		return
+		return nil, nil, err
 	}
 
 	caKey, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
 	if err != nil {
 		err = errors.New("failed to parse valid Certificate from PEM blob")
-		return
+		return nil, nil, err
 	}
 
 	// Bulid service certificate template; template will be used for all
@@ -170,25 +181,36 @@ func CreateServiceCertAndKey(lifespan time.Duration, service, hostname string, c
 
 	servicePrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	serviceCertBytes, err := x509.CreateCertificate(rand.Reader, serviceCert, caCert, &servicePrivKey.PublicKey, caKey)
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 
 	serviceCertBlock := new(bytes.Buffer)
-	pem.Encode(serviceCertBlock, &pem.Block{
+	err = pem.Encode(serviceCertBlock, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: serviceCertBytes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 
-	certPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(certPrivKeyPEM, &pem.Block{
+	servicePrivKeyPEM := new(bytes.Buffer)
+	certPrivKeyPEMBytes, err := x509.MarshalPKCS8PrivateKey(servicePrivKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = pem.Encode(servicePrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(servicePrivKey),
+		Bytes: certPrivKeyPEMBytes,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return
+	return serviceCertBlock.Bytes(), servicePrivKeyPEM.Bytes(), err
 }
