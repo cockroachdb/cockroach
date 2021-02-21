@@ -20,8 +20,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow", true,
 		[]string{
-			// TODO(yuzefovich): break this dependency.
-			// "github.com/cockroachdb/cockroach/pkg/sql/colexec",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",
 		}, nil,

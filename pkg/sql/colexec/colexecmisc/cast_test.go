@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecmisc_test
 
 import (
 	"context"
@@ -180,11 +180,11 @@ func BenchmarkCastOp(b *testing.B) {
 					fmt.Sprintf("useSel=%t/hasNulls=%t/%s_to_%s",
 						useSel, hasNulls, typePair[0].Name(), typePair[1].Name(),
 					), func(b *testing.B) {
-						nullProbability := nullProbability
+						nullProbability := 0.1
 						if !hasNulls {
 							nullProbability = 0
 						}
-						selectivity := selectivity
+						selectivity := 0.5
 						if !useSel {
 							selectivity = 0
 						}

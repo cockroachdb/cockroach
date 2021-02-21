@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -495,10 +496,10 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	factory coldata.ColumnFactory,
 ) colexec.DiskBackedSorterConstructor {
 	return func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecbase.Operator {
-		if maxNumberPartitions < colexec.ExternalSorterMinPartitions {
+		if maxNumberPartitions < colexecbase.ExternalSorterMinPartitions {
 			colexecerror.InternalError(errors.AssertionFailedf(
 				"external sorter is attempted to be created with %d partitions, minimum %d required",
-				maxNumberPartitions, colexec.ExternalSorterMinPartitions,
+				maxNumberPartitions, colexecbase.ExternalSorterMinPartitions,
 			))
 		}
 		sortArgs := *args
@@ -906,7 +907,7 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
-				result.Op, err = colexec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
+				result.Op, err = colexecmisc.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 			} else {
 				// We have separate unit tests that instantiate in-memory
 				// distinct operators, so we don't need to look at
@@ -954,7 +955,7 @@ func NewColOperator(
 				return r, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Op = colexec.NewOrdinalityOp(streamingAllocator, inputs[0], outputIdx)
+			result.Op = colexecmisc.NewOrdinalityOp(streamingAllocator, inputs[0], outputIdx)
 			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
@@ -1228,7 +1229,7 @@ func NewColOperator(
 						projection = append(projection, i)
 					}
 					projection = append(projection, wf.OutputColIdx+tempColOffset)
-					result.Op = colexec.NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
+					result.Op = colexecmisc.NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
 				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []*types.T{}...)
@@ -1304,7 +1305,7 @@ func NewColOperator(
 			input := r.Op
 			castedIdx := len(r.ColumnTypes)
 			resultTypes := appendOneType(r.ColumnTypes, expected)
-			r.Op, err = colexec.GetCastOperator(
+			r.Op, err = colexecmisc.GetCastOperator(
 				streamingAllocator, input, i, castedIdx, actual, expected,
 			)
 			if err != nil {
@@ -1437,7 +1438,7 @@ func (r *postProcessResult) planPostProcessSpec(
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		r.Op = colexec.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
+		r.Op = colexecmisc.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
 		newTypes := make([]*types.T, len(renderedCols))
 		for i, j := range renderedCols {
 			newTypes[i] = r.ColumnTypes[j]
@@ -1574,7 +1575,7 @@ func planFilterExpr(
 		for i := range columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
-		op = colexec.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
+		op = colexecmisc.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
 	}
 	return op, nil
 }
@@ -1588,7 +1589,7 @@ func addProjection(
 	for i, j := range projection {
 		newTypes[i] = typs[j]
 	}
-	return colexec.NewSimpleProjectOp(op, len(typs), projection), newTypes
+	return colexecmisc.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
 func planSelectionOperators(
@@ -1602,7 +1603,7 @@ func planSelectionOperators(
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		op, err = colexec.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
 		return op, -1, columnTypes, err
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection
@@ -1647,7 +1648,7 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		op, err = colexec.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
@@ -1656,7 +1657,7 @@ func planSelectionOperators(
 		if err != nil {
 			return op, resultIdx, typs, err
 		}
-		op, err = colexec.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
 	case *tree.IsNullExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
@@ -1759,7 +1760,7 @@ func planCastOperator(
 	factory coldata.ColumnFactory,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
-	op, err = colexec.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
+	op, err = colexecmisc.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
 	typs = appendOneType(columnTypes, toType)
 	return op, outputIdx, typs, err
 }
@@ -1786,10 +1787,10 @@ func planProjectionOperators(
 		if datumType.Family() == types.UnknownFamily {
 			// We handle Unknown type by planning a special constant null
 			// operator.
-			return colexec.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
+			return colexecmisc.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
 		}
 		constVal := colconv.GetDatumToPhysicalFn(datumType)(datum)
-		return colexec.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
+		return colexecmisc.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
 	}
 	resultIdx = -1
 	switch t := expr.(type) {
@@ -1933,7 +1934,7 @@ func planProjectionOperators(
 			if err != nil {
 				return nil, resultIdx, typs, err
 			}
-			caseOps[i], err = colexec.BoolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
+			caseOps[i], err = colexecutils.BoolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
 			if err != nil {
 				return nil, resultIdx, typs, err
 			}
