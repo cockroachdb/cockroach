@@ -36,22 +36,33 @@ func IsRetriableReplicationChangeError(err error) bool {
 }
 
 const (
-	descChangedRangeSubsumedErrorFmt = "descriptor changed: expected %s != [actual] nil (range subsumed)"
 	descChangedErrorFmt              = "descriptor changed: [expected] %s != [actual] %s"
+	descChangedRangeReplacedErrorFmt = "descriptor changed: [expected] %s != [actual] %s  (range replaced)"
+	descChangedRangeSubsumedErrorFmt = "descriptor changed: [expected] %s != [actual] nil (range subsumed)"
 )
 
 func newDescChangedError(desc, actualDesc *roachpb.RangeDescriptor) error {
+	var err error
 	if actualDesc == nil {
-		return errors.Mark(errors.Newf(descChangedRangeSubsumedErrorFmt, desc), errMarkCanRetryReplicationChangeWithUpdatedDesc)
+		err = errors.Newf(descChangedRangeSubsumedErrorFmt, desc)
+	} else if desc.RangeID != actualDesc.RangeID {
+		err = errors.Newf(descChangedRangeReplacedErrorFmt, desc, actualDesc)
+	} else {
+		err = errors.Newf(descChangedErrorFmt, desc, actualDesc)
 	}
-	return errors.Mark(errors.Newf(descChangedErrorFmt, desc, actualDesc), errMarkCanRetryReplicationChangeWithUpdatedDesc)
+	return errors.Mark(err, errMarkCanRetryReplicationChangeWithUpdatedDesc)
 }
 
 func wrapDescChangedError(err error, desc, actualDesc *roachpb.RangeDescriptor) error {
+	var wrapped error
 	if actualDesc == nil {
-		return errors.Mark(errors.Wrapf(err, descChangedRangeSubsumedErrorFmt, desc), errMarkCanRetryReplicationChangeWithUpdatedDesc)
+		wrapped = errors.Wrapf(err, descChangedRangeSubsumedErrorFmt, desc)
+	} else if desc.RangeID != actualDesc.RangeID {
+		wrapped = errors.Wrapf(err, descChangedRangeReplacedErrorFmt, desc, actualDesc)
+	} else {
+		wrapped = errors.Wrapf(err, descChangedErrorFmt, desc, actualDesc)
 	}
-	return errors.Mark(errors.Wrapf(err, descChangedErrorFmt, desc, actualDesc), errMarkCanRetryReplicationChangeWithUpdatedDesc)
+	return errors.Mark(wrapped, errMarkCanRetryReplicationChangeWithUpdatedDesc)
 }
 
 // NB: don't change the string here; this will cause cross-version issues
