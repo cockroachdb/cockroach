@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecwindow
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -46,7 +47,7 @@ func NewWindowSortingPartitioner(
 	}
 
 	var distinctCol []bool
-	input, distinctCol, err = OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
+	input, distinctCol, err = colexec.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
 	if err != nil {
 		return nil, err
 	}
