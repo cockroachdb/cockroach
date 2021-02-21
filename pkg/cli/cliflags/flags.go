@@ -717,8 +717,12 @@ Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal)
 	}
 
 	InitToken = FlagInfo{
-		Name:        "init-token",
-		Description: `Shared token for initialization of node TLS certificates`,
+		Name: "init-token",
+		Description: `Shared token for initialization of node TLS certificates.
+
+This flag is optional for the 'start' command. When omitted, the command
+expects the operator to prepare TLS certificates beforehand using
+the 'cert' command.`,
 	}
 
 	CertsDir = FlagInfo{

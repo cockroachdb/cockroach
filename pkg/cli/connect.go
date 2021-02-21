@@ -23,7 +23,7 @@ import (
 // certificates in the specified certs-dir for use with start.
 var connectCmd = &cobra.Command{
 	Use:   "connect --certs-dir=<path to cockroach certs dir> --init-token=<shared secret> --join=<host 1>,<host 2>,...,<host N>",
-	Short: "build TLS certificates for use with the start command",
+	Short: "auto-build TLS certificates for use with the start command",
 	Long: `
 Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
