@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules", "gen_like_ops_rule")
+load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
     name = "colexec",
@@ -55,7 +55,6 @@ go_library(
         "unordered_distinct.go",
         "utils.go",
         ":gen-exec",  # keep
-        ":gen-like-ops",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec",
     visibility = ["//visibility:public"],
@@ -217,13 +216,3 @@ eg_go_filegroup(name = "gen-exec")
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules()
-
-# Special-case the gen rule for like_ops.eg.go.
-gen_like_ops_rule(
-    name = "gen-like-ops",
-    target = "like_ops.eg.go",
-    templates = [
-        "selection_ops_tmpl.go",
-        "proj_const_ops_tmpl.go",
-    ],
-)
