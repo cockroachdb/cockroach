@@ -491,7 +491,7 @@ func (tf *SchemaFeed) validateDescriptor(
 		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 			return err
 		}
-		log.Infof(ctx, "validate %v", formatDesc(desc))
+		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))
 		if lastVersion, ok := tf.mu.previousTableVersion[desc.GetID()]; ok {
 			// NB: Writes can occur to a table
 			if desc.GetModificationTime().LessEq(lastVersion.GetModificationTime()) {
@@ -517,7 +517,7 @@ func (tf *SchemaFeed) validateDescriptor(
 				After:  desc,
 			}
 			shouldFilter, err := tf.filter.shouldFilter(ctx, e)
-			log.Infof(ctx, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
+			log.VEventf(ctx, 1, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
 			if err != nil {
 				return err
 			}
