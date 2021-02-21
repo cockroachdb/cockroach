@@ -842,7 +842,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/default_cmp_expr.eg.go \
   pkg/sql/colexec/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/default_cmp_sel_ops.eg.go \
-  pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
@@ -890,6 +889,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecagg/ordered_min_max_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_int_agg.eg.go \
+  pkg/sql/colexec/colexecdistinct/distinct.eg.go \
   pkg/sql/colexec/colexechash/hashtable_distinct.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_deleting.eg.go \

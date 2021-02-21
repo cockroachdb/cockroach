@@ -21,8 +21,10 @@ import (
 
 // distinctTmpl is the common base for the template used to generate code for
 // ordered distinct structs and sort partitioners. It should be used as a format
-// string with one %s argument that specifies which of the building blocks
-// coming from distinct_tmpl.go should be included into the code generation.
+// string with two %s arguments:
+// 1. specifies the package that the generated code is placed in
+// 2. specifies which of the building blocks coming from distinct_tmpl.go should
+// be included into the code generation.
 const distinctTmpl = `
 // Copyright 2018 The Cockroach Authors.
 //
@@ -34,7 +36,7 @@ const distinctTmpl = `
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package %s
 
 import (
 	"context"
@@ -55,9 +57,9 @@ import (
 %s
 `
 
-const distinctOpsTmpl = "pkg/sql/colexec/distinct_tmpl.go"
+const distinctOpsTmpl = "pkg/sql/colexec/colexecdistinct/distinct_tmpl.go"
 
-func genDistinctOps(targetTmpl string) generator {
+func genDistinctOps(targetPkg, targetTmpl string) generator {
 	return func(inputFileContents string, wr io.Writer) error {
 		r := strings.NewReplacer(
 			"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
@@ -79,7 +81,7 @@ func genDistinctOps(targetTmpl string) generator {
 			return err
 		}
 
-		tmpl, err = tmpl.Parse(fmt.Sprintf(distinctTmpl, targetTmpl))
+		tmpl, err = tmpl.Parse(fmt.Sprintf(distinctTmpl, targetPkg, targetTmpl))
 		if err != nil {
 			return err
 		}
@@ -106,6 +108,6 @@ func init() {
 {{end}}
 {{end}}
 `
-	registerGenerator(genDistinctOps(distinctOp), "distinct.eg.go", distinctOpsTmpl)
-	registerGenerator(genDistinctOps(sortPartitioner), "sort_partitioner.eg.go", distinctOpsTmpl)
+	registerGenerator(genDistinctOps("colexecdistinct", distinctOp), "distinct.eg.go", distinctOpsTmpl)
+	registerGenerator(genDistinctOps("colexec", sortPartitioner), "sort_partitioner.eg.go", distinctOpsTmpl)
 }

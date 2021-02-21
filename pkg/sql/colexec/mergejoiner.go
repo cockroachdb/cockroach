@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -441,13 +442,13 @@ func newMergeJoinBase(
 	}
 	var err error
 	base.left.distincterInput = &colexecbase.FeedOperator{}
-	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
+	base.left.distincter, base.left.distinctOutput, err = colexecdistinct.OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
 	base.right.distincterInput = &colexecbase.FeedOperator{}
-	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
+	base.right.distincter, base.right.distinctOutput, err = colexecdistinct.OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
 		return base, err

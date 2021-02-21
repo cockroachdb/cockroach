@@ -14,6 +14,7 @@ go_library(
         "//pkg/col/coldata",  # keep
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colexec",  # keep
+        "//pkg/sql/colexec/colexecdistinct",
         "//pkg/sql/colexec/colexecutils",  # keep
         "//pkg/sql/colexecbase",  # keep
         "//pkg/sql/colexecbase/colexecerror",  # keep

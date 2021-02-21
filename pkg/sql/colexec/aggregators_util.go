@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -172,7 +173,7 @@ func newFilteringHashAggHelper(
 	}
 	filterInput := newSingleBatchOperator(args.Allocator, args.InputTypes, maxBatchSize)
 	h := &filteringSingleFunctionHashHelper{
-		filter:      newBoolVecToSelOp(filterInput, filterIdx),
+		filter:      colexecutils.NewBoolVecToSelOp(filterInput, filterIdx),
 		filterInput: filterInput,
 	}
 	return h

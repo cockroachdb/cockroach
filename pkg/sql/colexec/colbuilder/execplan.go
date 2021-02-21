@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -906,7 +907,7 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
-				result.Op, err = colexec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
+				result.Op, err = colexecdistinct.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 			} else {
 				// We have separate unit tests that instantiate in-memory
 				// distinct operators, so we don't need to look at
@@ -1602,7 +1603,7 @@ func planSelectionOperators(
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		op, err = colexec.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
 		return op, -1, columnTypes, err
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection
@@ -1647,7 +1648,7 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		op, err = colexec.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
@@ -1656,7 +1657,7 @@ func planSelectionOperators(
 		if err != nil {
 			return op, resultIdx, typs, err
 		}
-		op, err = colexec.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
 	case *tree.IsNullExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
@@ -1933,7 +1934,7 @@ func planProjectionOperators(
 			if err != nil {
 				return nil, resultIdx, typs, err
 			}
-			caseOps[i], err = colexec.BoolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
+			caseOps[i], err = colexecutils.BoolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
 			if err != nil {
 				return nil, resultIdx, typs, err
 			}

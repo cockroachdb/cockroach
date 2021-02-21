@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -72,7 +73,7 @@ func NewExternalDistinct(
 			projection[i] = uint32(i)
 		}
 		diskBackedWithoutOrdinality := NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
-		diskBackedFallbackOp, err := NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
+		diskBackedFallbackOp, err := colexecdistinct.NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}

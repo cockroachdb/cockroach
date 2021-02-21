@@ -1,11 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules", "gen_sort_partitioner_rule")
 
 go_library(
     name = "colexec",
     srcs = [
         "aggregators_util.go",
-        "bool_vec_to_sel.go",
         "buffer.go",
         "builtin_funcs.go",
         "case.go",
@@ -15,12 +14,10 @@ go_library(
         "crossjoiner.go",
         "deselector.go",
         "disk_spiller.go",
-        "distinct.go",
         "external_distinct.go",
         "external_hash_aggregator.go",
         "external_hash_joiner.go",
         "external_sort.go",
-        "fn_op.go",
         "hash_aggregator.go",
         "hash_based_partitioner.go",
         "hashjoiner.go",
@@ -41,12 +38,14 @@ go_library(
         "simple_project.go",
         "sort.go",
         "sort_chunks.go",
+        "sort_utils.go",
         "sorttopk.go",
         "stats.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
         "utils.go",
         ":gen-exec",  # keep
+        ":gen-sort-partitioner",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec",
     visibility = ["//visibility:public"],
@@ -63,6 +62,7 @@ go_library(
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecdistinct",
         "//pkg/sql/colexec/colexechash",  # keep
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
@@ -97,7 +97,6 @@ go_test(
     srcs = [
         "aggregators_test.go",
         "and_or_projection_test.go",
-        "bool_vec_to_sel_test.go",
         "buffer_test.go",
         "builtin_funcs_test.go",
         "case_test.go",
@@ -157,6 +156,7 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecdistinct",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",
@@ -199,3 +199,9 @@ eg_go_filegroup(name = "gen-exec")
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules()
+
+# Special-case the gen rule for sort_partitioner.eg.go.
+gen_sort_partitioner_rule(
+    name = "gen-sort-partitioner",
+    target = "sort_partitioner.eg.go",
+)

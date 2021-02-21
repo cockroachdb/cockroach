@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecdistinct
 
 import (
 	"context"

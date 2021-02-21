@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -212,7 +213,7 @@ func TestDistinct(t *testing.T) {
 			log.Info(context.Background(), "ordered")
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+					return colexecdistinct.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
 				})
 		}
 	}
@@ -351,7 +352,7 @@ func BenchmarkDistinct(b *testing.B) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewOrderedDistinct(input, distinctCols, typs)
+			return colexecdistinct.NewOrderedDistinct(input, distinctCols, typs)
 		},
 	}
 	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}

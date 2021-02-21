@@ -13,7 +13,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -45,7 +45,7 @@ func NewWindowPeerGrouper(
 		for i, ordCol := range orderingCols {
 			orderIdxs[i] = ordCol.ColIdx
 		}
-		input, distinctCol, err = colexec.OrderedDistinctColsToOperators(
+		input, distinctCol, err = colexecdistinct.OrderedDistinctColsToOperators(
 			input, orderIdxs, typs,
 		)
 		if err != nil {

@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load(":COLEXECDISTINCT.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecdistinct",
+    srcs = [
+        "distinct.go",
+        "fn_op.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdistinct",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/duration",  # keep
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(name = "gen-exec")
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules()
+
+# Export the template because it is used by another target in colexec package.
+exports_files(["distinct_tmpl.go"])

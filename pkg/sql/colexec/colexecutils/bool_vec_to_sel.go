@@ -8,13 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -27,31 +26,31 @@ func BoolOrUnknownToSelOp(
 ) (colexecbase.Operator, error) {
 	switch typs[vecIdx].Family() {
 	case types.BoolFamily:
-		return newBoolVecToSelOp(input, vecIdx), nil
+		return NewBoolVecToSelOp(input, vecIdx), nil
 	case types.UnknownFamily:
 		// If the column is of an Unknown type, then all values in that column
 		// must be NULLs, so the selection vector will always be empty, and we
 		// can simply plan a zero operator.
-		return colexecutils.NewZeroOp(input), nil
+		return NewZeroOp(input), nil
 	default:
 		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
 	}
 }
 
-// boolVecToSelOp transforms a boolean column into a selection vector by adding
+// BoolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
-type boolVecToSelOp struct {
+type BoolVecToSelOp struct {
 	colexecbase.OneInputNode
 	colexecbase.NonExplainable
 
-	// outputCol is the boolean output column. It should be shared by other
+	// OutputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
-	outputCol []bool
+	OutputCol []bool
 }
 
-var _ colexecbase.ResettableOperator = &boolVecToSelOp{}
+var _ colexecbase.ResettableOperator = &BoolVecToSelOp{}
 
-func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
+func (p *BoolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
 	// exhausted.
 	for {
@@ -60,7 +59,7 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 		if n == 0 {
 			return batch
 		}
-		outputCol := p.outputCol
+		outputCol := p.OutputCol
 
 		// Convert outputCol to a selection vector by outputting the index of each
 		// tuple whose outputCol value is true.
@@ -104,48 +103,38 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (p *boolVecToSelOp) Init() {
+func (p *BoolVecToSelOp) Init() {
 	p.Input.Init()
 }
 
-func (p *boolVecToSelOp) Reset(ctx context.Context) {
+func (p *BoolVecToSelOp) Reset(ctx context.Context) {
 	if r, ok := p.Input.(colexecbase.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func boolVecToSel64(vec []bool, sel []int) []int {
-	l := len(vec)
-	for i := 0; i < l; i++ {
-		if vec[i] {
-			sel = append(sel, i)
-		}
-	}
-	return sel
-}
-
-// newBoolVecToSelOp is the operator form of boolVecToSelOp. It filters its
+// NewBoolVecToSelOp is the operator form of BoolVecToSelOp. It filters its
 // input batch by the boolean column specified by colIdx.
 //
 // For internal use cases that just need a way to create a selection vector
 // based on a boolean column that *isn't* in a batch, just create a
-// boolVecToSelOp directly with the desired boolean slice.
+// BoolVecToSelOp directly with the desired boolean slice.
 //
 // NOTE: if the column can be of a type other than boolean,
 // BoolOrUnknownToSelOp *must* be used instead.
-func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
+func NewBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
 	d := selBoolOp{OneInputNode: colexecbase.NewOneInputNode(input), colIdx: colIdx}
-	ret := &boolVecToSelOp{OneInputNode: colexecbase.NewOneInputNode(&d)}
+	ret := &BoolVecToSelOp{OneInputNode: colexecbase.NewOneInputNode(&d)}
 	d.boolVecToSelOp = ret
 	return ret
 }
 
-// selBoolOp is a small helper operator that transforms a boolVecToSelOp into
-// an operator that can see the inside of its input batch for newBoolVecToSelOp.
+// selBoolOp is a small helper operator that transforms a BoolVecToSelOp into
+// an operator that can see the inside of its input batch for NewBoolVecToSelOp.
 type selBoolOp struct {
 	colexecbase.OneInputNode
 	colexecbase.NonExplainable
-	boolVecToSelOp *boolVecToSelOp
+	boolVecToSelOp *BoolVecToSelOp
 	colIdx         int
 }
 
@@ -160,7 +149,7 @@ func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	inputCol := batch.ColVec(d.colIdx)
-	d.boolVecToSelOp.outputCol = inputCol.Bool()
+	d.boolVecToSelOp.OutputCol = inputCol.Bool()
 	if inputCol.MaybeHasNulls() {
 		// If the input column has null values, we need to explicitly set the
 		// values of the output column that correspond to those null values to
@@ -169,7 +158,7 @@ func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 		// also set the null. In the code above, we only copied the values' vector,
 		// so we need to adjust it.
 		// TODO(yuzefovich): think through this case more, possibly clean this up.
-		outputCol := d.boolVecToSelOp.outputCol
+		outputCol := d.boolVecToSelOp.OutputCol
 		sel := batch.Selection()
 		nulls := inputCol.Nulls()
 		if sel != nil {
