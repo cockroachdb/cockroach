@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colflow
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -26,24 +27,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// The NetworkReader interface only exists to avoid an import cycle with
-// the colrpc file. This interface should only be implemented by the inbox.
-type NetworkReader interface {
-	GetBytesRead() int64
-	GetRowsRead() int64
-	GetDeserializationTime() time.Duration
-	GetNumMessages() int64
-}
-
-// VectorizedStatsCollector is the common interface implemented by collectors.
-type VectorizedStatsCollector interface {
+// vectorizedStatsCollector is the common interface implemented by collectors.
+type vectorizedStatsCollector interface {
 	colexecbase.Operator
-	OutputStats(ctx context.Context)
+	outputStats(ctx context.Context)
 }
 
-// ChildStatsCollector gives access to the stopwatches of a
-// VectorizedStatsCollector's childStatsCollectors.
-type ChildStatsCollector interface {
+// childStatsCollector gives access to the stopwatches of a
+// vectorizedStatsCollector's childStatsCollectors.
+type childStatsCollector interface {
 	getElapsedTime() time.Duration
 }
 
@@ -67,7 +59,7 @@ type batchInfoCollector struct {
 
 	// childStatsCollectors contains the stats collectors for all of the inputs
 	// to the wrapped operator.
-	childStatsCollectors []ChildStatsCollector
+	childStatsCollectors []childStatsCollector
 }
 
 var _ colexecbase.Operator = &batchInfoCollector{}
@@ -76,7 +68,7 @@ func makeBatchInfoCollector(
 	op colexecbase.Operator,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
-	childStatsCollectors []ChildStatsCollector,
+	childStatsCollectors []childStatsCollector,
 ) batchInfoCollector {
 	if inputWatch == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("input watch is nil"))
@@ -114,25 +106,25 @@ func (bic *batchInfoCollector) finish() (numBatches, numTuples uint64, time time
 	return bic.numBatches, bic.numTuples, tm
 }
 
-// getElapsedTime implements the ChildStatsCollector interface.
+// getElapsedTime implements the childStatsCollector interface.
 func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 	return bic.stopwatch.Elapsed()
 }
 
-// NewVectorizedStatsCollector creates a VectorizedStatsCollector which wraps
+// newVectorizedStatsCollector creates a vectorizedStatsCollector which wraps
 // 'op' that corresponds to a component with either ProcessorID or StreamID 'id'
 // (with 'idTagKey' distinguishing between the two). 'kvReader' is a component
 // (either an operator or a wrapped processor) that performs KV reads that is
 // present in the chain of operators rooted at 'op'.
-func NewVectorizedStatsCollector(
+func newVectorizedStatsCollector(
 	op colexecbase.Operator,
 	kvReader execinfra.KVReader,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
-	inputStatsCollectors []ChildStatsCollector,
-) VectorizedStatsCollector {
+	inputStatsCollectors []childStatsCollector,
+) vectorizedStatsCollector {
 	// TODO(cathymw): Refactor to have specialized stats collectors for
 	// memory/disk stats and IO operators.
 	return &vectorizedStatsCollectorImpl{
@@ -144,7 +136,7 @@ func NewVectorizedStatsCollector(
 }
 
 // vectorizedStatsCollectorImpl is the implementation behind
-// NewVectorizedStatsCollector.
+// newVectorizedStatsCollector.
 type vectorizedStatsCollectorImpl struct {
 	batchInfoCollector
 
@@ -199,36 +191,36 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	return s
 }
 
-// OutputStats is part of the VectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context) {
+// outputStats is part of the vectorizedStatsCollector interface.
+func (vsc *vectorizedStatsCollectorImpl) outputStats(ctx context.Context) {
 	s := vsc.finish()
 	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), s)
 }
 
-// NewNetworkVectorizedStatsCollector creates a new VectorizedStatsCollector
-// for streams. In addition to the base stats, NewNetworkVectorizedStatsCollector
+// newNetworkVectorizedStatsCollector creates a new vectorizedStatsCollector
+// for streams. In addition to the base stats, newNetworkVectorizedStatsCollector
 // collects the network latency for a stream.
-func NewNetworkVectorizedStatsCollector(
+func newNetworkVectorizedStatsCollector(
 	op colexecbase.Operator,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
-	networkReader NetworkReader,
+	inbox *colrpc.Inbox,
 	latency time.Duration,
-) VectorizedStatsCollector {
+) vectorizedStatsCollector {
 	return &networkVectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, nil /* childStatsCollectors */),
-		networkReader:      networkReader,
+		inbox:              inbox,
 		latency:            latency,
 	}
 }
 
 // networkVectorizedStatsCollectorImpl is the implementation behind
-// NewNetworkVectorizedStatsCollector.
+// newNetworkVectorizedStatsCollector.
 type networkVectorizedStatsCollectorImpl struct {
 	batchInfoCollector
 
-	networkReader NetworkReader
-	latency       time.Duration
+	inbox   *colrpc.Inbox
+	latency time.Duration
 }
 
 // finish returns the collected stats.
@@ -239,10 +231,10 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 
 	s.NetRx.Latency.Set(nvsc.latency)
 	s.NetRx.WaitTime.Set(time)
-	s.NetRx.DeserializationTime.Set(nvsc.networkReader.GetDeserializationTime())
-	s.NetRx.TuplesReceived.Set(uint64(nvsc.networkReader.GetRowsRead()))
-	s.NetRx.BytesReceived.Set(uint64(nvsc.networkReader.GetBytesRead()))
-	s.NetRx.MessagesReceived.Set(uint64(nvsc.networkReader.GetNumMessages()))
+	s.NetRx.DeserializationTime.Set(nvsc.inbox.GetDeserializationTime())
+	s.NetRx.TuplesReceived.Set(uint64(nvsc.inbox.GetRowsRead()))
+	s.NetRx.BytesReceived.Set(uint64(nvsc.inbox.GetBytesRead()))
+	s.NetRx.MessagesReceived.Set(uint64(nvsc.inbox.GetNumMessages()))
 
 	s.Output.NumBatches.Set(numBatches)
 	s.Output.NumTuples.Set(numTuples)
@@ -250,8 +242,8 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 	return s
 }
 
-// OutputStats is part of the VectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(ctx context.Context) {
+// outputStats is part of the vectorizedStatsCollector interface.
+func (nvsc *networkVectorizedStatsCollectorImpl) outputStats(ctx context.Context) {
 	s := nvsc.finish()
 	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), s)
 }

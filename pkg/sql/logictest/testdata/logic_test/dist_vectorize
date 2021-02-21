@@ -159,28 +159,28 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colexec.deselectorOp
+    └ *colexecutils.deselectorOp
       └ *colexec.countOp
         └ *colexecmisc.simpleProjectOp
           └ *colexecutils.CancelChecker
@@ -228,7 +228,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
@@ -258,7 +258,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
@@ -288,7 +288,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
@@ -318,7 +318,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 └ Node 5
   └ *colrpc.Outbox
-    └ *colexec.deselectorOp
+    └ *colexecutils.deselectorOp
       └ *colexec.countOp
         └ *colexecmisc.simpleProjectOp
           └ *colexec.diskSpillerBase
