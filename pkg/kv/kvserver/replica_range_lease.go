@@ -942,9 +942,9 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 
 // leaseGoodToGoRLocked verifies that the replica has a lease that is
 // valid, owned by the current replica, and usable to serve requests at
-// the specified timestamp. The method will return the lease status,
-// along with an error indicating whether any of these conditions is
-// unsatisfied. The lease status is either empty or fully populated.
+// the specified timestamp. The method will return the lease status if
+// these conditions are satisfied or an error if they are unsatisfied.
+// The lease status is either empty or fully populated.
 //
 // Latches must be acquired on the range before calling this method.
 // This ensures that callers are properly sequenced with TransferLease
@@ -978,7 +978,7 @@ func (r *Replica) leaseGoodToGoRLocked(
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 	if !st.IsValid() {
 		// Case (2): invalid lease.
-		return st, false, &roachpb.InvalidLeaseError{}
+		return kvserverpb.LeaseStatus{}, false, &roachpb.InvalidLeaseError{}
 	}
 	if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Case (3): not leaseholder.
@@ -1022,7 +1022,7 @@ func (r *Replica) leaseGoodToGoRLocked(
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
 		// to the holder.
-		return st, false, newNotLeaseHolderError(
+		return kvserverpb.LeaseStatus{}, false, newNotLeaseHolderError(
 			st.Lease, r.store.StoreID(), r.descRLocked(), "lease held by different store",
 		)
 	}
