@@ -78,9 +78,9 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		log.Infof(ctx, "%s", tc.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes,
-					tc.expr, false, /* canFallbackToRowexec */
+					tc.expr, false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}
@@ -129,9 +129,9 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 
 	typs := []*types.T{types.Int}
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := createTestProjectingOperator(
+	op, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, source, typs,
-		"abs(@1)" /* projectingExpr */, false, /* canFallbackToRowexec */
+		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
 	op.Init()
@@ -183,7 +183,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	inputCols := []int{0, 1, 2}
-	p := &mockTypeContext{typs: typs}
+	p := &colexectestutils.MockTypeContext{Typs: typs}
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = p
 	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
