@@ -15,6 +15,7 @@ go_library(
         "crossjoiner.go",
         "deselector.go",
         "disk_spiller.go",
+        "distinct.go",
         "external_distinct.go",
         "external_hash_aggregator.go",
         "external_hash_joiner.go",
