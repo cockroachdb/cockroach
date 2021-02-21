@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -86,7 +86,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
@@ -217,7 +217,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
@@ -228,7 +228,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// streaming memory account.
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				var (
-					result *colexec.NewColOperatorResult
+					result *colexecargs.NewColOperatorResult
 					err    error
 				)
 				// The memory error can occur either during planning or during

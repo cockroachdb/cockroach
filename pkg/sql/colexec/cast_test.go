@@ -218,8 +218,8 @@ func createTestCastOperator(
 	// We currently don't support casting to decimal type (other than when
 	// casting from decimal with the same precision), so we will allow falling
 	// back to row-by-row engine.
-	return createTestProjectingOperator(
+	return colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, input, []*types.T{fromTyp},
-		fmt.Sprintf("@1::%s", toTyp.Name()), true, /* canFallbackToRowexec */
+		fmt.Sprintf("@1::%s", toTyp.Name()), true /* canFallbackToRowexec */, testMemAcc,
 	)
 }
