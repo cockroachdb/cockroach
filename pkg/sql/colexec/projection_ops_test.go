@@ -50,9 +50,9 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1}, {2}, {nil}}}, colexectestutils.Tuples{{1, 2}, {2, 3}, {nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return createTestProjectingOperator(
+			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
-				"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
+				"@1 + 1" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 			)
 		})
 }
@@ -72,9 +72,9 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1, 2}, {3, 4}, {5, nil}}}, colexectestutils.Tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return createTestProjectingOperator(
+			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
-				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+				"@1 + @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 			)
 		})
 }
@@ -94,9 +94,9 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, colexectestutils.Tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}}, colexectestutils.OrderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return createTestProjectingOperator(
+			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
-				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+				"@1 / @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 			)
 		})
 }
@@ -240,9 +240,9 @@ func TestRandomComparisons(t *testing.T) {
 				expected[i] = b
 			}
 			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
-			op, err := createTestProjectingOperator(
+			op, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
-				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
+				fmt.Sprintf("@1 %s @2", cmpOp), false /* canFallbackToRowexec */, testMemAcc,
 			)
 			require.NoError(t, err)
 			op.Init()
@@ -384,8 +384,8 @@ func BenchmarkProjOp(b *testing.B) {
 						if rightConst {
 							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
 						}
-						return createTestProjectingOperator(
-							ctx, flowCtx, source, inputTypes, expr, false, /* canFallbackToRowexec */
+						return colexectestutils.CreateTestProjectingOperator(
+							ctx, flowCtx, source, inputTypes, expr, false /* canFallbackToRowexec */, testMemAcc,
 						)
 					}, inputTypes, useSel, hasNulls)
 				}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -204,7 +205,7 @@ type DiskBackedSorterConstructor func(input colexecbase.Operator, inputTypes []*
 func newHashBasedPartitioner(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	name string,
 	inputs []colexecbase.Operator,
 	inputTypes [][]*types.T,
@@ -284,7 +285,7 @@ func newHashBasedPartitioner(
 }
 
 func calculateMaxNumberActivePartitions(
-	flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs, numRequiredActivePartitions int,
+	flowCtx *execinfra.FlowCtx, args *colexecargs.NewColOperatorArgs, numRequiredActivePartitions int,
 ) int {
 	// With the default limit of 256 file descriptors, this results in 16
 	// partitions. This is a hard maximum of partitions that will be used by the

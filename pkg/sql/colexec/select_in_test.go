@@ -217,9 +217,9 @@ func TestProjectInInt64(t *testing.T) {
 		log.Infof(ctx, "%s", c.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					fmt.Sprintf("@1 %s", c.inClause), false, /* canFallbackToRowexec */
+					fmt.Sprintf("@1 %s", c.inClause), false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}

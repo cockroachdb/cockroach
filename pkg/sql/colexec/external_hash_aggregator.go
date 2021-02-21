@@ -13,6 +13,7 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -37,7 +38,7 @@ const (
 // partitioner and the external sort + ordered aggregator as the "fallback".
 func NewExternalHashAggregator(
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,

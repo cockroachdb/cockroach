@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -110,12 +111,12 @@ func wrapRowSources(
 }
 
 type opResult struct {
-	*colexec.NewColOperatorResult
+	*colexecargs.NewColOperatorResult
 }
 
 // resetToState resets r to the state specified in arg. arg may be a shallow
 // copy made at a given point in time.
-func (r *opResult) resetToState(ctx context.Context, arg colexec.NewColOperatorResult) {
+func (r *opResult) resetToState(ctx context.Context, arg colexecargs.NewColOperatorResult) {
 	// MetadataSources are left untouched since there is no need to do any
 	// cleaning there.
 
@@ -353,7 +354,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 func (r opResult) createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
@@ -488,7 +489,7 @@ func (r opResult) createDiskBackedSort(
 func (r opResult) makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	monitorNamePrefix string,
 	factory coldata.ColumnFactory,
 ) colexec.DiskBackedSorterConstructor {
@@ -533,7 +534,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 func (r opResult) createAndWrapRowSource(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	inputs []colexecbase.Operator,
 	inputTypes [][]*types.T,
 	spec *execinfrapb.ProcessorSpec,
@@ -618,9 +619,9 @@ func (r opResult) createAndWrapRowSource(
 
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, args *colexec.NewColOperatorArgs,
-) (_ *colexec.NewColOperatorResult, err error) {
-	result := opResult{NewColOperatorResult: colexec.GetNewColOperatorResult()}
+	ctx context.Context, flowCtx *execinfra.FlowCtx, args *colexecargs.NewColOperatorArgs,
+) (_ *colexecargs.NewColOperatorResult, err error) {
+	result := opResult{NewColOperatorResult: colexecargs.GetNewColOperatorResult()}
 	r := result.NewColOperatorResult
 	// Make sure that we clean up memory monitoring infrastructure in case of an
 	// error or a panic.
@@ -652,7 +653,7 @@ func NewColOperator(
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	if args.ExprHelper == nil {
-		args.ExprHelper = colexec.NewExprHelper()
+		args.ExprHelper = colexecargs.NewExprHelper()
 	}
 
 	if log.V(2) {
@@ -1338,7 +1339,7 @@ func (r opResult) planAndMaybeWrapFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
@@ -1381,7 +1382,7 @@ func (r opResult) planAndMaybeWrapFilter(
 func (r opResult) wrapPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	resultTypes []*types.T,
 	factory coldata.ColumnFactory,
@@ -1406,7 +1407,7 @@ func (r *postProcessResult) planPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
-	args *colexec.NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
 ) error {
@@ -1547,7 +1548,7 @@ func planFilterExpr(
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	helper *colexec.ExprHelper,
+	helper *colexecargs.ExprHelper,
 ) (colexecbase.Operator, error) {
 	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, columnTypes)

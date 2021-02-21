@@ -202,9 +202,9 @@ func TestAndOrOps(t *testing.T) {
 					tc.expected,
 					colexectestutils.OrderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						projOp, err := createTestProjectingOperator(
+						projOp, err := colexectestutils.CreateTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
-							fmt.Sprintf("@1 %s @2", test.operation), false, /* canFallbackToRowexec */
+							fmt.Sprintf("@1 %s @2", test.operation), false /* canFallbackToRowexec */, testMemAcc,
 						)
 						if err != nil {
 							return nil, err
@@ -262,9 +262,9 @@ func benchmarkLogicalProjOp(
 	}
 	typs := []*types.T{types.Bool, types.Bool}
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	logicalProjOp, err := createTestProjectingOperator(
+	logicalProjOp, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, input, typs,
-		fmt.Sprintf("@1 %s @2", operation), false, /* canFallbackToRowexec */
+		fmt.Sprintf("@1 %s @2", operation), false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
 	logicalProjOp.Init()

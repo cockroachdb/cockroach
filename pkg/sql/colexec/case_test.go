@@ -67,9 +67,9 @@ func TestCaseOp(t *testing.T) {
 		},
 	} {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			caseOp, err := createTestProjectingOperator(
+			caseOp, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr,
-				false, /* canFallbackToRowexec */
+				false /* canFallbackToRowexec */, testMemAcc,
 			)
 			if err != nil {
 				return nil, err

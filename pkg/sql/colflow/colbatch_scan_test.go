@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -85,7 +85,7 @@ func TestColBatchScanMeta(t *testing.T) {
 		ResultTypes: rowenc.OneIntCol,
 	}
 
-	args := &colexec.NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                &spec,
 		StreamingMemAccount: testMemAcc,
 	}
@@ -157,7 +157,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
 				}

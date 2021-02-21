@@ -53,9 +53,9 @@ func TestConst(t *testing.T) {
 	for _, tc := range tcs {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					"9" /* projectingExpr */, false, /* canFallbackToRowexec */
+					"9" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}
@@ -90,9 +90,9 @@ func TestConstNull(t *testing.T) {
 	for _, tc := range tcs {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					"NULL::INT" /* projectingExpr */, false, /* canFallbackToRowexec */
+					"NULL::INT" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}

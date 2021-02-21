@@ -158,6 +158,7 @@ ALL_TESTS = [
     "//pkg/sql/colencoding:colencoding_test",
     "//pkg/sql/colexec/colbuilder:colbuilder_test",
     "//pkg/sql/colexec/colexecagg:colexecagg_test",
+    "//pkg/sql/colexec/colexecargs:colexecargs_test",
     "//pkg/sql/colexec/colexechash:colexechash_test",
     "//pkg/sql/colexec/colexectestutils:colexectestutils_test",
     "//pkg/sql/colexec/colexecutils:colexecutils_test",

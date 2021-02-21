@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecargs
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 
 // TestNewColOperator is a test helper that's always aliased to
 // colbuilder.NewColOperator. We inject this at test time, so tests can use
-// NewColOperator from colexec package.
+// NewColOperator from colexec* packages.
 var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
 ) (r *NewColOperatorResult, err error)
 
