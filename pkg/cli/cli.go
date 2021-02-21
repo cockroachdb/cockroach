@@ -250,6 +250,7 @@ func init() {
 	cockroachCmd.AddCommand(
 		startCmd,
 		startSingleNodeCmd,
+		connectCmd,
 		initCmd,
 		certCmd,
 		// TODO(bilal): Uncomment this when the connect command does something useful.
