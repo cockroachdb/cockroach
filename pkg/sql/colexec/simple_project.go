@@ -21,7 +21,7 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 	colexecbase.NonExplainable
 
 	projection []uint32
@@ -32,7 +32,7 @@ type simpleProjectOp struct {
 	numBatchesLoggingThreshold int
 }
 
-var _ closableOperator = &simpleProjectOp{}
+var _ colexecbase.ClosableOperator = &simpleProjectOp{}
 var _ colexecbase.ResettableOperator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
@@ -106,7 +106,7 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		oneInputCloserHelper:       makeOneInputCloserHelper(input),
+		OneInputCloserHelper:       colexecbase.MakeOneInputCloserHelper(input),
 		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,

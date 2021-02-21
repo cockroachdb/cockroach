@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -79,10 +80,10 @@ func GetCastOperator(
 	fromType *types.T,
 	toType *types.T,
 ) (colexecbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, toType, resultIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
-			oneInputCloserHelper: makeOneInputCloserHelper(input),
+			OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 			allocator:            allocator,
 			colIdx:               colIdx,
 			outputIdx:            resultIdx,
@@ -102,7 +103,7 @@ func GetCastOperator(
 				// {{range .RightWidths}}
 				case _RIGHT_TYPE_WIDTH:
 					return &cast_NAMEOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -120,14 +121,14 @@ func GetCastOperator(
 }
 
 type castOpNullAny struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ closableOperator = &castOpNullAny{}
+var _ colexecbase.ClosableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.Input.Init()
@@ -179,7 +180,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 // {{range .RightWidths}}
 
 type cast_NAMEOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -188,7 +189,7 @@ type cast_NAMEOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &cast_NAMEOp{}
-var _ closableOperator = &cast_NAMEOp{}
+var _ colexecbase.ClosableOperator = &cast_NAMEOp{}
 
 func (c *cast_NAMEOp) Init() {
 	c.Input.Init()
