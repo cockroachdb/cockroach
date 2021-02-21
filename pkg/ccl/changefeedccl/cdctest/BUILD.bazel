@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx//:pgx",
     ],
