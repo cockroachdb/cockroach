@@ -147,7 +147,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
+			return NewOrderedSynchronizer(testAllocator, colexecbase.DefaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
 		})
 	}
 }
@@ -188,7 +188,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecbase.DefaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(t, err)
 	op.Init()
 	out := colexectestutils.NewOpTestOutput(op, expected)
@@ -218,7 +218,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecbase.DefaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(b, err)
 	op.Init()
 
