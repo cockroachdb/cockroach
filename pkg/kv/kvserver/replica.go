@@ -1251,7 +1251,8 @@ func (r *Replica) checkExecutionCanProceed(
 			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
 				return st, err
 			}
-			err = nil // ignoring error
+			err = nil                     // ignore error
+			st = kvserverpb.LeaseStatus{} // already empty for follower reads, but be explicit
 		}
 	}
 
