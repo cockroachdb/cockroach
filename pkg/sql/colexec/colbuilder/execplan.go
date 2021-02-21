@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
@@ -254,7 +255,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 				return errors.Newf("aggregate functions used as window functions are not supported")
 			}
 
-			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
+			if _, supported := colexecwindow.SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
 				return errors.Newf("window function %s is not supported", wf.String())
 			}
 		}
@@ -1145,7 +1146,7 @@ func NewColOperator(
 					// distribute). The decision about which kind of partitioner
 					// to use should come from the optimizer.
 					partitionColIdx = int(wf.OutputColIdx)
-					input, err = colexec.NewWindowSortingPartitioner(
+					input, err = colexecwindow.NewWindowSortingPartitioner(
 						streamingAllocator, input, typs,
 						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
 						func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error) {
@@ -1172,9 +1173,9 @@ func NewColOperator(
 				if err != nil {
 					return r, err
 				}
-				if windowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
+				if colexecwindow.WindowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
 					peersColIdx = int(wf.OutputColIdx + tempColOffset)
-					input, err = colexec.NewWindowPeerGrouper(
+					input, err = colexecwindow.NewWindowPeerGrouper(
 						streamingAllocator, input, typs, wf.Ordering.Columns,
 						partitionColIdx, peersColIdx,
 					)
@@ -1187,9 +1188,9 @@ func NewColOperator(
 				outputIdx := int(wf.OutputColIdx + tempColOffset)
 				switch windowFn {
 				case execinfrapb.WindowerSpec_ROW_NUMBER:
-					result.Op = colexec.NewRowNumberOperator(streamingAllocator, input, outputIdx, partitionColIdx)
+					result.Op = colexecwindow.NewRowNumberOperator(streamingAllocator, input, outputIdx, partitionColIdx)
 				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-					result.Op, err = colexec.NewRankOperator(
+					result.Op, err = colexecwindow.NewRankOperator(
 						streamingAllocator, input, windowFn, wf.Ordering.Columns,
 						outputIdx, partitionColIdx, peersColIdx,
 					)
@@ -1203,7 +1204,7 @@ func NewColOperator(
 						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, memAccName), factory,
 					)
 					diskAcc := result.createDiskAccount(ctx, flowCtx, memAccName)
-					result.Op, err = colexec.NewRelativeRankOperator(
+					result.Op, err = colexecwindow.NewRelativeRankOperator(
 						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg,
 						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
 						outputIdx, partitionColIdx, peersColIdx, diskAcc,

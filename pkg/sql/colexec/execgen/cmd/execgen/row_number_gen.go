@@ -21,7 +21,7 @@ type rowNumberTmplInfo struct {
 	String       string
 }
 
-const rowNumberTmpl = "pkg/sql/colexec/row_number_tmpl.go"
+const rowNumberTmpl = "pkg/sql/colexec/colexecwindow/row_number_tmpl.go"
 
 func genRowNumberOp(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_ROW_NUMBER_STRING", "{{.String}}")
