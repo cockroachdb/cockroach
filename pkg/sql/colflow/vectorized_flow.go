@@ -320,7 +320,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	inputs []colexecbase.Operator,
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
-) (colexec.VectorizedStatsCollector, error) {
+) (vectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
@@ -330,15 +330,15 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 			memMonitors = append(memMonitors, m)
 		}
 	}
-	inputStatsCollectors := make([]colexec.ChildStatsCollector, len(inputs))
+	inputStatsCollectors := make([]childStatsCollector, len(inputs))
 	for i, input := range inputs {
-		sc, ok := input.(colexec.ChildStatsCollector)
+		sc, ok := input.(childStatsCollector)
 		if !ok {
 			return nil, errors.New("unexpectedly an input is not collecting stats")
 		}
 		inputStatsCollectors[i] = sc
 	}
-	vsc := colexec.NewVectorizedStatsCollector(
+	vsc := newVectorizedStatsCollector(
 		op, kvReader, component, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
@@ -350,11 +350,10 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 // colexec.NetworkVectorizedStatsCollector that wraps op.
 func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 	inbox *colrpc.Inbox, component execinfrapb.ComponentID, latency time.Duration,
-) (colexec.VectorizedStatsCollector, error) {
+) (vectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	op := colexecbase.Operator(inbox)
-	networkReader := colexec.NetworkReader(inbox)
-	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, component, inputWatch, networkReader, latency)
+	nvsc := newNetworkVectorizedStatsCollector(op, component, inputWatch, inbox, latency)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
 }
@@ -362,10 +361,10 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 // finishVectorizedStatsCollectors finishes the given stats collectors and
 // outputs their stats to the trace contained in the ctx's span.
 func finishVectorizedStatsCollectors(
-	ctx context.Context, vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
+	ctx context.Context, vectorizedStatsCollectors []vectorizedStatsCollector,
 ) {
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.OutputStats(ctx)
+		vsc.outputStats(ctx)
 	}
 }
 
@@ -442,7 +441,7 @@ type vectorizedFlowCreator struct {
 	streamIDToSpecIdx              map[execinfrapb.StreamID]int
 	recordingStats                 bool
 	isGatewayNode                  bool
-	vectorizedStatsCollectorsQueue []colexec.VectorizedStatsCollector
+	vectorizedStatsCollectorsQueue []vectorizedStatsCollector
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
@@ -948,7 +947,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
-			vscs := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscs := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 			metadataSourcesQueue = append(
 				metadataSourcesQueue,
@@ -991,7 +990,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
-			vscq := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscq := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			outputStatsToTrace = func() *execinfrapb.ComponentStats {
 				// TODO(radu): this is a sketchy way to use this infrastructure. We
 				// aren't actually returning any stats, but we are creating and closing
@@ -1129,10 +1128,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
-				result.Op = colexec.NewInvariantsChecker(result.Op)
+				result.Op = newInvariantsChecker(result.Op)
 			}
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
-				result.Op = colexec.NewPanicInjector(result.Op)
+				result.Op = newPanicInjector(result.Op)
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
