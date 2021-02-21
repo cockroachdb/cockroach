@@ -71,8 +71,7 @@ func maybeDescriptorChangedError(
 		var actualDesc roachpb.RangeDescriptor
 		if !detail.ActualValue.IsPresent() {
 			return true, nil
-		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
-			desc.RangeID == actualDesc.RangeID && !desc.Equal(&actualDesc) {
+		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil && !desc.Equal(&actualDesc) {
 			return true, &actualDesc
 		}
 	}
