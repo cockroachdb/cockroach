@@ -348,6 +348,9 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else if resultIsError(t.Result, `unable to find store \d+ in range`) {
 			// A lease transfer that races with a replica removal may find that
 			// the store it was targeting is no longer part of the range.
+		} else if resultIsError(t.Result, `liveness record not found in cache`) {
+			// If the existing leaseholder has not yet heard about the transfer
+			// target's liveness record through gossip, it will return an error.
 		} else {
 			v.failIfError(op, t.Result)
 		}
