@@ -60,6 +60,7 @@ ALL_TESTS = [
     "//pkg/geo/geographiclib:geographiclib_test",
     "//pkg/geo/geoindex:geoindex_test",
     "//pkg/geo/geomfn:geomfn_test",
+    "//pkg/geo/geopb:geopb_test",
     "//pkg/geo/geoproj:geoproj_test",
     "//pkg/geo/geoprojbase:geoprojbase_test",
     "//pkg/geo/geos:geos_test",

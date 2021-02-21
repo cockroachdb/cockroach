@@ -22,7 +22,6 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/geo/wkt",
         "//pkg/util",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_geo//r1",
