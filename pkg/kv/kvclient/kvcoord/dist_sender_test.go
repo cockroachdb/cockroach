@@ -721,8 +721,8 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	leaseHolders := testUserRangeDescriptor3Replicas.InternalReplicas
-	for _, n := range leaseHolders {
+	repls := testUserRangeDescriptor3Replicas.InternalReplicas
+	for _, n := range repls {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
 			newNodeDesc(n.NodeID),
@@ -742,13 +742,13 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			if seq > 0 {
 				lease = &roachpb.Lease{
 					Sequence: seq,
-					Replica:  leaseHolders[int(seq)%2],
+					Replica:  repls[int(seq)%2],
 				}
 			}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{
-					Replica:     leaseHolders[int(seq)%2],
-					LeaseHolder: &leaseHolders[(int(seq)+1)%2],
+					Replica:     repls[int(seq)%2],
+					LeaseHolder: &repls[(int(seq)+1)%2],
 					Lease:       lease,
 				})
 			return reply, nil
@@ -795,6 +795,85 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead verifies that the DistSender
+// does not back off immediately upon receiving a NotLeaseHolderErrors when having
+// attempted a follower read, even though the NotLeaseHolderError superficially
+// looks to the DistSender like the follower had a stale lease.
+func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	old := CanSendToFollower
+	defer func() { CanSendToFollower = old }()
+	CanSendToFollower = func(
+		_ uuid.UUID,
+		_ *cluster.Settings,
+		_ *hlc.Clock,
+		_ roachpb.RangeClosedTimestampPolicy,
+		ba roachpb.BatchRequest,
+	) bool {
+		return true
+	}
+
+	var sentTo []roachpb.NodeID
+	lease := roachpb.Lease{
+		Replica:  testUserRangeDescriptor3Replicas.InternalReplicas[1],
+		Sequence: 1,
+	}
+	testFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		sentTo = append(sentTo, ba.Replica.NodeID)
+		br := ba.CreateReply()
+		if ba.Replica != lease.Replica {
+			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
+				Replica:     ba.Replica,
+				LeaseHolder: &lease.Replica,
+				Lease:       &lease,
+			})
+		}
+		return br, nil
+	}
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	repls := testUserRangeDescriptor3Replicas.InternalReplicas
+	for _, n := range repls {
+		if err := g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  testUserRangeDescriptor3Replicas,
+		Lease: lease,
+	})
+
+	get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+	_, pErr := kv.SendWrapped(ctx, ds, get)
+	require.Nil(t, pErr)
+	require.Equal(t, []roachpb.NodeID{1, 2}, sentTo)
+	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
 // Test a scenario where a lease indicates a replica that, when contacted,
@@ -3455,8 +3534,8 @@ func TestCanSendToFollower(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	leaseHolders := testUserRangeDescriptor3Replicas.InternalReplicas
-	for _, n := range leaseHolders {
+	repls := testUserRangeDescriptor3Replicas.InternalReplicas
+	for _, n := range repls {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
 			newNodeDesc(n.NodeID),
