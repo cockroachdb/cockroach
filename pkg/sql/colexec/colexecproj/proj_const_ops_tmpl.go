@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecproj
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecprojsel"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -370,7 +371,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		}
 		return &defaultCmp_CONST_SIDEConstProjOp{
 			projConstOpBase:     projConstOpBase,
-			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+			adapter:             colexecprojsel.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
 			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
