@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +33,7 @@ func NewTupleProjOp(
 	input colexecbase.Operator,
 	outputIdx int,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
 		OneInputNode:      colexecbase.NewOneInputNode(input),
 		allocator:         allocator,

@@ -692,7 +692,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			result.Op = colexec.NewNoop(inputs[0])
+			result.Op = colexecbase.NewNoop(inputs[0])
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 
@@ -706,7 +706,7 @@ func NewColOperator(
 					core.Values.NumRows, len(core.Values.Columns),
 				)
 			}
-			result.Op = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows))
+			result.Op = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows))
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
@@ -768,7 +768,7 @@ func NewColOperator(
 				// TableReader, so we end up creating an orphaned colBatchScan.
 				// We should avoid that. Ideally the optimizer would not plan a
 				// scan in this unusual case.
-				result.Op, err = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
+				result.Op, err = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't
 				// panic.
 				result.ColumnTypes = []*types.T{}
@@ -1557,7 +1557,7 @@ func planFilterExpr(
 	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
-		return colexec.NewZeroOp(input), nil
+		return colexecutils.NewZeroOp(input), nil
 	}
 	op, _, filterColumnTypes, err := planSelectionOperators(
 		ctx, evalCtx, expr, columnTypes, input, acc, factory,
@@ -1902,7 +1902,7 @@ func planProjectionOperators(
 		caseOutputIdx := len(columnTypes)
 		// We don't know the schema yet and will update it below, right before
 		// instantiating caseOp. The same goes for subsetEndIdx.
-		schemaEnforcer := colexec.NewBatchSchemaSubsetEnforcer(
+		schemaEnforcer := colexecutils.NewBatchSchemaSubsetEnforcer(
 			allocator, input, nil /* typs */, caseOutputIdx, -1, /* subsetEndIdx */
 		)
 		buffer := colexec.NewBufferOp(schemaEnforcer)
@@ -2195,7 +2195,7 @@ func planLogicalProjectionOp(
 		return nil, resultIdx, typs, err
 	}
 	allocator := colmem.NewAllocator(ctx, acc, factory)
-	input = colexec.NewBatchSchemaSubsetEnforcer(allocator, input, typs, resultIdx, len(typs))
+	input = colexecutils.NewBatchSchemaSubsetEnforcer(allocator, input, typs, resultIdx, len(typs))
 	switch expr.(type) {
 	case *tree.AndExpr:
 		op, err = colexec.NewAndProjOp(

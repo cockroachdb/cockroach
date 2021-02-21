@@ -208,7 +208,7 @@ func _COMPUTE_PEER_GROUPS_SIZES(_HAS_SEL bool) { // */}}
 
 type relativeRankInitFields struct {
 	rankInitFields
-	closerHelper
+	colexecbase.CloserHelper
 
 	state        relativeRankState
 	memoryLimit  int64
@@ -274,7 +274,7 @@ type _RELATIVE_RANK_STRINGOp struct {
 	output         coldata.Batch
 }
 
-var _ closableOperator = &_RELATIVE_RANK_STRINGOp{}
+var _ colexecbase.ClosableOperator = &_RELATIVE_RANK_STRINGOp{}
 
 func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	r.Input.Init()
@@ -624,7 +624,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
-	if !r.close() {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

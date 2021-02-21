@@ -115,7 +115,7 @@ const ExternalSorterMinPartitions = 3
 type externalSorter struct {
 	colexecbase.OneInputNode
 	colexecbase.NonExplainable
-	closerHelper
+	colexecbase.CloserHelper
 
 	// mergeUnlimitedAllocator is used to track the memory under the batches
 	// dequeued from partitions during the merge operation.
@@ -185,7 +185,7 @@ type externalSorter struct {
 }
 
 var _ colexecbase.ResettableOperator = &externalSorter{}
-var _ closableOperator = &externalSorter{}
+var _ colexecbase.ClosableOperator = &externalSorter{}
 
 // NewExternalSorter returns a disk-backed general sort operator.
 // - unlimitedAllocators must have been created with a memory account derived
@@ -505,7 +505,7 @@ func (s *externalSorter) Reset(ctx context.Context) {
 		colexecerror.InternalError(err)
 	}
 	// Reset closed so that the sorter may be closed again.
-	s.closed = false
+	s.Closed = false
 	s.firstPartitionIdx = 0
 	s.numPartitions = 0
 	// Note that we consciously do not reset maxNumberPartitions and
@@ -514,7 +514,7 @@ func (s *externalSorter) Reset(ctx context.Context) {
 }
 
 func (s *externalSorter) Close(ctx context.Context) error {
-	if !s.close() {
+	if !s.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

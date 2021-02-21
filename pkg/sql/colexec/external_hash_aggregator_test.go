@@ -190,7 +190,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							// signatures of the aggregator constructors, we
 							// wrap it with a noop operator. It is ok for the
 							// purposes of this benchmark.
-							return NewNoop(op), err
+							return colexecbase.NewNoop(op), err
 						},
 						name: fmt.Sprintf("spilled=%t", spillForced),
 					},

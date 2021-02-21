@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -38,10 +39,10 @@ func GetCastOperator(
 	fromType *types.T,
 	toType *types.T,
 ) (colexecbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, toType, resultIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
-			oneInputCloserHelper: makeOneInputCloserHelper(input),
+			OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 			allocator:            allocator,
 			colIdx:               colIdx,
 			outputIdx:            resultIdx,
@@ -59,7 +60,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castBoolBoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -71,7 +72,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castBoolFloat64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -82,7 +83,7 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castBoolInt16Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -90,7 +91,7 @@ func GetCastOperator(
 					}, nil
 				case 32:
 					return &castBoolInt32Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -99,7 +100,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castBoolInt64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -118,7 +119,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castDecimalBoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -130,7 +131,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castDecimalDecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -147,7 +148,7 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castInt16Int16Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -155,7 +156,7 @@ func GetCastOperator(
 					}, nil
 				case 32:
 					return &castInt16Int32Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -164,7 +165,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt16Int64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -176,7 +177,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt16BoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -188,7 +189,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt16DecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -200,7 +201,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt16Float64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -214,7 +215,7 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castInt32Int16Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -222,7 +223,7 @@ func GetCastOperator(
 					}, nil
 				case 32:
 					return &castInt32Int32Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -231,7 +232,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt32Int64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -243,7 +244,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt32BoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -255,7 +256,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt32DecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -267,7 +268,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt32Float64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -282,7 +283,7 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castInt64Int16Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -290,7 +291,7 @@ func GetCastOperator(
 					}, nil
 				case 32:
 					return &castInt64Int32Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -299,7 +300,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt64Int64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -311,7 +312,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt64BoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -323,7 +324,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt64DecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -335,7 +336,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castInt64Float64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -354,7 +355,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castFloat64Float64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -366,7 +367,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castFloat64BoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -378,7 +379,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castFloat64DecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -389,7 +390,7 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castFloat64Int16Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -397,7 +398,7 @@ func GetCastOperator(
 					}, nil
 				case 32:
 					return &castFloat64Int32Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -406,7 +407,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castFloat64Int64Op{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -425,7 +426,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castDatumBoolOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -437,7 +438,7 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castDatumDatumOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -451,14 +452,14 @@ func GetCastOperator(
 }
 
 type castOpNullAny struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ closableOperator = &castOpNullAny{}
+var _ colexecbase.ClosableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.Input.Init()
@@ -505,7 +506,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 // probably require changing the way we handle cast overloads as well.
 
 type castBoolBoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -514,7 +515,7 @@ type castBoolBoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castBoolBoolOp{}
-var _ closableOperator = &castBoolBoolOp{}
+var _ colexecbase.ClosableOperator = &castBoolBoolOp{}
 
 func (c *castBoolBoolOp) Init() {
 	c.Input.Init()
@@ -610,7 +611,7 @@ func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castBoolFloat64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -619,7 +620,7 @@ type castBoolFloat64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castBoolFloat64Op{}
-var _ closableOperator = &castBoolFloat64Op{}
+var _ colexecbase.ClosableOperator = &castBoolFloat64Op{}
 
 func (c *castBoolFloat64Op) Init() {
 	c.Input.Init()
@@ -735,7 +736,7 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castBoolInt16Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -744,7 +745,7 @@ type castBoolInt16Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castBoolInt16Op{}
-var _ closableOperator = &castBoolInt16Op{}
+var _ colexecbase.ClosableOperator = &castBoolInt16Op{}
 
 func (c *castBoolInt16Op) Init() {
 	c.Input.Init()
@@ -860,7 +861,7 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castBoolInt32Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -869,7 +870,7 @@ type castBoolInt32Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castBoolInt32Op{}
-var _ closableOperator = &castBoolInt32Op{}
+var _ colexecbase.ClosableOperator = &castBoolInt32Op{}
 
 func (c *castBoolInt32Op) Init() {
 	c.Input.Init()
@@ -985,7 +986,7 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castBoolInt64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -994,7 +995,7 @@ type castBoolInt64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castBoolInt64Op{}
-var _ closableOperator = &castBoolInt64Op{}
+var _ colexecbase.ClosableOperator = &castBoolInt64Op{}
 
 func (c *castBoolInt64Op) Init() {
 	c.Input.Init()
@@ -1110,7 +1111,7 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castDecimalBoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1119,7 +1120,7 @@ type castDecimalBoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castDecimalBoolOp{}
-var _ closableOperator = &castDecimalBoolOp{}
+var _ colexecbase.ClosableOperator = &castDecimalBoolOp{}
 
 func (c *castDecimalBoolOp) Init() {
 	c.Input.Init()
@@ -1215,7 +1216,7 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castDecimalDecimalOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1224,7 +1225,7 @@ type castDecimalDecimalOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castDecimalDecimalOp{}
-var _ closableOperator = &castDecimalDecimalOp{}
+var _ colexecbase.ClosableOperator = &castDecimalDecimalOp{}
 
 func (c *castDecimalDecimalOp) Init() {
 	c.Input.Init()
@@ -1340,7 +1341,7 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16Int16Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1349,7 +1350,7 @@ type castInt16Int16Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16Int16Op{}
-var _ closableOperator = &castInt16Int16Op{}
+var _ colexecbase.ClosableOperator = &castInt16Int16Op{}
 
 func (c *castInt16Int16Op) Init() {
 	c.Input.Init()
@@ -1445,7 +1446,7 @@ func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16Int32Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1454,7 +1455,7 @@ type castInt16Int32Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16Int32Op{}
-var _ closableOperator = &castInt16Int32Op{}
+var _ colexecbase.ClosableOperator = &castInt16Int32Op{}
 
 func (c *castInt16Int32Op) Init() {
 	c.Input.Init()
@@ -1558,7 +1559,7 @@ func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16Int64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1567,7 +1568,7 @@ type castInt16Int64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16Int64Op{}
-var _ closableOperator = &castInt16Int64Op{}
+var _ colexecbase.ClosableOperator = &castInt16Int64Op{}
 
 func (c *castInt16Int64Op) Init() {
 	c.Input.Init()
@@ -1671,7 +1672,7 @@ func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16BoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1680,7 +1681,7 @@ type castInt16BoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16BoolOp{}
-var _ closableOperator = &castInt16BoolOp{}
+var _ colexecbase.ClosableOperator = &castInt16BoolOp{}
 
 func (c *castInt16BoolOp) Init() {
 	c.Input.Init()
@@ -1784,7 +1785,7 @@ func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16DecimalOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1793,7 +1794,7 @@ type castInt16DecimalOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16DecimalOp{}
-var _ closableOperator = &castInt16DecimalOp{}
+var _ colexecbase.ClosableOperator = &castInt16DecimalOp{}
 
 func (c *castInt16DecimalOp) Init() {
 	c.Input.Init()
@@ -1913,7 +1914,7 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt16Float64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -1922,7 +1923,7 @@ type castInt16Float64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt16Float64Op{}
-var _ closableOperator = &castInt16Float64Op{}
+var _ colexecbase.ClosableOperator = &castInt16Float64Op{}
 
 func (c *castInt16Float64Op) Init() {
 	c.Input.Init()
@@ -2026,7 +2027,7 @@ func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32Int16Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2035,7 +2036,7 @@ type castInt32Int16Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32Int16Op{}
-var _ closableOperator = &castInt32Int16Op{}
+var _ colexecbase.ClosableOperator = &castInt32Int16Op{}
 
 func (c *castInt32Int16Op) Init() {
 	c.Input.Init()
@@ -2139,7 +2140,7 @@ func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32Int32Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2148,7 +2149,7 @@ type castInt32Int32Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32Int32Op{}
-var _ closableOperator = &castInt32Int32Op{}
+var _ colexecbase.ClosableOperator = &castInt32Int32Op{}
 
 func (c *castInt32Int32Op) Init() {
 	c.Input.Init()
@@ -2244,7 +2245,7 @@ func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32Int64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2253,7 +2254,7 @@ type castInt32Int64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32Int64Op{}
-var _ closableOperator = &castInt32Int64Op{}
+var _ colexecbase.ClosableOperator = &castInt32Int64Op{}
 
 func (c *castInt32Int64Op) Init() {
 	c.Input.Init()
@@ -2357,7 +2358,7 @@ func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32BoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2366,7 +2367,7 @@ type castInt32BoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32BoolOp{}
-var _ closableOperator = &castInt32BoolOp{}
+var _ colexecbase.ClosableOperator = &castInt32BoolOp{}
 
 func (c *castInt32BoolOp) Init() {
 	c.Input.Init()
@@ -2470,7 +2471,7 @@ func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32DecimalOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2479,7 +2480,7 @@ type castInt32DecimalOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32DecimalOp{}
-var _ closableOperator = &castInt32DecimalOp{}
+var _ colexecbase.ClosableOperator = &castInt32DecimalOp{}
 
 func (c *castInt32DecimalOp) Init() {
 	c.Input.Init()
@@ -2599,7 +2600,7 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt32Float64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2608,7 +2609,7 @@ type castInt32Float64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt32Float64Op{}
-var _ closableOperator = &castInt32Float64Op{}
+var _ colexecbase.ClosableOperator = &castInt32Float64Op{}
 
 func (c *castInt32Float64Op) Init() {
 	c.Input.Init()
@@ -2712,7 +2713,7 @@ func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64Int16Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2721,7 +2722,7 @@ type castInt64Int16Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64Int16Op{}
-var _ closableOperator = &castInt64Int16Op{}
+var _ colexecbase.ClosableOperator = &castInt64Int16Op{}
 
 func (c *castInt64Int16Op) Init() {
 	c.Input.Init()
@@ -2825,7 +2826,7 @@ func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64Int32Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2834,7 +2835,7 @@ type castInt64Int32Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64Int32Op{}
-var _ closableOperator = &castInt64Int32Op{}
+var _ colexecbase.ClosableOperator = &castInt64Int32Op{}
 
 func (c *castInt64Int32Op) Init() {
 	c.Input.Init()
@@ -2938,7 +2939,7 @@ func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64Int64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -2947,7 +2948,7 @@ type castInt64Int64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64Int64Op{}
-var _ closableOperator = &castInt64Int64Op{}
+var _ colexecbase.ClosableOperator = &castInt64Int64Op{}
 
 func (c *castInt64Int64Op) Init() {
 	c.Input.Init()
@@ -3043,7 +3044,7 @@ func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64BoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3052,7 +3053,7 @@ type castInt64BoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64BoolOp{}
-var _ closableOperator = &castInt64BoolOp{}
+var _ colexecbase.ClosableOperator = &castInt64BoolOp{}
 
 func (c *castInt64BoolOp) Init() {
 	c.Input.Init()
@@ -3156,7 +3157,7 @@ func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64DecimalOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3165,7 +3166,7 @@ type castInt64DecimalOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64DecimalOp{}
-var _ closableOperator = &castInt64DecimalOp{}
+var _ colexecbase.ClosableOperator = &castInt64DecimalOp{}
 
 func (c *castInt64DecimalOp) Init() {
 	c.Input.Init()
@@ -3285,7 +3286,7 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castInt64Float64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3294,7 +3295,7 @@ type castInt64Float64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castInt64Float64Op{}
-var _ closableOperator = &castInt64Float64Op{}
+var _ colexecbase.ClosableOperator = &castInt64Float64Op{}
 
 func (c *castInt64Float64Op) Init() {
 	c.Input.Init()
@@ -3398,7 +3399,7 @@ func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64Float64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3407,7 +3408,7 @@ type castFloat64Float64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64Float64Op{}
-var _ closableOperator = &castFloat64Float64Op{}
+var _ colexecbase.ClosableOperator = &castFloat64Float64Op{}
 
 func (c *castFloat64Float64Op) Init() {
 	c.Input.Init()
@@ -3503,7 +3504,7 @@ func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64BoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3512,7 +3513,7 @@ type castFloat64BoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64BoolOp{}
-var _ closableOperator = &castFloat64BoolOp{}
+var _ colexecbase.ClosableOperator = &castFloat64BoolOp{}
 
 func (c *castFloat64BoolOp) Init() {
 	c.Input.Init()
@@ -3616,7 +3617,7 @@ func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64DecimalOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3625,7 +3626,7 @@ type castFloat64DecimalOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64DecimalOp{}
-var _ closableOperator = &castFloat64DecimalOp{}
+var _ colexecbase.ClosableOperator = &castFloat64DecimalOp{}
 
 func (c *castFloat64DecimalOp) Init() {
 	c.Input.Init()
@@ -3753,7 +3754,7 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64Int16Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3762,7 +3763,7 @@ type castFloat64Int16Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64Int16Op{}
-var _ closableOperator = &castFloat64Int16Op{}
+var _ colexecbase.ClosableOperator = &castFloat64Int16Op{}
 
 func (c *castFloat64Int16Op) Init() {
 	c.Input.Init()
@@ -3878,7 +3879,7 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64Int32Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -3887,7 +3888,7 @@ type castFloat64Int32Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64Int32Op{}
-var _ closableOperator = &castFloat64Int32Op{}
+var _ colexecbase.ClosableOperator = &castFloat64Int32Op{}
 
 func (c *castFloat64Int32Op) Init() {
 	c.Input.Init()
@@ -4003,7 +4004,7 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castFloat64Int64Op struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -4012,7 +4013,7 @@ type castFloat64Int64Op struct {
 }
 
 var _ colexecbase.ResettableOperator = &castFloat64Int64Op{}
-var _ closableOperator = &castFloat64Int64Op{}
+var _ colexecbase.ClosableOperator = &castFloat64Int64Op{}
 
 func (c *castFloat64Int64Op) Init() {
 	c.Input.Init()
@@ -4128,7 +4129,7 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 }
 
 type castDatumBoolOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -4137,7 +4138,7 @@ type castDatumBoolOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castDatumBoolOp{}
-var _ closableOperator = &castDatumBoolOp{}
+var _ colexecbase.ClosableOperator = &castDatumBoolOp{}
 
 func (c *castDatumBoolOp) Init() {
 	c.Input.Init()
@@ -4265,7 +4266,7 @@ func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type castDatumDatumOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -4274,7 +4275,7 @@ type castDatumDatumOp struct {
 }
 
 var _ colexecbase.ResettableOperator = &castDatumDatumOp{}
-var _ closableOperator = &castDatumDatumOp{}
+var _ colexecbase.ClosableOperator = &castDatumDatumOp{}
 
 func (c *castDatumDatumOp) Init() {
 	c.Input.Init()

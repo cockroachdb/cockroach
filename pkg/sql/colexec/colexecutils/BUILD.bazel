@@ -4,6 +4,7 @@ go_library(
     name = "colexecutils",
     srcs = [
         "cancel_checker.go",
+        "operator.go",
         "spilling_queue.go",
         "utils.go",
     ],
