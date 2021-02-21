@@ -17,13 +17,14 @@
 //
 // */}}
 
-package colexec
+package colexecproj
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +40,7 @@ type defaultCmp_KINDProjOp struct {
 	projOpBase
 	// {{end}}
 
-	adapter             comparisonExprAdapter
+	adapter             colexeccmp.ComparisonExprAdapter
 	toDatumConverter    *colconv.VecToDatumConverter
 	datumToVecConverter func(tree.Datum) interface{}
 }
@@ -77,10 +78,10 @@ func (d *defaultCmp_KINDProjOp) Next(ctx context.Context) coldata.Batch {
 			// is no need to check whether sel is non-nil.
 			// {{if .IsRightConst}}
 			//gcassert:bce
-			res, err := d.adapter.eval(nonConstColumn[i], d.constArg)
+			res, err := d.adapter.Eval(nonConstColumn[i], d.constArg)
 			// {{else}}
 			//gcassert:bce
-			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
 			// {{end}}
 			if err != nil {
 				colexecerror.ExpectedError(err)

@@ -25,8 +25,7 @@ import (
 // complexity of the LIKE pattern.
 //
 // likeTemplate needs to be used as a format string expecting exactly one %s
-// argument which specifies the name of the template (either "selConstOp" or
-// "projConstOp") to be used for actual code generation.
+// arguments that describes the type of the operator (either "sel" or "proj").
 const likeTemplate = `
 // Copyright 2019 The Cockroach Authors.
 //
@@ -38,7 +37,7 @@ const likeTemplate = `
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexec%[1]s
 
 import (
 	"bytes"
@@ -49,22 +48,22 @@ import (
 )
 
 {{range .}}
-{{template "%s" .}}
+{{template "%[1]sConstOp" .}}
 {{end}}
 `
 
 func genLikeOps(
 	tmplGetter func(inputFileContents string) (*template.Template, error),
-	// templateName is the name of the template to be used (either "selConstOp"
-	// or "projConstOp").
-	templateName string,
+	// opType is the type of the operator to be generated (either "sel" or
+	// "proj").
+	opType string,
 ) func(string, io.Writer) error {
 	return func(inputFileContents string, wr io.Writer) error {
 		tmpl, err := tmplGetter(inputFileContents)
 		if err != nil {
 			return err
 		}
-		tmpl, err = tmpl.Parse(fmt.Sprintf(likeTemplate, templateName))
+		tmpl, err = tmpl.Parse(fmt.Sprintf(likeTemplate, opType))
 		if err != nil {
 			return err
 		}
@@ -148,6 +147,6 @@ func init() {
 		projTemplate := replaceProjConstTmplVariables(inputFileContents, false /* isConstLeft */)
 		return template.New("proj_like_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(projTemplate)
 	}
-	registerGenerator(genLikeOps(getProjectionOpsTmpl, "projConstOp"), "proj_like_ops.eg.go", projConstOpsTmpl)
-	registerGenerator(genLikeOps(getSelectionOpsTmpl, "selConstOp"), "sel_like_ops.eg.go", selectionOpsTmpl)
+	registerGenerator(genLikeOps(getProjectionOpsTmpl, "proj"), "proj_like_ops.eg.go", projConstOpsTmpl)
+	registerGenerator(genLikeOps(getSelectionOpsTmpl, "sel"), "sel_like_ops.eg.go", selectionOpsTmpl)
 }

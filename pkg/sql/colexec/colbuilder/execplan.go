@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -1694,7 +1696,7 @@ func planSelectionOperators(
 			switch cmpOp {
 			case tree.Like, tree.NotLike:
 				negate := cmpOp == tree.NotLike
-				op, err = colexec.GetLikeOperator(
+				op, err = colexecsel.GetLikeOperator(
 					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
 				)
 			case tree.In, tree.NotIn:
@@ -1725,7 +1727,7 @@ func planSelectionOperators(
 			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other selection operators.
-				op, err = colexec.GetSelectionConstOperator(
+				op, err = colexecsel.GetSelectionConstOperator(
 					cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
 				)
 			}
@@ -1737,7 +1739,7 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		op, err = colexec.GetSelectionOperator(
+		op, err = colexecsel.GetSelectionOperator(
 			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
 		)
 		return op, resultIdx, ct, err
@@ -2060,7 +2062,7 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
-		op, err = colexec.GetProjectionLConstOperator(
+		op, err = colexecproj.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
 			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 		)
@@ -2092,7 +2094,7 @@ func planProjectionExpr(
 			switch projOp {
 			case tree.Like, tree.NotLike:
 				negate := projOp == tree.NotLike
-				op, err = colexec.GetLikeProjectionOperator(
+				op, err = colexecproj.GetLikeProjectionOperator(
 					allocator, evalCtx, input, leftIdx, resultIdx,
 					string(tree.MustBeDString(rConstArg)), negate,
 				)
@@ -2126,7 +2128,7 @@ func planProjectionExpr(
 			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other projection operators.
-				op, err = colexec.GetProjectionRConstOperator(
+				op, err = colexecproj.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
 					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 				)
@@ -2141,7 +2143,7 @@ func planProjectionExpr(
 				return nil, resultIdx, nil, err
 			}
 			resultIdx = len(typs)
-			op, err = colexec.GetProjectionOperator(
+			op, err = colexecproj.GetProjectionOperator(
 				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
 				resultIdx, evalCtx, binFn, cmpExpr,
 			)

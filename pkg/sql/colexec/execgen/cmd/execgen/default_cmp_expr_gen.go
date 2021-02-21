@@ -22,7 +22,7 @@ type defaultCmpExprTmplInfo struct {
 	Negate       bool
 }
 
-const defaultCmpExprTmpl = "pkg/sql/colexec/default_cmp_expr_tmpl.go"
+const defaultCmpExprTmpl = "pkg/sql/colexec/colexeccmp/default_cmp_expr_tmpl.go"
 
 func genDefaultCmpExpr(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(
