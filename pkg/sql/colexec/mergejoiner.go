@@ -458,7 +458,7 @@ func newMergeJoinBase(
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
 	twoInputNode
-	closerHelper
+	colexecbase.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
 	memoryLimit        int64
@@ -774,7 +774,7 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 }
 
 func (o *mergeJoinBase) Close(ctx context.Context) error {
-	if !o.close() {
+	if !o.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +37,7 @@ import (
 func NewRowNumberOperator(
 	allocator *colmem.Allocator, input colexecbase.Operator, outputColIdx int, partitionColIdx int,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	base := rowNumberBase{
 		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,

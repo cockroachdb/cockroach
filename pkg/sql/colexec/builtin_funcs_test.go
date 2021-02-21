@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -174,7 +175,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	batch.SetLength(coldata.BatchSize())
 	var source colexecbase.Operator
 	source = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source = newVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
+	source = colexecutils.NewVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
 
 	// Set up the default operator.
 	expr, err := parser.ParseExpr("substring(@1, @2, @3)")

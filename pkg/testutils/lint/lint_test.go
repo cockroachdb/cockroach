@@ -1751,11 +1751,11 @@ func TestLint(t *testing.T) {
 			"grep",
 			"-nE",
 			// We prohibit usage of Allocator.MaybeAppendColumn outside of
-			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
+			// vectorTypeEnforcer and BatchSchemaPrefixEnforcer.
 			`(MaybeAppendColumn)\(`,
 			"--",
 			"sql/col*",
-			":!sql/colexec/operator.go",
+			":!sql/colexec/colexecutils/operator.go",
 			":!sql/colmem/allocator.go",
 			":!sql/colmem/allocator_test.go",
 		)
@@ -1768,8 +1768,8 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colexec.vectorTypeEnforcer "+
-				"or colexec.batchSchemaPrefixEnforcer", s)
+			t.Errorf("\n%s <- forbidden; use colexecutils.vectorTypeEnforcer "+
+				"or colexecutils.BatchSchemaPrefixEnforcer", s)
 		}); err != nil {
 			t.Error(err)
 		}
