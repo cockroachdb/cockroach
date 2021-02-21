@@ -75,7 +75,7 @@ type crossJoiner struct {
 	isLeftAllNulls, isRightAllNulls bool
 }
 
-var _ closableOperator = &crossJoiner{}
+var _ colexecbase.ClosableOperator = &crossJoiner{}
 var _ colexecbase.ResettableOperator = &crossJoiner{}
 
 func (c *crossJoiner) Init() {

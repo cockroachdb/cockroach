@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,7 +41,7 @@ func NewIsNullProjOp(
 	negate bool,
 	isTupleNull bool,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
 		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,

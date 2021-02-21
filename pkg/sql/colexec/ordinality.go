@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,7 +39,7 @@ var _ colexecbase.Operator = &ordinalityOp{}
 func NewOrdinalityOp(
 	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Int, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputIdx)
 	c := &ordinalityOp{
 		OneInputNode: colexecbase.NewOneInputNode(input),
 		allocator:    allocator,

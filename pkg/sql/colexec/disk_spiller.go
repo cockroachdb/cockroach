@@ -150,10 +150,10 @@ func NewTwoInputDiskSpiller(
 	return &diskSpillerBase{
 		inputs:                 []colexecbase.Operator{inputOne, inputTwo},
 		inMemoryOp:             inMemoryOp,
-		inMemoryOpInitStatus:   OperatorNotInitialized,
+		inMemoryOpInitStatus:   colexecbase.OperatorNotInitialized,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
-		distBackedOpInitStatus: OperatorNotInitialized,
+		distBackedOpInitStatus: colexecbase.OperatorNotInitialized,
 		spillingCallbackFn:     spillingCallbackFn,
 	}
 }
@@ -163,23 +163,23 @@ func NewTwoInputDiskSpiller(
 type diskSpillerBase struct {
 	colexecbase.NonExplainable
 
-	closerHelper
+	colexecbase.CloserHelper
 
 	inputs  []colexecbase.Operator
 	spilled bool
 
 	inMemoryOp             colexecbase.BufferingInMemoryOperator
-	inMemoryOpInitStatus   OperatorInitStatus
+	inMemoryOpInitStatus   colexecbase.OperatorInitStatus
 	inMemoryMemMonitorName string
 	diskBackedOp           colexecbase.Operator
-	distBackedOpInitStatus OperatorInitStatus
+	distBackedOpInitStatus colexecbase.OperatorInitStatus
 	spillingCallbackFn     func()
 }
 
 var _ colexecbase.ResettableOperator = &diskSpillerBase{}
 
 func (d *diskSpillerBase) Init() {
-	if d.inMemoryOpInitStatus == OperatorInitialized {
+	if d.inMemoryOpInitStatus == colexecbase.OperatorInitialized {
 		return
 	}
 	// It is possible that Init() call below will hit an out of memory error,
@@ -188,7 +188,7 @@ func (d *diskSpillerBase) Init() {
 	// Also note that d.input is the input to d.inMemoryOp, so calling Init()
 	// only on the latter is sufficient.
 	d.inMemoryOp.Init()
-	d.inMemoryOpInitStatus = OperatorInitialized
+	d.inMemoryOpInitStatus = colexecbase.OperatorInitialized
 }
 
 func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
@@ -207,12 +207,12 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 			if d.spillingCallbackFn != nil {
 				d.spillingCallbackFn()
 			}
-			if d.distBackedOpInitStatus == OperatorNotInitialized {
+			if d.distBackedOpInitStatus == colexecbase.OperatorNotInitialized {
 				// The disk spiller might be reset for reuse in which case the
 				// the disk-backed operator has already been initialized and we
 				// don't want to perform the initialization again.
 				d.diskBackedOp.Init()
-				d.distBackedOpInitStatus = OperatorInitialized
+				d.distBackedOpInitStatus = colexecbase.OperatorInitialized
 			}
 			return d.diskBackedOp.Next(ctx)
 		}
@@ -229,12 +229,12 @@ func (d *diskSpillerBase) Reset(ctx context.Context) {
 			r.Reset(ctx)
 		}
 	}
-	if d.inMemoryOpInitStatus == OperatorInitialized {
+	if d.inMemoryOpInitStatus == colexecbase.OperatorInitialized {
 		if r, ok := d.inMemoryOp.(colexecbase.Resetter); ok {
 			r.Reset(ctx)
 		}
 	}
-	if d.distBackedOpInitStatus == OperatorInitialized {
+	if d.distBackedOpInitStatus == colexecbase.OperatorInitialized {
 		if r, ok := d.diskBackedOp.(colexecbase.Resetter); ok {
 			r.Reset(ctx)
 		}
@@ -244,7 +244,7 @@ func (d *diskSpillerBase) Reset(ctx context.Context) {
 
 // Close implements the Closer interface.
 func (d *diskSpillerBase) Close(ctx context.Context) error {
-	if !d.close() {
+	if !d.CloserHelper.Close() {
 		return nil
 	}
 	var retErr error

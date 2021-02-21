@@ -20,7 +20,7 @@ import (
 // limitOp is an operator that implements limit, returning only the first n
 // tuples from its input.
 type limitOp struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 
 	limit uint64
 
@@ -31,12 +31,12 @@ type limitOp struct {
 }
 
 var _ colexecbase.Operator = &limitOp{}
-var _ closableOperator = &limitOp{}
+var _ colexecbase.ClosableOperator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
 func NewLimitOp(input colexecbase.Operator, limit uint64) colexecbase.Operator {
 	c := &limitOp{
-		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 		limit:                limit,
 	}
 	return c

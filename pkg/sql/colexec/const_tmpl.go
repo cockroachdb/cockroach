@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -64,7 +65,7 @@ func NewConstOp(
 	constVal interface{},
 	outputIdx int,
 ) (colexecbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -145,7 +146,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 func NewConstNullOp(
 	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
 		OneInputNode: colexecbase.NewOneInputNode(input),
 		outputIdx:    outputIdx,

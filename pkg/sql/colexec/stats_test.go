@@ -33,7 +33,7 @@ func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	nBatches := 10
-	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
+	noop := colexecbase.NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(
 		noop, nil /* kvReader */, execinfrapb.ComponentID{},
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
@@ -56,7 +56,7 @@ func TestNumTuples(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
-		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
+		noop := colexecbase.NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
 		vsc := NewVectorizedStatsCollector(
 			noop, nil /* kvReader */, execinfrapb.ComponentID{},
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */

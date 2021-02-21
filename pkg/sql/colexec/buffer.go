@@ -21,7 +21,7 @@ import (
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
 	colexecbase.OneInputNode
-	initStatus OperatorInitStatus
+	initStatus colexecbase.OperatorInitStatus
 
 	// read is true if someone has read the current batch already.
 	read  bool
@@ -43,9 +43,9 @@ func (b *bufferOp) Init() {
 	// called multiple times. However, we do not want to call Init many times on
 	// the input to bufferOp, so we do this check whether Init has already been
 	// performed.
-	if b.initStatus == OperatorNotInitialized {
+	if b.initStatus == colexecbase.OperatorNotInitialized {
 		b.Input.Init()
-		b.initStatus = OperatorInitialized
+		b.initStatus = colexecbase.OperatorInitialized
 	}
 }
 

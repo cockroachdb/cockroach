@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -85,7 +86,7 @@ func GetInProjectionOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:

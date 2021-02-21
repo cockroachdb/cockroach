@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -118,13 +119,13 @@ func NewBuiltinFunctionOperator(
 ) (colexecbase.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = newVectorTypeEnforcer(allocator, input, types.String, outputIdx)
+		input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
+		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputNode:        colexecbase.NewOneInputNode(input),
 			allocator:           allocator,

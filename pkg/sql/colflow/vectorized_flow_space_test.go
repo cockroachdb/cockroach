@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -72,9 +73,9 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */)}
+				inputs := []colexecbase.Operator{colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */))
+					inputs = append(inputs, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {

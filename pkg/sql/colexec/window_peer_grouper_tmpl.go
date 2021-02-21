@@ -61,7 +61,7 @@ func NewWindowPeerGrouper(
 			return nil, err
 		}
 	}
-	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
 		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,

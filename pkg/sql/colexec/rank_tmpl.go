@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -53,7 +54,7 @@ func NewRankOperator(
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
 	}
-	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	initFields := rankInitFields{
 		OneInputNode:    colexecbase.NewOneInputNode(input),
 		allocator:       allocator,

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -31,7 +32,7 @@ func BoolOrUnknownToSelOp(
 		// If the column is of an Unknown type, then all values in that column
 		// must be NULLs, so the selection vector will always be empty, and we
 		// can simply plan a zero operator.
-		return NewZeroOp(input), nil
+		return colexecutils.NewZeroOp(input), nil
 	default:
 		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
 	}

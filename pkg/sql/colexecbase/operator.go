@@ -206,3 +206,91 @@ type NonExplainable interface {
 	// nonExplainableMarker is just a marker method. It should never be called.
 	nonExplainableMarker()
 }
+
+// OperatorInitStatus indicates whether Init method has already been called on
+// an Operator.
+type OperatorInitStatus int
+
+const (
+	// OperatorNotInitialized indicates that Init has not been called yet.
+	OperatorNotInitialized OperatorInitStatus = iota
+	// OperatorInitialized indicates that Init has already been called.
+	OperatorInitialized
+)
+
+// CloserHelper is a simple helper that helps Operators implement
+// Closer. If close returns true, resources may be released, if it
+// returns false, close has already been called.
+// use.
+type CloserHelper struct {
+	Closed bool
+}
+
+// Close marks the CloserHelper as closed. If true is returned, this is the
+// first call to close.
+func (c *CloserHelper) Close() bool {
+	if c.Closed {
+		return false
+	}
+	c.Closed = true
+	return true
+}
+
+// ClosableOperator is an Operator that needs to be Close()'d.
+type ClosableOperator interface {
+	Operator
+	Closer
+}
+
+// MakeOneInputCloserHelper returns a new OneInputCloserHelper.
+func MakeOneInputCloserHelper(input Operator) OneInputCloserHelper {
+	return OneInputCloserHelper{
+		OneInputNode: NewOneInputNode(input),
+	}
+}
+
+// OneInputCloserHelper is an execinfrapb.OpNode with a single Operator input
+// that might need to be Close()'d.
+type OneInputCloserHelper struct {
+	OneInputNode
+	CloserHelper
+}
+
+var _ Closer = &OneInputCloserHelper{}
+
+// Close implements the Closer interface.
+func (c *OneInputCloserHelper) Close(ctx context.Context) error {
+	if !c.CloserHelper.Close() {
+		return nil
+	}
+	if closer, ok := c.Input.(Closer); ok {
+		return closer.Close(ctx)
+	}
+	return nil
+}
+
+type noopOperator struct {
+	OneInputCloserHelper
+	NonExplainable
+}
+
+var _ ResettableOperator = &noopOperator{}
+
+// NewNoop returns a new noop Operator.
+func NewNoop(input Operator) ResettableOperator {
+	return &noopOperator{OneInputCloserHelper: MakeOneInputCloserHelper(input)}
+}
+
+func (n *noopOperator) Init() {
+	n.Input.Init()
+}
+
+func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
+	return n.Input.Next(ctx)
+}
+
+func (n *noopOperator) Reset(ctx context.Context) {
+	if r, ok := n.Input.(Resetter); ok {
+		r.Reset(ctx)
+	}
+}

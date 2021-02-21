@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"context"
@@ -17,132 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
-
-// OperatorInitStatus indicates whether Init method has already been called on
-// an Operator.
-type OperatorInitStatus int
-
-const (
-	// OperatorNotInitialized indicates that Init has not been called yet.
-	OperatorNotInitialized OperatorInitStatus = iota
-	// OperatorInitialized indicates that Init has already been called.
-	OperatorInitialized
-)
-
-// newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
-func newTwoInputNode(inputOne, inputTwo colexecbase.Operator) twoInputNode {
-	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
-}
-
-type twoInputNode struct {
-	inputOne colexecbase.Operator
-	inputTwo colexecbase.Operator
-}
-
-func (twoInputNode) ChildCount(verbose bool) int {
-	return 2
-}
-
-func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
-	switch nth {
-	case 0:
-		return n.inputOne
-	case 1:
-		return n.inputTwo
-	}
-	colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
-}
-
-// CallbackCloser is a utility struct that implements the Closer interface by
-// calling a provided callback.
-type CallbackCloser struct {
-	CloseCb func(context.Context) error
-}
-
-var _ colexecbase.Closer = &CallbackCloser{}
-
-// Close implements the Closer interface.
-func (c *CallbackCloser) Close(ctx context.Context) error {
-	return c.CloseCb(ctx)
-}
-
-// closerHelper is a simple helper that helps Operators implement
-// Closer. If close returns true, resources may be released, if it
-// returns false, close has already been called.
-// use.
-type closerHelper struct {
-	closed bool
-}
-
-// close marks the closerHelper as closed. If true is returned, this is the
-// first call to close.
-func (c *closerHelper) close() bool {
-	if c.closed {
-		return false
-	}
-	c.closed = true
-	return true
-}
-
-type closableOperator interface {
-	colexecbase.Operator
-	colexecbase.Closer
-}
-
-func makeOneInputCloserHelper(input colexecbase.Operator) oneInputCloserHelper {
-	return oneInputCloserHelper{
-		OneInputNode: colexecbase.NewOneInputNode(input),
-	}
-}
-
-type oneInputCloserHelper struct {
-	colexecbase.OneInputNode
-	closerHelper
-}
-
-var _ colexecbase.Closer = &oneInputCloserHelper{}
-
-func (c *oneInputCloserHelper) Close(ctx context.Context) error {
-	if !c.close() {
-		return nil
-	}
-	if closer, ok := c.Input.(colexecbase.Closer); ok {
-		return closer.Close(ctx)
-	}
-	return nil
-}
-
-type noopOperator struct {
-	oneInputCloserHelper
-	colexecbase.NonExplainable
-}
-
-var _ colexecbase.Operator = &noopOperator{}
-
-// NewNoop returns a new noop Operator.
-func NewNoop(input colexecbase.Operator) colexecbase.ResettableOperator {
-	return &noopOperator{oneInputCloserHelper: makeOneInputCloserHelper(input)}
-}
-
-func (n *noopOperator) Init() {
-	n.Input.Init()
-}
-
-func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
-	return n.Input.Next(ctx)
-}
-
-func (n *noopOperator) Reset(ctx context.Context) {
-	if r, ok := n.Input.(colexecbase.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
 
 type zeroOperator struct {
 	colexecbase.OneInputNode
@@ -160,7 +37,7 @@ func (s *zeroOperator) Init() {
 	s.Input.Init()
 }
 
-func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
+func (s *zeroOperator) Next(context.Context) coldata.Batch {
 	return coldata.ZeroBatch
 }
 
@@ -229,7 +106,7 @@ func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 	colexecbase.NonExplainable
 
 	allocator *colmem.Allocator
@@ -239,11 +116,12 @@ type vectorTypeEnforcer struct {
 
 var _ colexecbase.ResettableOperator = &vectorTypeEnforcer{}
 
-func newVectorTypeEnforcer(
+// NewVectorTypeEnforcer returns a new vectorTypeEnforcer.
+func NewVectorTypeEnforcer(
 	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
 ) colexecbase.Operator {
 	return &vectorTypeEnforcer{
-		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 		allocator:            allocator,
 		typ:                  typ,
 		idx:                  idx,
@@ -283,7 +161,7 @@ func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
 // NOTE: the type schema passed into BatchSchemaSubsetEnforcer *must* include
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
-	oneInputCloserHelper
+	colexecbase.OneInputCloserHelper
 	colexecbase.NonExplainable
 
 	allocator                    *colmem.Allocator
@@ -304,7 +182,7 @@ func NewBatchSchemaSubsetEnforcer(
 	subsetStartIdx, subsetEndIdx int,
 ) *BatchSchemaSubsetEnforcer {
 	return &BatchSchemaSubsetEnforcer{
-		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
 		allocator:            allocator,
 		typs:                 typs,
 		subsetStartIdx:       subsetStartIdx,

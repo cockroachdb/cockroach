@@ -136,7 +136,7 @@ type orderedAggregator struct {
 }
 
 var _ colexecbase.ResettableOperator = &orderedAggregator{}
-var _ closableOperator = &orderedAggregator{}
+var _ colexecbase.ClosableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator.
 func NewOrderedAggregator(
