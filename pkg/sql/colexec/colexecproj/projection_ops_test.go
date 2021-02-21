@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecproj
 
 import (
 	"context"
@@ -306,7 +306,7 @@ func benchmarkProjOp(
 	batch := testAllocator.NewMemBatchWithMaxCapacity(inputTypes)
 	nullProb := 0.0
 	if hasNulls {
-		nullProb = nullProbability
+		nullProb = 0.1
 	}
 	for _, colVec := range batch.ColVecs() {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{

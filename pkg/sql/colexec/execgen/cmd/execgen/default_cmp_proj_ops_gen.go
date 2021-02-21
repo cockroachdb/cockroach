@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const defaultCmpProjOpsTmpl = "pkg/sql/colexec/default_cmp_proj_ops_tmpl.go"
+const defaultCmpProjOpsTmpl = "pkg/sql/colexec/colexecproj/default_cmp_proj_ops_tmpl.go"
 
 func genDefaultCmpProjOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_KIND", "{{.Kind}}")
