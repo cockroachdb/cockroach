@@ -1,11 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecbase:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load(":COLEXEC.bzl", "gen_sort_partitioner_rule")
 
 go_library(
     name = "colexec",
     srcs = [
         "aggregators_util.go",
-        "bool_vec_to_sel.go",
         "buffer.go",
         "builtin_funcs.go",
         "case.go",
@@ -15,12 +15,10 @@ go_library(
         "crossjoiner.go",
         "deselector.go",
         "disk_spiller.go",
-        "distinct.go",
         "external_distinct.go",
         "external_hash_aggregator.go",
         "external_hash_joiner.go",
         "external_sort.go",
-        "fn_op.go",
         "hash_aggregator.go",
         "hash_based_partitioner.go",
         "hashjoiner.go",
@@ -33,20 +31,20 @@ go_library(
         "mergejoiner_util.go",
         "offset.go",
         "ordered_aggregator.go",
-        "ordinality.go",
         "panic_injector.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
         "serial_unordered_synchronizer.go",
-        "simple_project.go",
         "sort.go",
         "sort_chunks.go",
+        "sort_utils.go",
         "sorttopk.go",
         "stats.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
         "utils.go",
         ":gen-exec",  # keep
+        ":gen-sort-partitioner",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec",
     visibility = ["//visibility:public"],
@@ -64,6 +62,7 @@ go_library(
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexechash",  # keep
+        "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecbase",
@@ -97,13 +96,10 @@ go_test(
     srcs = [
         "aggregators_test.go",
         "and_or_projection_test.go",
-        "bool_vec_to_sel_test.go",
         "buffer_test.go",
         "builtin_funcs_test.go",
         "case_test.go",
-        "cast_test.go",
         "columnarizer_test.go",
-        "const_test.go",
         "count_test.go",
         "crossjoiner_test.go",
         "default_agg_test.go",
@@ -127,14 +123,12 @@ go_test(
         "mergejoiner_test.go",
         "offset_test.go",
         "ordered_synchronizer_test.go",
-        "ordinality_test.go",
         "parallel_unordered_synchronizer_test.go",
         "projection_ops_test.go",
         "rowstovec_test.go",
         "select_in_test.go",
         "selection_ops_test.go",
         "serial_unordered_synchronizer_test.go",
-        "simple_project_test.go",
         "sort_chunks_test.go",
         "sort_test.go",
         "sort_utils_test.go",
@@ -157,6 +151,7 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",
@@ -197,13 +192,10 @@ go_test(
 # Map between target name and relevant template.
 targets = [
     ("and_or_projection.eg.go", "and_or_projection_tmpl.go"),
-    ("cast.eg.go", "cast_tmpl.go"),
-    ("const.eg.go", "const_tmpl.go"),
     ("crossjoiner.eg.go", "crossjoiner_tmpl.go"),
     ("default_cmp_expr.eg.go", "default_cmp_expr_tmpl.go"),
     ("default_cmp_proj_ops.eg.go", "default_cmp_proj_ops_tmpl.go"),
     ("default_cmp_sel_ops.eg.go", "default_cmp_sel_ops_tmpl.go"),
-    ("distinct.eg.go", "distinct_tmpl.go"),
     ("hash_aggregator.eg.go", "hash_aggregator_tmpl.go"),
     ("hashjoiner.eg.go", "hashjoiner_tmpl.go"),
     ("is_null_ops.eg.go", "is_null_ops_tmpl.go"),
@@ -229,7 +221,6 @@ targets = [
     ("selection_ops.eg.go", "selection_ops_tmpl.go"),
     ("sel_like_ops.eg.go", "selection_ops_tmpl.go"),
     ("sort.eg.go", "sort_tmpl.go"),
-    ("sort_partitioner.eg.go", "distinct_tmpl.go"),
     ("substring.eg.go", "substring_tmpl.go"),
     ("values_differ.eg.go", "values_differ_tmpl.go"),
     ("vec_comparators.eg.go", "vec_comparators_tmpl.go"),
@@ -243,3 +234,9 @@ eg_go_filegroup(
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules(targets)
+
+# Special-case the gen rule for sort_partitioner.eg.go.
+gen_sort_partitioner_rule(
+    name = "gen-sort-partitioner",
+    target = "sort_partitioner.eg.go",
+)

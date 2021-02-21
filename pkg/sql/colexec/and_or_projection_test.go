@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -211,7 +212,7 @@ func TestAndOrOps(t *testing.T) {
 						}
 						// We will project out the first two columns in order
 						// to have test cases be less verbose.
-						return NewSimpleProjectOp(projOp, 3 /* numInputCols */, []uint32{2}), nil
+						return colexecmisc.NewSimpleProjectOp(projOp, 3 /* numInputCols */, []uint32{2}), nil
 					})
 			}
 		})

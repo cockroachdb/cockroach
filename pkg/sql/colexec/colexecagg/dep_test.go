@@ -22,6 +22,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
 		}, nil,
 	)

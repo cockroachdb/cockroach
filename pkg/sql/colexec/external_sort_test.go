@@ -88,7 +88,7 @@ func TestExternalSort(t *testing.T) {
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
 						// more than this number of file descriptors.
-						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+						sem := colexecbase.NewTestingSemaphore(colexecbase.ExternalSorterMinPartitions)
 						// If a limit is satisfied before the sorter is drained of all its
 						// tuples, the sorter will not close its partitioner. During a
 						// flow this will happen in a downstream materializer/outbox,
@@ -171,7 +171,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need
 	// to add the cache sizes of the queues.
-	partitionSize := int64(memoryToSort/4) + int64(ExternalSorterMinPartitions*queueCfg.BufferSizeBytes)
+	partitionSize := int64(memoryToSort/4) + int64(colexecbase.ExternalSorterMinPartitions*queueCfg.BufferSizeBytes)
 	for _, tk := range []execinfra.TestingKnobs{{ForceDiskSpill: true}, {MemoryLimitBytes: partitionSize}} {
 		flowCtx.Cfg.TestingKnobs = tk
 		for nCols := 1; nCols <= maxCols; nCols++ {
@@ -204,7 +204,7 @@ func TestExternalSortRandomized(t *testing.T) {
 					expected,
 					colexectestutils.OrderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+						sem := colexecbase.NewTestingSemaphore(colexecbase.ExternalSorterMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 							ctx, flowCtx, input, typs[:nCols], ordCols,
@@ -284,7 +284,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		batch.ColVec(0).Bytes().Set(i, singleTupleValue)
 	}
 	batch.SetLength(batchLength)
-	numFDs := ExternalSorterMinPartitions + rng.Intn(3)
+	numFDs := colexecbase.ExternalSorterMinPartitions + rng.Intn(3)
 	// The memory limit in the external sorter is divided as follows:
 	// - BufferSizeBytes for each of the disk queues is subtracted right away
 	// - the remaining part is divided evenly between the sorter and the merger.

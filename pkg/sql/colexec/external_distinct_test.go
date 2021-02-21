@@ -81,7 +81,7 @@ func TestExternalDistinct(t *testing.T) {
 					// A sorter should never exceed ExternalSorterMinPartitions, even
 					// during repartitioning. A panic will happen if a sorter requests
 					// more than this number of file descriptors.
-					sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+					sem := colexecbase.NewTestingSemaphore(colexecbase.ExternalSorterMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					var outputOrdering execinfrapb.Ordering
 					if tc.isOrderedOnDistinctCols {

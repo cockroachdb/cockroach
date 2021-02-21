@@ -836,13 +836,10 @@ EXECGEN_TARGETS = \
   pkg/sql/colconv/datum_to_vec.eg.go \
   pkg/sql/colconv/vec_to_datum.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
-  pkg/sql/colexec/cast.eg.go \
-  pkg/sql/colexec/const.eg.go \
   pkg/sql/colexec/crossjoiner.eg.go \
   pkg/sql/colexec/default_cmp_expr.eg.go \
   pkg/sql/colexec/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/default_cmp_sel_ops.eg.go \
-  pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
@@ -894,6 +891,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/colexechash/hash_utils.eg.go \
+  pkg/sql/colexec/colexecmisc/cast.eg.go \
+  pkg/sql/colexec/colexecmisc/const.eg.go \
+  pkg/sql/colexec/colexecmisc/distinct.eg.go \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
   pkg/sql/colexec/colexecwindow/row_number.eg.go \

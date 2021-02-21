@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/colexecwindow",  # keep
         "//pkg/sql/colexecbase",

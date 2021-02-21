@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -57,7 +58,7 @@ func NewExternalDistinct(
 		// every tuple before the disk-backed sorter and include that column in
 		// the desired ordering. We then project out that temporary column
 		// before feeding the tuples into the ordered distinct.
-		ordinalityOp := NewOrdinalityOp(unlimitedAllocator, partitionedInputs[0], len(inputTypes))
+		ordinalityOp := colexecmisc.NewOrdinalityOp(unlimitedAllocator, partitionedInputs[0], len(inputTypes))
 		orderingCols := make([]execinfrapb.Ordering_Column, len(distinctCols)+1)
 		for i := range distinctCols {
 			orderingCols[i].ColIdx = distinctCols[i]
@@ -71,8 +72,8 @@ func NewExternalDistinct(
 		for i := range projection {
 			projection[i] = uint32(i)
 		}
-		diskBackedWithoutOrdinality := NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
-		diskBackedFallbackOp, err := NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
+		diskBackedWithoutOrdinality := colexecmisc.NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
+		diskBackedFallbackOp, err := colexecmisc.NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -85,7 +86,7 @@ func NewExternalDistinct(
 		OneInputNode: colexecbase.NewOneInputNode(input),
 		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
 	}
-	numRequiredActivePartitions := ExternalSorterMinPartitions
+	numRequiredActivePartitions := colexecbase.ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(
 		unlimitedAllocator,
 		flowCtx,

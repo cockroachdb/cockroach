@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// NewWindowSortingPartitioner creates a new colexec.Operator that orders input
-// first based on the partitionIdxs columns and second on ordCols (i.e. it
-// handles both PARTITION BY and ORDER BY clauses of a window function) and
-// puts true in partitionColIdx'th column (which is appended if needed) for
-// every tuple that is the first within its partition.
+// NewWindowSortingPartitioner creates a new colexecbase.Operator that orders
+// input first based on the partitionIdxs columns and second on ordCols (i.e. it
+// handles both PARTITION BY and ORDER BY clauses of a window function) and puts
+// true in partitionColIdx'th column (which is appended if needed) for every
+// tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
@@ -47,7 +47,7 @@ func NewWindowSortingPartitioner(
 	}
 
 	var distinctCol []bool
-	input, distinctCol, err = colexec.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
+	input, distinctCol, err = colexecmisc.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
 	if err != nil {
 		return nil, err
 	}

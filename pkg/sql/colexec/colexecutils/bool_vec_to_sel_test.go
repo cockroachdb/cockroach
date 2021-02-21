@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecutils
 
 import (
 	"testing"
@@ -35,7 +35,7 @@ func TestBoolVecToSelOp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return newBoolVecToSelOp(input[0], 0), nil
+			return NewBoolVecToSelOp(input[0], 0), nil
 		})
 	}
 }
