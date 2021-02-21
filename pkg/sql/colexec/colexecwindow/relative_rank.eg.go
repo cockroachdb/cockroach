@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -52,7 +52,7 @@ func NewRelativeRankOperator(
 		if windowFn == execinfrapb.WindowerSpec_CUME_DIST {
 			constValue = 1
 		}
-		return colexec.NewConstOp(unlimitedAllocator, input, types.Float, constValue, outputColIdx)
+		return colexecmisc.NewConstOp(unlimitedAllocator, input, types.Float, constValue, outputColIdx)
 	}
 	rrInitFields := relativeRankInitFields{
 		rankInitFields: rankInitFields{
@@ -98,7 +98,7 @@ func NewRelativeRankOperator(
 // clause (or both) is used - we need 3 FDs for each of the spilling queues used
 // by the operator directly plus we use an external sort to handle PARTITION BY
 // and/or ORDER BY clauses.
-const relativeRankNumRequiredFDs = 3 + colexec.ExternalSorterMinPartitions
+const relativeRankNumRequiredFDs = 3 + colexecbase.ExternalSorterMinPartitions
 
 // NOTE: in the context of window functions "partitions" mean a different thing
 // from "partition" in the context of external algorithms and some disk

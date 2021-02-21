@@ -1,45 +1,53 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXECWINDOW.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load(":COLEXECMISC.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
-    name = "colexecwindow",
+    name = "colexecmisc",
     srcs = [
-        "partitioner.go",
-        "window_functions_util.go",
+        "distinct.go",
+        "fn_op.go",
+        "ordinality.go",
+        "simple_project.go",
         ":gen-exec",  # keep
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/col/coldata",  # keep
-        "//pkg/sql/colcontainer",  # keep
-        "//pkg/sql/colexec/colexecmisc",
-        "//pkg/sql/colexec/colexecutils",  # keep
-        "//pkg/sql/colexecbase",  # keep
-        "//pkg/sql/colexecbase/colexecerror",  # keep
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/colmem",  # keep
-        "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/sem/tree",  # keep
-        "//pkg/sql/types",  # keep
-        "//pkg/util/mon",  # keep
-        "@com_github_cockroachdb_errors//:errors",  # keep
-        "@com_github_marusama_semaphore//:semaphore",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/duration",  # keep
+        "//pkg/util/log",
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
-    name = "colexecwindow_test",
+    name = "colexecmisc_test",
     srcs = [
+        "cast_test.go",
+        "const_test.go",
         "dep_test.go",
         "inject_setup_test.go",
         "main_test.go",
-        "window_functions_test.go",
+        "ordinality_test.go",
+        "simple_project_test.go",
     ],
-    embed = [":colexecwindow"],
     deps = [
+        ":colexecmisc",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
+        "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
@@ -48,16 +56,15 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
-        "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
-        "@com_github_marusama_semaphore//:semaphore",
         "@com_github_stretchr_testify//require",
     ],
 )
@@ -67,3 +74,6 @@ eg_go_filegroup(name = "gen-exec")
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules()
+
+# Export the template because it is used by another target in colexec package.
+exports_files(["distinct_tmpl.go"])

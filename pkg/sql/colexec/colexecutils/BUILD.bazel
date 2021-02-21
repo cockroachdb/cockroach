@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "colexecutils",
     srcs = [
+        "bool_vec_to_sel.go",
         "cancel_checker.go",
         "operator.go",
         "spilling_queue.go",
@@ -29,6 +30,7 @@ go_library(
 go_test(
     name = "colexecutils_test",
     srcs = [
+        "bool_vec_to_sel_test.go",
         "cancel_checker_test.go",
         "dep_test.go",
         "main_test.go",

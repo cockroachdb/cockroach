@@ -1,13 +1,10 @@
 # Map between target name and relevant template.
 targets = [
     ('and_or_projection.eg.go', 'and_or_projection_tmpl.go'),
-    ('cast.eg.go', 'cast_tmpl.go'),
-    ('const.eg.go', 'const_tmpl.go'),
     ('crossjoiner.eg.go', 'crossjoiner_tmpl.go'),
     ('default_cmp_expr.eg.go', 'default_cmp_expr_tmpl.go'),
     ('default_cmp_proj_ops.eg.go', 'default_cmp_proj_ops_tmpl.go'),
     ('default_cmp_sel_ops.eg.go', 'default_cmp_sel_ops_tmpl.go'),
-    ('distinct.eg.go', 'distinct_tmpl.go'),
     ('hash_aggregator.eg.go', 'hash_aggregator_tmpl.go'),
     ('hashjoiner.eg.go', 'hashjoiner_tmpl.go'),
     ('is_null_ops.eg.go', 'is_null_ops_tmpl.go'),
@@ -33,7 +30,7 @@ targets = [
     ('selection_ops.eg.go', 'selection_ops_tmpl.go'),
     ('sel_like_ops.eg.go', 'selection_ops_tmpl.go'),
     ('sort.eg.go', 'sort_tmpl.go'),
-    ('sort_partitioner.eg.go', 'distinct_tmpl.go'),
+    # ('sort_partitioner.eg.go', ...); See `gen_sort_partitioner_rule` below.
     ('substring.eg.go', 'substring_tmpl.go'),
     ('values_differ.eg.go', 'values_differ_tmpl.go'),
     ('vec_comparators.eg.go', 'vec_comparators_tmpl.go'),
@@ -76,3 +73,18 @@ def gen_eg_go_rules():
               """,
             tools = [":execgen", ":goimports"],
         )
+
+# Generating the code for `sort_partitioner.eg.go` requires special handling
+# because the template lives in a subpackage.
+def gen_sort_partitioner_rule(name, target):
+    native.genrule(
+        name = name,
+        srcs = ["//pkg/sql/colexec/colexecmisc:distinct_tmpl.go"],
+        outs = [target],
+        cmd = """
+          $(location :execgen) -template $(SRCS) \
+              -fmt=false pkg/sql/colexec/$@ > $@
+          $(location :goimports) -w $@
+          """,
+        tools = [":execgen", ":goimports"],
+    )

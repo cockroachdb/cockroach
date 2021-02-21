@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecmisc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -66,8 +66,8 @@ func NewOrderedDistinct(
 	if err != nil {
 		return nil, err
 	}
-	return &boolVecToSelOp{
+	return &colexecutils.BoolVecToSelOp{
 		OneInputNode: colexecbase.NewOneInputNode(op),
-		outputCol:    outputCol,
+		OutputCol:    outputCol,
 	}, nil
 }

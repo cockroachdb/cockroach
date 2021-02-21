@@ -25,7 +25,7 @@ import (
 const (
 	// This limit comes from the fallback strategy where we are using an
 	// external sort.
-	ehaNumRequiredActivePartitions = ExternalSorterMinPartitions
+	ehaNumRequiredActivePartitions = colexecbase.ExternalSorterMinPartitions
 	// ehaNumRequiredFDs is the minimum number of file descriptors that are
 	// needed for the machinery of the external aggregator (plus 1 is needed for
 	// the in-memory hash aggregator in order to track tuples in a spilling

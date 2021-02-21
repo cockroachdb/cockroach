@@ -40,7 +40,7 @@ const (
 	//   sorter emits its first batch, it must be the case that the input to it
 	//   has returned a zero batch, and thus the FD has been closed.
 	sortMergeNonSortMinFDsOpen = 2
-	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (ExternalSorterMinPartitions * 2)
+	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (colexecbase.ExternalSorterMinPartitions * 2)
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
