@@ -1659,7 +1659,7 @@ func TestMergeJoiner(t *testing.T) {
 			}
 			// We test all cases with the default memory limit (regular scenario) and a
 			// limit of 1 byte (to force the buffered groups to spill to disk).
-			for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
+			for _, memoryLimit := range []int64{1, colexecbase.DefaultMemoryLimit} {
 				log.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
 				runner(t, testAllocator, []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
@@ -1721,7 +1721,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	a, err := NewMergeJoinOp(
-		testAllocator, defaultMemoryLimit, queueCfg,
+		testAllocator, colexecbase.DefaultMemoryLimit, queueCfg,
 		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1827,7 +1827,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	mj, err := NewMergeJoinOp(
-		testAllocator, defaultMemoryLimit, queueCfg,
+		testAllocator, colexecbase.DefaultMemoryLimit, queueCfg,
 		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1847,7 +1847,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			right: hashJoinerSourceSpec{
 				eqCols: []uint32{0}, sourceTypes: typs,
 			},
-		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets, defaultMemoryLimit,
+		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
 	)
 	hj.Init()
 
@@ -1892,7 +1892,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				a, err := NewMergeJoinOp(
-					testAllocator, defaultMemoryLimit,
+					testAllocator, colexecbase.DefaultMemoryLimit,
 					queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1968,7 +1968,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					a, err := NewMergeJoinOp(
-						testAllocator, defaultMemoryLimit,
+						testAllocator, colexecbase.DefaultMemoryLimit,
 						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2096,7 +2096,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
 					a, err := NewMergeJoinOp(
-						testAllocator, defaultMemoryLimit,
+						testAllocator, colexecbase.DefaultMemoryLimit,
 						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2183,7 +2183,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	getNewMergeJoiner := func(leftSource, rightSource colexecbase.Operator) colexecbase.Operator {
 		benchMemAccount.Clear(ctx)
 		base, err := newMergeJoinBase(
-			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), colexecbase.DefaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
 			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

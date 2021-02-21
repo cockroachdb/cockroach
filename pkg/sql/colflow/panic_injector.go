@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colflow
 
 import (
 	"context"
@@ -40,8 +40,8 @@ const (
 	nextPanicInjectionProbability = 0.00001
 )
 
-// NewPanicInjector creates a new panicInjector.
-func NewPanicInjector(input colexecbase.Operator) colexecbase.Operator {
+// newPanicInjector creates a new panicInjector.
+func newPanicInjector(input colexecbase.Operator) colexecbase.Operator {
 	rng, _ := randutil.NewPseudoRand()
 	return &panicInjector{
 		OneInputNode: colexecbase.OneInputNode{Input: input},

@@ -266,7 +266,7 @@ func newChunker(
 			return nil, err
 		}
 	}
-	deselector := NewDeselectorOp(allocator, input, inputTypes)
+	deselector := colexecutils.NewDeselectorOp(allocator, input, inputTypes)
 	return &chunker{
 		OneInputNode:      colexecbase.NewOneInputNode(deselector),
 		allocator:         allocator,

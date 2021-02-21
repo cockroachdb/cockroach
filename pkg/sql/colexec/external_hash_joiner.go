@@ -98,7 +98,7 @@ func NewExternalHashJoiner(
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
-		memoryLimit = defaultMemoryLimit
+		memoryLimit = colexecbase.DefaultMemoryLimit
 	}
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions

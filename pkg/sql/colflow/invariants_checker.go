@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colflow
 
 import (
 	"context"
@@ -29,8 +29,8 @@ type invariantsChecker struct {
 
 var _ colexecbase.Operator = invariantsChecker{}
 
-// NewInvariantsChecker creates a new invariantsChecker.
-func NewInvariantsChecker(input colexecbase.Operator) colexecbase.Operator {
+// newInvariantsChecker creates a new invariantsChecker.
+func newInvariantsChecker(input colexecbase.Operator) colexecbase.Operator {
 	return &invariantsChecker{
 		OneInputNode: colexecbase.OneInputNode{Input: input},
 	}

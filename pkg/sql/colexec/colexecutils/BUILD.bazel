@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "bool_vec_to_sel.go",
         "cancel_checker.go",
+        "deselector.go",
         "operator.go",
         "spilling_queue.go",
         "utils.go",
@@ -33,6 +34,7 @@ go_test(
         "bool_vec_to_sel_test.go",
         "cancel_checker_test.go",
         "dep_test.go",
+        "deselector_test.go",
         "main_test.go",
         "spilling_queue_test.go",
     ],

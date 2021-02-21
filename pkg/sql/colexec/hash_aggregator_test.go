@@ -213,7 +213,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 							Types:              args.InputTypes,
-							MemoryLimit:        defaultMemoryLimit,
+							MemoryLimit:        colexecbase.DefaultMemoryLimit,
 							DiskQueueCfg:       queueCfg,
 							FDSemaphore:        &colexecbase.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,
