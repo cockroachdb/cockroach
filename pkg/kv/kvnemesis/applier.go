@@ -32,7 +32,7 @@ type Applier struct {
 	}
 }
 
-// MakeApplier constructs an Applier that executes against the given DB.
+// MakeApplier constructs an Applier that executes against the given DBs.
 func MakeApplier(dbs ...*kv.DB) *Applier {
 	a := &Applier{
 		dbs: dbs,
