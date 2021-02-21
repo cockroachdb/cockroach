@@ -49,7 +49,7 @@ var (
 	_ = rankTmplInfo{}.UpdateRankIncrement()
 )
 
-const rankTmpl = "pkg/sql/colexec/rank_tmpl.go"
+const rankTmpl = "pkg/sql/colexec/colexecwindow/rank_tmpl.go"
 
 func genRankOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_RANK_STRING", "{{.String}}")

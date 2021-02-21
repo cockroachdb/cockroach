@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colbuilder
+package colexecwindow
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -26,13 +26,13 @@ var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
 	execinfrapb.WindowerSpec_CUME_DIST:    {},
 }
 
-// windowFnNeedsPeersInfo returns whether a window function pays attention to
+// WindowFnNeedsPeersInfo returns whether a window function pays attention to
 // the concept of "peers" during its computation ("peers" are tuples within the
 // same partition - from PARTITION BY clause - that are not distinct on the
 // columns in ORDER BY clause). For most window functions, the result of
 // computation should be the same for "peers", so most window functions do need
 // this information.
-func windowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
+func WindowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
 	switch windowFn {
 	case execinfrapb.WindowerSpec_ROW_NUMBER:
 		// row_number doesn't pay attention to the concept of "peers."
