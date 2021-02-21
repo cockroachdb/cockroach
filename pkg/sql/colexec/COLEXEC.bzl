@@ -33,6 +33,7 @@ targets = [
     ('selection_ops.eg.go', 'selection_ops_tmpl.go'),
     ('sel_like_ops.eg.go', 'selection_ops_tmpl.go'),
     ('sort.eg.go', 'sort_tmpl.go'),
+    ('sort_partitioner.eg.go', 'distinct_tmpl.go'),
     ('substring.eg.go', 'substring_tmpl.go'),
     ('values_differ.eg.go', 'values_differ_tmpl.go'),
     ('vec_comparators.eg.go', 'vec_comparators_tmpl.go'),
