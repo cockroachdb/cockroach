@@ -22,6 +22,18 @@ const (
 	DefaultGeographySRID = SRID(4326)
 )
 
+const (
+	// ZShapeTypeFlag indicates a Z dimension on the ShapeType.
+	ZShapeTypeFlag = 1 << 30
+	// MShapeTypeFlag indicates a M dimension on the ShapeType.
+	MShapeTypeFlag = 1 << 29
+)
+
+// To2DShapeType returns the ShapeType for the corresponding 2D geometry type.
+func (s ShapeType) To2DShapeType() ShapeType {
+	return ShapeType(uint32(s) & (MShapeTypeFlag - 1))
+}
+
 // SRID is a Spatial Reference Identifer. All geometry and geography shapes are
 // stored and represented as using coordinates that are bare floats. SRIDs tie these
 // floats to the planar or spherical coordinate system, allowing them to be interpreted

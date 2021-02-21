@@ -1,0 +1,85 @@
+# All dimensions
+statement ok
+CREATE TABLE geom_all(geom geometry)
+
+statement ok
+INSERT INTO geom_all VALUES('point(1 2)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointm(1 2 3)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointz(1 2 3)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointzm(1 2 3 4)')
+
+# 2D
+statement ok
+CREATE TABLE geom_2d(geom geometry(geometry))
+
+statement ok
+INSERT INTO geom_2d VALUES('point(1 2)')
+
+statement error q: object type PointM does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointm(1 2 3)')
+
+statement error q: object type PointZ does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointz(1 2 3)')
+
+statement error q: object type PointZM does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointzm(1 2 3 4)')
+
+# 2D+M
+statement ok
+CREATE TABLE geom_2d_m(geomm geometry(geometrym))
+
+statement ok
+INSERT INTO geom_2d_m VALUES ('pointm(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('point(1 2)')
+
+statement error pq: object type PointZ does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('pointz(1 2 3)')
+
+statement error pq: object type PointZM does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('pointzm(1 2 3 4)')
+
+# 3D
+statement ok
+CREATE TABLE geom_3d(geomz geometry(geometryz))
+
+statement ok
+INSERT INTO geom_3d VALUES ('pointz(1 2 3)')
+
+statement ok
+INSERT INTO geom_3d VALUES ('point(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('point(1 2)')
+
+statement error pq: object type PointM does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('pointm(1 2 3)')
+
+statement error pq: object type PointZM does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('pointzm(1 2 3 4)')
+
+# 4D
+statement ok
+CREATE TABLE geom_4d(geomzm geometry(geometryzm))
+
+statement ok
+INSERT INTO geom_4d VALUES ('pointzm(1 2 3 4)')
+
+statement ok
+INSERT INTO geom_4d VALUES ('point(1 2 3 4)')
+
+statement error pq: object type PointM does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('pointm(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('point(1 2)')
+
+statement error pq: object type PointZ does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('pointz(1 2 3)')

@@ -104,6 +104,9 @@ func TestSpatialObjectFitsColumnMetadata(t *testing.T) {
 		errorContains string
 	}{
 		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.ShapeType_Geometry, ""},
+		{MustParseGeometry("POINT Z(1.0 1.0 1.0)"), 0, geopb.ShapeType_GeometryZ, ""},
+		{MustParseGeometry("POINT ZM(1.0 1.0 1.0 1.0)"), 0, geopb.ShapeType_GeometryZM, ""},
+		{MustParseGeometry("POINT M(1.0 1.0 1.0)"), 0, geopb.ShapeType_GeometryM, ""},
 		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.ShapeType_Unset, ""},
 		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.ShapeType_Geometry, ""},
 		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.ShapeType_Unset, ""},

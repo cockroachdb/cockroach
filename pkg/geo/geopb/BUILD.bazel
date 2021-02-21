@@ -1,6 +1,6 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "geopb",
@@ -28,4 +28,11 @@ go_proto_library(
     proto = ":geopb_proto",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_test(
+    name = "geopb_test",
+    srcs = ["types_test.go"],
+    embed = [":geopb"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
