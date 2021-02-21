@@ -345,6 +345,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// Only VOTER_FULL replicas can currently hold a range lease.
 			// Attempts to transfer to lease to any other replica type are
 			// rejected.
+		} else if resultIsError(t.Result, `replica cannot hold lease`) {
+			// Same case as above, but with a slightly different message.
 		} else if resultIsError(t.Result, `unable to find store \d+ in range`) {
 			// A lease transfer that races with a replica removal may find that
 			// the store it was targeting is no longer part of the range.
