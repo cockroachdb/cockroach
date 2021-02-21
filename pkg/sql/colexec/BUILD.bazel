@@ -36,7 +36,6 @@ go_library(
         "panic_injector.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
-        "partitioner.go",
         "serial_unordered_synchronizer.go",
         "simple_project.go",
         "sort.go",
@@ -141,7 +140,6 @@ go_test(
         "sorttopk_test.go",
         "stats_test.go",
         "types_integration_test.go",
-        "window_functions_test.go",
     ],
     embed = [":colexec"],
     deps = [

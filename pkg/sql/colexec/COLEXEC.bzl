@@ -28,9 +28,6 @@ targets = [
     ('proj_like_ops.eg.go', 'proj_const_ops_tmpl.go'),
     ('proj_non_const_ops.eg.go', 'proj_non_const_ops_tmpl.go'),
     ('quicksort.eg.go', 'quicksort_tmpl.go'),
-    ('rank.eg.go', 'rank_tmpl.go'),
-    ('relative_rank.eg.go', 'relative_rank_tmpl.go'),
-    ('row_number.eg.go', 'row_number_tmpl.go'),
     ('rowstovec.eg.go', 'rowstovec_tmpl.go'),
     ('select_in.eg.go', 'select_in_tmpl.go'),
     ('selection_ops.eg.go', 'selection_ops_tmpl.go'),
@@ -39,7 +36,6 @@ targets = [
     ('substring.eg.go', 'substring_tmpl.go'),
     ('values_differ.eg.go', 'values_differ_tmpl.go'),
     ('vec_comparators.eg.go', 'vec_comparators_tmpl.go'),
-    ('window_peer_grouper.eg.go', 'window_peer_grouper_tmpl.go'),
 ]
 
 def rule_name_for(target):

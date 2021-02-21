@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load(":COLEXECWINDOW.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecwindow",
+    srcs = [
+        "partitioner.go",
+        "window_functions_util.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",  # keep
+        "//pkg/sql/colcontainer",  # keep
+        "//pkg/sql/colexec",  # keep
+        "//pkg/sql/colexec/colexecutils",  # keep
+        "//pkg/sql/colexecbase",  # keep
+        "//pkg/sql/colexecbase/colexecerror",  # keep
+        "//pkg/sql/colmem",  # keep
+        "//pkg/sql/execinfrapb",  # keep
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/types",  # keep
+        "//pkg/util/mon",  # keep
+        "@com_github_cockroachdb_errors//:errors",  # keep
+        "@com_github_marusama_semaphore//:semaphore",  # keep
+    ],
+)
+
+go_test(
+    name = "colexecwindow_test",
+    srcs = [
+        "inject_setup_test.go",
+        "main_test.go",
+        "window_functions_test.go",
+    ],
+    embed = [":colexecwindow"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/colcontainerutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(name = "gen-exec")
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules()

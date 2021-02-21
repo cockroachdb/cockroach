@@ -23,7 +23,7 @@ type relativeRankTmplInfo struct {
 	String        string
 }
 
-const relativeRankTmpl = "pkg/sql/colexec/relative_rank_tmpl.go"
+const relativeRankTmpl = "pkg/sql/colexec/colexecwindow/relative_rank_tmpl.go"
 
 func genRelativeRankOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_RELATIVE_RANK_STRING", "{{.String}}")
