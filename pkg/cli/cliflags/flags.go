@@ -720,9 +720,18 @@ Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal)
 		Name: "init-token",
 		Description: `Shared token for initialization of node TLS certificates.
 
-This flag is optional for the 'start' command. When omitted, the command
-expects the operator to prepare TLS certificates beforehand using
-the 'cert' command.`,
+This flag is optional for the 'start' command. When omitted, the 'start'
+command expects the operator to prepare TLS certificates beforehand using
+the 'cert' command.
+
+The --init-token flag must be combined with --init-num-peers.`,
+	}
+
+	NumExpectedInitialPeers = FlagInfo{
+		Name: "init-num-peers",
+		Description: `Number of expected peer nodes during TLS certificate creation.
+
+The --init-num-peers flag must be combined with --init-token.`,
 	}
 
 	CertsDir = FlagInfo{
