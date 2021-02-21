@@ -29,8 +29,8 @@ const (
 	MShapeTypeFlag = 1 << 29
 )
 
-// To2DShapeType returns the ShapeType for the corresponding 2D geometry type.
-func (s ShapeType) To2DShapeType() ShapeType {
+// To2D returns the ShapeType for the corresponding 2D geometry type.
+func (s ShapeType) To2D() ShapeType {
 	return ShapeType(uint32(s) & (MShapeTypeFlag - 1))
 }
 

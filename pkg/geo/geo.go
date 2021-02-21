@@ -305,6 +305,11 @@ func (g *Geometry) ShapeType() geopb.ShapeType {
 	return g.spatialObject.ShapeType
 }
 
+// ShapeType2D returns the 2D shape type of the Geometry.
+func (g *Geometry) ShapeType2D() geopb.ShapeType {
+	return g.ShapeType().To2D()
+}
+
 // CartesianBoundingBox returns a Cartesian bounding box.
 func (g *Geometry) CartesianBoundingBox() *CartesianBoundingBox {
 	if g.spatialObject.BoundingBox == nil {
@@ -550,6 +555,11 @@ func (g *Geography) SRID() geopb.SRID {
 // ShapeType returns the shape type of the Geography.
 func (g *Geography) ShapeType() geopb.ShapeType {
 	return g.spatialObject.ShapeType
+}
+
+// ShapeType2D returns the 2D shape type of the Geography.
+func (g *Geography) ShapeType2D() geopb.ShapeType {
+	return g.ShapeType().To2D()
 }
 
 // Spheroid returns the spheroid represented by the given Geography.
