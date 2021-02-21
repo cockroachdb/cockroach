@@ -863,9 +863,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/proj_like_ops.eg.go \
   pkg/sql/colexec/proj_non_const_ops.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
-  pkg/sql/colexec/rank.eg.go \
-  pkg/sql/colexec/relative_rank.eg.go \
-  pkg/sql/colexec/row_number.eg.go \
   pkg/sql/colexec/rowstovec.eg.go \
   pkg/sql/colexec/selection_ops.eg.go \
   pkg/sql/colexec/select_in.eg.go \
@@ -874,7 +871,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
-  pkg/sql/colexec/window_peer_grouper.eg.go \
   pkg/sql/colexec/colexecagg/hash_any_not_null_agg.eg.go \
   pkg/sql/colexec/colexecagg/hash_avg_agg.eg.go \
   pkg/sql/colexec/colexecagg/hash_bool_and_or_agg.eg.go \
@@ -896,7 +892,11 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexechash/hashtable_distinct.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_deleting.eg.go \
-  pkg/sql/colexec/colexechash/hash_utils.eg.go
+  pkg/sql/colexec/colexechash/hash_utils.eg.go \
+  pkg/sql/colexec/colexecwindow/rank.eg.go \
+  pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
+  pkg/sql/colexec/colexecwindow/row_number.eg.go \
+  pkg/sql/colexec/colexecwindow/window_peer_grouper.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
