@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecsel
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -338,7 +339,7 @@ func GetSelectionConstOperator(
 	}
 	return &defaultCmpConstSelOp{
 		selConstOpBase:   selConstOpBase,
-		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 		constArg:         constArg,
 		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
 	}, nil
@@ -394,7 +395,7 @@ func GetSelectionOperator(
 	}
 	return &defaultCmpSelOp{
 		selOpBase:        selOpBase,
-		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
 	}, nil
 }

@@ -17,13 +17,14 @@
 //
 // */}}
 
-package colexec
+package colexecsel
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +40,7 @@ type defaultCmp_KINDSelOp struct {
 	selOpBase
 	// {{end}}
 
-	adapter          comparisonExprAdapter
+	adapter          colexeccmp.ComparisonExprAdapter
 	toDatumConverter *colconv.VecToDatumConverter
 }
 
@@ -76,10 +77,10 @@ func (d *defaultCmp_KINDSelOp) Next(ctx context.Context) coldata.Batch {
 			// is no need to check whether hasSel is true.
 			// {{if .HasConst}}
 			//gcassert:bce
-			res, err := d.adapter.eval(leftColumn[i], d.constArg)
+			res, err := d.adapter.Eval(leftColumn[i], d.constArg)
 			// {{else}}
 			//gcassert:bce
-			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
 			// {{end}}
 			if err != nil {
 				colexecerror.ExpectedError(err)

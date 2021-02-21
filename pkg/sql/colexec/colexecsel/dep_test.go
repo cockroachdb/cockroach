@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexechash
+package colexecsel
 
 import (
 	"testing"
@@ -18,13 +18,13 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel", true,
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj",
-			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
 		}, nil,
 	)

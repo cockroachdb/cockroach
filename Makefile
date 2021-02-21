@@ -837,9 +837,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colconv/vec_to_datum.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/crossjoiner.eg.go \
-  pkg/sql/colexec/default_cmp_expr.eg.go \
-  pkg/sql/colexec/default_cmp_proj_ops.eg.go \
-  pkg/sql/colexec/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
@@ -855,15 +852,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/mergejoiner_rightsemi.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
-  pkg/sql/colexec/proj_const_left_ops.eg.go \
-  pkg/sql/colexec/proj_const_right_ops.eg.go \
-  pkg/sql/colexec/proj_like_ops.eg.go \
-  pkg/sql/colexec/proj_non_const_ops.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
   pkg/sql/colexec/rowstovec.eg.go \
-  pkg/sql/colexec/selection_ops.eg.go \
   pkg/sql/colexec/select_in.eg.go \
-  pkg/sql/colexec/sel_like_ops.eg.go \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/sort_partitioner.eg.go \
   pkg/sql/colexec/substring.eg.go \
@@ -887,6 +878,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecagg/ordered_min_max_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_int_agg.eg.go \
+  pkg/sql/colexec/colexeccmp/default_cmp_expr.eg.go \
   pkg/sql/colexec/colexechash/hashtable_distinct.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_deleting.eg.go \
@@ -894,6 +886,14 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecmisc/cast.eg.go \
   pkg/sql/colexec/colexecmisc/const.eg.go \
   pkg/sql/colexec/colexecmisc/distinct.eg.go \
+  pkg/sql/colexec/colexecproj/default_cmp_proj_ops.eg.go \
+  pkg/sql/colexec/colexecproj/proj_const_left_ops.eg.go \
+  pkg/sql/colexec/colexecproj/proj_const_right_ops.eg.go \
+  pkg/sql/colexec/colexecproj/proj_like_ops.eg.go \
+  pkg/sql/colexec/colexecproj/proj_non_const_ops.eg.go \
+  pkg/sql/colexec/colexecsel/default_cmp_sel_ops.eg.go \
+  pkg/sql/colexec/colexecsel/selection_ops.eg.go \
+  pkg/sql/colexec/colexecsel/sel_like_ops.eg.go \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
   pkg/sql/colexec/colexecwindow/row_number.eg.go \
