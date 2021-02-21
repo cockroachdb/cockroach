@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -135,7 +136,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		columnarizers[i] = c
 	}
 
-	constructorArgs := &colexec.NewColOperatorArgs{
+	constructorArgs := &colexecargs.NewColOperatorArgs{
 		Spec:                args.pspec,
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,

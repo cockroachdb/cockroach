@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -27,7 +28,7 @@ import (
 func NewExternalDistinct(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	createDiskBackedSorter DiskBackedSorterConstructor,

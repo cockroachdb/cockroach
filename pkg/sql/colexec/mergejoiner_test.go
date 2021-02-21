@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -1665,7 +1666,7 @@ func TestMergeJoiner(t *testing.T) {
 					tc.expected, verifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
-						args := &NewColOperatorArgs{
+						args := &colexecargs.NewColOperatorArgs{
 							Spec:                spec,
 							Inputs:              input,
 							StreamingMemAccount: testMemAcc,
@@ -1673,7 +1674,7 @@ func TestMergeJoiner(t *testing.T) {
 							FDSemaphore:         colexecbase.NewTestingSemaphore(mjFDLimit),
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-						result, err := TestNewColOperator(ctx, flowCtx, args)
+						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
