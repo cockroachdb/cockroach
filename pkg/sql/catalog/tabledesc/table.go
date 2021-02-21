@@ -362,6 +362,13 @@ func FindFKReferencedUniqueConstraint(
 	uniqueWithoutIndexConstraints := referencedTable.GetUniqueWithoutIndexConstraints()
 	for i := range uniqueWithoutIndexConstraints {
 		c := &uniqueWithoutIndexConstraints[i]
+
+		// A partial unique constraint cannot be a reference constraint for a
+		// FK.
+		if c.IsPartial() {
+			continue
+		}
+
 		// TODO(rytaft): We should allow out-of-order unique constraints, as long
 		// as they have the same columns.
 		if descpb.ColumnIDs(c.ColumnIDs).Equals(referencedColIDs) {
