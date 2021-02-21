@@ -411,11 +411,16 @@ func initHandshakeHelper(
 	ctx context.Context,
 	cfg *base.Config,
 	token string,
-	numExpectedPeers int,
+	numExpectedNodes int,
 	peers []string,
 	certsDir string,
 	listener net.Listener,
 ) error {
+	if numExpectedNodes <= 0 {
+		return errors.AssertionFailedf("programming error: must expect more than 1 node")
+	}
+	numExpectedPeers := numExpectedNodes - 1
+
 	addr := listener.Addr()
 	var listenHost string
 	switch netAddr := addr.(type) {
@@ -535,7 +540,7 @@ func InitHandshake(
 	ctx context.Context,
 	cfg *base.Config,
 	token string,
-	numExpectedPeers int,
+	numExpectedNodes int,
 	peers []string,
 	certsDir string,
 	listener net.Listener,
@@ -543,6 +548,6 @@ func InitHandshake(
 	// TODO(bilal): Allow defaultInitLifespan to be configurable, possibly through
 	// base.Config.
 	return contextutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
-		return initHandshakeHelper(ctx, cfg, token, numExpectedPeers, peers, certsDir, listener)
+		return initHandshakeHelper(ctx, cfg, token, numExpectedNodes, peers, certsDir, listener)
 	})
 }
