@@ -518,22 +518,36 @@ func (r *Replica) executeAdminBatch(
 		sp.SetOperationName(reflect.TypeOf(args).String())
 	}
 
-	// Admin commands always require the range lease.
-	_, pErr := r.redirectOnOrAcquireLease(ctx)
-	if pErr != nil {
-		return nil, pErr
-	}
-	// Note there is no need to limit transaction max timestamp on admin requests.
-
-	// Verify that the batch can be executed.
+	// Verify that the batch can be executed, which includes verifying that the
+	// current replica has the range lease.
 	// NB: we pass nil for the spanlatch guard because we haven't acquired
 	// latches yet. This is ok because each individual request that the admin
 	// request sends will acquire latches.
-	if _, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */); err != nil {
-		return nil, roachpb.NewError(err)
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		_, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
+		if err == nil {
+			break
+		}
+		switch {
+		case errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)):
+			// If the replica does not have the lease, attempt to acquire it, or
+			// redirect to the current leaseholder by returning an error.
+			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
+			if pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		default:
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	var resp roachpb.Response
+	var pErr *roachpb.Error
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
