@@ -130,7 +130,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 				if err != nil {
 					return nil, err
 				}
-				if g.ShapeType().To2DShapeType() != shapeType {
+				if g.ShapeType2D() != shapeType {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -154,7 +154,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 				if err != nil {
 					return nil, err
 				}
-				if g.ShapeType().To2DShapeType() != shapeType {
+				if g.ShapeType2D() != shapeType {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -180,7 +180,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 				if err != nil {
 					return nil, err
 				}
-				if g.ShapeType().To2DShapeType() != shapeType {
+				if g.ShapeType2D() != shapeType {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -204,7 +204,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 				if err != nil {
 					return nil, err
 				}
-				if g.ShapeType().To2DShapeType() != shapeType {
+				if g.ShapeType2D() != shapeType {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -494,7 +494,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if g.Geometry.Empty() {
 					return tree.DBoolFalse, nil
 				}
-				if g.Geometry.ShapeType().To2DShapeType() == geopb.ShapeType_Point {
+				if g.Geometry.ShapeType2D() == geopb.ShapeType_Point {
 					return tree.DBoolFalse, nil
 				}
 				return tree.DBoolTrue, nil
@@ -1873,7 +1873,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType().To2DShapeType(), false)
+				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType2D(), false)
 				if err != nil {
 					return nil, err
 				}
@@ -1901,7 +1901,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType().To2DShapeType(), true)
+				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType2D(), true)
 				if err != nil {
 					return nil, err
 				}
@@ -2582,7 +2582,7 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(g.ShapeType().To2DShapeType().String()), nil
+				return tree.NewDString(g.ShapeType2D().String()), nil
 			},
 			types.String,
 			infoBuilder{
@@ -2596,7 +2596,7 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType().To2DShapeType().String())), nil
+				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType2D().String())), nil
 			},
 			types.String,
 			infoBuilder{
