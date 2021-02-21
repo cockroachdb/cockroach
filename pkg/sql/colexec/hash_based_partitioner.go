@@ -113,7 +113,7 @@ const (
 // seem to make progress in reducing the size of the partitions).
 type hashBasedPartitioner struct {
 	colexecbase.NonExplainable
-	closerHelper
+	colexecbase.CloserHelper
 
 	unlimitedAllocator                 *colmem.Allocator
 	name                               string
@@ -180,7 +180,7 @@ type hashBasedPartitioner struct {
 	}
 }
 
-var _ closableOperator = &hashBasedPartitioner{}
+var _ colexecbase.ClosableOperator = &hashBasedPartitioner{}
 
 // hbpPartitionInfo is a helper struct that tracks the memory usage of a
 // partition. Note that if the hash-based partitioner has two inputs, we take
@@ -621,7 +621,7 @@ StateChanged:
 }
 
 func (op *hashBasedPartitioner) Close(ctx context.Context) error {
-	if !op.close() {
+	if !op.CloserHelper.Close() {
 		return nil
 	}
 	var retErr error

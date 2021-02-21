@@ -130,7 +130,7 @@ const (
 
 type relativeRankInitFields struct {
 	rankInitFields
-	closerHelper
+	colexecbase.CloserHelper
 
 	state        relativeRankState
 	memoryLimit  int64
@@ -179,7 +179,7 @@ type percentRankNoPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ closableOperator = &percentRankNoPartitionOp{}
+var _ colexecbase.ClosableOperator = &percentRankNoPartitionOp{}
 
 func (r *percentRankNoPartitionOp) Init() {
 	r.Input.Init()
@@ -352,7 +352,7 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
-	if !r.close() {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -381,7 +381,7 @@ type percentRankWithPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ closableOperator = &percentRankWithPartitionOp{}
+var _ colexecbase.ClosableOperator = &percentRankWithPartitionOp{}
 
 func (r *percentRankWithPartitionOp) Init() {
 	r.Input.Init()
@@ -655,7 +655,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
-	if !r.close() {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -688,7 +688,7 @@ type cumeDistNoPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ closableOperator = &cumeDistNoPartitionOp{}
+var _ colexecbase.ClosableOperator = &cumeDistNoPartitionOp{}
 
 func (r *cumeDistNoPartitionOp) Init() {
 	r.Input.Init()
@@ -946,7 +946,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
-	if !r.close() {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -980,7 +980,7 @@ type cumeDistWithPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ closableOperator = &cumeDistWithPartitionOp{}
+var _ colexecbase.ClosableOperator = &cumeDistWithPartitionOp{}
 
 func (r *cumeDistWithPartitionOp) Init() {
 	r.Input.Init()
@@ -1339,7 +1339,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
-	if !r.close() {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

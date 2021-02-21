@@ -130,7 +130,7 @@ type hashAggregator struct {
 
 var _ colexecbase.ResettableOperator = &hashAggregator{}
 var _ colexecbase.BufferingInMemoryOperator = &hashAggregator{}
-var _ closableOperator = &hashAggregator{}
+var _ colexecbase.ClosableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
 // aggregator's allocators. This number was chosen after running benchmarks of

@@ -51,7 +51,7 @@ type Columnarizer struct {
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
 	da         rowenc.DatumAlloc
-	initStatus OperatorInitStatus
+	initStatus colexecbase.OperatorInitStatus
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
@@ -130,10 +130,10 @@ func (c *Columnarizer) Init() {
 	// We don't want to call Start on the input to columnarizer and allocating
 	// internal objects several times if Init method is called more than once, so
 	// we have this check in place.
-	if c.initStatus == OperatorNotInitialized {
+	if c.initStatus == colexecbase.OperatorNotInitialized {
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 		c.input.Start(c.ctx)
-		c.initStatus = OperatorInitialized
+		c.initStatus = colexecbase.OperatorInitialized
 	}
 }
 

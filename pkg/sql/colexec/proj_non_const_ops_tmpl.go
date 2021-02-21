@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -257,7 +258,7 @@ func GetProjectionOperator(
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
 		OneInputNode:   colexecbase.NewOneInputNode(input),
 		allocator:      allocator,
