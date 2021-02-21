@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -83,7 +84,7 @@ const (
 func NewExternalHashJoiner(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	spec HashJoinerSpec,
 	leftInput, rightInput colexecbase.Operator,
 	createDiskBackedSorter DiskBackedSorterConstructor,

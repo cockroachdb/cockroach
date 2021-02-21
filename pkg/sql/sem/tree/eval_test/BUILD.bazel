@@ -17,6 +17,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexecbase",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -297,7 +298,7 @@ func TestWindowFunctions(t *testing.T) {
 				// Relative rank operators currently require the most number of
 				// FDs.
 				sem := colexecbase.NewTestingSemaphore(relativeRankNumRequiredFDs)
-				args := &NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                spec,
 					Inputs:              inputs,
 					StreamingMemAccount: testMemAcc,
@@ -306,7 +307,7 @@ func TestWindowFunctions(t *testing.T) {
 				}
 				semsToCheck = append(semsToCheck, sem)
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := TestNewColOperator(ctx, flowCtx, args)
+				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 				accounts = append(accounts, result.OpAccounts...)
 				monitors = append(monitors, result.OpMonitors...)
 				return result.Op, err

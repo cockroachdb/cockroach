@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -446,7 +447,7 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
-	exprHelper                     *colexec.ExprHelper
+	exprHelper                     *colexecargs.ExprHelper
 	typeResolver                   descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
@@ -499,7 +500,7 @@ var vectorizedFlowCreatorPool = sync.Pool{
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]opDAGWithMetaSources),
 			streamIDToSpecIdx: make(map[execinfrapb.StreamID]int),
-			exprHelper:        colexec.NewExprHelper(),
+			exprHelper:        colexecargs.NewExprHelper(),
 		}
 	},
 }
@@ -1102,7 +1103,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 
-			args := &colexec.NewColOperatorArgs{
+			args := &colexecargs.NewColOperatorArgs{
 				Spec:                 pspec,
 				Inputs:               inputs,
 				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
@@ -1113,7 +1114,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
 			}
-			var result *colexec.NewColOperatorResult
+			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {
 				// Even when err is non-nil, it is possible that the buffering memory
