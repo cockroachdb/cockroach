@@ -167,10 +167,6 @@ type Config struct {
 	// SSLCertsDir is the path to the certificate/key directory.
 	SSLCertsDir string
 
-	// InitToken is a shared initialization token for generating TLS certificates
-	// across multiple nodes.
-	InitToken string
-
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
 	User security.SQLUsername

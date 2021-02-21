@@ -79,13 +79,13 @@ func TestInitHandshake(t *testing.T) {
 	addr3 = listener3.Addr().String()
 
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg1, "foobar", 2, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
+		errReturned <- InitHandshake(ctx, cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg2, "foobar", 2, []string{addr1, addr3}, cfg1.SSLCertsDir, listener2)
+		errReturned <- InitHandshake(ctx, cfg2, "foobar", 3, []string{addr1, addr3}, cfg1.SSLCertsDir, listener2)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg3, "foobar", 2, []string{addr1, addr2}, cfg1.SSLCertsDir, listener3)
+		errReturned <- InitHandshake(ctx, cfg3, "foobar", 3, []string{addr1, addr2}, cfg1.SSLCertsDir, listener3)
 	}()
 
 	count := 0
@@ -167,13 +167,13 @@ func TestInitHandshakeWrongToken(t *testing.T) {
 	addr3 = listener3.Addr().String()
 
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg1, "foobar", 2, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
+		errReturned <- InitHandshake(ctx, cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg2, "foobarbaz", 2, []string{addr1, addr3}, cfg1.SSLCertsDir, listener2)
+		errReturned <- InitHandshake(ctx, cfg2, "foobarbaz", 3, []string{addr1, addr3}, cfg1.SSLCertsDir, listener2)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg3, "foobar", 2, []string{addr1, addr2}, cfg1.SSLCertsDir, listener3)
+		errReturned <- InitHandshake(ctx, cfg3, "foobar", 3, []string{addr1, addr2}, cfg1.SSLCertsDir, listener3)
 	}()
 
 	count := 0

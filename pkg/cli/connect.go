@@ -47,5 +47,5 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		_ = listener.Close()
 	}()
 
-	return server.InitHandshake(ctx, baseCfg, baseCfg.InitToken, len(peers), peers, baseCfg.SSLCertsDir, listener)
+	return server.InitHandshake(ctx, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, listener)
 }
