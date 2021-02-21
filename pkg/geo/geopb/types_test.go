@@ -37,9 +37,9 @@ func TestShapeType(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.base.String(), func(t *testing.T) {
-			require.Equal(t, tc.base, tc.z.To2DShapeType())
-			require.Equal(t, tc.base, tc.m.To2DShapeType())
-			require.Equal(t, tc.base, tc.zm.To2DShapeType())
+			require.Equal(t, tc.base, tc.z.To2D())
+			require.Equal(t, tc.base, tc.m.To2D())
+			require.Equal(t, tc.base, tc.zm.To2D())
 
 			require.Equal(t, tc.z, tc.base|ZShapeTypeFlag)
 			require.Equal(t, tc.m, tc.base|MShapeTypeFlag)
