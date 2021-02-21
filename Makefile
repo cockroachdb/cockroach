@@ -868,6 +868,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sel_like_ops.eg.go \
   pkg/sql/colexec/sort.eg.go \
+  pkg/sql/colexec/sort_partitioner.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
