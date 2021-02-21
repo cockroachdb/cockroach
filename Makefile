@@ -850,7 +850,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
-  pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \
   pkg/sql/colexec/mergejoiner_exceptall.eg.go \
   pkg/sql/colexec/mergejoiner_fullouter.eg.go \
@@ -865,6 +864,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
   pkg/sql/colexec/proj_const_right_ops.eg.go \
+  pkg/sql/colexec/proj_like_ops.eg.go \
   pkg/sql/colexec/proj_non_const_ops.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
   pkg/sql/colexec/rank.eg.go \
@@ -873,6 +873,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/rowstovec.eg.go \
   pkg/sql/colexec/selection_ops.eg.go \
   pkg/sql/colexec/select_in.eg.go \
+  pkg/sql/colexec/sel_like_ops.eg.go \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \

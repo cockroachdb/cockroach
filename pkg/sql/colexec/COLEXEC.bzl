@@ -15,7 +15,6 @@ targets = [
     ('hashtable_full_default.eg.go', 'hashtable_tmpl.go'),
     ('hashtable_full_deleting.eg.go', 'hashtable_tmpl.go'),
     ('is_null_ops.eg.go', 'is_null_ops_tmpl.go'),
-    # ('like_ops.eg.go', ...); See `gen_like_ops_rule` below.
     ('mergejoinbase.eg.go', 'mergejoinbase_tmpl.go'),
     ('mergejoiner_exceptall.eg.go', 'mergejoiner_tmpl.go'),
     ('mergejoiner_fullouter.eg.go', 'mergejoiner_tmpl.go'),
@@ -30,6 +29,7 @@ targets = [
     ('ordered_synchronizer.eg.go', 'ordered_synchronizer_tmpl.go'),
     ('proj_const_left_ops.eg.go', 'proj_const_ops_tmpl.go'),
     ('proj_const_right_ops.eg.go', 'proj_const_ops_tmpl.go'),
+    ('proj_like_ops.eg.go', 'proj_const_ops_tmpl.go'),
     ('proj_non_const_ops.eg.go', 'proj_non_const_ops_tmpl.go'),
     ('quicksort.eg.go', 'quicksort_tmpl.go'),
     ('rank.eg.go', 'rank_tmpl.go'),
@@ -38,6 +38,7 @@ targets = [
     ('rowstovec.eg.go', 'rowstovec_tmpl.go'),
     ('select_in.eg.go', 'select_in_tmpl.go'),
     ('selection_ops.eg.go', 'selection_ops_tmpl.go'),
+    ('sel_like_ops.eg.go', 'selection_ops_tmpl.go'),
     ('sort.eg.go', 'sort_tmpl.go'),
     ('substring.eg.go', 'substring_tmpl.go'),
     ('values_differ.eg.go', 'values_differ_tmpl.go'),
@@ -82,27 +83,3 @@ def gen_eg_go_rules():
               """,
             tools = [":execgen", ":goimports"],
         )
-
-# TODO(irfansharif): We should be able to use `gen_eg_go_rules` to generate
-# like_ops.eg.go. It's special-cased here because execgen reads two separate
-# template files[1] when generating like_ops.eg.go.
-#
-# [1]: https://github.com/cockroachdb/cockroach/blob/1f23ef2b4e/pkg/sql/colexec/execgen/cmd/execgen/like_ops_gen.go#L48
-def gen_like_ops_rule(name, templates, target):
-    native.genrule(
-        name = name,
-        srcs = templates,
-        outs = [target],
-        # See TODO above. We should ideally be using $(SRCS) to point to the
-        # template file, but like_ops.eg.go needs access to two template files.
-        # We point to the first, which is the template the generator is
-        # registered with, but we also need to include the other in our srcs so
-        # it's included in the sandbox when generating the file (-template only
-        # expects one argument).
-        cmd = """
-          $(location :execgen) -template $(location %s) \
-              -fmt=false pkg/sql/colexec/$@ > $@
-          $(location :goimports) -w $@
-          """ % (templates[0]),
-        tools = [":execgen", ":goimports"],
-    )
