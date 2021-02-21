@@ -355,8 +355,9 @@ func init() {
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 		boolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
 
-		// The initialization token. For 'start' commands this is optional.
-		stringFlag(f, &baseCfg.InitToken, cliflags.InitToken)
+		// The initialization token and expected peers. For 'start' commands this is optional.
+		stringFlag(f, &startCtx.initToken, cliflags.InitToken)
+		intFlag(f, &startCtx.numExpectedPeers, cliflags.NumExpectedInitialPeers)
 
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
