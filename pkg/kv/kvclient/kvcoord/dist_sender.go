@@ -1794,17 +1794,15 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	// Try the leaseholder first, if the request wants it.
-	{
-		sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
-		if sendToLeaseholder {
-			idx := replicas.Find(leaseholder.ReplicaID)
-			if idx != -1 {
-				replicas.MoveToFront(idx)
-			} else {
-				// The leaseholder node's info must have been missing from gossip when
-				// we created replicas.
-				log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
-			}
+	sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
+	if sendToLeaseholder {
+		idx := replicas.Find(leaseholder.ReplicaID)
+		if idx != -1 {
+			replicas.MoveToFront(idx)
+		} else {
+			// The leaseholder node's info must have been missing from gossip when
+			// we created replicas.
+			log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
 		}
 	}
 
@@ -1820,6 +1818,9 @@ func (ds *DistSender) sendToReplicas(
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
 	// lease transfer is suspected.
+	// TODO(andrei): now that requests wait on lease transfers to complete on
+	// outgoing leaseholders instead of immediately redirecting, we should
+	// rethink this backoff policy.
 	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
 	inTransferRetry.Next() // The first call to Next does not block.
 	var sameReplicaRetries int
@@ -2009,13 +2010,13 @@ func (ds *DistSender) sendToReplicas(
 					// happen when the next RPC comes back, but we don't want to wait out
 					// the additional RPC latency.
 
-					var ok bool
+					var updatedLeaseholder bool
 					if tErr.Lease != nil {
-						ok = routing.UpdateLease(ctx, tErr.Lease)
+						updatedLeaseholder = routing.UpdateLease(ctx, tErr.Lease)
 					} else if tErr.LeaseHolder != nil {
 						// tErr.LeaseHolder might be set when tErr.Lease isn't.
 						routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder)
-						ok = true
+						updatedLeaseholder = true
 					}
 					// Move the new leaseholder to the head of the queue for the next
 					// retry. Note that the leaseholder might not be the one indicated by
@@ -2032,15 +2033,24 @@ func (ds *DistSender) sendToReplicas(
 							transport.MoveToFront(*lh)
 						}
 					}
-					// See if we want to backoff a little before the next attempt. If the lease info
-					// we got is stale, we backoff because it might be the case that there's a
-					// lease transfer in progress and the would-be leaseholder has not yet
-					// applied the new lease.
-					if ok {
-						inTransferRetry.Reset() // The following Next() call will not block.
-					} else {
+					// Check whether the request was intentionally sent to a follower
+					// replica to perform a follower read. In such cases, the follower
+					// may reject the request with a NotLeaseHolderError if it does not
+					// have a sufficient closed timestamp. In response, we should
+					// immediately redirect to the leaseholder, without a backoff
+					// period.
+					intentionallySentToFollower := first && !sendToLeaseholder
+					// See if we want to backoff a little before the next attempt. If
+					// the lease info we got is stale and we were intending to send to
+					// the leaseholder, we backoff because it might be the case that
+					// there's a lease transfer in progress and the would-be leaseholder
+					// has not yet applied the new lease.
+					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower
+					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
 						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
+					} else {
+						inTransferRetry.Reset() // The following Next() call will not block.
 					}
 					inTransferRetry.Next()
 				}
