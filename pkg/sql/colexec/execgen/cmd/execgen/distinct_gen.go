@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"text/template"
@@ -18,32 +19,93 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// distinctTmpl is the common base for the template used to generate code for
+// ordered distinct structs and sort partitioners. It should be used as a format
+// string with one %s argument that specifies which of the building blocks
+// coming from distinct_tmpl.go should be included into the code generation.
+const distinctTmpl = `
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package colexec
+
+import (
+	"context"
+
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
+)
+
+%s
+`
+
 const distinctOpsTmpl = "pkg/sql/colexec/distinct_tmpl.go"
 
-func genDistinctOps(inputFileContents string, wr io.Writer) error {
-	r := strings.NewReplacer(
-		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
-		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
-		"_TYPE", "{{.VecMethod}}",
-		"TemplateType", "{{.VecMethod}}")
-	s := r.Replace(inputFileContents)
+func genDistinctOps(targetTmpl string) generator {
+	return func(inputFileContents string, wr io.Writer) error {
+		r := strings.NewReplacer(
+			"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+			"_TYPE_WIDTH", typeWidthReplacement,
+			"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+			"_GOTYPE", "{{.GoType}}",
+			"_TYPE", "{{.VecMethod}}",
+			"TemplateType", "{{.VecMethod}}")
+		s := r.Replace(inputFileContents)
 
-	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
+		assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
+		s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
-	s = replaceManipulationFuncs(s)
+		s = replaceManipulationFuncs(s)
 
-	// Now, generate the op, from the template.
-	tmpl, err := template.New("distinct_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
-	if err != nil {
-		return err
+		// Now, generate the op, from the template.
+		tmpl, err := template.New("distinct_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
+		if err != nil {
+			return err
+		}
+
+		tmpl, err = tmpl.Parse(fmt.Sprintf(distinctTmpl, targetTmpl))
+		if err != nil {
+			return err
+		}
+		return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 	}
-
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 
 func init() {
-	registerGenerator(genDistinctOps, "distinct.eg.go", distinctOpsTmpl)
+	distinctOp := `
+{{template "distinctOpConstructor" .}}
+
+{{range .}}
+{{range .WidthOverloads}}
+{{template "distinctOp" .}}
+{{end}}
+{{end}}
+`
+	sortPartitioner := `
+{{template "sortPartitionerConstructor" .}}
+
+{{range .}}
+{{range .WidthOverloads}}
+{{template "sortPartitioner" .}}
+{{end}}
+{{end}}
+`
+	registerGenerator(genDistinctOps(distinctOp), "distinct.eg.go", distinctOpsTmpl)
+	registerGenerator(genDistinctOps(sortPartitioner), "sort_partitioner.eg.go", distinctOpsTmpl)
 }

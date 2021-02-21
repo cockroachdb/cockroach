@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -44,59 +43,6 @@ var (
 	_ duration.Duration
 	_ tree.AggType
 )
-
-// OrderedDistinctColsToOperators is a utility function that given an input and
-// a slice of columns, creates a chain of distinct operators and returns the
-// last distinct operator in that chain as well as its output column.
-func OrderedDistinctColsToOperators(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.ResettableOperator, []bool, error) {
-	distinctCol := make([]bool, coldata.BatchSize())
-	// zero the boolean column on every iteration.
-	input = fnOp{
-		OneInputNode: colexecbase.NewOneInputNode(input),
-		fn:           func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
-	}
-	var (
-		err error
-		r   colexecbase.ResettableOperator
-		ok  bool
-	)
-	for i := range distinctCols {
-		input, err = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	if r, ok = input.(colexecbase.ResettableOperator); !ok {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a Resetter"))
-	}
-	distinctChain := &distinctChainOps{
-		ResettableOperator: r,
-	}
-	return distinctChain, distinctCol, nil
-}
-
-type distinctChainOps struct {
-	colexecbase.ResettableOperator
-}
-
-var _ colexecbase.ResettableOperator = &distinctChainOps{}
-
-// NewOrderedDistinct creates a new ordered distinct operator on the given
-// input columns with the given types.
-func NewOrderedDistinct(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.ResettableOperator, error) {
-	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
-	if err != nil {
-		return nil, err
-	}
-	return &boolVecToSelOp{
-		OneInputNode: colexecbase.NewOneInputNode(op),
-		outputCol:    outputCol,
-	}, nil
-}
 
 // {{/*
 
@@ -122,6 +68,8 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
+// {{define "distinctOpConstructor"}}
+
 func newSingleDistinct(
 	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
 ) (colexecbase.Operator, error) {
@@ -142,6 +90,10 @@ func newSingleDistinct(
 	}
 	return nil, errors.Errorf("unsupported distinct type %s", t)
 }
+
+// {{end}}
+
+// {{define "sortPartitionerConstructor"}}
 
 // partitioner is a simple implementation of sorted distinct that's useful for
 // other operators that need to partition an arbitrarily-sized Vec.
@@ -176,8 +128,9 @@ func newPartitioner(t *types.T) (partitioner, error) {
 	return nil, errors.Errorf("unsupported partition type %s", t)
 }
 
-// {{range .}}
-// {{range .WidthOverloads}}
+// {{end}}
+
+// {{define "distinctOp"}}
 
 // distinct_TYPEOp runs a distinct on the column in distinctColIdx, writing
 // true to the resultant bool column for every value that differs from the
@@ -283,6 +236,10 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// {{end}}
+
+// {{define "sortPartitioner"}}
+
 // partitioner_TYPE partitions an arbitrary-length colVec by running a distinct
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
@@ -344,7 +301,6 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 }
 
-// {{end}}
 // {{end}}
 
 // checkDistinct retrieves the value at the ith index of col, compares it
