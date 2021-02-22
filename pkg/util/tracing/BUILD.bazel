@@ -21,7 +21,6 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/util",
-        "//pkg/util/caller",
         "//pkg/util/envutil",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
@@ -39,6 +38,7 @@ go_library(
         "@com_github_opentracing_opentracing_go//log",
         "@com_github_openzipkin_contrib_zipkin_go_opentracing//:zipkin-go-opentracing",
         "@com_github_petermattis_goid//:goid",
+        "@com_github_pmezard_go_difflib//difflib",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",

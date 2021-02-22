@@ -66,7 +66,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Initial recording of this fresh (real) span.
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
-		Span a:
+		span: a
 			tags: _unfinished=1
 	`); err != nil {
 		t.Fatal(err)
@@ -89,18 +89,18 @@ func TestTracerRecording(t *testing.T) {
 	s2.Recordf("x=%d", 3)
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
-		Span a:
+		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
-		Span b:
-			tags: _unfinished=1 _verbose=1
-			event: x=3
+			span: b
+				tags: _unfinished=1 _verbose=1
+				event: x=3
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
-		Span b:
+		span: b
 			tags: _unfinished=1 _verbose=1
 			event: x=3
 	`); err != nil {
@@ -114,59 +114,48 @@ func TestTracerRecording(t *testing.T) {
 	s2.Finish()
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
-		Span a:
+		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
-		Span b:
-			tags: _verbose=1
-			event: x=3
-		Span c:
-			tags: _unfinished=1 _verbose=1 tag=val
-			event: x=4
+			span: b
+				tags: _verbose=1
+				event: x=3
+				span: c
+					tags: _unfinished=1 _verbose=1 tag=val
+					event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
-	defer s3.Finish()
-	expS1v := `
-		Span a:
-      tags: _unfinished=1 _verbose=1
+	s3.Finish()
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+		span: a
+			tags: _unfinished=1 _verbose=1
 			event: x=2
-		Span b:
-      tags: _verbose=1
-			event: x=3
-		Span c:
-			tags: _unfinished=1 _verbose=1 tag=val
-			event: x=4
-	`
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), expS1v); err != nil {
+			span: b
+				tags: _verbose=1
+				event: x=3
+				span: c
+					tags: _verbose=1 tag=val
+					event: x=4
+	`); err != nil {
 		t.Fatal(err)
 	}
-	// When we turn off verbosity and add more verbose logs, they get
-	// dropped, i.e. the recording is unchanged mod the _verbose flag.
-	expS1n := `
-		Span a:
-      tags: _unfinished=1
-			event: x=2
-		Span b:
-      tags: _verbose=1
-			event: x=3
-		Span c:
-			tags: _unfinished=1 _verbose=1 tag=val
-			event: x=4
-	`
+	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), expS1n); err != nil {
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+		span: a
+			tags: _unfinished=1
+	`); err != nil {
 		t.Fatal(err)
 	}
 
-	// The child Span is still recording.
+	// The child Span, now finished, will drop future recordings.
 	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
-		Span c:
-			tags: _unfinished=1 _verbose=1 tag=val
+		span: c
+			tags: _verbose=1 tag=val
 			event: x=4
-			event: x=5
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -181,14 +170,12 @@ func TestStartChildSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	var exp = `
-Span parent:
-      tags: _verbose=1
-    Span child:
-      tags: _verbose=1
-`
-
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), exp); err != nil {
+	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+		span: parent
+			tags: _verbose=1
+			span: child
+				tags: _verbose=1
+	`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,13 +185,13 @@ Span parent:
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
-		Span parent:
+		span: parent
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
 	if err := TestingCheckRecordedSpans(sp2.GetRecording(), `
-		Span child:
+		span: child
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
@@ -217,9 +204,9 @@ Span parent:
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
-		Span parent:
+		span: parent
 			tags: _verbose=1
-			Span child:
+			span: child
 				tags: _verbose=1 key=val
 	`); err != nil {
 		t.Fatal(err)
@@ -287,7 +274,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that recording was started automatically.
 	rec := s2.GetRecording()
 	if err := TestingCheckRecordedSpans(rec, `
-		Span remote op:
+		span: remote op
 			tags: _verbose=1
 			event: x=1
 	`); err != nil {
@@ -295,7 +282,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	}
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
-		Span a:
+		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
@@ -307,11 +294,11 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.Finish()
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
-		Span a:
+		span: a
 			tags: _verbose=1
-		Span remote op:
-			tags: _verbose=1
-			event: x=1
+			span: remote op
+				tags: _verbose=1
+				event: x=1
 	`); err != nil {
 		t.Fatal(err)
 	}
