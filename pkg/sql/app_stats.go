@@ -468,6 +468,7 @@ func (a *appStats) recordTransaction(
 		s.mu.data.ExecStats.NetworkBytes.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkBytesSent))
 		s.mu.data.ExecStats.MaxMemUsage.Record(s.mu.data.ExecStats.Count, float64(execStats.MaxMemUsage))
 		s.mu.data.ExecStats.ContentionTime.Record(s.mu.data.ExecStats.Count, execStats.ContentionTime.Seconds())
+		s.mu.data.ExecStats.NetworkMessages.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkMessages))
 	}
 }
 
