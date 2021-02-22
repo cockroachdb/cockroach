@@ -75,3 +75,17 @@ func TestDummyInitializeNodeFromBundle(t *testing.T) {
 		t.Fatalf("failed to remove test temp dir: %s", err)
 	}
 }
+
+// TestDummyCertLoader is a placeholder for actual testing functions.
+// TODO(aaron-crl): [tests] write unit tests.
+func TestDummyCertLoader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	scb := ServiceCertificateBundle{}
+	_ = scb.loadServiceCertAndKey("", "")
+	_ = scb.loadCACertAndKey("", "")
+
+	cb := CertificateBundle{}
+	cb.InterNode.copyOnlyCAs(&scb)
+	_ = cb.ToPeerInitBundle()
+}

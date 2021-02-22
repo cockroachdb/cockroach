@@ -86,34 +86,34 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
 		// Cert DNE.
 		if _, err = os.Stat(caKeyPath); !oserror.IsNotExist(err) {
 			// Key exists but cert does not, this is an error.
-			err = errors.Wrapf(err,
+			return errors.Wrapf(err,
 				"found key but not certificate for user auth at: %s", caKeyPath)
 		}
 
 		// Create both cert and key for service CA.
 		err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
 		if err != nil {
-			return
+			return err
 		}
 
-		return
+		return nil
 	}
 
 	// Load cert into ServiceCertificateBundle.
 	sb.CACertificate, err = loadCertificateFile(caCertPath)
 	if err != nil {
-		return
+		return err
 	}
 
 	// Load the key only if it exists.
 	if _, err = os.Stat(caKeyPath); !oserror.IsNotExist(err) {
 		sb.CAKey, err = loadKeyFile(caKeyPath)
 		if err != nil {
-			return
+			return err
 		}
 	}
 
-	return
+	return nil
 }
 
 // loadOrCreateServiceCertificates will attempt to load the service cert/key
@@ -160,13 +160,24 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			}
 
 			sb.CACertificate, err = loadCertificateFile(caCertPath)
+			if err != nil {
+				return errors.Wrapf(
+					err, "failed to load certificate file: %s", caCertPath,
+				)
+			}
+
 			sb.CAKey, err = loadKeyFile(caKeyPath)
+			if err != nil {
+				return errors.Wrapf(
+					err, "failed to load key file: %s", caKeyPath,
+				)
+			}
 
 		} else {
 			// Build the CA cert and key.
 			err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
 			if err != nil {
-				return
+				return err
 			}
 
 		}

@@ -267,7 +267,7 @@ func CACertFilename() string { return "ca" + certExtension }
 
 // CAKeyPath returns the expected file path for the CA certificate.
 func (cl CertsLocator) CAKeyPath() string {
-	return filepath.Join(cl.certsDir, CACertFilename())
+	return filepath.Join(cl.certsDir, CAKeyFilename())
 }
 
 // CAKeyFilename returns the expected file name for the CA certificate.
