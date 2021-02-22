@@ -114,11 +114,10 @@ func newMergeJoiner(
 }
 
 // Start is part of the RowSource interface.
-func (m *mergeJoiner) Start(ctx context.Context) context.Context {
+func (m *mergeJoiner) Start(ctx context.Context) {
 	m.streamMerger.start(ctx)
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.cancelChecker = cancelchecker.NewCancelChecker(ctx)
-	return ctx
 }
 
 // Next is part of the Processor interface.

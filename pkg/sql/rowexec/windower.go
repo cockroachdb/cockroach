@@ -204,12 +204,11 @@ func newWindower(
 }
 
 // Start is part of the RowSource interface.
-func (w *windower) Start(ctx context.Context) context.Context {
+func (w *windower) Start(ctx context.Context) {
 	w.input.Start(ctx)
 	ctx = w.StartInternal(ctx, windowerProcName)
 	w.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	w.runningState = windowerAccumulating
-	return ctx
 }
 
 // Next is part of the RowSource interface.

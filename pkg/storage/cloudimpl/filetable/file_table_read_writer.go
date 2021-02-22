@@ -702,7 +702,7 @@ func newFileTableReader(
 			ORDER BY byte_offset DESC
 			LIMIT 1`, payloadTableName)
 		rows, err := ie.Query(
-			ctx, "userfile-reader-payload", query, username, fileID, pos, bufSize,
+			ctx, "userfile-reader-payload", query, username, fileID, pos, int64(bufSize),
 		)
 		if err != nil {
 			return 0, errors.Wrap(err, "reading file content")

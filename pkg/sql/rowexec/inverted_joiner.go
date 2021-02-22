@@ -733,11 +733,14 @@ func (ij *invertedJoiner) transformToTableRow(indexRow rowenc.EncDatumRow) {
 }
 
 // Start is part of the RowSource interface.
-func (ij *invertedJoiner) Start(ctx context.Context) context.Context {
+func (ij *invertedJoiner) Start(ctx context.Context) {
 	ij.input.Start(ctx)
 	ctx = ij.StartInternal(ctx, invertedJoinerProcName)
+	// Go around "this value of ctx is never used" linter error. We do it this
+	// way instead of omitting the assignment to ctx above so that if in the
+	// future other initialization is added, the correct ctx is used.
+	_ = ctx
 	ij.runningState = ijReadingInput
-	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.
