@@ -247,6 +247,10 @@ message ExecStats {
   // ContentionTime collects the time this statement spent contending.
   optional NumericStat contention_time = 4 [(gogoproto.nullable) = false];
 
+  // NetworkMessages collects the number of messages that were sent over the
+  // network.
+  optional NumericStat network_messages = 5 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
 }
