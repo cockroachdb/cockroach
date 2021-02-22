@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"math/rand"
 	"net/url"
 	"sort"
@@ -39,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -49,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -553,49 +550,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	// We'd like to avoid failing a changefeed unnecessarily, so when an error
-	// bubbles up to this level, we'd like to "retry" the flow if possible. This
-	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons.
-	opts := retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
-		Multiplier:     2,
-		MaxBackoff:     10 * time.Second,
-	}
-	var err error
-
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		// startedCh is normally used to signal back to the creator of the job that
-		// the job has started; however, in this case nothing will ever receive
-		// on the channel, causing the changefeed flow to block. Replace it with
-		// a dummy channel.
-		startedCh := make(chan tree.Datums, 1)
-
-		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
-			return nil
-		}
-		if !isRetryableError(err) {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			if flowinfra.IsFlowRetryableError(err) {
-				// We don't want to retry flowinfra retryable error in the retry loop above.
-				// This error currently indicates that this node is being drained.  As such,
-				// retries will not help.
-				// Instead, we want to make sure that the changefeed job is not marked failed
-				// due to a transient, retryable error.
-				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
-			}
-
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
-			return err
-		}
-
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
-		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
-			metrics.ErrorRetries.Inc(1)
-		}
+	runChangefeed := func(ctx context.Context) error {
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
 		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
@@ -609,10 +564,24 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		} else {
 			progress = reloadedJob.Progress()
 		}
+
+		// startedCh is normally used to signal back to the creator of the job that
+		// the job has started; however, in this case nothing will ever receive
+		// on the channel, causing the changefeed flow to block. Replace it with
+		// a dummy channel.
+		startedCh := make(chan tree.Datums, 1)
+
+		return distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
 	}
-	// We only hit this if `r.Next()` returns false, which right now only happens
-	// on context cancellation.
-	return errors.Wrap(err, `ran out of retries`)
+
+	logOnRetryableError := func(err error) {
+		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			metrics.ErrorRetries.Inc(1)
+		}
+	}
+
+	return utilccl.RetryDistSQLFlowCustomRetryable(ctx, isChangefeedRetryableError, runChangefeed, logOnRetryableError)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
