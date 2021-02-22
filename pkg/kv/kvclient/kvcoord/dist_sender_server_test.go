@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1496,9 +1495,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 51795, "TODO(andreimatei): This last assertion in this test was broken by #33150. "+
-		"I suspect the reason is that there is no longer a single Range "+
-		"that spans [KeyMin, z), so we're not hitting the error.")
+
 	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -1520,8 +1517,13 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
-	if err := db.DelRange(ctx, "", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
-		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
+	// To make the last check fail we need to search the replica that starts at
+	// KeyMin i.e. typically it's Range(1).
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	repl := store.LookupReplica(roachpb.RKeyMin)
+	if err := db.DelRange(ctx, "", repl.Desc().EndKey); !testutils.IsError(err, "must be greater than LocalMax") {
+		t.Fatalf("unexpected error on deletion on [KeyMin, %s): %v", repl.Desc().EndKey, err)
 	}
 }
 
