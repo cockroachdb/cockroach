@@ -177,7 +177,9 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			// Build the CA cert and key.
 			err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
 			if err != nil {
-				return err
+				return errors.Wrap(
+					err, "failed to create Service CA",
+				)
 			}
 
 		}
@@ -191,30 +193,35 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			sb.CACertificate,
 			sb.CAKey,
 		)
+		if err != nil {
+			return errors.Wrap(
+				err, "failed to create Service Cert and Key",
+			)
+		}
 
 		err = writeCertificateFile(serviceCertPath, hostCert)
 		if err != nil {
-			return
+			return err
 		}
 
 		err = writeKeyFile(serviceKeyPath, hostKey)
 		if err != nil {
-			return
+			return err
 		}
 
 	}
 
 	sb.HostCertificate, err = loadCertificateFile(serviceCertPath)
 	if err != nil {
-		return
+		return err
 	}
 
 	sb.HostKey, err = loadKeyFile(serviceKeyPath)
 	if err != nil {
-		return
+		return err
 	}
 
-	return
+	return nil
 }
 
 // createServiceCA builds CA cert and key and populates them to
