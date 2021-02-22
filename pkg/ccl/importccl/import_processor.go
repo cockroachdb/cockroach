@@ -100,6 +100,7 @@ func newReadImportDataProcessor(
 
 // Start is part of the RowSource interface.
 func (idp *readImportDataProcessor) Start(ctx context.Context) {
+	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
 	go func() {
@@ -107,13 +108,6 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
 	}()
-	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	// TODO(bulkio): check whether this context should be used in the closure
-	// above.
-	_ = ctx
 }
 
 // Next is part of the RowSource interface.
