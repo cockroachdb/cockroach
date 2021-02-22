@@ -363,6 +363,24 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
+
+			// If the table descriptor is being written to a multi-region database and
+			// the table does not have a locality config setup, set one up here. The
+			// table's locality config will be set to the default locality - REGIONAL
+			// BY TABLE IN PRIMARY REGION.
+			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+				ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
+					Required:       true,
+					AvoidCached:    true,
+					IncludeOffline: true,
+				})
+			if err != nil {
+				return err
+			}
+			if dbDesc.GetRegionConfig() != nil && table.GetLocalityConfig() == nil {
+				table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			}
+
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, tables[i].(catalog.MutableDescriptor), b,
 			); err != nil {
