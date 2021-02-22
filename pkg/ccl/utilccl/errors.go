@@ -30,15 +30,11 @@ func (e *retryableError) Error() string {
 	return fmt.Sprintf("%s: %s", retryableJobsFlowError, e.wrapped.Error())
 }
 
-// Cause implements the github.com/pkg/errors.causer interface.
-func (e *retryableError) Cause() error { return e.wrapped }
-
-// Unwrap implements the github.com/golang/xerrors.Wrapper interface, which is
-// planned to be moved to the stdlib in go 1.13.
-func (e *retryableError) Unwrap() error { return e.wrapped }
 
 // IsDistSQLRetryableError returns true if the supplied error, or any of its parent
-// causes, is a IsDistSQLRetryableError.
+// causes is an rpc error.
+// This is an unfortunate implementation that should be looking for a more
+// specific error.
 func IsDistSQLRetryableError(err error) bool {
 	if err == nil {
 		return false
@@ -48,11 +44,8 @@ func IsDistSQLRetryableError(err error) bool {
 	// by avoiding string comparisons.
 
 	errStr := err.Error()
-	if strings.Contains(errStr, `rpc error`) {
-		// When a crdb node dies, any DistSQL flows with processors scheduled on
-		// it get an error with "rpc error" in the message from the call to
-		// `(*DistSQLPlanner).Run`.
-		return true
-	}
-	return false
+	// When a crdb node dies, any DistSQL flows with processors scheduled on
+	// it get an error with "rpc error" in the message from the call to
+	// `(*DistSQLPlanner).Run`.
+	return strings.Contains(errStr, `rpc error`)
 }

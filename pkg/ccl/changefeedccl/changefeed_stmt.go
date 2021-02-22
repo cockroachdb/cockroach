@@ -293,7 +293,7 @@ func changefeedPlanHook(
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
-			return maybeStripRetryableErrorMarker(err)
+			return MaybeStripRetryableErrorMarker(err)
 		}
 
 		settings := p.ExecCfg().Settings
@@ -324,7 +324,7 @@ func changefeedPlanHook(
 				p.User(), mon.BoundAccount{},
 			)
 			if err != nil {
-				return maybeStripRetryableErrorMarker(err)
+				return MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
