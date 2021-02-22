@@ -836,21 +836,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colconv/datum_to_vec.eg.go \
   pkg/sql/colconv/vec_to_datum.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
-  pkg/sql/colexec/crossjoiner.eg.go \
-  pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
-  pkg/sql/colexec/mergejoinbase.eg.go \
-  pkg/sql/colexec/mergejoiner_exceptall.eg.go \
-  pkg/sql/colexec/mergejoiner_fullouter.eg.go \
-  pkg/sql/colexec/mergejoiner_inner.eg.go \
-  pkg/sql/colexec/mergejoiner_intersectall.eg.go \
-  pkg/sql/colexec/mergejoiner_leftanti.eg.go \
-  pkg/sql/colexec/mergejoiner_leftouter.eg.go \
-  pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
-  pkg/sql/colexec/mergejoiner_rightanti.eg.go \
-  pkg/sql/colexec/mergejoiner_rightouter.eg.go \
-  pkg/sql/colexec/mergejoiner_rightsemi.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
   pkg/sql/colexec/rowstovec.eg.go \
@@ -882,6 +869,19 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/colexechash/hash_utils.eg.go \
+  pkg/sql/colexec/colexecjoin/crossjoiner.eg.go \
+  pkg/sql/colexec/colexecjoin/hashjoiner.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoinbase.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_exceptall.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_fullouter.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_inner.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_intersectall.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_leftanti.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_leftouter.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_leftsemi.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_rightanti.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_rightouter.eg.go \
+  pkg/sql/colexec/colexecjoin/mergejoiner_rightsemi.eg.go \
   pkg/sql/colexec/colexecmisc/cast.eg.go \
   pkg/sql/colexec/colexecmisc/const.eg.go \
   pkg/sql/colexec/colexecmisc/distinct.eg.go \

@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"testing"
 
 	"github.com/cockroachdb/apd/v2"
@@ -1082,16 +1083,16 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = descpb.FullOuterJoin
 										}
-										hjSpec := MakeHashJoinerSpec(
+										hjSpec := colexecjoin.MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
-										hj := NewHashJoiner(
+										hj := colexecjoin.NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
-											HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
+											colexecjoin.HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
 										)
 										hj.Init()
 
