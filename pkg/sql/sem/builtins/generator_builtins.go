@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -343,6 +346,22 @@ var generators = map[string]builtinDefinition{
 			payloadsForSpanGeneratorType,
 			makePayloadsForSpanGenerator,
 			"Returns the payload(s) of the requested span.",
+			tree.VolatilityVolatile,
+		),
+	),
+
+	"crdb_internal.payloads_for_trace": makeBuiltin(
+		tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: categorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "trace_id", Typ: types.Int},
+			},
+			payloadsForTraceGeneratorType,
+			makePayloadsForTraceGenerator,
+			"Returns the payload(s) of the requested trace.",
 			tree.VolatilityVolatile,
 		),
 	),
@@ -1513,3 +1532,85 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 
 // Close implements the tree.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Close() {}
+
+var payloadsForTraceGeneratorLabels = []string{"span_id", "payload_type", "payload_jsonb"}
+
+// TODO(angelapwen): Is it confusing if we display span IDs as int64s when
+// internally they are uint64s? I guess this is the same problem in the
+// node_inflight_trace_spans table so it is consistent between the two.
+var payloadsForTraceGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.String, types.Jsonb},
+	payloadsForTraceGeneratorLabels,
+)
+
+// payloadsForTraceGenerator is a value generator that iterates over all payloads
+// over all recordings over all Spans for a given Trace.
+type payloadsForTraceGenerator struct {
+	// Iterator over all internal rows of a query (here, all payloads for a trace).
+	it sqlutil.InternalRows
+}
+
+func makePayloadsForTraceGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to use crdb_internal.payloads_for_trace",
+		)
+	}
+	traceID := uint64(*(args[0].(*tree.DInt)))
+
+	query := fmt.Sprintf(
+		`WITH spans AS 
+						(SELECT span_id
+  	 					FROM crdb_internal.node_inflight_trace_spans
+ 		 					WHERE trace_id = %d
+						) SELECT * 
+							FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`,
+		traceID)
+
+	ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
+	it, err := ie.QueryIteratorEx(
+		ctx.Ctx(),
+		"crdb_internal.payloads_for_trace",
+		ctx.Txn,
+		sessiondata.NoSessionDataOverride,
+		query,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &payloadsForTraceGenerator{it: it}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (p *payloadsForTraceGenerator) ResolvedType() *types.T {
+	return payloadsForSpanGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (p *payloadsForTraceGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (p *payloadsForTraceGenerator) Next(ctx context.Context) (bool, error) {
+	return p.it.Next(ctx)
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
+	return p.it.Cur(), nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (p *payloadsForTraceGenerator) Close() {
+	p.it.Close()
+}

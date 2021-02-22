@@ -39,7 +39,8 @@ type zipRequest struct {
 
 // Override for the default SELECT * when dumping one of the tables above.
 var customSelectClause = map[string]string{
-	"crdb.internal.node_inflight_trace_spans": "*, WHERE duration > 10*time.Second ORDER BY trace_id ASC, duration DESC",
+	// TODO(angelapwen): How can I test this? All tests in zip_test pass but not sure this statement works appropriately.
+	"crdb.internal.node_inflight_trace_spans": "*, LATERAL crdb_internal.payloads_for_span(span_id) WHERE duration > 10*time.Second ORDER BY trace_id ASC, duration DESC",
 	"system.jobs":       "*, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress",
 	"system.descriptor": "*, to_hex(descriptor) AS hex_descriptor",
 }
