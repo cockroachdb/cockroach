@@ -22,9 +22,9 @@ type retryableError struct {
 	wrapped error
 }
 
-// MarkRetryableError wraps the given error, marking it as retryable to
+// markRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
-func MarkRetryableError(e error) error {
+func markRetryableError(e error) error {
 	return &retryableError{wrapped: e}
 }
 
@@ -40,9 +40,9 @@ func (e *retryableError) Cause() error { return e.wrapped }
 // planned to be moved to the stdlib in go 1.13.
 func (e *retryableError) Unwrap() error { return e.wrapped }
 
-// IsRetryableError returns true if the supplied error, or any of its parent
-// causes, is a IsRetryableError.
-func IsRetryableError(err error) bool {
+// isRetryableError returns true if the supplied error, or any of its parent
+// causes, is a isRetryableError.
+func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -69,10 +69,10 @@ func IsRetryableError(err error) bool {
 	return false
 }
 
-// MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
+// maybeStripRetryableErrorMarker performs some minimal attempt to clean the
 // RetryableError marker out. This won't do anything if the RetryableError
 // itself has been wrapped, but that's okay, we'll just have an uglier string.
-func MaybeStripRetryableErrorMarker(err error) error {
+func maybeStripRetryableErrorMarker(err error) error {
 	// The following is a hack to work around the error cast linter.
 	// What we're doing here is really not kosher; this function
 	// has no business in assuming that the retryableError{} wrapper

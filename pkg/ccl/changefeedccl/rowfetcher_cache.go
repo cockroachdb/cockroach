@@ -86,7 +86,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		if err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
-			return nil, MarkRetryableError(err)
+			return nil, markRetryableError(err)
 		}
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
@@ -112,7 +112,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			}); err != nil {
 				// Manager can return all kinds of errors during chaos, but based on
 				// its usage, none of them should ever be terminal.
-				return nil, MarkRetryableError(err)
+				return nil, markRetryableError(err)
 			}
 			// Immediately release the lease, since we only need it for the exact
 			// timestamp requested.
