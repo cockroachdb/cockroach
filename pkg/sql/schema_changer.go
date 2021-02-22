@@ -248,7 +248,15 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
-		p, cleanup := NewInternalPlanner(desc, txn, security.RootUserName(), &MemoryMetrics{}, sc.execCfg, sessiondatapb.SessionData{})
+		p, cleanup := NewInternalPlanner(
+			desc,
+			txn,
+			security.RootUserName(),
+			&MemoryMetrics{},
+			sc.execCfg,
+			sessiondatapb.SessionData{},
+		)
+
 		defer cleanup()
 		localPlanner := p.(*planner)
 		stmt, err := parser.ParseOne(query)

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -165,6 +166,10 @@ type TypeSchemaChangerTestingKnobs struct {
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
+	// RunBeforeMultiRegionUpdates is a multi-region specific testing knob which
+	// runs after enum promotion and before multi-region updates (such as
+	// repartitioning tables, applying zone configs etc.)
+	RunBeforeMultiRegionUpdates func() error
 }
 
 // ModuleTestingKnobs implements the ModuleTestingKnobs interface.
@@ -254,6 +259,11 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return err
 		}
 
+		// A list of multi-region tables that were repartitioned as a result of
+		// promotion/demotion of enum values. This is used to track tables whose
+		// leases need to be invalidated.
+		var repartitionedTables []descpb.ID
+
 		// Now that we've ascertained that the enum values can be removed, we can
 		// actually go about modifying the type descriptor.
 
@@ -283,6 +293,31 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			); err != nil {
 				return err
 			}
+
+			// Additional work must be performed once the promotion/demotion of enum
+			// members has been taken care of. In particular, index partitions for
+			// REGIONAL BY ROW tables must be updated to reflect the new region values
+			// available.
+			if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+				immut, err := descsCol.GetImmutableTypeByID(ctx, txn, t.typeID, tree.ObjectLookupFlags{})
+				if err != nil {
+					return err
+				}
+				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
+					return fn()
+				}
+				repartitionedTables, err = repartitionRegionalByRowTables(
+					ctx,
+					immut,
+					txn,
+					t.execCfg,
+					descsCol,
+				)
+				if err != nil {
+					return err
+				}
+			}
+
 			return txn.Run(ctx, b)
 		}
 		if err := descs.Txn(
@@ -291,14 +326,31 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
-	}
 
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
+		// If any tables were repartitioned, make sure their leases are updated as
+		// well.
+		for _, tbID := range repartitionedTables {
+			if err := WaitToUpdateLeases(ctx, leaseMgr, tbID); err != nil {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					// Swallow.
+					log.Infof(ctx,
+						"could not find table %d to be repartitioned when adding/removing regions on "+
+							"enum %d, assuming it was dropped and moving on",
+						tbID,
+						t.typeID,
+					)
+				}
+				return err
+			}
 		}
-		return err
+
+		// Finally, make sure all of the type descriptor leases are updated.
+		if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				return nil
+			}
+			return err
+		}
 	}
 
 	// If the type is being dropped, remove the descriptor here.
@@ -312,6 +364,122 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// repartitionRegionalByRowTables takes a multi-region enum and re-partitions
+// all REGIONAL BY ROW tables in the enclosing database such that there is a
+// partition and corresponding zone configuration for all PUBLIC enum members
+// (regions).
+// This currently doesn't work too well if there are READ ONLY member on the
+// type. This is because we create the partitioning clause based on the regions
+// on the database descriptor, which may include the READ ONLY member, and
+// partitioning on a READ ONLY member doesn't work. This will go away once
+// https://github.com/cockroachdb/cockroach/issues/60620 is fixed.
+func repartitionRegionalByRowTables(
+	ctx context.Context,
+	typeDesc *typedesc.Immutable,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	descsCol *descs.Collection,
+) ([]descpb.ID, error) {
+	var repartitionedTableIDs []descpb.ID
+	if typeDesc.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return repartitionedTableIDs, errors.AssertionFailedf(
+			"expected multi-region enum, but found type descriptor of kind: %v", typeDesc.GetKind(),
+		)
+	}
+	p, cleanup := NewInternalPlanner(
+		"repartition-regional-by-row-tables",
+		txn,
+		security.RootUserName(),
+		&MemoryMetrics{},
+		execCfg,
+		sessiondatapb.SessionData{},
+		WithDescCollection(descsCol),
+	)
+	defer cleanup()
+	localPlanner := p.(*planner)
+
+	_, dbDesc, err := localPlanner.Descriptors().GetImmutableDatabaseByID(
+		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return nil, err
+	}
+	allDescs, err := localPlanner.Descriptors().GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+
+	b := txn.NewBatch()
+	for _, tbID := range lCtx.tbIDs {
+		tableDesc, err := localPlanner.Descriptors().GetMutableTableByID(
+			ctx, txn, tbID, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					IncludeDropped: true,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
+			// We only need to re-partition REGIONAL BY ROW tables. Even then, we
+			// don't need to (can't) repartition a REGIONAL BY ROW table if it has
+			// been dropped.
+			continue
+		}
+
+		colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return nil, err
+		}
+		partitionAllBy := partitionByForRegionalByRow(*dbDesc.RegionConfig, colName)
+
+		// Update the partitioning on all indexes of the table that aren't being
+		// dropped.
+		for _, index := range tableDesc.NonDropIndexes() {
+			newIdx, err := CreatePartitioning(
+				ctx,
+				localPlanner.extendedEvalCtx.Settings,
+				localPlanner.EvalContext(),
+				tableDesc,
+				*index.IndexDesc(),
+				partitionAllBy,
+				nil,  /* allowedNewColumnName*/
+				true, /* allowImplicitPartitioning */
+			)
+			if err != nil {
+				return nil, err
+			}
+			// Update the index descriptor proto's partitioning.
+			index.IndexDesc().Partitioning = newIdx.Partitioning
+		}
+
+		// Update the zone configurations now that the partition's been added.
+		if err := ApplyZoneConfigForMultiRegionTable(
+			ctx,
+			txn,
+			localPlanner.ExecCfg(),
+			*dbDesc.RegionConfig,
+			tableDesc,
+			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+		); err != nil {
+			return nil, err
+		}
+
+		if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
+			return nil, err
+		}
+
+		repartitionedTableIDs = append(repartitionedTableIDs, tbID)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+
+	return repartitionedTableIDs, nil
 }
 
 // isTransitioningInCurrentJob returns true if the given member is either being
