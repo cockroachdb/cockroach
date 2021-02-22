@@ -104,10 +104,10 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
-	pgDumpIgnoreAllUnsupported     = "ignore_unsupported"
-	pgDumpIgnoreShuntFileDest      = "ignored_stmt_log"
+	pgDumpIgnoreAllUnsupported     = "ignore_unsupported_statements"
+	pgDumpIgnoreShuntFileDest      = "log_ignored_statements"
 	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
-	pgDumpUnsupportedDataStmtLog   = "unsupported_data-_stmts"
+	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
 	pgDumpMaxLoggedStmts           = 10
 
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
@@ -635,7 +635,7 @@ func importPlanHook(
 
 			if dest, ok := opts[pgDumpIgnoreShuntFileDest]; ok {
 				if !format.PgDump.IgnoreUnsupported {
-					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported` option")
+					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported_statements` option")
 				}
 				format.PgDump.IgnoreUnsupportedLog = dest
 			}

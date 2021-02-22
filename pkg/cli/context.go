@@ -610,13 +610,19 @@ func setStmtDiagContextDefaults() {
 
 // importCtx captures the command-line parameters of the 'import' command.
 var importCtx struct {
-	maxRowSize      int
-	skipForeignKeys bool
+	maxRowSize           int
+	skipForeignKeys      bool
+	ignoreUnsupported    bool
+	ignoreUnsupportedLog string
+	rowLimit             int
 }
 
 func setImportContextDefaults() {
 	importCtx.maxRowSize = 512 * (1 << 10) // 512 KiB
 	importCtx.skipForeignKeys = false
+	importCtx.ignoreUnsupported = false
+	importCtx.ignoreUnsupportedLog = ""
+	importCtx.rowLimit = 0
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside
