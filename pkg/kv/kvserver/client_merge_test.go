@@ -1854,6 +1854,91 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeRHSLeaseTransfers verifies that in cases where a lease
+// transfer is triggered while a range merge is in progress, it is rejected
+// immediately and does not prevent the merge itself from completing by creating
+// a deadlock.
+func TestStoreRangeMergeRHSLeaseTransfers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Install a hook to control when the merge transaction subsumes the RHS.
+	// Put this in a sync.Once to ignore retries.
+	var once sync.Once
+	subsumeReceived := make(chan struct{})
+	finishSubsume := make(chan struct{})
+	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.IsSingleSubsumeRequest() {
+			once.Do(func() {
+				subsumeReceived <- struct{}{}
+				<-finishSubsume
+			})
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						TestingRequestFilter:                    testingRequestFilter,
+						AllowLeaseRequestProposalsWhenNotLeader: true,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Create the ranges to be merged. Put both ranges on both stores, but give
+	// the second store the lease on the RHS. The LHS is largely irrelevant. What
+	// matters is that the RHS exists on two stores so we can transfer its lease
+	// during the merge.
+	lhsDesc, rhsDesc, err := tc.Servers[0].ScratchRangeWithExpirationLeaseEx()
+	require.NoError(t, err)
+
+	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(1))
+
+	// Launch the merge.
+	mergeErr := make(chan error)
+	_ = tc.Stopper().RunAsyncTask(ctx, "merge", func(context.Context) {
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
+		mergeErr <- pErr.GoError()
+	})
+
+	// Wait for the merge transaction to send its Subsume request. It won't
+	// be able to complete just yet, thanks to the hook we installed above.
+	<-subsumeReceived
+
+	// Transfer the lease to store 0. Even though the Subsume request has not
+	// yet evaluated, the new leaseholder will notice the deletion intent on its
+	// local range descriptor (see maybeWatchForMergeLocked) and will begin
+	// blocking most operations.
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(0))
+
+	// Attempt to transfer the lease back to store 1. This will cause the
+	// current leaseholder to revoke its lease (see minLeaseProposedTS), which
+	// will cause the Subsume request to need to acquire a new range lease.
+	//
+	// In the past, this lease transfer would get blocked on the mergeComplete
+	// channel. While in this state, it would block the lease acquisition
+	// triggerred by the Subsume request because a replica only performs a
+	// single lease operation at a time. As a result, this would deadlock and
+	// neither the lease transfer nor the merge would ever complete.
+	err = tc.TransferRangeLease(rhsDesc, tc.Target(1))
+	require.Regexp(t, "cannot transfer lease while merge in progress", err)
+
+	// Finally, allow the merge to complete. It should complete successfully.
+	close(finishSubsume)
+	require.NoError(t, <-mergeErr)
+}
+
 // TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the following:
 // 1. While a range is subsumed, ComputeChecksum requests wait until the merge
 // is complete before proceeding.
