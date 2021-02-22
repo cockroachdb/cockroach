@@ -1656,6 +1656,9 @@ func (st *SessionTracing) StartTracing(
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
+		// We want to clear out any existing recordings so they don't show up in
+		// future traces.
+		sp.ResetRecording()
 		sp.SetVerbose(true)
 		st.firstTxnSpan = sp
 	}

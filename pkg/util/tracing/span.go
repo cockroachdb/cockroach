@@ -122,9 +122,6 @@ func (sp *Span) Meta() *SpanMeta {
 // descendants of this Span will do so automatically as well. This does not
 // apply to past derived Spans, which may in fact be noop spans.
 //
-// As a side effect, calls to `SetVerbose(true)` on a span that was not already
-// verbose will reset any past recording stored on this Span.
-//
 // When set to 'false', Record will cede to add data to the recording (though
 // they may still be collected, should the Span have been set up with an
 // auxiliary trace sink). This does not apply to Spans derived from this one
@@ -135,6 +132,12 @@ func (sp *Span) SetVerbose(to bool) {
 	// prevented the toggling we could end up in weird states since IsVerbose()
 	// won't reflect what the caller asked for.
 	sp.i.SetVerbose(to)
+}
+
+// ResetRecording clears any previously recorded information. This doesn't
+// affect any auxiliary trace sinks such as net/trace or zipkin.
+func (sp *Span) ResetRecording() {
+	sp.i.ResetRecording()
 }
 
 // IsVerbose returns true if the Span is verbose. See SetVerbose for details.
@@ -277,16 +280,14 @@ func (s *spanInner) SetVerbose(to bool) {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
 	if to {
-		// If we're already recording (perhaps because the parent was recording when
-		// this Span was created), there's nothing to do. Avoid the call to enableRecording
-		// because it would clear the existing recording.
-		recType := RecordingVerbose
-		if recType != s.crdb.recordingType() {
-			s.crdb.enableRecording(nil /* parent */, recType)
-		}
+		s.crdb.enableRecording(nil /* parent */, RecordingVerbose)
 	} else {
 		s.crdb.disableRecording()
 	}
+}
+
+func (s *spanInner) ResetRecording() {
+	s.crdb.resetRecording()
 }
 
 func (s *spanInner) GetRecording() Recording {
