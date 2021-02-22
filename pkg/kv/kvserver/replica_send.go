@@ -702,7 +702,7 @@ func (r *Replica) collectSpans(
 type endCmds struct {
 	repl *Replica
 	g    *concurrency.Guard
-	st   kvserverpb.LeaseStatus
+	st   kvserverpb.LeaseStatus // empty for follower reads
 }
 
 // move moves the endCmds into the return value, clearing and making a call to
