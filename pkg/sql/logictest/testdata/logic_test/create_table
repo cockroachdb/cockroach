@@ -132,7 +132,8 @@ CREATE TABLE like_table (
   UNIQUE INDEX foo (b DESC, c),
   INDEX (c) STORING (j),
   INVERTED INDEX (j),
-  UNIQUE WITHOUT INDEX (h)
+  UNIQUE WITHOUT INDEX (h),
+  UNIQUE WITHOUT INDEX (h) WHERE h > 0
 )
 
 statement ok
@@ -171,7 +172,8 @@ like_constraints  CREATE TABLE public.like_constraints (
                   FAMILY "primary" (a, b, c, h, j, k, rowid),
                   CONSTRAINT check_a CHECK (a > 3:::INT8),
                   CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
-                  CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h)
+                  CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
+                  CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
 )
 
 statement ok
@@ -251,7 +253,8 @@ like_all  CREATE TABLE public.like_all (
           FAMILY "primary" (a, b, c, h, j, k),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
-          CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h)
+          CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
+          CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
 )
 
 statement ok
