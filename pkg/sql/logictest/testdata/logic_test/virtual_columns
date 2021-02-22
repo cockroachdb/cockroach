@@ -563,6 +563,184 @@ a  b  v   w
 6  7  13  42
 8  8  16  64
 
+# Tests with unique indexes and constraints involving virtual columns.
+subtest NotNull
+
+statement ok
+CREATE TABLE uniq_simple (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT UNIQUE AS (a+b) VIRTUAL
+)
+
+statement ok
+INSERT INTO uniq_simple VALUES (1, 10), (2, 20)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_simple VALUES (3, 8)
+
+statement error duplicate key value violates unique constraint
+UPDATE uniq_simple SET b=b+11 WHERE a < 2
+
+statement error duplicate key value violates unique constraint
+UPSERT INTO uniq_simple VALUES (2, 30), (5, 6)
+
+statement ok
+INSERT INTO uniq_simple VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
+
+query III colnames,rowsort
+SELECT * FROM uniq_simple
+----
+a  b   v
+1  15  16
+2  20  22
+
+statement ok
+CREATE TABLE uniq_partial (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  UNIQUE INDEX (v) WHERE b > 10
+)
+
+statement ok
+INSERT INTO uniq_partial VALUES (1, 10), (2, 20)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_partial VALUES (3, 19)
+
+statement ok
+INSERT INTO uniq_partial VALUES (4, 7)
+
+query III colnames,rowsort
+SELECT * FROM uniq_partial
+----
+a  b   v
+1  10  11
+2  20  22
+4  7   11
+
+statement error duplicate key value violates unique constraint
+UPDATE uniq_partial SET b = 30-a
+
+statement ok
+UPDATE uniq_partial SET b = 10-a
+
+query III colnames,rowsort
+SELECT * FROM uniq_partial
+----
+a  b  v
+1  9  10
+2  8  10
+4  6  10
+
+statement ok
+UPSERT INTO uniq_partial VALUES (3, 7), (20, 20)
+
+statement error duplicate key value violates unique constraint
+UPSERT INTO uniq_partial VALUES (15, 25)
+
+statement ok
+CREATE TABLE uniq_partial_pred (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (a+b) VIRTUAL,
+  UNIQUE INDEX (c) WHERE v > 10
+)
+
+statement ok
+INSERT INTO uniq_partial_pred VALUES (1, 1, 1), (2, 4, 2), (3, 3, 2), (10, 10, 1)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_partial_pred VALUES (11, 9, 1)
+
+statement error duplicate key value violates unique constraint
+UPDATE uniq_partial_pred SET b=20-a
+
+statement ok
+UPDATE uniq_partial_pred SET b=10-a
+
+statement ok
+CREATE TABLE uniq_partial_multi (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (a+b) VIRTUAL,
+  UNIQUE INDEX (c, v) WHERE (v > 10)
+)
+
+statement ok
+INSERT INTO uniq_partial_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 2), (10, 10, 1)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_partial_multi VALUES (15, 5, 1)
+
+statement ok
+UPSERT INTO uniq_partial_multi VALUES (4, 2, 2)
+
+statement error duplicate key value violates unique constraint
+UPSERT INTO uniq_partial_multi VALUES (4, 16, 1)
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE uniq_no_index (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  UNIQUE WITHOUT INDEX (v)
+)
+
+statement ok
+INSERT INTO uniq_no_index VALUES (1, 10), (2, 20)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_no_index VALUES (3, 8)
+
+statement error duplicate key value violates unique constraint
+UPDATE uniq_no_index SET b=b+11 WHERE a < 2
+
+statement error duplicate key value violates unique constraint
+UPSERT INTO uniq_no_index VALUES (2, 30), (5, 6)
+
+statement ok
+INSERT INTO uniq_no_index VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
+
+query III colnames,rowsort
+SELECT * FROM uniq_no_index
+----
+a  b   v
+1  15  16
+2  20  22
+
+statement ok
+CREATE TABLE uniq_no_index_multi (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (a+b) VIRTUAL,
+  UNIQUE WITHOUT INDEX (v, c)
+)
+
+statement ok
+INSERT INTO uniq_no_index_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 3)
+
+statement error duplicate key value violates unique constraint
+INSERT INTO uniq_no_index_multi VALUES (4, 2, 2)
+
+statement error duplicate key value violates unique constraint
+UPDATE uniq_no_index_multi SET c=2 WHERE a=3
+
+statement ok
+UPSERT INTO uniq_no_index_multi VALUES (3, 3, 10)
+
+statement error duplicate key value violates unique constraint
+UPSERT INTO uniq_no_index_multi VALUES (3, 3, 2)
+
+# TODO(radu): add a test with a partial unique without index constraint.
+
 # Test schema changes with virtual columns.
 subtest SchemaChanges
 
