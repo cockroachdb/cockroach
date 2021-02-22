@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"runtime/pprof"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
