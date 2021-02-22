@@ -1859,19 +1859,29 @@ func (desc *wrapper) ValidateSelf(ctx context.Context) error {
 		return errors.AssertionFailedf("invalid table ID %d", errors.Safe(desc.ID))
 	}
 
-	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
-	if desc.IsVirtualTable() {
-		return nil
+	// ParentID is the ID of the database holding this table.
+	// It is often < ID, except when a table gets moved across databases.
+	if desc.ParentID == 0 && !desc.IsVirtualTable() {
+		return errors.AssertionFailedf("invalid parent ID %d", errors.Safe(desc.ParentID))
 	}
 
 	if desc.IsSequence() {
 		return nil
 	}
 
-	// ParentID is the ID of the database holding this table.
-	// It is often < ID, except when a table gets moved across databases.
-	if desc.ParentID == 0 {
-		return errors.AssertionFailedf("invalid parent ID %d", errors.Safe(desc.ParentID))
+	if len(desc.Columns) == 0 {
+		return ErrMissingColumns
+	}
+
+	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
+	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
+	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
+		return err
+	}
+
+	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
+	if desc.IsVirtualTable() {
+		return nil
 	}
 
 	// We maintain forward compatibility, so if you see this error message with a
@@ -1891,17 +1901,7 @@ func (desc *wrapper) ValidateSelf(ctx context.Context) error {
 			errors.Safe(descpb.FamilyFormatVersion), errors.Safe(descpb.InterleavedFormatVersion))
 	}
 
-	if len(desc.Columns) == 0 {
-		return ErrMissingColumns
-	}
-
 	if err := desc.CheckUniqueConstraints(); err != nil {
-		return err
-	}
-
-	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
-	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
-	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
 		return err
 	}
 

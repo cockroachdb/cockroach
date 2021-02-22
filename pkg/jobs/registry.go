@@ -306,6 +306,18 @@ func (r *Registry) CreateAndStartJob(
 	return rj, nil
 }
 
+// NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
+func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
+	select {
+	case r.adoptionCh <- resumeClaimedJobs:
+	case <-r.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
+}
+
 // Run starts previously unstarted jobs from a list of scheduled
 // jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
 func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []int64) error {
@@ -313,24 +325,11 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		return nil
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
+	if err := r.NotifyToAdoptJobs(ctx); err != nil {
+		return err
+	}
 	buf := bytes.Buffer{}
-	usingSQLLiveness := r.startUsingSQLLivenessAdoption(ctx)
 	for i, id := range jobs {
-		// In the pre-20.2 and mixed-version state, the adoption loop needs to be
-		// notified once per job (in the worst case) in order to ensure that all
-		// newly created jobs get adopted in a timely manner. In the sqlliveness
-		// world of 20.2 and later, we only need to notify the loop once as the
-		// newly created jobs are already claimed. The adoption loop will merely
-		// start all previously claimed jobs.
-		if !usingSQLLiveness || i == 0 {
-			select {
-			case r.adoptionCh <- resumeClaimedJobs:
-			case <-r.stopper.ShouldQuiesce():
-				return stop.ErrUnavailable
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
 		if i > 0 {
 			buf.WriteString(",")
 		}

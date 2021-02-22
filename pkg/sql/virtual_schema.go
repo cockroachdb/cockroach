@@ -644,10 +644,15 @@ func NewVirtualSchemaHolder(
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
+			td := tabledesc.NewImmutable(tableDesc)
+			if err := td.ValidateSelf(ctx); err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
+			}
 
 			entry := &virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       tabledesc.NewImmutable(tableDesc),
+				desc:                       td,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
