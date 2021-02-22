@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -187,4 +188,10 @@ func (b *writeBuffer) setError(err error) {
 	if b.err == nil {
 		b.err = err
 	}
+}
+
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		return newWriteBuffer(nil)
+	},
 }

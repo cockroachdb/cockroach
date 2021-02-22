@@ -456,7 +456,9 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DTuple:
 		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		// subWriter := newWriteBuffer(nil /* bytecount */)
+		subWriter := bufPool.Get().(*writeBuffer)
+		subWriter.reset()
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
 		for _, elem := range v.D {
@@ -465,6 +467,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		bufPool.Put(subWriter)
 
 	case *tree.DBox2D:
 		b.putInt32(32)
@@ -487,8 +490,8 @@ func (b *writeBuffer) writeBinaryDatum(
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		subWriter := bufPool.Get().(*writeBuffer)
+		subWriter.reset()
 		// Put the number of dimensions. We currently support 1d arrays only.
 		var ndims int32 = 1
 		if v.Len() == 0 {
@@ -511,6 +514,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			}
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		bufPool.Put(subWriter)
 	case *tree.DJSON:
 		s := v.JSON.String()
 		b.putInt32(int32(len(s) + 1))
