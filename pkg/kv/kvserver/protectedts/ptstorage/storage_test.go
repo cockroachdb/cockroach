@@ -97,6 +97,16 @@ var testCases = []testCase{
 		ops: []op{
 			protectOp{spans: tableSpans(42)},
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				// When max_bytes or max_spans is set to 0 (i.e. unlimited), and a
+				// protect op fails because the record already exists, we should report
+				// that the record already exists, and not erroneously report that the
+				// max_bytes or max_spans has been exceeded.
+				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_bytes = $1", 0)
+				require.NoError(t, err)
+				_, err = tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 0)
+				require.NoError(t, err)
+			}),
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx.tc.Server(0).Clock().Now(), "", nil, tableSpan(42))
 				rec.ID = pickOneRecord(tCtx)
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
