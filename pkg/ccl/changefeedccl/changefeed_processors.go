@@ -205,7 +205,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
 	)
 	if err != nil {
-		err = MarkRetryableError(err)
+		err = markRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -920,7 +920,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
 	)
 	if err != nil {
-		err = MarkRetryableError(err)
+		err = markRetryableError(err)
 		cf.MoveToDraining(err)
 		return
 	}
@@ -1046,7 +1046,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				if cf.EvalCtx.Settings.Version.IsActive(
 					cf.Ctx, clusterversion.ChangefeedsSupportPrimaryIndexChanges,
 				) {
-					err = MarkRetryableError(err)
+					err = markRetryableError(err)
 				} else {
 					err = errors.Wrap(err, "primary key change occurred")
 				}
