@@ -161,6 +161,7 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexecargs:colexecargs_test",
     "//pkg/sql/colexec/colexeccmp:colexeccmp_test",
     "//pkg/sql/colexec/colexechash:colexechash_test",
+    "//pkg/sql/colexec/colexecjoin:colexecjoin_test",
     "//pkg/sql/colexec/colexecmisc:colexecmisc_test",
     "//pkg/sql/colexec/colexecproj:colexecproj_test",
     "//pkg/sql/colexec/colexecsel:colexecsel_test",
