@@ -13,18 +13,26 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/errors"
 )
 
 const retryableErrorString = "retryable changefeed error"
 
+// retryableError is deprecated, but used to maintain backwards
+// compatibility with 20.2 nodes.
+// TODO(pbardea): Remove in 21.2, and use the helpers in utilccl/errors.go
+// instead.
 type retryableError struct {
 	wrapped error
 }
 
 // markRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
+// TODO(pbardea): Remove in 21.2, and use utilccl.MarkRetryableError instead.
 func markRetryableError(e error) error {
+	// Wrap all these errors with a more generic job retry error.
+	e = utilccl.MarkRetryableError(e)
 	return &retryableError{wrapped: e}
 }
 
@@ -40,9 +48,11 @@ func (e *retryableError) Cause() error { return e.wrapped }
 // planned to be moved to the stdlib in go 1.13.
 func (e *retryableError) Unwrap() error { return e.wrapped }
 
-// isRetryableError returns true if the supplied error, or any of its parent
-// causes, is a isRetryableError.
-func isRetryableError(err error) bool {
+// isChangefeedRetryableError returns true if the supplied error, or any of its
+// parent causes, is a isChangefeedRetryableError. This should be used in
+// utilccl.RetryDistSQLFlowCustomRetryable, and should eventually be removed in
+// 21.2, when no more errors will be marked with this changefeed specific error.
+func isChangefeedRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -60,12 +70,7 @@ func isRetryableError(err error) bool {
 		// unfortunate string comparison.
 		return true
 	}
-	if strings.Contains(errStr, `rpc error`) {
-		// When a crdb node dies, any DistSQL flows with processors scheduled on
-		// it get an error with "rpc error" in the message from the call to
-		// `(*DistSQLPlanner).Run`.
-		return true
-	}
+
 	return false
 }
 
