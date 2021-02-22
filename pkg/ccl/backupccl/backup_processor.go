@@ -109,11 +109,12 @@ func newBackupDataProcessor(
 
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
+	ctxCopy := ctx
 	go func() {
 		defer close(bp.progCh)
-		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
+		bp.backupErr = runBackupProcessor(ctxCopy, bp.flowCtx, &bp.spec, bp.progCh)
 	}()
-	ctx = bp.StartInternal(ctx, backupProcessorName)
+	ctx = bp.StartInternal(ctxCopy, backupProcessorName)
 	// Go around "this value of ctx is never used" linter error. We do it this
 	// way instead of omitting the assignment to ctx above so that if in the
 	// future other initialization is added, the correct ctx is used.
