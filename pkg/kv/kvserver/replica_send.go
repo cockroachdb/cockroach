@@ -489,6 +489,22 @@ func (r *Replica) handleMergeInProgressError(
 		// Merge no longer in progress. Retry the command.
 		return nil
 	}
+	// Check to see if the request is a lease transfer. If so, reject it
+	// immediately instead of a waiting for the merge to complete. This is
+	// necessary because the merge may need to acquire a range lease in order to
+	// complete if it still needs to perform its Subsume request, which it
+	// likely will if this lease transfer revoked the leaseholder's existing
+	// range lease. Any concurrent lease acquisition attempt will be blocked on
+	// this lease transfer because a replica only performs a single lease
+	// operation at a time, so we reject to prevent a deadlock.
+	//
+	// NOTE: it would not be sufficient to check for an in-progress merge in
+	// AdminTransferLease because the range may notice the in-progress merge
+	// after the lease transfer is initiated but before the lease transfer
+	// acquires latches.
+	if ba.IsSingleTransferLeaseRequest() {
+		return roachpb.NewErrorf("cannot transfer lease while merge in progress")
+	}
 	log.Event(ctx, "waiting on in-progress merge")
 	select {
 	case <-mergeCompleteCh:
