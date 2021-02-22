@@ -971,6 +971,8 @@ $(go-targets): override LINKFLAGS += \
 $(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
+settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+
 docs/generated/settings/settings.html: $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
@@ -1596,8 +1598,6 @@ pkg/util/log/channel/channel_generated.go: pkg/util/log/gen.go pkg/util/log/logp
 pkg/util/log/log_channels_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
 	$(GO) run $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
-
-settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
 
 .PHONY: execgen
 execgen: ## Regenerate generated code for the vectorized execution engine.
