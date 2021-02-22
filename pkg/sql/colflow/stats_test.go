@@ -12,12 +12,12 @@ package colflow
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -115,7 +115,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
-		mergeJoiner, err := colexec.NewMergeJoinOp(
+		mergeJoiner, err := colexecjoin.NewMergeJoinOp(
 			tu.testAllocator, colexecbase.DefaultMemoryLimit, queueCfg,
 			colexecbase.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},

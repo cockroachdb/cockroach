@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecjoin
 
 import (
 	"context"
@@ -55,11 +55,11 @@ const (
 // joiner performs a join on the left and right's equal columns and returns
 // combined left and right output columns.
 type HashJoinerSpec struct {
-	joinType descpb.JoinType
-	// left and right are the specifications of the two input table sources to
+	JoinType descpb.JoinType
+	// Left and Right are the specifications of the two input table sources to
 	// the hash joiner.
-	left  hashJoinerSourceSpec
-	right hashJoinerSourceSpec
+	Left  hashJoinerSourceSpec
+	Right hashJoinerSourceSpec
 
 	// trackBuildMatches indicates whether or not we need to track if a row
 	// from the build table had a match (this is needed with RIGHT/FULL OUTER,
@@ -72,13 +72,13 @@ type HashJoinerSpec struct {
 }
 
 type hashJoinerSourceSpec struct {
-	// eqCols specify the indices of the source tables equality column during the
+	// EqCols specify the indices of the source tables equality column during the
 	// hash join.
-	eqCols []uint32
+	EqCols []uint32
 
-	// sourceTypes specify the types of the input columns of the source table for
+	// SourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
-	sourceTypes []*types.T
+	SourceTypes []*types.T
 }
 
 // hashJoiner performs a hash join on the input tables equality columns.
@@ -250,7 +250,7 @@ func (hj *hashJoiner) Init() {
 	hj.inputTwo.Init()
 
 	allowNullEquality, probeMode := false, colexechash.HashTableDefaultProbeMode
-	if hj.spec.joinType.IsSetOpJoin() {
+	if hj.spec.JoinType.IsSetOpJoin() {
 		allowNullEquality = true
 		probeMode = colexechash.HashTableDeletingProbeMode
 	}
@@ -261,15 +261,15 @@ func (hj *hashJoiner) Init() {
 		hj.buildSideAllocator,
 		hashTableLoadFactor,
 		hj.hashTableInitialNumBuckets,
-		hj.spec.right.sourceTypes,
-		hj.spec.right.eqCols,
+		hj.spec.Right.SourceTypes,
+		hj.spec.Right.EqCols,
 		allowNullEquality,
 		colexechash.HashTableFullBuildMode,
 		probeMode,
 	)
 
 	hj.exportBufferedState.rightWindowedBatch = hj.buildSideAllocator.NewMemBatchWithFixedCapacity(
-		hj.spec.right.sourceTypes, 0, /* size */
+		hj.spec.Right.SourceTypes, 0, /* size */
 	)
 	hj.state = hjBuilding
 }
@@ -282,7 +282,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 			if hj.ht.Vals.Length() == 0 {
 				// The build side is empty, so we might be able to
 				// short-circuit probing phase altogether.
-				if hj.spec.joinType.IsEmptyOutputWhenRightIsEmpty() {
+				if hj.spec.JoinType.IsEmptyOutputWhenRightIsEmpty() {
 					hj.state = hjDone
 				}
 			}
@@ -303,7 +303,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 				hj.state = hjDone
 				continue
 			}
-			hj.emitRight(hj.spec.joinType == descpb.RightSemiJoin /* matched */)
+			hj.emitRight(hj.spec.JoinType == descpb.RightSemiJoin /* matched */)
 			return hj.output
 		case hjDone:
 			return coldata.ZeroBatch
@@ -320,12 +320,12 @@ func (hj *hashJoiner) build(ctx context.Context) {
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
-	if !hj.spec.rightDistinct && !hj.spec.joinType.IsLeftAntiOrExceptAll() {
+	if !hj.spec.rightDistinct && !hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
 		// they have separate collectLeftAnti method.
 		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
 	}
-	if !hj.spec.rightDistinct || hj.spec.joinType.IsSetOpJoin() {
+	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
 		// visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
@@ -381,17 +381,17 @@ func (hj *hashJoiner) emitRight(matched bool) {
 	// already emitted partial output.
 	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
 		var rightOutColOffset int
-		if hj.spec.joinType.ShouldIncludeLeftColsInOutput() {
+		if hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
 			// Set all elements in the probe columns of the output batch to null.
-			for i := range hj.spec.left.sourceTypes {
+			for i := range hj.spec.Left.SourceTypes {
 				outCol := hj.output.ColVec(i)
 				outCol.Nulls().SetNullRange(0 /* startIdx */, nResults)
 			}
-			rightOutColOffset = len(hj.spec.left.sourceTypes)
+			rightOutColOffset = len(hj.spec.Left.SourceTypes)
 		}
 
-		outCols := hj.output.ColVecs()[rightOutColOffset : rightOutColOffset+len(hj.spec.right.sourceTypes)]
-		for i := range hj.spec.right.sourceTypes {
+		outCols := hj.output.ColVecs()[rightOutColOffset : rightOutColOffset+len(hj.spec.Right.SourceTypes)]
+		for i := range hj.spec.Right.SourceTypes {
 			outCol := outCols[i]
 			valCol := hj.ht.Vals.ColVec(i)
 			outCol.Copy(
@@ -415,7 +415,7 @@ func (hj *hashJoiner) emitRight(matched bool) {
 // in a single output batch (this is the case with non-distinct collectProbe*
 // methods).
 func (hj *hashJoiner) prepareForCollecting(batchSize int) {
-	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+	if hj.spec.JoinType.IsRightSemiOrRightAnti() {
 		// Right semi/anti joins have a separate collecting method that simply
 		// records the fact whether build rows had a match and don't need these
 		// probing slices.
@@ -429,12 +429,12 @@ func (hj *hashJoiner) prepareForCollecting(batchSize int) {
 	} else {
 		hj.probeState.probeIdx = hj.probeState.probeIdx[:batchSize]
 	}
-	if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+	if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 		// Left anti and except all joins have special collectLeftAnti method
 		// that only uses probeIdx slice.
 		return
 	}
-	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
 		if cap(hj.probeState.probeRowUnmatched) < batchSize {
 			hj.probeState.probeRowUnmatched = make([]bool, batchSize)
 		} else {
@@ -481,7 +481,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			return coldata.ZeroBatch
 		}
 
-		for i, colIdx := range hj.spec.left.eqCols {
+		for i, colIdx := range hj.spec.Left.EqCols {
 			hj.ht.Keys[i] = batch.ColVec(int(colIdx))
 		}
 
@@ -507,7 +507,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 		groupIDs := hj.ht.ProbeScratch.GroupID
 		_ = groupIDs[batchSize-1]
 		var nToCheck uint64
-		switch hj.spec.joinType {
+		switch hj.spec.JoinType {
 		case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
 			// The setup of probing for LEFT/RIGHT ANTI and EXCEPT ALL joins
 			// needs a special treatment in order to reuse the same "check"
@@ -581,9 +581,9 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	// very hard to fall back to disk backed hash joiner because we might have
 	// already emitted partial output.
 	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
-		if hj.spec.joinType.ShouldIncludeLeftColsInOutput() {
-			outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
-			for i := range hj.spec.left.sourceTypes {
+		if hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
+			outCols := hj.output.ColVecs()[:len(hj.spec.Left.SourceTypes)]
+			for i := range hj.spec.Left.SourceTypes {
 				outCol := outCols[i]
 				valCol := batch.ColVec(i)
 				outCol.Copy(
@@ -598,13 +598,13 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 			}
 		}
 
-		if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
-			rightColOffset := len(hj.spec.left.sourceTypes)
+		if hj.spec.JoinType.ShouldIncludeRightColsInOutput() {
+			rightColOffset := len(hj.spec.Left.SourceTypes)
 			// If the hash table is empty, then there is nothing to copy. The nulls
 			// will be set below.
 			if hj.ht.Vals.Length() > 0 {
-				outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
-				for i := range hj.spec.right.sourceTypes {
+				outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.Right.SourceTypes)]
+				for i := range hj.spec.Right.SourceTypes {
 					outCol := outCols[i]
 					valCol := hj.ht.Vals.ColVec(i)
 					// Note that if for some index i, probeRowUnmatched[i] is true, then
@@ -621,9 +621,9 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 					)
 				}
 			}
-			if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+			if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
 				// Add in the nulls we needed to set for the outer join.
-				for i := range hj.spec.right.sourceTypes {
+				for i := range hj.spec.Right.SourceTypes {
 					outCol := hj.output.ColVec(i + rightColOffset)
 					nulls := outCol.Nulls()
 					for i, isNull := range hj.probeState.probeRowUnmatched[:nResults] {
@@ -639,7 +639,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 			// Early bounds checks.
 			buildIdx := hj.probeState.buildIdx
 			_ = buildIdx[nResults-1]
-			if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+			if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
 				// Early bounds checks.
 				probeRowUnmatched := hj.probeState.probeRowUnmatched
 				_ = probeRowUnmatched[nResults-1]
@@ -684,7 +684,7 @@ func (hj *hashJoiner) ExportBuffered(
 		b := hj.exportBufferedState.rightWindowedBatch
 		// We don't need to worry about selection vectors on hj.ht.Vals because the
 		// tuples have been already selected during building of the hash table.
-		for i := range hj.spec.right.sourceTypes {
+		for i := range hj.spec.Right.SourceTypes {
 			window := hj.ht.Vals.ColVec(i).Window(startIdx, endIdx)
 			b.ReplaceCol(window, i)
 		}
@@ -779,17 +779,17 @@ func MakeHashJoinerSpec(
 	}
 
 	left := hashJoinerSourceSpec{
-		eqCols:      leftEqCols,
-		sourceTypes: leftTypes,
+		EqCols:      leftEqCols,
+		SourceTypes: leftTypes,
 	}
 	right := hashJoinerSourceSpec{
-		eqCols:      rightEqCols,
-		sourceTypes: rightTypes,
+		EqCols:      rightEqCols,
+		SourceTypes: rightTypes,
 	}
 	return HashJoinerSpec{
-		joinType:          joinType,
-		left:              left,
-		right:             right,
+		JoinType:          joinType,
+		Left:              left,
+		Right:             right,
 		trackBuildMatches: trackBuildMatches,
 		rightDistinct:     rightDistinct,
 	}
@@ -814,7 +814,7 @@ func NewHashJoiner(
 		outputUnlimitedAllocator:   outputUnlimitedAllocator,
 		spec:                       spec,
 		memoryLimit:                memoryLimit,
-		outputTypes:                spec.joinType.MakeOutputTypes(spec.left.sourceTypes, spec.right.sourceTypes),
+		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),
 		hashTableInitialNumBuckets: initialNumBuckets,
 	}
 }

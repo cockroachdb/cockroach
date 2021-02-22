@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel"
@@ -977,7 +978,7 @@ func NewColOperator(
 				crossJoinerMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, crossJoinerMemMonitorName)
 				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, crossJoinerMemMonitorName)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
-				result.Op = colexec.NewCrossJoiner(
+				result.Op = colexecjoin.NewCrossJoiner(
 					unlimitedAllocator,
 					memoryLimit,
 					args.DiskQueueCfg,
@@ -1003,7 +1004,7 @@ func NewColOperator(
 						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, hashJoinerMemMonitorName), factory,
 					)
 				}
-				hjSpec := colexec.MakeHashJoinerSpec(
+				hjSpec := colexecjoin.MakeHashJoinerSpec(
 					core.HashJoiner.Type,
 					core.HashJoiner.LeftEqColumns,
 					core.HashJoiner.RightEqColumns,
@@ -1012,10 +1013,10 @@ func NewColOperator(
 					core.HashJoiner.RightEqColumnsAreKey,
 				)
 
-				inMemoryHashJoiner := colexec.NewHashJoiner(
+				inMemoryHashJoiner := colexecjoin.NewHashJoiner(
 					colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
-					colexec.HashJoinerInitialNumBuckets, memoryLimit,
+					colexecjoin.HashJoinerInitialNumBuckets, memoryLimit,
 				)
 				if args.TestingKnobs.DiskSpillingDisabled {
 					// We will not be creating a disk-backed hash joiner because
@@ -1090,7 +1091,7 @@ func NewColOperator(
 					ctx, flowCtx, monitorName,
 				), factory)
 			diskAccount := result.createDiskAccount(ctx, flowCtx, monitorName)
-			mj, err := colexec.NewMergeJoinOp(
+			mj, err := colexecjoin.NewMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftTypes, rightTypes,

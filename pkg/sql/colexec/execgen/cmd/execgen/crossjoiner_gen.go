@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const crossJoinerTmpl = "pkg/sql/colexec/crossjoiner_tmpl.go"
+const crossJoinerTmpl = "pkg/sql/colexec/colexecjoin/crossjoiner_tmpl.go"
 
 func genCrossJoiner(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

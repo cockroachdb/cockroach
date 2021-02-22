@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -1082,16 +1083,16 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = descpb.FullOuterJoin
 										}
-										hjSpec := MakeHashJoinerSpec(
+										hjSpec := colexecjoin.MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
-										hj := NewHashJoiner(
+										hj := colexecjoin.NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
-											HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
+											colexecjoin.HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
 										)
 										hj.Init()
 

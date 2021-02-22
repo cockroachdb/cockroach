@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const mergeJoinBaseTmpl = "pkg/sql/colexec/mergejoinbase_tmpl.go"
+const mergeJoinBaseTmpl = "pkg/sql/colexec/colexecjoin/mergejoinbase_tmpl.go"
 
 func genMergeJoinBase(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
