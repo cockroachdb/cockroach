@@ -793,6 +793,22 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 
+	// If adminAuditLogging is enabled, we want to check for HasAdminRole
+	// before the deferred maybeLogStatement.
+	// We must check prior to execution in the case the txn is aborted due to
+	// an error. HasAdminRole can only be checked in a valid txn.
+	if adminAuditLog := adminAuditLogEnabled.Get(
+		&ex.planner.execCfg.Settings.SV,
+	); adminAuditLog {
+		if !ex.extraTxnState.hasAdminRoleCache.IsSet {
+			hasAdminRole, err := ex.planner.HasAdminRole(ctx)
+			if err != nil {
+				return err
+			}
+			ex.extraTxnState.hasAdminRoleCache.HasAdminRole = hasAdminRole
+			ex.extraTxnState.hasAdminRoleCache.IsSet = true
+		}
+	}
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
 	err := ex.makeExecPlan(ctx, planner)
@@ -818,6 +834,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			res.RowsAffected(),
 			res.Err(),
 			ex.statsCollector.phaseTimes[sessionQueryReceived],
+			&ex.extraTxnState.hasAdminRoleCache,
 		)
 	}()
 

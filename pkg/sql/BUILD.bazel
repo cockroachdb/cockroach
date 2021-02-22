@@ -399,6 +399,7 @@ go_test(
     name = "sql_test",
     size = "medium",
     srcs = [
+        "admin_audit_log_test.go",
         "alter_column_type_test.go",
         "ambiguous_commit_test.go",
         "as_of_test.go",
@@ -583,7 +584,9 @@ go_test(
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/channel",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logconfig",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",

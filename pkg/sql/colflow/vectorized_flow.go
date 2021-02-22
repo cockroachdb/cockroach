@@ -1347,6 +1347,14 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 		if err := colbuilder.IsSupported(mode, &spec.Processors[pIdx]); err != nil {
 			return err
 		}
+		for _, procOutput := range spec.Processors[pIdx].Output {
+			switch procOutput.Type {
+			case execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				execinfrapb.OutputRouterSpec_BY_HASH:
+			default:
+				return errors.New("only pass-through and hash routers are supported")
+			}
+		}
 	}
 	return nil
 }
