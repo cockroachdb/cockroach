@@ -104,6 +104,7 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.NetworkBytesSent))
 	s.mu.data.ExecStats.MaxMemUsage.Record(count, float64(stats.MaxMemUsage))
 	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
+	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
 }
 
 type transactionCounts struct {
