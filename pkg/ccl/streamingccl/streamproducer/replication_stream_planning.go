@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 // replicationStreamEval is a representation of tree.ReplicationStream, prepared
@@ -128,7 +127,7 @@ func doCreateReplicationStream(
 
 	if sinkURI != "" {
 		// TODO(yevgeniy): Support replication stream sinks.
-		return errors.AssertionFailedf("replication streaming into sink not supported")
+		return pgerror.New(pgcode.FeatureNotSupported, "replication streaming into sink not supported")
 	}
 
 	var scanStart hlc.Timestamp
@@ -141,7 +140,7 @@ func doCreateReplicationStream(
 	var spans []roachpb.Span
 	if eval.Targets.Tenant == (roachpb.TenantID{}) {
 		// TODO(yevgeniy): Only tenant streaming supported now; Support granular streaming.
-		return errors.AssertionFailedf("granular replication streaming not supported")
+		return pgerror.New(pgcode.FeatureNotSupported, "granular replication streaming not supported")
 	}
 
 	telemetry.Count(`replication.create.tenant`)
