@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -140,7 +141,7 @@ func (p *scanRequestScanner) exportSpan(
 		}
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
-	if err := sink.AddResolved(ctx, span, ts, false); err != nil {
+	if err := sink.AddResolved(ctx, span, ts, jobspb.ResolvedSpan_NONE); err != nil {
 		return err
 	}
 	if log.V(2) {

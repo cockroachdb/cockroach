@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -375,8 +376,8 @@ type TableFeed struct {
 	jobFeed
 	sinkURI string
 
-	rows *gosql.Rows
-	seen map[string]struct{}
+	toSend []*TestFeedMessage
+	seen   map[string]struct{}
 }
 
 // ResetSeen is useful when manually pausing and resuming a TableFeed.
@@ -403,71 +404,78 @@ func (c *TableFeed) Next() (*TestFeedMessage, error) {
 	// by repeatedly fetching and deleting all rows in the table. Then it pages
 	// through the results until they are empty and repeats.
 	for {
-		if c.rows != nil && c.rows.Next() {
-			m := &TestFeedMessage{}
-			var msgID int64
-			if err := c.rows.Scan(
-				&m.Topic, &m.Partition, &msgID, &m.Key, &m.Value, &m.Resolved,
-			); err != nil {
-				return nil, err
-			}
-
-			// Scan turns NULL bytes columns into a 0-length, non-nil byte
-			// array, which is pretty unexpected. Nil them out before returning.
-			// Either key+value or payload will be set, but not both.
-			if len(m.Key) > 0 || len(m.Value) > 0 {
-				// TODO(dan): This skips duplicates, since they're allowed by the
-				// semantics of our changefeeds. Now that we're switching to RangeFeed,
-				// this can actually happen (usually because of splits) and cause
-				// flakes. However, we really should be de-duping key+ts, this is too
-				// coarse. Fixme.
-				seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
-				if _, ok := c.seen[seenKey]; ok {
-					continue
-				}
-				c.seen[seenKey] = struct{}{}
-
-				m.Resolved = nil
-				return m, nil
-			}
-			m.Key, m.Value = nil, nil
-			return m, nil
+		if len(c.toSend) > 0 {
+			toSend := c.toSend[0]
+			c.toSend = c.toSend[1:]
+			return toSend, nil
 		}
-		if c.rows != nil {
-			if err := c.rows.Close(); err != nil {
-				return nil, err
-			}
-			c.rows = nil
-		}
-
 		if err := c.fetchJobError(); err != nil {
 			return nil, c.jobErr
 		}
+		var toSend []*TestFeedMessage
+		if err := crdb.ExecuteTx(context.Background(), c.db, nil, func(tx *gosql.Tx) error {
 
-		// TODO(dan): It's a bummer that this mutates the sqlsink table. I
-		// originally tried paging through message_id by repeatedly generating a
-		// new high-water with GenerateUniqueInt, but this was racy with rows
-		// being flushed out by the sink. An alternative is to steal the nanos
-		// part from `high_water_timestamp` in `crdb_internal.jobs` and run it
-		// through `builtins.GenerateUniqueID`, but that would mean we're only
-		// ever running tests on rows that have gotten a resolved timestamp,
-		// which seems limiting.
-		var err error
-		c.rows, err = c.db.Query(
-			`SELECT * FROM [DELETE FROM sqlsink RETURNING *] ORDER BY topic, partition, message_id`)
-		if err != nil {
+			// Avoid anything that might somehow look like deadlock under stressrace.
+			_, err := tx.Exec("SET TRANSACTION PRIORITY LOW")
+			if err != nil {
+				return err
+			}
+
+			toSend = nil // reset for this iteration
+			// TODO(dan): It's a bummer that this mutates the sqlsink table. I
+			// originally tried paging through message_id by repeatedly generating a
+			// new high-water with GenerateUniqueInt, but this was racy with rows
+			// being flushed out by the sink. An alternative is to steal the nanos
+			// part from `high_water_timestamp` in `crdb_internal.jobs` and run it
+			// through `builtins.GenerateUniqueID`, but that would mean we're only
+			// ever running tests on rows that have gotten a resolved timestamp,
+			// which seems limiting.
+			rows, err := tx.Query(
+				`SELECT * FROM [DELETE FROM sqlsink RETURNING *] ORDER BY topic, partition, message_id`)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+
+				m := &TestFeedMessage{}
+				var msgID int64
+				if err := rows.Scan(
+					&m.Topic, &m.Partition, &msgID, &m.Key, &m.Value, &m.Resolved,
+				); err != nil {
+					return err
+				}
+
+				// Scan turns NULL bytes columns into a 0-length, non-nil byte
+				// array, which is pretty unexpected. Nil them out before returning.
+				// Either key+value or payload will be set, but not both.
+				if len(m.Key) > 0 || len(m.Value) > 0 {
+					// TODO(dan): This skips duplicates, since they're allowed by the
+					// semantics of our changefeeds. Now that we're switching to RangeFeed,
+					// this can actually happen (usually because of splits) and cause
+					// flakes. However, we really should be de-duping key+ts, this is too
+					// coarse. Fixme.
+					seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
+					if _, ok := c.seen[seenKey]; ok {
+						continue
+					}
+					c.seen[seenKey] = struct{}{}
+
+					m.Resolved = nil
+				} else {
+					m.Key, m.Value = nil, nil
+				}
+				toSend = append(toSend, m)
+			}
+			return rows.Err()
+		}); err != nil {
 			return nil, err
 		}
+		c.toSend = toSend
 	}
 }
 
 // Close implements the TestFeed interface.
 func (c *TableFeed) Close() error {
-	if c.rows != nil {
-		if err := c.rows.Close(); err != nil {
-			return errors.Errorf(`could not close rows: %v`, err)
-		}
-	}
 	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
 		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
 	}

@@ -523,7 +523,34 @@ message ChangefeedDetails {
 message ResolvedSpan {
   roachpb.Span span = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  bool boundary_reached = 3;
+
+  // BoundaryReached indicates that this resolved timestamp
+  // corresponds to a schema change boundary. A schema change boundary is a
+  // timestamp at which a new version of a table has been committed that either
+  // indicates a logical backfill or a need for the changefeed to exit.
+  bool deprecated_boundary_reached = 3;
+
+  enum BoundaryType {
+
+    // NONE indicates that this resolved span does not correspond to a
+    // boundary.
+    NONE = 0;
+
+    // BACKFILL indicates that this resolved span corresponds to a boundary
+    // requiring a backfill internally and perhaps indicates the need for a
+    // protected timestamp.
+    BACKFILL = 1;
+
+    // EXIT indicates that this resolved span corresponds to a boundary which
+    // should result in the changefeed exiting.
+    EXIT = 2;
+
+    // RESTART indicates that this resolved span corresponds to a boundary which
+    // should result in the changefeed restarting.
+    RESTART = 3;
+  }
+
+  BoundaryType boundary_type = 4;
 }
 
 message ResolvedSpans {

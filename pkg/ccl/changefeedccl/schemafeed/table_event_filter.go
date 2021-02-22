@@ -34,6 +34,7 @@ var (
 		tableEventTypeAddColumnWithBackfill: false,
 		tableEventTypeAddColumnNoBackfill:   true,
 		tableEventTypeUnknown:               true,
+		tableEventPrimaryKeyChange:          false,
 	}
 
 	columnChangeTableEventFilter = tableEventFilter{
@@ -41,6 +42,7 @@ var (
 		tableEventTypeAddColumnWithBackfill: false,
 		tableEventTypeAddColumnNoBackfill:   false,
 		tableEventTypeUnknown:               true,
+		tableEventPrimaryKeyChange:          false,
 	}
 
 	schemaChangeEventFilters = map[changefeedbase.SchemaChangeEventClass]tableEventFilter{
@@ -75,9 +77,6 @@ func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool,
 	// Truncation events are not ignored and return an error.
 	if et == tableEventTruncate {
 		return false, errors.Errorf(`"%s" was truncated`, e.Before.GetName())
-	}
-	if et == tableEventPrimaryKeyChange {
-		return false, errors.Errorf(`"%s" primary key changed`, e.Before.GetName())
 	}
 	shouldFilter, ok := b[et]
 	if !ok {
@@ -136,4 +135,10 @@ func tableTruncated(e TableEvent) bool {
 func primaryKeyChanged(e TableEvent) bool {
 	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() &&
 		pkChangeMutationExists(e.Before)
+}
+
+// IsPrimaryIndexChange returns true if the event corresponds to a change
+// in the primary index.
+func IsPrimaryIndexChange(e TableEvent) bool {
+	return classifyTableEvent(e) == tableEventPrimaryKeyChange
 }

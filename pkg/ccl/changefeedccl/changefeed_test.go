@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -3048,12 +3049,214 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	})
 }
 
-// Primary key changes are not currently supported by changefeeds. There used
-// to be no detection but rather they would fail with an inscrutible error or
-// not all, just swallowing writes.
-func TestChangefeedPrimaryKeyChange(t *testing.T) {
+// Primary key changes are supported by changefeeds starting in 21.1. This tests
+// that basic behavior works.
+func TestChangefeedPrimaryKeyChangeWorks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		const baseStmt = `CREATE CHANGEFEED FOR foo WITH resolved = '100ms'`
+		foo := feed(t, f, baseStmt)
+		defer closeFeed(t, foo)
+
+		// maybeHandleRestart deals with the fact that sinkless changefeeds don't
+		// gracefully handle primary index changes but rather force the client to
+		// deal with restarting the changefeed as of the last resolved timestamp.
+		//
+		// This ends up being pretty sane; sinkless changefeeds already require this
+		// behavior in the face of other transient failures so clients already need
+		// to implement this logic.
+		maybeHandleRestart := func(t *testing.T) (cleanup func()) {
+			return func() {}
+		}
+		if strings.HasSuffix(t.Name(), "sinkless") {
+			maybeHandleRestart = func(t *testing.T) func() {
+				var resolved hlc.Timestamp
+				for {
+					m, err := foo.Next()
+					if err != nil {
+						assert.Contains(t, err.Error(),
+							fmt.Sprintf("schema change occurred at %s", resolved.Next().AsOfSystemTime()))
+						break
+					}
+					resolved = extractResolvedTimestamp(t, m)
+				}
+				const restartStmt = baseStmt + ", cursor = $1"
+				foo = feed(t, f, restartStmt, resolved.AsOfSystemTime())
+				return func() {
+					closeFeed(t, foo)
+				}
+			}
+		}
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+		defer maybeHandleRestart(t)()
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'c'), (4, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: ["c"]->{"after": {"a": 3, "b": "c"}}`,
+			`foo: ["d"]->{"after": {"a": 4, "b": "d"}}`,
+		})
+
+		// ALTER PRIMARY KEY should work and we should see the changed
+		// primary key in subsequent writes.
+		sqlDB.Exec(t, `
+BEGIN;
+ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (a);
+INSERT INTO foo VALUES (5, 'e');
+UPDATE foo SET a = 6 WHERE b = 'a';
+COMMIT;
+INSERT INTO foo VALUES (1, 'f');
+`)
+		// Note that the primary key change is asynchronous and that only the
+		// subsequent write will be displayed using the new primary key.
+		assertPayloads(t, foo, []string{
+			`foo: ["a"]->{"after": {"a": 6, "b": "a"}}`,
+			`foo: ["e"]->{"after": {"a": 5, "b": "e"}}`,
+		})
+		defer maybeHandleRestart(t)()
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "f"}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+}
+
+// Primary key changes are supported by changefeeds starting in 21.1. This test
+// specifically focuses on backfill behavior when a single transaction changes
+// multiple tables including a primary key change to one and a column change
+// requiring a backfill to another.
+//
+// Note that at time of writing, this change will not end up occurring in the
+// same transaction and thus at the same moment but in later code changes, it
+// will.
+func TestChangefeedPrimaryKeyChangeWorksWithMultipleTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'a')`)
+
+		const baseStmt = `CREATE CHANGEFEED FOR foo, bar WITH resolved = '100ms'`
+		cf := feed(t, f, baseStmt)
+		defer closeFeed(t, cf)
+
+		// maybeHandleRestart deals with the fact that sinkless changefeeds don't
+		// gracefully handle primary index changes but rather force the client to
+		// deal with restarting the changefeed as of the last resolved timestamp.
+		//
+		// This ends up being pretty sane; sinkless changefeeds already require this
+		// behavior in the face of other transient failures so clients already need
+		// to implement this logic.
+		maybeHandleRestart := func(t *testing.T) (cleanup func()) {
+			return func() {}
+		}
+		if strings.HasSuffix(t.Name(), "sinkless") {
+			maybeHandleRestart = func(t *testing.T) func() {
+				var resolvedTS hlc.Timestamp
+				for {
+					m, err := cf.Next()
+					if err != nil {
+						assert.Contains(t, err.Error(), fmt.Sprintf("schema change occurred at %s", resolvedTS.Next().AsOfSystemTime()))
+						break
+					}
+					resolvedTS = extractResolvedTimestamp(t, m)
+				}
+				const restartStmt = baseStmt + ", cursor = $1"
+				cf = feed(t, f, restartStmt, resolvedTS.AsOfSystemTime())
+				return func() {
+					closeFeed(t, cf)
+				}
+			}
+		}
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, cf, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`bar: [1]->{"after": {"a": 1, "b": "a"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (2, 'b'), (3, 'c')`)
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`bar: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`bar: [3]->{"after": {"a": 3, "b": "c"}}`,
+		})
+
+		sqlDB.Exec(t, `
+BEGIN;
+ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b);
+INSERT INTO bar VALUES (4, 'd'), (5, 'e');
+INSERT INTO foo VALUES (3, 'c');
+COMMIT;
+INSERT INTO foo VALUES (4, 'd');
+INSERT INTO bar VALUES (6, 'f');
+`)
+
+		assertPayloads(t, cf, []string{
+			`bar: [4]->{"after": {"a": 4, "b": "d"}}`,
+			`bar: [5]->{"after": {"a": 5, "b": "e"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "c"}}`,
+		})
+		defer maybeHandleRestart(t)()
+		assertPayloads(t, cf, []string{
+			`foo: ["d"]->{"after": {"a": 4, "b": "d"}}`,
+			`bar: [6]->{"after": {"a": 6, "b": "f"}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+}
+
+// Primary key changes are supported by changefeeds starting in 21.1.
+func TestChangefeedPrimaryKeyChangeMixedVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -3070,21 +3273,23 @@ func TestChangefeedPrimaryKeyChange(t *testing.T) {
 			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
-		})
-
-		// ALTER PRIMARY KEY is totally busted as of writing this.
-		// The change will occur and all future drops will be hidden
-		// until the data gets GC'd. Assert that we don't see these updates.
+		// Expect to see an error because primary key changes are not supported
+		// in the mixed version state.
 		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
 		_, err := foo.Next()
-		require.Regexp(t, "\"foo\" primary key changed", err)
+		require.Regexp(t, `primary key change occurred`, err)
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run("enterprise", enterpriseTestWithServerArgs(
+		func(args *base.TestServerArgs) {
+			args.Knobs = base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V20_2),
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			}
+		},
+		testFn,
+	))
+
 }

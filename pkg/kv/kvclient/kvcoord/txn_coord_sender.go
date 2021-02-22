@@ -1158,16 +1158,20 @@ func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
 
 	// Hijack the pre-emptive refresh code path to perform the refresh but
 	// provide the force flag to ensure that the refresh occurs unconditionally.
+	// We provide an empty BatchRequest - maybeRefreshPreemptivelyLocked just
+	// needs the transaction proto. The function then returns a BatchRequest
+	// with the updated transaction proto. We use this updated proto to call
+	// into updateStateLocked directly.
 	var ba roachpb.BatchRequest
 	ba.Txn = tc.mu.txn.Clone()
 	const force = true
-	ba, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
+	refreshedBa, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
 	if pErr != nil {
 		pErr = tc.updateStateLocked(ctx, ba, nil, pErr)
 	} else {
 		var br roachpb.BatchResponse
-		br.Txn = ba.Txn
-		pErr = tc.updateStateLocked(ctx, ba, &br, pErr)
+		br.Txn = refreshedBa.Txn
+		pErr = tc.updateStateLocked(ctx, ba, &br, nil)
 	}
 	return pErr.GoError()
 }
