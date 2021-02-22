@@ -3940,7 +3940,7 @@ func EvalComparisonExprWithSubOperator(
 	return evalDatumsCmp(ctx, expr.Operator, expr.SubOperator, expr.Fn, left, datums)
 }
 
-// EvalArgsAndGetGenerator evaluates the arguments and instanciates a
+// EvalArgsAndGetGenerator evaluates the arguments and instantiates a
 // ValueGenerator for use by set projections.
 func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator, error) {
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
