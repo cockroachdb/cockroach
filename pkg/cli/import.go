@@ -169,6 +169,16 @@ func runImport(
 		if importCtx.skipForeignKeys {
 			optionsClause = optionsClause + ", skip_foreign_keys"
 		}
+		if importCtx.rowLimit > 0 {
+			optionsClause = fmt.Sprintf("%s, row_limit='%d'", optionsClause, importCtx.rowLimit)
+		}
+		if importCtx.ignoreUnsupported {
+			optionsClause = fmt.Sprintf("%s, ignore_unsupported_statements", optionsClause)
+		}
+		if importCtx.ignoreUnsupportedLog != "" {
+			optionsClause = fmt.Sprintf("%s, log_ignored_statements=%s", optionsClause,
+				importCtx.ignoreUnsupportedLog)
+		}
 		switch mode {
 		case singleTable:
 			importQuery = fmt.Sprintf(`IMPORT TABLE %s FROM PGDUMP '%s' %s`, tableName,
@@ -180,6 +190,9 @@ func runImport(
 		var optionsClause string
 		if importCtx.skipForeignKeys {
 			optionsClause = " WITH skip_foreign_keys"
+		}
+		if importCtx.rowLimit > 0 {
+			optionsClause = fmt.Sprintf("%s, row_limit='%d'", optionsClause, importCtx.rowLimit)
 		}
 		switch mode {
 		case singleTable:

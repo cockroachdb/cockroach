@@ -1289,6 +1289,30 @@ may need to be tweaked if the Postgres dump file has extremely long lines.
 `,
 	}
 
+	ImportIgnoreUnsupportedStatements = FlagInfo{
+		Name: "ignore-unsupported-statements",
+		Description: `
+Ignore statements that are unsupported during an import from a PGDUMP file.
+`,
+	}
+
+	ImportLogIgnoredStatements = FlagInfo{
+		Name: "log-ignored-statements",
+		Description: `
+Log unsupported statements that are ignored during an import from a PGDUMP file to the specified
+destination. This flag should be used in conjunction with the ignore-unsupported-statements flag
+that ignores the unsupported statements during an import.
+`,
+	}
+
+	ImportRowLimit = FlagInfo{
+		Name: "row-limit",
+		Description: `
+Specify the number of rows that will be imported for each table during a PGDUMP or MYSQLDUMP import.
+This can be used to check schema and data correctness without running the entire import.
+`,
+	}
+
 	Log = FlagInfo{
 		Name:        "log",
 		Description: `Logging configuration. See the documentation for details.`,
