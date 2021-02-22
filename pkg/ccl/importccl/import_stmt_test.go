@@ -5736,13 +5736,13 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo2; USE foo2;")
 		ignoredLog := `userfile:///ignore.log`
 		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported` option",
-			"IMPORT PGDUMP ($1) WITH ignored_stmt_log=$2", srv.URL, ignoredLog)
+			"IMPORT PGDUMP ($1) WITH ignore_unsupported_log=$2", srv.URL, ignoredLog)
 	})
 
 	t.Run("log-unsupported-stmts", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo3; USE foo3;")
 		ignoredLog := `userfile:///ignore.log`
-		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported, ignored_stmt_log=$2",
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported, ignore_unsupported_log=$2",
 			srv.URL, ignoredLog)
 		// Check that statements which are not expected to be ignored, are still
 		// processed.

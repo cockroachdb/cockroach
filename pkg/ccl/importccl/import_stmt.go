@@ -102,9 +102,9 @@ const (
 	avroSchemaURI = "schema_uri"
 
 	pgDumpIgnoreAllUnsupported     = "ignore_unsupported"
-	pgDumpIgnoreShuntFileDest      = "ignored_stmt_log"
+	pgDumpIgnoreShuntFileDest      = "ignore_unsupported_log"
 	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
-	pgDumpUnsupportedDataStmtLog   = "unsupported_data-_stmts"
+	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
 	pgDumpMaxLoggedStmts           = 10
 
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
