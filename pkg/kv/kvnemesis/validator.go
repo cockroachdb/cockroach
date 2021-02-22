@@ -348,6 +348,9 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else if resultIsError(t.Result, `unable to find store \d+ in range`) {
 			// A lease transfer that races with a replica removal may find that
 			// the store it was targeting is no longer part of the range.
+		} else if resultIsError(t.Result, `cannot transfer lease while merge in progress`) {
+			// A lease transfer is not permitted while a range merge is in its
+			// critical phase.
 		} else {
 			v.failIfError(op, t.Result)
 		}
