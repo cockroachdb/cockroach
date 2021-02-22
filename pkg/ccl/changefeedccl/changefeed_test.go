@@ -1722,7 +1722,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		failSinkHook := func() error {
 			switch atomic.LoadInt64(&failSink) {
 			case 1:
-				return markRetryableError(fmt.Errorf("synthetic retryable error"))
+				return MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
 				return fmt.Errorf("synthetic terminal error")
 			}
@@ -3000,7 +3000,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- markRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- MarkRetryableError(errors.New(`nope don't write it`))
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.

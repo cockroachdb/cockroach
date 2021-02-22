@@ -270,7 +270,7 @@ func (s errorWrapperSink) EmitRow(
 	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated); err != nil {
-		return markRetryableError(err)
+		return MarkRetryableError(err)
 	}
 	return nil
 }
@@ -279,21 +279,21 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
-		return markRetryableError(err)
+		return MarkRetryableError(err)
 	}
 	return nil
 }
 
 func (s errorWrapperSink) Flush(ctx context.Context) error {
 	if err := s.wrapped.Flush(ctx); err != nil {
-		return markRetryableError(err)
+		return MarkRetryableError(err)
 	}
 	return nil
 }
 
 func (s errorWrapperSink) Close() error {
 	if err := s.wrapped.Close(); err != nil {
-		return markRetryableError(err)
+		return MarkRetryableError(err)
 	}
 	return nil
 }

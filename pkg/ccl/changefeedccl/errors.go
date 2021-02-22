@@ -19,20 +19,13 @@ import (
 
 const retryableErrorString = "retryable changefeed error"
 
-// retryableError is deprecated, but used to maintain backwards
-// compatibility with 20.2 nodes.
-// TODO(pbardea): Remove in 21.2, and use the helpers in utilccl/errors.go
-// instead.
 type retryableError struct {
 	wrapped error
 }
 
-// markRetryableError wraps the given error, marking it as retryable to
+// MarkRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
-// TODO(pbardea): Remove in 21.2, and use utilccl.MarkRetryableError instead.
-func markRetryableError(e error) error {
-	// Wrap all these errors with a more generic job retry error.
-	e = utilccl.MarkRetryableError(e)
+func MarkRetryableError(e error) error {
 	return &retryableError{wrapped: e}
 }
 
@@ -48,11 +41,9 @@ func (e *retryableError) Cause() error { return e.wrapped }
 // planned to be moved to the stdlib in go 1.13.
 func (e *retryableError) Unwrap() error { return e.wrapped }
 
-// isChangefeedRetryableError returns true if the supplied error, or any of its
-// parent causes, is a isChangefeedRetryableError. This should be used in
-// utilccl.RetryDistSQLFlowCustomRetryable, and should eventually be removed in
-// 21.2, when no more errors will be marked with this changefeed specific error.
-func isChangefeedRetryableError(err error) bool {
+// IsRetryableError returns true if the supplied error, or any of its parent
+// causes, is a IsRetryableError.
+func IsRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -71,13 +62,13 @@ func isChangefeedRetryableError(err error) bool {
 		return true
 	}
 
-	return false
+	return utilccl.IsDistSQLRetryableError(err)
 }
 
-// maybeStripRetryableErrorMarker performs some minimal attempt to clean the
+// MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
 // RetryableError marker out. This won't do anything if the RetryableError
 // itself has been wrapped, but that's okay, we'll just have an uglier string.
-func maybeStripRetryableErrorMarker(err error) error {
+func MaybeStripRetryableErrorMarker(err error) error {
 	// The following is a hack to work around the error cast linter.
 	// What we're doing here is really not kosher; this function
 	// has no business in assuming that the retryableError{} wrapper
