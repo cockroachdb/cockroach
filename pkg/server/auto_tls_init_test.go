@@ -11,32 +11,67 @@
 package server
 
 import (
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestDummyInitializeFromConfig is a placeholder for actual testing functions
-// TODO(aaron-crl): [tests] write unit tests
+// TestDummyInitializeFromConfig is a placeholder for actual testing functions.
+// TODO(aaron-crl): [tests] write unit tests.
 func TestDummyInitializeFromConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Create a temp dir for all certificate tests.
+	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
+	if err != nil {
+		t.Fatalf("failed to create test temp dir: %s", err)
+	}
+
 	certBundle := CertificateBundle{}
-	cfg := base.Config{}
-	err := certBundle.InitializeFromConfig(cfg)
+	cfg := base.Config{
+		SSLCertsDir: tempDir,
+	}
+
+	err = certBundle.InitializeFromConfig(cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
+
+	// Remove temp directory now that we are done with it.
+	err = os.RemoveAll(tempDir)
+	if err != nil {
+		t.Fatalf("failed to remove test temp dir: %s", err)
+	}
+
 }
 
-// TestDummyInitializeNodeFromBundle is a placeholder for actual testing functions
-// TODO(aaron-crl): [tests] write unit tests
+// TestDummyInitializeNodeFromBundle is a placeholder for actual testing functions.
+// TODO(aaron-crl): [tests] write unit tests.
 func TestDummyInitializeNodeFromBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Create a temp dir for all certificate tests.
+	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
+	if err != nil {
+		t.Fatalf("failed to create test temp dir: %s", err)
+	}
+
 	certBundle := CertificateBundle{}
-	cfg := base.Config{}
-	err := certBundle.InitializeNodeFromBundle(cfg)
+	cfg := base.Config{
+		SSLCertsDir: tempDir,
+	}
+
+	err = certBundle.InitializeNodeFromBundle(cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
+	}
+
+	// Remove temp directory now that we are done with it.
+	err = os.RemoveAll(tempDir)
+	if err != nil {
+		t.Fatalf("failed to remove test temp dir: %s", err)
 	}
 }
