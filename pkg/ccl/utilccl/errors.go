@@ -57,6 +57,16 @@ func isDistSQLRetryableError(err error) bool {
 	return false
 }
 
+// RetryDistSQLFlow retries the given func in the context of a
+// long running DistSQL flow which is used by all jobs. If a node were to fail,
+// either the work func should be retried, or the error returned will be a job
+// retry error that will retry the entire job in the case of the coordinator
+// node being drained.
+func RetryDistSQLFlow(ctx context.Context, retryable func(ctx context.Context) error) error {
+	return RetryDistSQLFlowCustomRetryable(ctx, nil, /* isCustomRetry */
+		retryable, nil /* logOnRetryableError */)
+}
+
 // RetryDistSQLFlowCustomRetryable retries the given func in the context of a
 // long running DistSQL flow which is used by all jobs. If a node were to fail,
 // either the work func should be retried, or the error returned will be a job

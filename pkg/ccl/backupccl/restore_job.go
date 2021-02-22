@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -622,17 +623,21 @@ func restore(
 		return nil
 	})
 
-	// TODO(pbardea): Improve logging in processors.
-	if err := distRestore(
-		restoreCtx,
-		execCtx,
-		importSpanChunks,
-		dataToRestore.getPKIDs(),
-		encryption,
-		dataToRestore.getRekeys(),
-		endTime,
-		progCh,
-	); err != nil {
+	runRestoreFlow := func(ctx context.Context) error {
+		// TODO(pbardea): Improve logging in processors.
+		return distRestore(
+			restoreCtx,
+			execCtx,
+			importSpanChunks,
+			dataToRestore.getPKIDs(),
+			encryption,
+			dataToRestore.getRekeys(),
+			endTime,
+			progCh,
+		)
+	}
+
+	if err := utilccl.RetryDistSQLFlow(restoreCtx, runRestoreFlow); err != nil {
 		return emptyRowCount, err
 	}
 

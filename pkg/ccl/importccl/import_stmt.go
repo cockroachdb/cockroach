@@ -1946,11 +1946,18 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime,
-		r.testingKnobs.alwaysFlushJobProgress)
-	if err != nil {
+	var res roachpb.BulkOpSummary
+	doImport := func(ctx context.Context) error {
+		var err error
+		res, err = sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime,
+			r.testingKnobs.alwaysFlushJobProgress)
 		return err
 	}
+
+	if err := utilccl.RetryDistSQLFlow(ctx, doImport); err != nil {
+		return err
+	}
+
 	pkIDs := make(map[uint64]struct{}, len(details.Tables))
 	for _, t := range details.Tables {
 		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
