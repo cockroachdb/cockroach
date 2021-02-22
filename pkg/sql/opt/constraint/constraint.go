@@ -569,12 +569,52 @@ func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
 
 // ExtractConstCols returns a set of columns which are restricted to be
 // constant by the constraint.
+//
+// For example, in this constraint, columns a and c are constant:
+//   /a/b/c: [/1/1/1 - /1/1/1] [/1/4/1 - /1/4/1]
+//
+// However, none of the columns in this constraint are constant:
+//   /a/b: [/1/1 - /2/1] [/3/1 - /3/1]
+// Even though column b might appear to be constant, the first span allows
+// column b to take on any value. For example, a=1 and b=100 is contained in
+// the first span.
+//
+// This function essentially returns all columns which have the same value for
+// all spans, and are within the constraint prefix (see Constraint.Prefix() for
+// details).
 func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
-	var res opt.ColSet
-	pre := c.ExactPrefix(evalCtx)
-	for i := 0; i < pre; i++ {
-		res.Add(c.Columns.Get(i).ID())
+	if c.IsContradiction() {
+		return opt.ColSet{}
 	}
+
+	var res opt.ColSet
+	for col := 0; col < c.Columns.Count(); col++ {
+		// Check if all spans have the same value for this column.
+		// Return early if this column is not part of the constraint prefix, since
+		// no column after that can be guaranteed to be constant.
+		var val tree.Datum
+		allMatch := true
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			if sp.start.Length() <= col || sp.end.Length() <= col {
+				return res
+			}
+			startVal := sp.start.Value(col)
+			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
+				return res
+			}
+			if i == 0 {
+				val = startVal
+			} else if startVal.Compare(evalCtx, val) != 0 {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			res.Add(c.Columns.Get(col).ID())
+		}
+	}
+
 	return res
 }
 

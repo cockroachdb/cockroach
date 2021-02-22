@@ -612,6 +612,87 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	return data
 }
 
+func TestExtractConstCols(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		c string
+		e []opt.ColumnID
+	}{
+		{ // 0
+			c: "/1: [/2 - ]",
+			e: []opt.ColumnID{},
+		},
+		{ // 1
+			c: "/1: [ - /2]",
+			e: []opt.ColumnID{},
+		},
+		{ // 2
+			c: "/1: [/3 - /4]",
+			e: []opt.ColumnID{},
+		},
+		{ // 3
+			c: "/1: [/4 - /4]",
+			e: []opt.ColumnID{1},
+		},
+		{ // 4
+			c: "/-1: [ - /2]",
+			e: []opt.ColumnID{},
+		},
+		{ // 5
+			c: "/-1: [/4 - /4]",
+			e: []opt.ColumnID{1},
+		},
+		{ // 6
+			c: "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
+			e: []opt.ColumnID{},
+		},
+		{ // 7
+			c: "/1/2/3: [/1/1/1 - /1/1/1] [/4/1 - /4/1]",
+			e: []opt.ColumnID{2},
+		},
+		{ // 8
+			c: "/1/2/3: [/1/1/1 - /1/1/2] [/1/1/3 - /1/3/4]",
+			e: []opt.ColumnID{1},
+		},
+		{ // 9
+			c: "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/1/3/1 - /3/1/4/1]",
+			e: []opt.ColumnID{2},
+		},
+		{ // 10
+			c: "/1/2/3/4: [/1/1/2/1 - /1/1/2/1] [/3/1/3/1 - /3/1/3/1]",
+			e: []opt.ColumnID{2, 4},
+		},
+		{ // 11
+			c: "/1/-2/-3: [/1/1/2 - /1/1] [/3/3/4 - /3/3/3]",
+			e: []opt.ColumnID{},
+		},
+		{ // 12
+			c: "/1/2/3: [/1/1/1 - /1/1/2] [/1/3/3 - /1/3/4] [/1/4 - /1/4/1]",
+			e: []opt.ColumnID{1},
+		},
+		{ // 13
+			c: "/1/2/3: [/1/1/NULL - /1/1/NULL] [/3/3/NULL - /3/3/NULL]",
+			e: []opt.ColumnID{3},
+		},
+		{ // 14
+			c: "/1/2/3: [/1/1/1 - /1/1/1] [/4/1 - /5/1]",
+			e: []opt.ColumnID{},
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.c)
+			cols := c.ExtractConstCols(&evalCtx)
+			if exp := opt.MakeColSet(tc.e...); !cols.Equals(exp) {
+				t.Errorf("expected %s; got %s", exp, cols)
+			}
+		})
+	}
+}
+
 func TestExtractNotNullCols(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -676,7 +757,7 @@ func TestExtractNotNullCols(t *testing.T) {
 			c: "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
 			e: []opt.ColumnID{1, 2},
 		},
-		{ // 13
+		{ // 14
 			c: "/1/2/3: [/1/1/1 - /1/1/1] [/2/NULL/2 - /2/NULL/3]",
 			e: []opt.ColumnID{1, 3},
 		},
