@@ -1,0 +1,117 @@
+# This test verifies that we're correctly typing placeholder arguments
+# in prepared statements.
+
+# 83 = ASCII 'S' for Statement
+# 50 = ASCII '2'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s1", "Query": "select n::int4 from generate_series(0,$1::int4) n"}
+Describe {"ObjectType": 83, "Name": "s1"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [[50]]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[23]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 83 = ASCII 'S' for Statement
+# 50 = ASCII '2'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s3", "Query": "select n::int4, lower($1) from generate_series(0,$1::int) as n"}
+Describe {"ObjectType": 83, "Name": "s3"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ParameterFormatCodes": [0], "Parameters": [[50]]}
+Execute {"Portal": "p3"}
+Sync
+----
+
+# Postgres returns error code 42883 (undefined function). CRDB returns code
+# 42804 (datatype mismatch). Both make sense here.
+until mapError=(42883, 42804)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42804"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "DROP TABLE IF EXISTS tab1 CASCADE"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "CREATE TABLE tab1 (a UUID PRIMARY KEY, b TIMESTAMPTZ, c TEXT[])"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 83 = ASCII 'S' for Statement
+send
+Parse {"Name": "s4", "Query": "UPDATE tab1 SET c = array(select unnest(c::text[]) except select unnest ($2::text[]) union select unnest($3::text[])), b = $1 WHERE a = $4"}
+Describe {"ObjectType": 83, "Name": "s4"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[1184,1009,1009,2950]}
+{"Type":"NoData"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 83 = ASCII 'S' for Statement
+send
+Parse {"Name": "s5", "Query": "SELECT $2 > 0"}
+Describe {"ObjectType": 83, "Name": "s5"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42P18"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 83 = ASCII 'S' for Statement
+send
+Parse {"Name": "s6", "Query": "SELECT 3 + CASE (4) WHEN 4 THEN $1 END"}
+Describe {"ObjectType": 83, "Name": "s6"}
+Sync
+----
+
+# Postgres returns error code 42883 (undefined function). CRDB returns code
+# 42P18 (indeterminate datatype). Both make sense here.
+until mapError=(42883, 42P18)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42P18"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
