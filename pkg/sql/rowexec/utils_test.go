@@ -103,6 +103,8 @@ type rowGeneratingSource struct {
 	maxRows int
 }
 
+var _ execinfra.RowSource = &rowGeneratingSource{}
+
 // newRowGeneratingSource creates a new rowGeneratingSource with the given fn
 // and a maximum number of rows to generate. Can be reset using Reset.
 func newRowGeneratingSource(
@@ -113,7 +115,7 @@ func newRowGeneratingSource(
 
 func (r *rowGeneratingSource) OutputTypes() []*types.T { return r.types }
 
-func (r *rowGeneratingSource) Start(ctx context.Context) context.Context { return ctx }
+func (r *rowGeneratingSource) Start(context.Context) {}
 
 func (r *rowGeneratingSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if r.rowIdx > r.maxRows {

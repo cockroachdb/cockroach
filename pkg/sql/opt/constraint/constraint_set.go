@@ -290,7 +290,7 @@ func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 }
 
 // ExtractValueForConstCol extracts the value for a constant column returned
-// by ExtractConstCols.
+// by ExtractConstCols. If the given column is not constant, nil is returned.
 func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnID) tree.Datum {
 	if s == Unconstrained || s == Contradiction {
 		return nil
@@ -304,8 +304,7 @@ func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnI
 				break
 			}
 		}
-		// The column must be part of the constraint's "exact prefix".
-		if colOrd != -1 && c.ExactPrefix(evalCtx) > colOrd {
+		if colOrd != -1 && s.ExtractConstCols(evalCtx).Contains(col) {
 			return c.Spans.Get(0).StartKey().Value(colOrd)
 		}
 	}

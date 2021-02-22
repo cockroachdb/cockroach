@@ -87,9 +87,13 @@ func newStreamIngestionFrontierProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (sf *streamIngestionFrontier) Start(ctx context.Context) context.Context {
+func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	sf.input.Start(ctx)
-	return sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	// Go around "this value of ctx is never used" linter error. We do it this
+	// way instead of omitting the assignment to ctx above so that if in the
+	// future other initialization is added, the correct ctx is used.
+	_ = ctx
 }
 
 // Next is part of the RowSource interface.

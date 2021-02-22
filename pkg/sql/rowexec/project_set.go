@@ -115,11 +115,10 @@ func newProjectSetProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
-	ctx = ps.input.Start(ctx)
+func (ps *projectSetProcessor) Start(ctx context.Context) {
+	ps.input.Start(ctx)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
-	return ctx
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also

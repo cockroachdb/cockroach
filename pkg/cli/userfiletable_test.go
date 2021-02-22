@@ -206,7 +206,7 @@ func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles 
 	require.Equal(t, expectedFiles, deletedFiles, "deleted files when running %v", cmd)
 }
 
-func TestUserFileList(t *testing.T) {
+func TestUserfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	c := newCLITest(cliTestParams{t: t})
@@ -232,246 +232,160 @@ func TestUserFileList(t *testing.T) {
 		Host:   defaultQualifiedNamePrefix + security.RootUser,
 	}
 
-	t.Run("ListFiles", func(t *testing.T) {
-		// Upload files to default userfile URI.
-		for _, file := range fileNames {
-			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", localFilePath, file))
-			require.NoError(t, err)
-		}
+	for tcNum, tc := range []struct {
+		name            string
+		URI             string
+		writeList       []string
+		expectedMatches []string
+		postDeleteList  []string
+	}{
+		{
+			"match-all",
+			"",
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"match-all-with-slash",
+			"/",
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"match-all-with-slash-prefix",
+			"/file",
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"match-all-with-prefix",
+			"file",
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"no-glob-path-match-all-in-default",
+			defaultUserfileURLSchemeAndHost.String(),
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"no-host-match-all-in-default",
+			"userfile:///*/*/*.*",
+			fileNames,
+			fileNames,
+			nil,
+		},
+		{
+			"well-formed-userfile-uri",
+			defaultUserfileURLSchemeAndHost.String() + "/file/letters/*.csv",
+			fileNames,
+			dataLetterFiles,
+			append(dataNumberFiles, unicodeFile...),
+		},
+		{
+			"match-unicode-file",
+			defaultUserfileURLSchemeAndHost.String() + "/file/unicode/á.csv",
+			fileNames,
+			unicodeFile,
+			append(dataLetterFiles, dataNumberFiles...),
+		},
+		{
+			"match-data-num-csv",
+			"file/numbers/data[0-9].csv",
+			fileNames,
+			dataNumberFiles,
+			append(dataLetterFiles, unicodeFile...),
+		},
+		{
+			"wildcard-bucket-and-filename",
+			"*/numbers/*.csv",
+			fileNames,
+			dataNumberFiles,
+			append(dataLetterFiles, unicodeFile...),
+		},
+		{
+			"match-all-csv-skip-dir",
+			// filepath.Glob() assumes that / is the separator, and enforces that it's there.
+			// So this pattern would not actually match anything.
+			"file/*.csv",
+			fileNames,
+			nil,
+			fileNames,
+		},
+		{
+			"match-no-matches",
+			"file/letters/dataD.csv",
+			fileNames,
+			nil,
+			fileNames,
+		},
+		{
+			"match-escaped-star",
+			"file/*/\\*.csv",
+			fileNames,
+			nil,
+			fileNames,
+		},
+		{
+			"match-escaped-range",
+			"file/*/data\\[0-9\\].csv",
+			fileNames,
+			nil,
+			fileNames,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Upload files to default userfile URI.
+			for _, file := range tc.writeList {
+				_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", localFilePath, file))
+				require.NoError(t, err)
+			}
 
-		for _, tc := range []struct {
-			name       string
-			URI        string
-			resultList []string
-		}{
-			{
-				"list-all-in-default-using-star",
-				"*",
-				fileNames,
-			},
-			{
-				"no-uri-list-all-in-default",
-				"",
-				fileNames,
-			},
-			{
-				"no-glob-path-list-all-in-default",
-				defaultUserfileURLSchemeAndHost.String(),
-				fileNames,
-			},
-			{
-				"no-host-list-all-in-default",
-				"userfile:///*/*/*.csv",
-				fileNames,
-			},
-			{
-				"well-formed-userfile-uri",
-				defaultUserfileURLSchemeAndHost.String() + "/file/letters/*.csv",
-				dataLetterFiles,
-			},
-			{
-				"only-glob",
-				"file/letters/*.csv",
-				dataLetterFiles,
-			},
-			{
-				"list-data-num-csv",
-				"file/numbers/data[0-9].csv",
-				dataNumberFiles,
-			},
-			{
-				"wildcard-bucket-and-filename",
-				"*/numbers/*.csv",
-				dataNumberFiles,
-			},
-			{
-				"list-all-csv-skip-dir",
-				// filepath.Glob() assumes that / is the separator, and enforces that it's there.
-				// So this pattern would not actually match anything.
-				"file/*.csv",
-				nil,
-			},
-			{
-				"list-no-matches",
-				"file/letters/dataD.csv",
-				nil,
-			},
-			{
-				"list-escaped-star",
-				"file/*/\\*.csv",
-				nil,
-			},
-			{
-				"list-escaped-range",
-				"file/*/data\\[0-9\\].csv",
-				nil,
-			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				checkListedFiles(t, c, tc.URI, "", tc.resultList)
-			})
-		}
-	})
-	require.NoError(t, os.RemoveAll(dir))
-}
-
-func TestUserFileDelete(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	c.omitArgs = true
-	defer c.cleanup()
-
-	dir, cleanFn := testutils.TempDir(t)
-	defer cleanFn()
-
-	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv"}
-	dataNumberFiles := []string{"file/numbers/data1.csv", "file/numbers/data2.csv"}
-	unicodeFile := []string{"file/unicode/á.csv"}
-	fileNames := append(dataLetterFiles, dataNumberFiles...)
-	fileNames = append(fileNames, unicodeFile...)
-	sort.Strings(fileNames)
-
-	localFilePath := filepath.Join(dir, "test.csv")
-	err := ioutil.WriteFile(localFilePath, []byte("a"), 0666)
-	require.NoError(t, err)
-
-	defaultUserfileURLSchemeAndHost := url.URL{
-		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + security.RootUser,
-	}
-
-	t.Run("DeleteFiles", func(t *testing.T) {
-		for _, tc := range []struct {
-			name               string
-			URI                string
-			writeList          []string
-			expectedDeleteList []string
-			postDeleteList     []string
-		}{
-			{
-				"delete-all",
-				"",
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"delete-all-with-slash",
-				"/",
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"delete-all-with-slash-prefix",
-				"/file",
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"delete-all-with-prefix",
-				"file",
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"no-glob-path-delete-all-in-default",
-				defaultUserfileURLSchemeAndHost.String(),
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"no-host-delete-all-in-default",
-				"userfile:///*/*/*.*",
-				fileNames,
-				fileNames,
-				nil,
-			},
-			{
-				"well-formed-userfile-uri",
-				defaultUserfileURLSchemeAndHost.String() + "/file/letters/*.csv",
-				fileNames,
-				dataLetterFiles,
-				append(dataNumberFiles, unicodeFile...),
-			},
-			{
-				"delete-unicode-file",
-				defaultUserfileURLSchemeAndHost.String() + "/file/unicode/á.csv",
-				fileNames,
-				unicodeFile,
-				append(dataLetterFiles, dataNumberFiles...),
-			},
-			{
-				"delete-data-num-csv",
-				"file/numbers/data[0-9].csv",
-				fileNames,
-				dataNumberFiles,
-				append(dataLetterFiles, unicodeFile...),
-			},
-			{
-				"wildcard-bucket-and-filename",
-				"*/numbers/*.csv",
-				fileNames,
-				dataNumberFiles,
-				append(dataLetterFiles, unicodeFile...),
-			},
-			{
-				"delete-all-csv-skip-dir",
-				// filepath.Glob() assumes that / is the separator, and enforces that it's there.
-				// So this pattern would not actually match anything.
-				"file/*.csv",
-				fileNames,
-				nil,
-				fileNames,
-			},
-			{
-				"delete-no-matches",
-				"file/letters/dataD.csv",
-				fileNames,
-				nil,
-				fileNames,
-			},
-			{
-				"delete-escaped-star",
-				"file/*/\\*.csv",
-				fileNames,
-				nil,
-				fileNames,
-			},
-			{
-				"delete-escaped-range",
-				"file/*/data\\[0-9\\].csv",
-				fileNames,
-				nil,
-				fileNames,
-			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				// Upload files to default userfile URI.
-				for _, file := range tc.writeList {
-					_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", localFilePath, file))
-					require.NoError(t, err)
-				}
-
-				// List files prior to deletion.
+			t.Run("list", func(t *testing.T) {
 				checkListedFiles(t, c, "", "", tc.writeList)
+				checkListedFiles(t, c, tc.URI, "", tc.expectedMatches)
+			})
 
-				// Delete files.
-				checkDeletedFiles(t, c, tc.URI, "", tc.expectedDeleteList)
+			if tc.URI != "" {
+				t.Run("get", func(t *testing.T) {
+					dest := filepath.Join(dir, fmt.Sprintf("tc-%d", tcNum))
+					cmd := []string{"userfile", "get", tc.URI, dest}
+					cliOutput, err := c.RunWithCaptureArgs(cmd)
+					require.NoError(t, err)
+					if strings.Contains(cliOutput, "ERROR: no files matched requested path or path pattern") {
+						if len(tc.expectedMatches) > 0 {
+							t.Fatalf("unexpected error: %q", cliOutput)
+						}
+					} else {
+						lines := strings.Split(strings.TrimSpace(cliOutput), "\n")
 
+						var downloaded []string
+						for i := range lines {
+							downloaded = append(downloaded, strings.Fields(lines[i])[3])
+						}
+						require.Equal(t, tc.expectedMatches, downloaded, "get files from %v returned %q", cmd, cliOutput)
+					}
+				})
+			}
+
+			t.Run("delete", func(t *testing.T) {
+				checkDeletedFiles(t, c, tc.URI, "", tc.expectedMatches)
 				// List files after deletion.
 				checkListedFiles(t, c, "", "", tc.postDeleteList)
-
-				// Cleanup all files for next test run.
-				_, err = c.RunWithCaptureArgs([]string{"userfile", "delete", "/"})
-				require.NoError(t, err)
 			})
-		}
-	})
+
+			// Cleanup all files for next test run.
+			_, err = c.RunWithCaptureArgs([]string{"userfile", "delete", "/"})
+			require.NoError(t, err)
+		})
+	}
+
 	require.NoError(t, os.RemoveAll(dir))
 }
 

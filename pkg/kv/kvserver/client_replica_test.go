@@ -2945,13 +2945,13 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 				ctx, rhs, *rhsDesc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
 			)
 			// We'll ultimately fail because we're going to race with the work below.
-			msg := "descriptor changed"
+			msg := `descriptor changed:`
 			if resplit {
-				// We don't convert ConditionFailedError to the "descriptor changed"
-				// error if the range ID changed.
-				msg = "unexpected value"
+				// We return a more detailed "descriptor changed" error if the
+				// range ID changed.
+				msg = `descriptor changed: .* \(range replaced\)`
 			}
-			require.True(t, testutils.IsError(err, msg), err)
+			require.Regexp(t, msg, err)
 		}()
 		// Wait until our goroutine is blocked.
 		testutils.SucceedsSoon(t, func() error {
