@@ -270,7 +270,7 @@ func TestExtractCols(t *testing.T) {
 	}
 }
 
-func TestExtractConstCols(t *testing.T) {
+func TestExtractConstColsForSet(t *testing.T) {
 	type vals map[opt.ColumnID]string
 	type testCase struct {
 		constraints []string
@@ -304,12 +304,11 @@ func TestExtractConstCols(t *testing.T) {
 			vals{2: "4"},
 		},
 		{[]string{`/1: [/10 - /11)`}, vals{}},
-		// TODO(justin): column 1 here is constant but we don't infer it as such.
 		{
 			[]string{
 				`/2/1: [/900/4 - /900/4] [/1000/4 - /1000/4] [/1100/4 - /1100/4] [/1400/4 - /1400/4] [/1500/4 - /1500/4]`,
 			},
-			vals{},
+			vals{1: "4"},
 		},
 		{
 			[]string{
@@ -335,6 +334,16 @@ func TestExtractConstCols(t *testing.T) {
 		if !expCols.Equals(cols) {
 			t.Errorf("%s: expected constant columns be %s, was %s", cs, expCols, cols)
 		}
+		// Ensure that no value is returned for the columns that are not constant.
+		cs.ExtractCols().ForEach(func(col opt.ColumnID) {
+			if !cols.Contains(col) {
+				val := cs.ExtractValueForConstCol(evalCtx, col)
+				if val != nil {
+					t.Errorf("%s: const value should not have been found for column %d", cs, col)
+				}
+			}
+		})
+		// Ensure that the expected value is returned for the columns that are constant.
 		cols.ForEach(func(col opt.ColumnID) {
 			val := cs.ExtractValueForConstCol(evalCtx, col)
 			if val == nil {
