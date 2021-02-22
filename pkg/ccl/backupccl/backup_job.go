@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -269,14 +270,18 @@ func backup(
 		return nil
 	})
 
-	if err := distBackup(
-		ctx,
-		execCtx,
-		planCtx,
-		dsp,
-		progCh,
-		backupSpecs,
-	); err != nil {
+	runBackupFlow := func(ctx context.Context) error {
+		return distBackup(
+			ctx,
+			execCtx,
+			planCtx,
+			dsp,
+			progCh,
+			backupSpecs,
+		)
+	}
+
+	if err := utilccl.RetryDistSQLFlow(ctx, runBackupFlow); err != nil {
 		return RowCount{}, err
 	}
 

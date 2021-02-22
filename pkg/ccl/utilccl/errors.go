@@ -57,6 +57,16 @@ func isDistSQLRetryableError(err error) bool {
 	return false
 }
 
+// RetryDistSQLFlow retries the given func in the context of a
+// long running DistSQL flow which is used by all jobs. If a node were to fail,
+// either the work func should be retried, or the error returned will be a job
+// retry error that will retry the entire job in the case of the coordinator
+// node being drained.
+func RetryDistSQLFlow(ctx context.Context, retryable func(ctx context.Context) error) error {
+	return RetryDistSQLFlowCustomRetryable(ctx, nil, /* isCustomRetry */
+		retryable, nil /* logOnRetryableError */)
+}
+
 // RetryDistSQLFlowCustomRetryable retries the given func in the context of a
 // long running DistSQL flow which is used by all jobs. If a node were to fail,
 // either the work func should be retried, or the error returned will be a job
@@ -90,17 +100,18 @@ func RetryDistSQLFlowCustomRetryable(
 		if isRetryable != nil && isRetryable(err) {
 			isCustomRetryable = true
 		}
-		if retryable := isDistSQLRetryableError(err) || isCustomRetryable; !retryable {
+		retryable := isCustomRetryable || isDistSQLRetryableError(err)
+		if !retryable {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 
 			if flowinfra.IsFlowRetryableError(err) {
-				// We don't want to retry flowinfra retryable error in the retry loop
+				// We don't want to retry a flowinfra retryable error in the retry loop
 				// above. This error currently indicates that this node is being
 				// drained.  As such, retries will not help.
 				// Instead, we want to make sure that the job is not marked failed due
-				// to a transient, retryable error.
+				// to a transient, jobs-level retryable error.
 				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
 			}
 

@@ -558,12 +558,13 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a non-corrupted backup.
 	// Populate system.jobs.
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
+
+	// Create a non-corrupted backup.
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
