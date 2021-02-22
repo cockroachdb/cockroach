@@ -671,7 +671,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PAYLOADS PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -925,6 +925,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
+%type <tree.Statement> show_payloads_for_trace_stmt
 
 %type <str> statements_or_queries
 
@@ -4491,42 +4492,43 @@ zone_value:
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
 // SHOW LOCALITY
 show_stmt:
-  show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
-| show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
-| show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
-| show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
-| show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
-| show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
-| show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
-| show_types_stmt           // EXTEND WITH HELP: SHOW TYPES
+  show_backup_stmt             // EXTEND WITH HELP: SHOW BACKUP
+| show_columns_stmt            // EXTEND WITH HELP: SHOW COLUMNS
+| show_constraints_stmt        // EXTEND WITH HELP: SHOW CONSTRAINTS
+| show_create_stmt             // EXTEND WITH HELP: SHOW CREATE
+| show_csettings_stmt          // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_databases_stmt          // EXTEND WITH HELP: SHOW DATABASES
+| show_enums_stmt              // EXTEND WITH HELP: SHOW ENUMS
+| show_types_stmt              // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
-| show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
-| show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
-| show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
-| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
-| show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_grants_stmt             // EXTEND WITH HELP: SHOW GRANTS
+| show_histogram_stmt          // EXTEND WITH HELP: SHOW HISTOGRAM
+| show_indexes_stmt            // EXTEND WITH HELP: SHOW INDEXES
+| show_partitions_stmt         // EXTEND WITH HELP: SHOW PARTITIONS
+| show_jobs_stmt               // EXTEND WITH HELP: SHOW JOBS
+| show_payloads_for_trace_stmt // EXTEND WITH HELP: SHOW PAYLOADS FOR TRACE
 | show_locality_stmt
-| show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
-| show_statements_stmt      // EXTEND WITH HELP: SHOW STATEMENTS
-| show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
+| show_schedules_stmt          // EXTEND WITH HELP: SHOW SCHEDULES
+| show_statements_stmt         // EXTEND WITH HELP: SHOW STATEMENTS
+| show_ranges_stmt             // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
-| show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
-| show_survival_goal_stmt   // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
-| show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
-| show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
-| show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
-| show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
-| show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
-| show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
-| show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
-| show_syntax_stmt          // EXTEND WITH HELP: SHOW SYNTAX
-| show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
-| show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
-| show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
-| show_transactions_stmt    // EXTEND WITH HELP: SHOW TRANSACTIONS
-| show_users_stmt           // EXTEND WITH HELP: SHOW USERS
+| show_regions_stmt            // EXTEND WITH HELP: SHOW REGIONS
+| show_survival_goal_stmt      // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
+| show_roles_stmt              // EXTEND WITH HELP: SHOW ROLES
+| show_savepoint_stmt          // EXTEND WITH HELP: SHOW SAVEPOINT
+| show_schemas_stmt            // EXTEND WITH HELP: SHOW SCHEMAS
+| show_sequences_stmt          // EXTEND WITH HELP: SHOW SEQUENCES
+| show_session_stmt            // EXTEND WITH HELP: SHOW SESSION
+| show_sessions_stmt           // EXTEND WITH HELP: SHOW SESSIONS
+| show_stats_stmt              // EXTEND WITH HELP: SHOW STATISTICS
+| show_syntax_stmt             // EXTEND WITH HELP: SHOW SYNTAX
+| show_tables_stmt             // EXTEND WITH HELP: SHOW TABLES
+| show_trace_stmt              // EXTEND WITH HELP: SHOW TRACE
+| show_transaction_stmt        // EXTEND WITH HELP: SHOW TRANSACTION
+| show_transactions_stmt       // EXTEND WITH HELP: SHOW TRANSACTIONS
+| show_users_stmt              // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
-| SHOW error                // SHOW HELP: SHOW
+| SHOW error                   // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
@@ -4952,6 +4954,26 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+
+// %Help: SHOW PAYLOADS FOR TRACE
+// %Category: Misc
+// %Text:
+// SHOW PAYLOADS FOR TRACE <traceid>
+// Returns span payloads for a given trace ID.
+show_payloads_for_trace_stmt:
+  SHOW PAYLOADS FOR TRACE signed_iconst64
+  {
+    /* SKIP DOC */
+    id, err := $5.numVal().AsInt64()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = &tree.ShowPayloadsForTrace{
+      TraceID: id,
+    }
+  }
+| SHOW PAYLOADS FOR TRACE error // SHOW HELP: SHOW PAYLOADS FOR TRACE
+
 
 // %Help: SHOW SCHEDULES - list periodic schedules
 // %Category: Misc
@@ -12527,6 +12549,7 @@ unreserved_keyword:
 | PASSWORD
 | PAUSE
 | PAUSED
+| PAYLOADS
 | PHYSICAL
 | PLAN
 | PLANS

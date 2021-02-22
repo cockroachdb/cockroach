@@ -49,7 +49,7 @@ user root
 #
 # NB: this needs the 5node-pretend59315 config because otherwise the span is not
 # tracked.
-query B
+query T
 WITH spans AS (
   SELECT span_id
   FROM crdb_internal.node_inflight_trace_spans
@@ -57,8 +57,20 @@ WITH spans AS (
 ), payloads AS (
   SELECT *
   FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)
-) SELECT count(*) > 0
+) SELECT
+  -- Strip the first prefix because we don't want to have this test
+  -- become sensitive to changes in descriptor ID allocation.
+  crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1)
   FROM payloads
   WHERE payload_type = 'roachpb.ContentionEvent'
+  LIMIT 1
 ----
-true
+/1/"k"/0
+
+let $curr_trace_id
+SELECT * FROM crdb_internal.trace_id()
+
+# SHOW PAYLOADS FOR TRACE is syntactic sugar for most of the above statement.
+query ITT
+SHOW PAYLOADS FOR TRACE curr_trace_id
+----

@@ -686,6 +686,7 @@ func TestParse(t *testing.T) {
 		{`SHOW ZONE CONFIGURATION FROM INDEX db.t@i`},
 		{`SHOW ZONE CONFIGURATION FROM INDEX t@i`},
 		{`SHOW ZONE CONFIGURATION FROM INDEX i`},
+		{`SHOW PAYLOADS FOR TRACE 1`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.

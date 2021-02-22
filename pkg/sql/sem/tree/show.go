@@ -179,6 +179,17 @@ const (
 	ShowTraceReplica ShowTraceType = "EXPERIMENTAL_REPLICA TRACE"
 )
 
+// ShowPayloadsForTrace represents a SHOW PAYLOADS FOR TRACE statement.
+type ShowPayloadsForTrace struct {
+	// TODO(angelapwen): I think we expect a (signed) int64 to be passed into this arg as that is the output for trace_id() builtin.
+	TraceID int64
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowPayloadsForTrace) Format(ctx *FmtCtx) {
+	ctx.Printf("SHOW PAYLOADS FOR TRACE %d", node.TraceID)
+}
+
 // ShowTraceForSession represents a SHOW TRACE FOR SESSION statement.
 type ShowTraceForSession struct {
 	TraceType ShowTraceType

@@ -889,6 +889,12 @@ func (*ShowPartitions) StatementType() StatementType { return Rows }
 func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
 
 // StatementType implements the Statement interface.
+func (*ShowPayloadsForTrace) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of the statement.
+func (*ShowPayloadsForTrace) StatementTag() string { return "SHOW PAYLOADS FOR TRACE" }
+
+// StatementType implements the Statement interface.
 func (*ShowQueries) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1201,6 +1207,7 @@ func (n *ShowSchedules) String() string                  { return AsString(n) }
 func (n *ShowIndexes) String() string                    { return AsString(n) }
 func (n *ShowPartitions) String() string                 { return AsString(n) }
 func (n *ShowJobs) String() string                       { return AsString(n) }
+func (n *ShowPayloadsForTrace) String() string           { return AsString(n) }
 func (n *ShowQueries) String() string                    { return AsString(n) }
 func (n *ShowRanges) String() string                     { return AsString(n) }
 func (n *ShowRangeForRow) String() string                { return AsString(n) }
