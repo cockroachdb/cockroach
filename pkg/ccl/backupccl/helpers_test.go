@@ -23,9 +23,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
@@ -353,4 +357,107 @@ func makeInsecureHTTPServer(t *testing.T) (*url.URL, func()) {
 	}
 	uri.Path = filepath.Join(uri.Path, "testing")
 	return uri, cleanup
+}
+
+// syncBarrier allows 2 threads (a controller and a worker) to
+// synchronize between themselves. A controller portion of the
+// barrier waits until worker starts running, and then notifies
+// worker to proceed. The worker is the opposite: notifies controller
+// that it started running, and waits for the proceed signal.
+type syncBarrier interface {
+	// Enter blocks the barrier, and returns a function
+	// that, when executed, unblocks the other thread.
+	Enter() func()
+}
+
+type onceBarrier struct {
+	jobReady      chan struct{}
+	workerAdvance chan struct{}
+	controller    bool
+}
+
+// Returns controller/worker barriers.
+func newOnceBarrier() (syncBarrier, syncBarrier) {
+	p1 := make(chan struct{})
+	p2 := make(chan struct{})
+	return &onceBarrier{p1, p2, true}, &onceBarrier{p1, p2, false}
+}
+
+func (b *onceBarrier) Enter() func() {
+	if b.controller {
+		// Wait until the job is ready.
+		log.Infof(context.TODO(), "waiting for job to be ready")
+		<-b.jobReady
+		log.Infof(context.TODO(), "job is ready, advancing test")
+		return func() {
+			log.Infof(context.TODO(), "signaling worker that it can advance")
+			close(b.workerAdvance)
+		}
+	}
+
+	// Signal that the job is ready.
+	log.Infof(context.TODO(), "informing controller that worker is ready")
+	select {
+	case b.jobReady <- struct{}{}:
+	default:
+	}
+
+	// Wait to be allowed to advance.
+	log.Infof(context.TODO(), "worker blocking")
+	<-b.workerAdvance
+	log.Infof(context.TODO(), "worker advancing")
+	return func() {}
+}
+
+func blockBackupKnobs() (syncBarrier, *sql.BackupRestoreTestingKnobs) {
+	testBarrier, jobBarrier := newOnceBarrier()
+	backupKnobs := &sql.BackupRestoreTestingKnobs{}
+	backupKnobs.RunAfterExportingSpanEntry = func(_ context.Context) {
+		jobBarrier.Enter()()
+	}
+
+	return testBarrier, backupKnobs
+}
+
+func blockRestoreKnobs() (syncBarrier, *sql.BackupRestoreTestingKnobs) {
+	testBarrier, jobBarrier := newOnceBarrier()
+	backupKnobs := &sql.BackupRestoreTestingKnobs{}
+	backupKnobs.RunAfterExportingSpanEntry = func(_ context.Context) {
+		jobBarrier.Enter()()
+	}
+
+	return testBarrier, backupKnobs
+}
+
+func startBlockableCluster(
+	t *testing.T, numNodes int,
+) (_ serverutils.TestClusterInterface, _ syncBarrier, cleanup func()) {
+	t.Helper()
+
+	testBarrier, jobBarrier := newOnceBarrier()
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				RunAfterExportingSpanEntry: func(_ context.Context) {
+					jobBarrier.Enter()()
+				},
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
+					jobBarrier.Enter()()
+				},
+			},
+		},
+	}
+
+	params.ServerArgs.Knobs = knobs
+	tc := serverutils.StartNewTestCluster(
+		t, numNodes, params,
+	)
+
+	cleanup = func() {
+		tc.Stopper().Stop(context.Background())
+	}
+
+	return tc, testBarrier, cleanup
 }

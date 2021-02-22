@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -432,23 +435,62 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
-	res, err := backup(
-		ctx,
-		p,
-		details.URI,
-		details.URIsByLocalityKV,
-		p.ExecCfg().DB,
-		p.ExecCfg().Settings,
-		defaultStore,
-		storageByLocalityKV,
-		b.job,
-		backupManifest,
-		p.ExecCfg().DistSQLSrv.ExternalStorage,
-		details.EncryptionOptions,
-		statsCache,
-	)
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	opts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry a backup if there are transient failures (i.e. worker nodes
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	var res RowCount
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		res, err = backup(
+			ctx,
+			p,
+			details.URI,
+			details.URIsByLocalityKV,
+			p.ExecCfg().DB,
+			p.ExecCfg().Settings,
+			defaultStore,
+			storageByLocalityKV,
+			b.job,
+			backupManifest,
+			p.ExecCfg().DistSQLSrv.ExternalStorage,
+			details.EncryptionOptions,
+			statsCache,
+		)
+		if err == nil {
+			break
+		}
+
+		if !utilccl.IsDistSQLRetryableError(err) {
+			if flowinfra.IsFlowRetryableError(err) {
+				// We don't want to retry flowinfra retryable error in the retry loop above.
+				// This error currently indicates that this node is being drained.  As such,
+				// retries will not help.
+				// Instead, we want to make sure that the job is not marked failed due to
+				// a transient, retryable error.
+				return jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+			}
+
+			return err
+		}
+
+		log.Warningf(ctx, `BACKUP job encountered retryable error: %v`, err)
+
+		// Reload the backup manifest to pick up any spans we may have completed on
+		// previous attempts.
+		var reloadBackupErr error
+		backupManifest, reloadBackupErr = b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
+		if reloadBackupErr != nil {
+			log.Warning(ctx, "could not reload backup manifest when retrying, continuing with old progress")
+		}
+	}
 	if err != nil {
-		return errors.Wrap(err, "failed to run backup")
+		return errors.Wrap(err, "exhausted retries")
 	}
 
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())

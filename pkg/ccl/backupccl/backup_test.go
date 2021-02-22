@@ -7404,3 +7404,40 @@ table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
 		return nil
 	})
 }
+
+func TestNodeRestarts(t *testing.T) {
+	startTestCluster := func() (serverutils.TestClusterInterface, func()) {
+		numNodes := 4
+		params := base.TestClusterArgs{}
+		params.ServerArgs.UseDatabase = "defaultdb"
+		tc := serverutils.StartNewTestCluster(
+			t, numNodes, params,
+		)
+
+		// Block backups, and restores.
+
+		return tc, func() {
+			tc.Stopper().Stop(context.Background())
+		}
+	}
+	t.Run("backup", func(t *testing.T) {
+		t.Run("coordinator", func(t *testing.T) {
+			defer leaktest.AfterTest(t)()
+			defer log.Scope(t).Close(t)
+
+			tc, cleanup := startTestCluster()
+			// Run backup, block it during data backup.
+			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+			tc.StopServer(0)
+			// Unblock backup.
+
+			// Check that job completed.
+			defer cleanup()
+		})
+		t.Run("worker", func(t *testing.T) {
+			defer leaktest.AfterTest(t)()
+			defer log.Scope(t).Close(t)
+		})
+	})
+}

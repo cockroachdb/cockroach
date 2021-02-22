@@ -13,10 +13,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -496,6 +500,65 @@ func rewriteBackupSpanKey(
 		newKey = codec.TablePrefix(id)
 	}
 	return newKey, nil
+}
+
+func restoreWithRetry(
+	restoreCtx context.Context,
+	execCtx sql.JobExecContext,
+	backupManifests []BackupManifest,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+	dataToRestore restorationData,
+	job *jobs.Job,
+	encryption *jobspb.BackupEncryptionOptions,
+) (RowCount, error) {
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	opts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry a restore if there are transient failures (i.e. worker nodes
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	var res RowCount
+	var err error
+	for r := retry.StartWithCtx(restoreCtx, opts); r.Next(); {
+		res, err = restore(
+			restoreCtx,
+			execCtx,
+			backupManifests,
+			backupLocalityInfo,
+			endTime,
+			dataToRestore,
+			job,
+			encryption,
+		)
+		if err == nil {
+			break
+		}
+
+		if !utilccl.IsDistSQLRetryableError(err) {
+			if flowinfra.IsFlowRetryableError(err) {
+				// We don't want to retry flowinfra retryable error in the retry loop above.
+				// This error currently indicates that this node is being drained.  As such,
+				// retries will not help.
+				// Instead, we want to make sure that the job is not marked failed due to
+				// a transient, retryable error.
+				return RowCount{}, jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+			}
+
+			return RowCount{}, err
+		}
+
+		log.Warningf(restoreCtx, `encountered retryable error: %v`, err)
+	}
+
+	if err != nil {
+		return RowCount{}, errors.Wrap(err, "exhausted retries")
+	}
+	return res, nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1423,7 +1486,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	var resTotal RowCount
 	if !preData.isEmpty() {
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			backupManifests,
@@ -1457,7 +1520,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	{
 		// Restore the main data bundle. We notably only restore the system tables
 		// later.
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			backupManifests,
