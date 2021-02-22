@@ -18,6 +18,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 export interface SqlBoxProps {
   value: string;
   zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+  className?: string;
 }
 
 const cx = classNames.bind(styles);
@@ -26,7 +27,7 @@ export class SqlBox extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
   render() {
     return (
-      <div className={cx("box-highlight")}>
+      <div className={cx("box-highlight", this.props.className)}>
         <Highlight {...this.props} />
       </div>
     );
