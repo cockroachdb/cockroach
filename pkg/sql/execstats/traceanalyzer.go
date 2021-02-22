@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
@@ -41,6 +42,9 @@ type flowStats struct {
 // physical plan. This information is stored in sql.flowInfo and is analyzed by
 // TraceAnalyzer.
 type FlowsMetadata struct {
+	// flowID is the FlowID of the flows belonging to the physical plan. Note that
+	// the same FlowID is used across multiple flows in the same query.
+	flowID execinfrapb.FlowID
 	// processorStats maps a processor ID to stats associated with this
 	// processor extracted from a trace as well as some metadata. Note that it
 	// is possible for the processorStats to have nil stats, which indicates
@@ -68,6 +72,15 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 
 	// Annotate the maps with physical plan information.
 	for nodeID, flow := range flows {
+		if a.flowID.IsUnset() {
+			a.flowID = flow.FlowID
+		} else if util.CrdbTestBuild && !a.flowID.Equal(flow.FlowID) {
+			panic(
+				errors.AssertionFailedf(
+					"expected the same FlowID to be used for all flows. UUID of first flow: %v, UUID of flow on node %s: %v",
+					a.flowID, nodeID, flow.FlowID),
+			)
+		}
 		a.flowStats[base.SQLInstanceID(nodeID)] = &flowStats{}
 		for _, proc := range flow.Processors {
 			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
@@ -147,6 +160,12 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
 	// Annotate the maps with stats extracted from the trace.
 	for component, componentStats := range m {
+		if !component.FlowID.Equal(a.flowID) {
+			// This component belongs to a flow we do not care about. Note that we use
+			// a bytes comparison because the UUID Equals method only returns true iff
+			// the UUIDs are the same object.
+			continue
+		}
 		switch component.Type {
 		case execinfrapb.ComponentID_PROCESSOR:
 			id := component.ID
