@@ -13,18 +13,26 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/errors"
 )
 
 const retryableErrorString = "retryable changefeed error"
 
+// retryableError is deprecated, but used to maintain backwards
+// compatibility with 20.2 nodes.
+// TODO(pbardea): Remove in 21.2, and use the helpers in utilccl/errors.go
+// instead.
 type retryableError struct {
 	wrapped error
 }
 
-// MarkRetryableError wraps the given error, marking it as retryable to
+// markRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
-func MarkRetryableError(e error) error {
+// TODO(pbardea): Remove in 21.2, and use utilccl.MarkRetryableError instead.
+func markRetryableError(e error) error {
+	// Wrap all these errors with a more generic job retry error.
+	e = utilccl.MarkRetryableError(e)
 	return &retryableError{wrapped: e}
 }
 
@@ -60,19 +68,14 @@ func IsRetryableError(err error) bool {
 		// unfortunate string comparison.
 		return true
 	}
-	if strings.Contains(errStr, `rpc error`) {
-		// When a crdb node dies, any DistSQL flows with processors scheduled on
-		// it get an error with "rpc error" in the message from the call to
-		// `(*DistSQLPlanner).Run`.
-		return true
-	}
-	return false
+
+	return utilccl.IsDistSQLRetryableError(err)
 }
 
-// MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
+// maybeStripRetryableErrorMarker performs some minimal attempt to clean the
 // RetryableError marker out. This won't do anything if the RetryableError
 // itself has been wrapped, but that's okay, we'll just have an uglier string.
-func MaybeStripRetryableErrorMarker(err error) error {
+func maybeStripRetryableErrorMarker(err error) error {
 	// The following is a hack to work around the error cast linter.
 	// What we're doing here is really not kosher; this function
 	// has no business in assuming that the retryableError{} wrapper
