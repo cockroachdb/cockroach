@@ -41,7 +41,7 @@ var vn = (*ReplicaType)(nil) // should be treated like VoterFull
 var v = ReplicaTypeVoterFull()
 var vi = ReplicaTypeVoterIncoming()
 var vo = ReplicaTypeVoterOutgoing()
-var vd = ReplicaTypeVoterDemoting()
+var vd = ReplicaTypeVoterDemotingLearner()
 var l = ReplicaTypeLearner()
 
 func TestVotersLearnersAll(t *testing.T) {

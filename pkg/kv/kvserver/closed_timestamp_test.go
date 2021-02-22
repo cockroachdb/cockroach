@@ -152,7 +152,7 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Add a new voting replica, which should get the range into a joint config.
-	// It will stay in that state because of the `ReplicaAddStopAfterJointConfig`
+	// It will stay in that state because of the `VoterAddStopAfterJointConfig`
 	// testing knob `makeReplicationTestKnobs()`.
 	ltk.withStopAfterJointConfig(func() {
 		tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))

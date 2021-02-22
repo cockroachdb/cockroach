@@ -39,10 +39,10 @@ func ReplicaTypeVoterOutgoing() *ReplicaType {
 	return &t
 }
 
-// ReplicaTypeVoterDemoting returns a VOTER_DEMOTING pointer suitable
-// for use in a nullable proto field.
-func ReplicaTypeVoterDemoting() *ReplicaType {
-	t := VOTER_DEMOTING
+// ReplicaTypeVoterDemotingLearner returns a VOTER_DEMOTING_LEARNER pointer
+// suitable for use in a nullable proto field.
+func ReplicaTypeVoterDemotingLearner() *ReplicaType {
+	t := VOTER_DEMOTING_LEARNER
 	return &t
 }
 
@@ -376,7 +376,8 @@ func (d *ReplicaSet) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescr
 func (d ReplicaSet) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
 		switch rDesc.GetType() {
-		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
+		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER,
+			VOTER_DEMOTING_NON_VOTER:
 			return true
 		case VOTER_FULL, LEARNER, NON_VOTER:
 		default:
@@ -406,7 +407,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 			cs.Voters = append(cs.Voters, id)
 		case VOTER_OUTGOING:
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
-		case VOTER_DEMOTING:
+		case VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
 			cs.LearnersNext = append(cs.LearnersNext, id)
 		case LEARNER:
@@ -426,7 +427,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 func (d ReplicaSet) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
 	isVoterOldConfig := func(rDesc ReplicaDescriptor) bool {
 		switch rDesc.GetType() {
-		case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING:
+		case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			return true
 		default:
 			return false

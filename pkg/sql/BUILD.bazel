@@ -431,6 +431,7 @@ go_test(
         "drop_test.go",
         "err_count_test.go",
         "event_log_test.go",
+        "exec_util_test.go",
         "explain_bundle_test.go",
         "explain_test.go",
         "explain_tree_test.go",

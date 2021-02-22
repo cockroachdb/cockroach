@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -57,6 +58,12 @@ func TestAnonymizeStatementsForReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	s := cluster.MakeTestingClusterSettings()
+	vt, err := sql.NewVirtualSchemaHolder(context.Background(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	const stmt1s = `
 INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 `
@@ -66,7 +73,7 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 	}
 
 	rUnsafe := errors.New("some error")
-	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST)
+	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST, vt)
 
 	const expMessage = "some error"
 	actMessage := safeErr.Error()

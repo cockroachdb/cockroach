@@ -1697,7 +1697,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 
 	vi := VOTER_INCOMING
 	vo := VOTER_OUTGOING
-	vd := VOTER_DEMOTING
+	vd := VOTER_DEMOTING_LEARNER
 	l := LEARNER
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
@@ -1722,9 +1722,9 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 	}
 	act := crt.String()
 	exp := "ENTER_JOINT(r6 r12 l12 v3) [(n1,s2):3VOTER_INCOMING], " +
-		"[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
+		"[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING_LEARNER]: " +
 		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
-		"(n10,s11):12VOTER_DEMOTING] next=10"
+		"(n10,s11):12VOTER_DEMOTING_LEARNER] next=10"
 	require.Equal(t, exp, act)
 
 	crt.InternalRemovedReplicas = nil
@@ -1893,14 +1893,14 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 			),
 			del: sl(
 				// Voter removals.
-				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
+				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING_LEARNER, 9,
 			),
 			repls: sl(
 				// Replicas.
 				VOTER_FULL, 1,
 				VOTER_INCOMING, 6, // added
 				VOTER_INCOMING, 3, // added
-				VOTER_DEMOTING, 9, // removing
+				VOTER_DEMOTING_LEARNER, 9, // removing
 				LEARNER, 4, // added
 				VOTER_OUTGOING, 8, // removing
 				VOTER_FULL, 10,

@@ -204,13 +204,13 @@ type StoreTestingKnobs struct {
 	// the added replica has no prior state which can be caught up from the raft
 	// log, the result will be an voter that is unable to participate in quorum.
 	ReplicaSkipLearnerSnapshot func() bool
-	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
+	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
 	// of a first ChangeReplicas transaction. If the replication change does
 	// not use joint consensus, this early return is identical to the regular
 	// return path.
-	ReplicaAddStopAfterJointConfig func() bool
+	VoterAddStopAfterJointConfig func() bool
 	// ReplicationAlwaysUseJointConfig causes replica addition to always go
 	// through a joint configuration, even when this isn't necessary (because
 	// the replication change affects only one replica).

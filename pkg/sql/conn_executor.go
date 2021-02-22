@@ -795,7 +795,8 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 			// Embed the statement in the error object for the telemetry
 			// report below. The statement gets anonymized.
-			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST)
+			vt := ex.planner.extendedEvalCtx.VirtualSchemas
+			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST, vt)
 		}
 
 		// Report the panic to telemetry in any case.
@@ -2840,6 +2841,6 @@ func init() {
 			return ""
 		}
 		// Anonymize the statement for reporting.
-		return anonymizeStmtAndConstants(stmt)
+		return anonymizeStmtAndConstants(stmt, nil /* VirtualTabler */)
 	})
 }
