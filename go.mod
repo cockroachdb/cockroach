@@ -3,6 +3,7 @@ module github.com/cockroachdb/cockroach
 go 1.15
 
 require (
+	cloud.google.com/go v0.77.0 // indirect
 	cloud.google.com/go/storage v1.10.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.12.0
@@ -76,7 +77,7 @@ require (
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.5.4
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/pprof v0.0.0-20201203190320-1bf35d6f28c2
+	github.com/google/pprof v0.0.0-20210122040257-d980be63207e
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
@@ -149,10 +150,10 @@ require (
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
-	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
+	golang.org/x/oauth2 v0.0.0-20210113205817-d3ed898aa8a3
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210217105451-b926d437f341
+	golang.org/x/sys v0.0.0-20210220050731-9a76102bfb43
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0

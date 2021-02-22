@@ -48,8 +48,8 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:2/QtM1mL37YmcsT8HaDNHDgTqqFVw+zr8UzMiBVLzYU=",
-    version = "v0.0.0-20210217105451-b926d437f341",
+    sum = "h1:SgQ6LNaYJU0JIuEHv9+s6EbhSCwYeAf5Yvj6lpYlqAE=",
+    version = "v0.0.0-20210220050731-9a76102bfb43",
 )
 
 go_repository(
@@ -89,8 +89,8 @@ go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:HV9Z9qMhQEsdlvxNFELgQ11RkMzO3CMkjEySjCtuLes=",
-    version = "v0.0.0-20201214200347-8c77b98c765d",
+    sum = "h1:Edhcm0CKDPLQIecHCp5Iz57Lo7MfT6zUFBAlocmOjcY=",
+    version = "v0.0.0-20210212180131-e7f2df4ecc2d",
 )
 
 # Load the go dependencies and invoke them.
