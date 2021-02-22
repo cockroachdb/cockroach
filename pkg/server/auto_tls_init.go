@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // Define default certificate lifespan of 366 days
@@ -49,7 +50,9 @@ type ServiceCertificateBundle struct {
 }
 
 // Helper function to load cert and key for a service.
-func (sb *ServiceCertificateBundle) loadServiceCertAndKey(certPath string, keyPath string) (err error) {
+func (sb *ServiceCertificateBundle) loadServiceCertAndKey(
+	certPath string, keyPath string,
+) (err error) {
 	sb.HostCertificate, err = loadCertificateFile(certPath)
 	if err != nil {
 		return
@@ -75,11 +78,13 @@ func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath st
 }
 
 // LoadUserAuthCACertAndKey loads host certificate and key from disk or fails with error.
-func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string) (err error) {
+func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
+	caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string,
+) (err error) {
 	// Check if the service cert and key already exist.
-	if _, err = os.Stat(caCertPath); os.IsNotExist(err) {
+	if _, err = os.Stat(caCertPath); oserror.IsNotExist(err) {
 		// Cert DNE.
-		if _, err = os.Stat(caKeyPath); !os.IsNotExist(err) {
+		if _, err = os.Stat(caKeyPath); !oserror.IsNotExist(err) {
 			// Key exists but cert does not, this is an error.
 			err = errors.Wrapf(err,
 				"found key but not certificate for user auth at: %s", caKeyPath)
@@ -101,7 +106,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(caCertPath 
 	}
 
 	// Load the key only if it exists.
-	if _, err = os.Stat(caKeyPath); !os.IsNotExist(err) {
+	if _, err = os.Stat(caKeyPath); !oserror.IsNotExist(err) {
 		sb.CAKey, err = loadKeyFile(caKeyPath)
 		if err != nil {
 			return
@@ -129,11 +134,12 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	caKeyPath string,
 	initLifespan time.Duration,
 	serviceName string,
-	hostname string) (err error) {
+	hostname string,
+) (err error) {
 	// Check if the service cert and key already exist.
-	if _, err = os.Stat(serviceCertPath); !os.IsNotExist(err) {
+	if _, err = os.Stat(serviceCertPath); !oserror.IsNotExist(err) {
 		// cert exists
-		if _, err = os.Stat(serviceKeyPath); os.IsNotExist(err) {
+		if _, err = os.Stat(serviceKeyPath); oserror.IsNotExist(err) {
 			// cert exists but key doesn't, this is an error
 			err = errors.Wrapf(err,
 				"failed to load service certificate key for %s expected key at %s",
@@ -143,9 +149,9 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	} else {
 		// Niether service cert or key exist, attempt to load CA.
 		// Check if the CA cert and key already exist.
-		if _, err = os.Stat(caCertPath); !os.IsNotExist(err) {
+		if _, err = os.Stat(caCertPath); !oserror.IsNotExist(err) {
 			// cert exists
-			if _, err = os.Stat(caKeyPath); os.IsNotExist(err) {
+			if _, err = os.Stat(caKeyPath); oserror.IsNotExist(err) {
 				// cert exists but key doesn't, this is an error
 				err = errors.Wrapf(err,
 					"failed to load service CA key for %s expected key at %s",
@@ -175,12 +181,12 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			sb.CAKey,
 		)
 
-		writeCertificateFile(serviceCertPath, hostCert)
+		err = writeCertificateFile(serviceCertPath, hostCert)
 		if err != nil {
 			return
 		}
 
-		writeKeyFile(serviceKeyPath, hostKey)
+		err = writeKeyFile(serviceKeyPath, hostKey)
 		if err != nil {
 			return
 		}
@@ -202,18 +208,20 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 
 // createServiceCA builds CA cert and key and populates them to
 // ServiceCertificateBundle.
-func (sb *ServiceCertificateBundle) createServiceCA(caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string) (err error) {
+func (sb *ServiceCertificateBundle) createServiceCA(
+	caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string,
+) (err error) {
 	sb.CACertificate, sb.CAKey, err = security.CreateCACertAndKey(initLifespan, serviceName)
 	if err != nil {
 		return
 	}
 
-	writeCertificateFile(caCertPath, sb.CACertificate)
+	err = writeCertificateFile(caCertPath, sb.CACertificate)
 	if err != nil {
 		return
 	}
 
-	writeKeyFile(caKeyPath, sb.CAKey)
+	err = writeKeyFile(caKeyPath, sb.CAKey)
 	if err != nil {
 		return
 	}
@@ -256,7 +264,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if _, err = os.Stat(cl.NodeCertPath()); !os.IsNotExist(err) {
+	if _, err = os.Stat(cl.NodeCertPath()); !oserror.IsNotExist(err) {
 		err = errors.New("interNodeHost certificate already present")
 		return
 	}
@@ -353,7 +361,7 @@ func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) (err error) 
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if _, err = os.Stat(cl.NodeCertPath()); !os.IsNotExist(err) {
+	if _, err = os.Stat(cl.NodeCertPath()); !oserror.IsNotExist(err) {
 		err = errors.New("interNodeHost certificate already present")
 		return
 	}
@@ -421,7 +429,7 @@ func (sb *ServiceCertificateBundle) writeCAOrFail(certPath string, keyPath strin
 	}
 
 	if sb.CAKey != nil {
-		writeKeyFile(keyPath, sb.CAKey)
+		err = writeKeyFile(keyPath, sb.CAKey)
 		if err != nil {
 			return
 		}

@@ -40,7 +40,7 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 	max := new(big.Int)
 	max.Exp(big.NewInt(2), big.NewInt(130), nil).Sub(max, big.NewInt(1))
 
-	// Serials is set using rand.Int which yields a value between [0, max)
+	// serialNumber is set using rand.Int which yields a value between [0, max)
 	// where max is (2^130)-1.
 	serialNumber, err = rand.Int(rand.Reader, max)
 	if err != nil {
@@ -56,7 +56,9 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 // CreateCACertAndKey will create a CA with a validity beginning
 // now() and expiring after `lifespan`. This is a utility function to help
 // with cluster auto certificate generation.
-func CreateCACertAndKey(lifespan time.Duration, service string) (certPEM []byte, keyPEM []byte, err error) {
+func CreateCACertAndKey(
+	lifespan time.Duration, service string,
+) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
 
@@ -125,7 +127,9 @@ func CreateCACertAndKey(lifespan time.Duration, service string) (certPEM []byte,
 
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
 // This is a utility function to help with cluster auto certificate generation.
-func CreateServiceCertAndKey(lifespan time.Duration, service, hostname string, caCertPEM []byte, caKeyPEM []byte) (certPEM []byte, keyPEM []byte, err error) {
+func CreateServiceCertAndKey(
+	lifespan time.Duration, service, hostname string, caCertPEM []byte, caKeyPEM []byte,
+) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
 
