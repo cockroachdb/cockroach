@@ -350,7 +350,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 					// We have a sleep loop below to try to encourage the lease transfer
 					// to make it past that sanity check prior to letting the change
 					// of replicas proceed.
-					"cannot transfer lease to replica of type VOTER_DEMOTING", err.Error())
+					"cannot transfer lease to replica of type VOTER_DEMOTING_LEARNER", err.Error())
 		}()
 		// Try really hard to make sure that our request makes it past the
 		// sanity check error to the evaluation error.

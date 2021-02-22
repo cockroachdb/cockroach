@@ -615,25 +615,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 
 	// Re-format to remove most names.
 	f := tree.NewFmtCtx(tree.FmtAnonymize)
-
-	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		virtual, err := vt.getVirtualTableEntry(tn)
-		if err != nil || virtual == nil {
-			ctx.WriteByte('_')
-			return
-		}
-		// Virtual table: we want to keep the name; however
-		// we need to scrub the database name prefix.
-		newTn := *tn
-		newTn.CatalogName = "_"
-
-		ctx.WithFlags(tree.FmtParsable, func() {
-			ctx.WithReformatTableNames(nil, func() {
-				ctx.FormatNode(&newTn)
-			})
-		})
-	}
-	f.SetReformatTableNames(reformatFn)
+	f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }

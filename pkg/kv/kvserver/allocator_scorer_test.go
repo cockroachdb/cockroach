@@ -418,7 +418,8 @@ func TestStoreHasReplica(t *testing.T) {
 		existing = append(existing, roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i)})
 	}
 	for i := 1; i < 10; i++ {
-		if e, a := i%2 == 0, storeHasReplica(roachpb.StoreID(i), existing); e != a {
+		if e, a := i%2 == 0,
+			storeHasReplica(roachpb.StoreID(i), roachpb.MakeReplicaSet(existing).ReplicationTargets()); e != a {
 			t.Errorf("StoreID %d expected to be %t, got %t", i, e, a)
 		}
 	}
