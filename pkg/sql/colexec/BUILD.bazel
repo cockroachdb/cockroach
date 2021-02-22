@@ -12,7 +12,6 @@ go_library(
         "columnarizer.go",
         "constants.go",
         "count.go",
-        "crossjoiner.go",
         "disk_spiller.go",
         "external_distinct.go",
         "external_hash_aggregator.go",
@@ -20,12 +19,8 @@ go_library(
         "external_sort.go",
         "hash_aggregator.go",
         "hash_based_partitioner.go",
-        "hashjoiner.go",
-        "joiner_utils.go",
         "limit.go",
         "materializer.go",
-        "mergejoiner.go",
-        "mergejoiner_util.go",
         "offset.go",
         "ordered_aggregator.go",
         "parallel_unordered_synchronizer.go",
@@ -47,17 +42,17 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
-        "//pkg/col/typeconv",
+        "//pkg/col/typeconv",  # keep
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexeccmp",  # keep
         "//pkg/sql/colexec/colexechash",  # keep
+        "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
@@ -139,6 +134,7 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
@@ -176,21 +172,8 @@ go_test(
 # Map between target name and relevant template.
 targets = [
     ("and_or_projection.eg.go", "and_or_projection_tmpl.go"),
-    ("crossjoiner.eg.go", "crossjoiner_tmpl.go"),
     ("hash_aggregator.eg.go", "hash_aggregator_tmpl.go"),
-    ("hashjoiner.eg.go", "hashjoiner_tmpl.go"),
     ("is_null_ops.eg.go", "is_null_ops_tmpl.go"),
-    ("mergejoinbase.eg.go", "mergejoinbase_tmpl.go"),
-    ("mergejoiner_exceptall.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_fullouter.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_inner.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_intersectall.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_leftanti.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_leftouter.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_leftsemi.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_rightanti.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_rightouter.eg.go", "mergejoiner_tmpl.go"),
-    ("mergejoiner_rightsemi.eg.go", "mergejoiner_tmpl.go"),
     ("ordered_synchronizer.eg.go", "ordered_synchronizer_tmpl.go"),
     ("quicksort.eg.go", "quicksort_tmpl.go"),
     ("rowstovec.eg.go", "rowstovec_tmpl.go"),

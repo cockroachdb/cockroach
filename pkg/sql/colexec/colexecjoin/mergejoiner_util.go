@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecjoin
 
 // circularGroupsBuffer is a struct designed to store the groups' slices for a
 // given column. It starts out small and will grow dynamically if necessary

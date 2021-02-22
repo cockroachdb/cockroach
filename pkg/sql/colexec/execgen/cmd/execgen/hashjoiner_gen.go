@@ -15,7 +15,7 @@ import (
 	"io"
 )
 
-const hashJoinerTmpl = "pkg/sql/colexec/hashjoiner_tmpl.go"
+const hashJoinerTmpl = "pkg/sql/colexec/colexecjoin/hashjoiner_tmpl.go"
 
 func genHashJoiner(inputFileContents string, wr io.Writer) error {
 	_, err := fmt.Fprint(wr, inputFileContents)

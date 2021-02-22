@@ -198,7 +198,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         ├ *colexec.countOp
 │         │ └ *colexecmisc.simpleProjectOp
 │         │   └ *colexec.diskSpillerBase
-│         │     ├ *colexec.hashJoiner
+│         │     ├ *colexecjoin.hashJoiner
 │         │     │ ├ *colexec.ParallelUnorderedSynchronizer
 │         │     │ │ ├ *colflow.routerOutputOp
 │         │     │ │ │ └ *colflow.HashRouter
@@ -232,7 +232,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colflow.routerOutputOp
@@ -262,7 +262,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
@@ -292,7 +292,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │     └ *colexec.countOp
 │       └ *colexecmisc.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
@@ -322,7 +322,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
       └ *colexec.countOp
         └ *colexecmisc.simpleProjectOp
           └ *colexec.diskSpillerBase
-            ├ *colexec.hashJoiner
+            ├ *colexecjoin.hashJoiner
             │ ├ *colexec.ParallelUnorderedSynchronizer
             │ │ ├ *colrpc.Inbox
             │ │ ├ *colrpc.Inbox

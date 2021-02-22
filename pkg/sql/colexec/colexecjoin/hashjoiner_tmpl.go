@@ -10,7 +10,7 @@
 
 // +build execgen_template
 
-package colexec
+package colexecjoin
 
 import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
@@ -258,12 +258,12 @@ func distinctCollectProbeNoOuter(
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0
 
-	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+	if hj.spec.JoinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)
 		return 0
 	}
 
-	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
 		if sel != nil {
 			nResults = collectProbeOuter(hj, batchSize, nResults, batch, sel, true)
 		} else {
@@ -271,13 +271,13 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 		}
 	} else {
 		if sel != nil {
-			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+			if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, true)
 			} else {
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, true)
 			}
 		} else {
-			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+			if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, false)
 			} else {
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, false)
@@ -294,12 +294,12 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0
 
-	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+	if hj.spec.JoinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)
 		return 0
 	}
 
-	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
 		nResults = batchSize
 
 		if sel != nil {
@@ -309,7 +309,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 		}
 	} else {
 		if sel != nil {
-			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+			if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
@@ -318,7 +318,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 				nResults = distinctCollectProbeNoOuter(hj, batchSize, nResults, sel, true)
 			}
 		} else {
-			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+			if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.

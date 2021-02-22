@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecjoin
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
