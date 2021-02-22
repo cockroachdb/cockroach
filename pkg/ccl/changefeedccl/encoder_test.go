@@ -482,6 +482,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 			`supermovr.public.drivers-key`,
 			`supermovr.public.drivers-value`,
 		})
+
+		//Both changes to the subject are also reflected in the schema name in the posted schemas
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-key`]], `supermovr`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-value`]], `supermovr`)
 	}
 
 	t.Run(`enterprise`, enterpriseTest(testFn))
