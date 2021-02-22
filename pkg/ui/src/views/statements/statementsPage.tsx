@@ -182,7 +182,6 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-
     return PrintTime(TimestampToMoment(state.data.last_reset));
   },
 );
