@@ -479,22 +479,15 @@ func startGCJob(
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
 ) error {
-	var sj *jobs.StartableJob
 	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn); err != nil {
-			return err
-		}
-		return nil
+		_, err := jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
+		return err
 	}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "starting GC job %d", *sj.ID())
-	if err := sj.Start(ctx); err != nil {
-		return err
-	}
-	return nil
+	// TODO (lucy): Add logging once we create the job ID outside the txn closure.
+	return jobRegistry.NotifyToAdoptJobs(ctx)
 }
 
 func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
@@ -847,7 +840,6 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// Check if the target table needs to be cleaned up at all. If the target
 	// table was in the ADD state and the schema change failed, then we need to
 	// clean up the descriptor.
-	var cleanupJob *jobs.StartableJob
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
@@ -885,27 +877,15 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 				},
 			},
 		)
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
-		if err != nil {
+		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn); err != nil {
 			return err
 		}
-		cleanupJob = job
 		return txn.Run(ctx, b)
 	}); err != nil {
-		if cleanupJob != nil {
-			if rollbackErr := cleanupJob.CleanupOnRollback(ctx); rollbackErr != nil {
-				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
-			}
-		}
 		return err
 	}
-	if cleanupJob != nil {
-		if err := cleanupJob.Start(ctx); err != nil {
-			log.Warningf(ctx, "starting job %d failed with error: %v", *cleanupJob.ID(), err)
-		}
-		log.VEventf(ctx, 2, "started job %d", *cleanupJob.ID())
-	}
-	return nil
+	// TODO (lucy): Add logging once we create the job ID outside the txn closure.
+	return sc.jobRegistry.NotifyToAdoptJobs(ctx)
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -988,7 +968,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 
 func (sc *SchemaChanger) createIndexGCJob(
 	ctx context.Context, index *descpb.IndexDescriptor, txn *kv.Txn, jobDesc string,
-) (*jobs.StartableJob, error) {
+) error {
 	dropTime := timeutil.Now().UnixNano()
 	indexGCDetails := jobspb.SchemaChangeGCDetails{
 		Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
@@ -1001,12 +981,12 @@ func (sc *SchemaChanger) createIndexGCJob(
 	}
 
 	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
-	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn)
+	indexGCJob, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	log.VEventf(ctx, 2, "created index GC job %d", *indexGCJob.ID())
-	return indexGCJob, nil
+	log.Infof(ctx, "created index GC job %d", *indexGCJob.ID())
+	return nil
 }
 
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
@@ -1048,13 +1028,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
-	var childJobs []*jobs.StartableJob
 	var didUpdate bool
 	modified, err := sc.txnWithModified(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		childJobs = nil
-
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
@@ -1109,11 +1086,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						description = "ROLLBACK of " + description
 					}
 
-					childJob, err := sc.createIndexGCJob(ctx, indexDesc, txn, description)
-					if err != nil {
+					if err := sc.createIndexGCJob(ctx, indexDesc, txn, description); err != nil {
 						return err
 					}
-					childJobs = append(childJobs, childJob)
 				}
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
@@ -1219,34 +1194,26 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// existing indexes on the table.
 				if mutation.Direction == descpb.DescriptorMutation_ADD {
 					desc := fmt.Sprintf("REFRESH MATERIALIZED VIEW %q cleanup", scTable.Name)
-					pkJob, err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex().IndexDesc(), txn, desc)
-					if err != nil {
+					if err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex().IndexDesc(), txn, desc); err != nil {
 						return err
 					}
-					childJobs = append(childJobs, pkJob)
 					for _, idx := range scTable.PublicNonPrimaryIndexes() {
-						idxJob, err := sc.createIndexGCJob(ctx, idx.IndexDesc(), txn, desc)
-						if err != nil {
+						if err := sc.createIndexGCJob(ctx, idx.IndexDesc(), txn, desc); err != nil {
 							return err
 						}
-						childJobs = append(childJobs, idxJob)
 					}
 				} else if mutation.Direction == descpb.DescriptorMutation_DROP {
 					// Otherwise, the refresh job ran into an error and is being rolled
 					// back. So, we need to GC all of the indexes that were going to be
 					// created, in case any data was written to them.
 					desc := fmt.Sprintf("ROLLBACK OF REFRESH MATERIALIZED VIEW %q", scTable.Name)
-					pkJob, err := sc.createIndexGCJob(ctx, &refresh.NewPrimaryIndex, txn, desc)
-					if err != nil {
+					if err := sc.createIndexGCJob(ctx, &refresh.NewPrimaryIndex, txn, desc); err != nil {
 						return err
 					}
-					childJobs = append(childJobs, pkJob)
 					for i := range refresh.NewIndexes {
-						idxJob, err := sc.createIndexGCJob(ctx, &refresh.NewIndexes[i], txn, desc)
-						if err != nil {
+						if err := sc.createIndexGCJob(ctx, &refresh.NewIndexes[i], txn, desc); err != nil {
 							return err
 						}
-						childJobs = append(childJobs, idxJob)
 					}
 				}
 			}
@@ -1353,7 +1320,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
-				if childJobs, err = sc.queueCleanupJobs(ctx, scTable, txn, childJobs); err != nil {
+				if err := sc.queueCleanupJobs(ctx, scTable, txn); err != nil {
 					return err
 				}
 			}
@@ -1366,7 +1333,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// If we performed MakeMutationComplete on a computed column swap, then
 				// we need to start a job for the column deletion that the swap mutation
 				// added if any.
-				if childJobs, err = sc.queueCleanupJobs(ctx, scTable, txn, childJobs); err != nil {
+				if err := sc.queueCleanupJobs(ctx, scTable, txn); err != nil {
 					return err
 				}
 			}
@@ -1452,24 +1419,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			sc.mutationID,
 			info)
 	})
-	if fn := sc.testingKnobs.RunBeforeChildJobs; fn != nil {
-		if len(childJobs) != 0 {
-			fn()
-		}
-	}
 	if err != nil {
-		for _, job := range childJobs {
-			if rollbackErr := job.CleanupOnRollback(ctx); rollbackErr != nil {
-				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
-			}
-		}
 		return err
-	}
-	for _, job := range childJobs {
-		if err := job.Start(ctx); err != nil {
-			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
-		}
-		log.VEventf(ctx, 2, "started job %d", *job.ID())
 	}
 	// Wait for the modified versions of tables other than the table we're
 	// updating to have their leases updated.
@@ -1481,6 +1432,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, desc.ID); err != nil {
 			return err
 		}
+	}
+	// Notify the job registry to start jobs, in case we started any.
+	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2014,10 +1969,6 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeComputedColumnSwap is called just before the computed column swap is committed.
 	RunBeforeComputedColumnSwap func()
 
-	// RunBeforeChildJobs is called just before child jobs are run to clean up
-	// dropped schema elements after a mutation.
-	RunBeforeChildJobs func()
-
 	// RunBeforeIndexValidation is called just before starting the index validation,
 	// after setting the job status to validating.
 	RunBeforeIndexValidation func() error
@@ -2463,8 +2414,8 @@ func init() {
 // queueCleanupJobs checks if the completed schema change needs to start a
 // child job to clean up dropped schema elements.
 func (sc *SchemaChanger) queueCleanupJobs(
-	ctx context.Context, scDesc *tabledesc.Mutable, txn *kv.Txn, childJobs []*jobs.StartableJob,
-) ([]*jobs.StartableJob, error) {
+	ctx context.Context, scDesc *tabledesc.Mutable, txn *kv.Txn,
+) error {
 	// Create jobs for dropped columns / indexes to be deleted.
 	mutationID := scDesc.ClusterVersion.NextMutationID
 	span := scDesc.PrimaryIndexSpan(sc.execCfg.Codec)
@@ -2494,19 +2445,17 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
+		job, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		log.VEventf(ctx, 2, "created job %d to drop previous columns "+
-			"and indexes.", *job.ID())
-		childJobs = append(childJobs, job)
+		log.Infof(ctx, "created job %d to drop previous columns and indexes", *job.ID())
 		scDesc.MutationJobs = append(scDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
 			JobID:      *job.ID(),
 		})
 	}
-	return childJobs, nil
+	return nil
 }
 
 // DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.

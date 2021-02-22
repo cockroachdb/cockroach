@@ -47,6 +47,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
 		postTruncatedStateMigration,
 	),
+	migration.NewSQLMigration(
+		"copy all namespace entries to new namespace table",
+		toCV(clusterversion.NamespaceTableWithSchemasMigration),
+		namespaceMigration,
+	),
 }
 
 func init() {
