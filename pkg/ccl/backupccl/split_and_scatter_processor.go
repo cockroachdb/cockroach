@@ -203,6 +203,7 @@ func newSplitAndScatterProcessor(
 
 // Start is part of the RowSource interface.
 func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
+	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
 	go func() {
 		// Note that the loop over doneScatterCh in Next should prevent this
 		// goroutine from leaking when there are no errors. However, if that loop
@@ -213,13 +214,6 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 		defer close(ssp.doneScatterCh)
 		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
 	}()
-	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	// TODO(bulkio): check whether this context should be used in the closure
-	// above.
-	_ = ctx
 }
 
 type entryNode struct {
