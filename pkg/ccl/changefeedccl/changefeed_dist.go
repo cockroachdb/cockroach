@@ -81,19 +81,34 @@ func distChangefeedFlow(
 		}
 	}
 
-	spansTS := details.StatementTime
-	var initialHighWater hlc.Timestamp
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		initialHighWater = *h
-		// If we have a high-water set, use it to compute the spans, since the
-		// ones at the statement time may have been garbage collected by now.
-		spansTS = initialHighWater
-	}
-
 	execCfg := execCtx.ExecCfg()
-	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
-	if err != nil {
-		return err
+	var initialHighWater hlc.Timestamp
+	var trackedSpans []roachpb.Span
+	{
+		spansTS := details.StatementTime
+		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+			initialHighWater = *h
+			// If we have a high-water set, use it to compute the spans, since the
+			// ones at the statement time may have been garbage collected by now.
+			spansTS = initialHighWater
+		}
+
+		// We want to fetch the target spans as of the timestamp following the
+		// highwater unless the highwater corresponds to a timestamp of an initial
+		// scan. This logic is irritatingly complex but extremely important. Namely,
+		// we may be here because the schema changed at the current resolved
+		// timestamp. However, an initial scan should be performed at exactly the
+		// timestamp specified; initial scans can be created at the timestamp of a
+		// schema change and thus should see the side-effect of the schema change.
+		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
+		if isRestartAfterCheckpointOrNoInitialScan {
+			spansTS = spansTS.Next()
+		}
+		var err error
+		trackedSpans, err = fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
+		if err != nil {
+			return err
+		}
 	}
 
 	return changefeeddist.StartDistChangefeed(
