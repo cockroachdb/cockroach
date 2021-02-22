@@ -288,7 +288,7 @@ func changefeedPlanHook(
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
-			return MaybeStripRetryableErrorMarker(err)
+			return maybeStripRetryableErrorMarker(err)
 		}
 
 		settings := p.ExecCfg().Settings
@@ -318,7 +318,7 @@ func changefeedPlanHook(
 				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
 			)
 			if err != nil {
-				return MaybeStripRetryableErrorMarker(err)
+				return maybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -574,7 +574,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
-		if !IsRetryableError(err) {
+		if !isRetryableError(err) {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

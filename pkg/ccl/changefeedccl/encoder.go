@@ -547,7 +547,7 @@ func (e *confluentAvroEncoder) register(
 		return nil
 	}); err != nil {
 		log.Warningf(ctx, "%+v", err)
-		return 0, MarkRetryableError(err)
+		return 0, markRetryableError(err)
 	}
 
 	return id, nil
