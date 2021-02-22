@@ -2110,3 +2110,4 @@ TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                         voter_constraints = '[+region=ca-central-1]',
                         lease_preferences = '[[+region=ca-central-1]]'
+

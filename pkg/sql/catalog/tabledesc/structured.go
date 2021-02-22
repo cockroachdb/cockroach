@@ -4048,7 +4048,7 @@ func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
 // REGIONAL BY ROW table.
 func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
 	if !desc.IsLocalityRegionalByRow() {
-		return "", errors.AssertionFailedf("%s is not REGIONAL BY ROW", desc.Name)
+		return "", errors.AssertionFailedf("%q is not a REGIONAL BY ROW table", desc.Name)
 	}
 	colName := desc.LocalityConfig.GetRegionalByRow().As
 	if colName == nil {
