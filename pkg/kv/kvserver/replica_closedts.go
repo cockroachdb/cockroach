@@ -12,8 +12,12 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // EmitMLAI registers the replica's last assigned max lease index with the
@@ -56,4 +60,37 @@ func (r *Replica) EmitMLAI() {
 			untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
 		}
 	}
+}
+
+// closedTimestampTargetRLocked computes the timestamp we'd like to close for
+// this range. Note that we might not be able to ultimately close this timestamp
+// if there are requests in flight.
+func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
+	now := r.Clock().NowAsClockTimestamp()
+	policy := r.closedTimestampPolicyRLocked()
+	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
+	return closedTimestampTargetByPolicy(now, policy, lagTargetDuration)
+}
+
+// closedTimestampTargetByPolicy returns the target closed timestamp for a range
+// with the given policy.
+func closedTimestampTargetByPolicy(
+	now hlc.ClockTimestamp,
+	policy roachpb.RangeClosedTimestampPolicy,
+	lagTargetDuration time.Duration,
+) hlc.Timestamp {
+	var closedTSTarget hlc.Timestamp
+	switch policy {
+	case roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS:
+		closedTSTarget = hlc.Timestamp{WallTime: now.WallTime - lagTargetDuration.Nanoseconds()}
+		// TODO(andrei,nvanbenschoten): Resolve all the issues preventing us from closing
+		// timestamps in the future (which, in turn, forces future-time writes on
+		// global ranges), and enable the proper logic below.
+		//case roachpb.LEAD_FOR_GLOBAL_READS:
+		//	closedTSTarget = hlc.Timestamp{
+		//		WallTime:  now + 2*b.clock.MaxOffset().Nanoseconds(),
+		//		Synthetic: true,
+		//	}
+	}
+	return closedTSTarget
 }

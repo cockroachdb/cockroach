@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -213,7 +212,7 @@ type proposer interface {
 	destroyed() destroyStatus
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
-	closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy
+	closedTimestampTarget() hlc.Timestamp
 	// raftTransportClosedTimestampEnabled returns whether the range has switched
 	// to the Raft-based closed timestamp transport.
 	// TODO(andrei): This shouldn't be needed any more in 21.2, once the Raft
@@ -518,7 +517,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		}
 	}
 
-	closedTSTarget := b.computeClosedTimestampTarget()
+	closedTSTarget := b.p.closedTimestampTarget()
 
 	// Remember the first error that we see when proposing the batch. We don't
 	// immediately return this error because we want to finish clearing out the
@@ -675,29 +674,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 	return used, proposeBatch(raftGroup, b.p.replicaID(), ents)
-}
-
-// computeClosedTimestampTarget computes the timestamp we'd like to close for
-// our range. Note that we might not be able to ultimately close this timestamp
-// if there's requests in flight.
-func (b *propBuf) computeClosedTimestampTarget() hlc.Timestamp {
-	now := b.clock.Now().WallTime
-	closedTSPolicy := b.p.closeTimestampPolicy()
-	var closedTSTarget hlc.Timestamp
-	switch closedTSPolicy {
-	case roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS:
-		targetDuration := closedts.TargetDuration.Get(&b.settings.SV)
-		closedTSTarget = hlc.Timestamp{WallTime: now - targetDuration.Nanoseconds()}
-		// TODO(andrei,nvanbenschoten): Resolve all the issues preventing us from closing
-		// timestamps in the future (which, in turn, forces future-time writes on
-		// global ranges), and enable the proper logic below.
-		//case roachpb.LEAD_FOR_GLOBAL_READS:
-		//	closedTSTarget = hlc.Timestamp{
-		//		WallTime:  now + 2*b.clock.MaxOffset().Nanoseconds(),
-		//		Synthetic: true,
-		//	}
-	}
-	return closedTSTarget
 }
 
 // assignClosedTimestampToProposalLocked assigns a closed timestamp to be carried by
@@ -1027,8 +1003,8 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 	rp.store.enqueueRaftUpdateCheck(rp.RangeID)
 }
 
-func (rp *replicaProposer) closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
-	return (*Replica)(rp).closedTimestampPolicyRLocked()
+func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
+	return (*Replica)(rp).closedTimestampTargetRLocked()
 }
 
 func (rp *replicaProposer) raftTransportClosedTimestampEnabled() bool {
