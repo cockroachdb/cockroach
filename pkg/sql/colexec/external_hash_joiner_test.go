@@ -45,9 +45,9 @@ func TestExternalHashJoiner(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: testDiskMonitor,
 	}
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
@@ -133,8 +133,8 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 			TestingKnobs: execinfra.TestingKnobs{
 				ForceDiskSpill: true,
 			},
-			DiskMonitor: testDiskMonitor,
 		},
+		DiskMonitor: testDiskMonitor,
 	}
 	sourceTypes := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
@@ -213,9 +213,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: testDiskMonitor,
 	}
 	nCols := 4
 	sourceTypes := make([]*types.T, nCols)

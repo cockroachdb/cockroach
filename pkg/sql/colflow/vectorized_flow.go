@@ -603,7 +603,7 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 func (s *vectorizedFlowCreator) createDiskAccounts(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
-	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
 	s.monitors = append(s.monitors, diskMonitor)
 	diskAccounts := make([]*mon.BoundAccount, numAccounts)
 	for i := range diskAccounts {

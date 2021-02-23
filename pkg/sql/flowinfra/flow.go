@@ -442,6 +442,8 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		}
 	}
 
+	// This closes the disk monitor opened in NewFlowCtx.
+	f.DiskMonitor.Stop(ctx)
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {
