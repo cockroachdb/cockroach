@@ -30,11 +30,10 @@ import (
 // split commit.
 func splitPreApply(
 	ctx context.Context,
+	r *Replica,
 	readWriter storage.ReadWriter,
 	split roachpb.SplitTrigger,
-	r *Replica,
-	// The closed timestamp used to initialize the RHS.
-	closedTS hlc.Timestamp,
+	initClosedTS *hlc.Timestamp,
 ) {
 	// Sanity check that the store is in the split.
 	//
@@ -123,7 +122,7 @@ func splitPreApply(
 	}
 
 	// Persist the closed timestamp.
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, closedTS); err != nil {
+	if err := rsl.SetClosedTimestamp(ctx, readWriter, initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}
 

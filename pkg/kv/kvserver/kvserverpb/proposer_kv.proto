@@ -241,7 +241,12 @@ message RaftCommand {
   // updated accordingly. Managing retry of proposals becomes trickier as
   // well as that uproots whatever ordering was originally envisioned.
   //
-  // This field is set through RaftCommandFooter hackery.
+  // This field is set through MaxLeaseFooter hackery. Unlike with the
+  // ClosedTimestamp, which needs to be nullable in this proto (see comment),
+  // there are no nullability concerns with this field. This is because
+  // max_lease_index is a primitive type, so it does not get encoded when zero.
+  // This alone ensures that the field is not encoded twice in the combined
+  // RaftCommand+MaxLeaseFooter proto.
   uint64 max_lease_index = 4;
 
   // The closed timestamp carried by this command. Once a follower is told to
@@ -255,8 +260,11 @@ message RaftCommand {
   // in a command-specific way. If the value is not zero, the value is greater
   // or equal to that of the previous commands (and all before it).
   //
-  // This field is set through ClosedTimestampFooter hackery.
-  util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
+  // This field is set through ClosedTimestampFooter hackery. Unlike in the
+  // ClosedTimestampFooter, the field is nullable here so that it does not get
+  // encoded when empty. This prevents the field from being encoded twice in the
+  // combined RaftCommand+ClosedTimestampFooter proto.
+  util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
 
@@ -284,19 +292,22 @@ message RaftCommand {
   reserved 1, 2, 10001 to 10014;
 }
 
-// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
+// MaxLeaseFooter contains a subset of the fields in RaftCommand. It is used
 // to optimize a pattern where most of the fields in RaftCommand are marshaled
 // outside of a heavily contended critical section, except for the fields in the
 // footer, which are assigned and marhsaled inside of the critical section and
 // appended to the marshaled byte buffer. This minimizes the memory allocation
 // and marshaling work performed under lock.
-message RaftCommandFooter {
+message MaxLeaseFooter {
   uint64 max_lease_index = 4;
 }
 
-// ClosedTimestampFooter is similar to RaftCommandFooter, allowing the proposal
+// ClosedTimestampFooter is similar to MaxLeaseFooter, allowing the proposal
 // buffer to fill in the closed_timestamp field after most of the proto has been
 // marshaled already.
 message ClosedTimestampFooter {
+  // NOTE: unlike in RaftCommand, there's no reason to make this field nullable.
+  // If we don't want to include the field, we don't need to append the encoded
+  // footer to an encoded RaftCommand buffer.
   util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 }

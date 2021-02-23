@@ -445,7 +445,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		cmd.raftCmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
 		cmd.raftCmd.WriteBatch = nil
 		cmd.raftCmd.LogicalOpLog = nil
-		cmd.raftCmd.ClosedTimestamp.Reset()
+		cmd.raftCmd.ClosedTimestamp = nil
 	} else {
 		// Assert that we're not writing under the closed timestamp. We can only do
 		// these checks on IsIntentWrite requests, since others (for example,
@@ -639,7 +639,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r, cmd.raftCmd.ClosedTimestamp)
+		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.raftCmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -823,13 +823,13 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
-	if cts := cmd.raftCmd.ClosedTimestamp; !cts.IsEmpty() {
+	if cts := cmd.raftCmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
 		if cts.Less(b.state.ClosedTimestamp) {
 			log.Fatalf(ctx,
 				"closed timestamp regressing from %s to %s when applying command %x",
 				b.state.ClosedTimestamp, cts, cmd.idKey)
 		}
-		b.state.ClosedTimestamp = cts
+		b.state.ClosedTimestamp = *cts
 		if clockTS, ok := cts.TryToClockTimestamp(); ok {
 			b.maxTS.Forward(clockTS)
 		}

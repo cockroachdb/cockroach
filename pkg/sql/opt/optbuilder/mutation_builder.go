@@ -1201,12 +1201,12 @@ func (mb *mutationBuilder) parsePartialIndexPredicateExpr(idx cat.IndexOrdinal) 
 // parseUniqueConstraintPredicateExpr parses the predicate of the given partial
 // unique constraint and caches it for reuse. This function panics if the unique
 // constraint at the given ordinal is not partial.
-func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdinal) tree.Expr {
-	uniqueConstraint := mb.tab.Unique(idx)
+func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(uniq cat.UniqueOrdinal) tree.Expr {
+	uniqueConstraint := mb.tab.Unique(uniq)
 
 	predStr, isPartial := uniqueConstraint.Predicate()
 	if !isPartial {
-		panic(errors.AssertionFailedf("unique constraint at ordinal %d is not a partial unique constraint", idx))
+		panic(errors.AssertionFailedf("unique constraint at ordinal %d is not a partial unique constraint", uniq))
 	}
 
 	if mb.parsedUniqueConstraintExprs == nil {
@@ -1214,8 +1214,8 @@ func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdi
 	}
 
 	// Return expression from the cache, if it was already parsed previously.
-	if mb.parsedUniqueConstraintExprs[idx] != nil {
-		return mb.parsedUniqueConstraintExprs[idx]
+	if mb.parsedUniqueConstraintExprs[uniq] != nil {
+		return mb.parsedUniqueConstraintExprs[uniq]
 	}
 
 	expr, err := parser.ParseExpr(predStr)
@@ -1223,7 +1223,7 @@ func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdi
 		panic(err)
 	}
 
-	mb.parsedUniqueConstraintExprs[idx] = expr
+	mb.parsedUniqueConstraintExprs[uniq] = expr
 	return expr
 }
 
