@@ -37,7 +37,9 @@ type ShowCreateTableTestCase struct {
 // ShowCreateTableTest tests the output for SHOW CREATE TABLE matches
 // the expect values. Furthermore, it round trips SHOW CREATE TABLE
 // statements to ensure they produces an identical SHOW CREATE TABLE.
-func ShowCreateTableTest(t *testing.T, testCases []ShowCreateTableTestCase) {
+func ShowCreateTableTest(
+	t *testing.T, extraQuerySetup string, testCases []ShowCreateTableTestCase,
+) {
 	params, _ := tests.CreateTestServerParams()
 	params.Locality.Tiers = []roachpb.Tier{
 		{Key: "region", Value: "us-west1"},
@@ -49,7 +51,6 @@ func ShowCreateTableTest(t *testing.T, testCases []ShowCreateTableTestCase) {
     SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 		SET experimental_enable_hash_sharded_indexes = TRUE;
 		CREATE DATABASE d;
-		CREATE DATABASE mrdb PRIMARY REGION = "us-west1";
 		USE d;
 		-- Create a table we can point FKs to.
 		CREATE TABLE items (
@@ -63,6 +64,11 @@ func ShowCreateTableTest(t *testing.T, testCases []ShowCreateTableTestCase) {
 		CREATE TABLE o.foo(x int primary key);
 	`); err != nil {
 		t.Fatal(err)
+	}
+	if extraQuerySetup != "" {
+		if _, err := sqlDB.Exec(extraQuerySetup); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for i, test := range testCases {
 		name := fmt.Sprintf("t%d", i)
