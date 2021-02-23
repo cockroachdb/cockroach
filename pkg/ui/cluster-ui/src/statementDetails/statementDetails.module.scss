@@ -1,4 +1,5 @@
 @import "src/core/index.module";
+@import "~@cockroachlabs/design-tokens/dist/web/tokens";
 
 $max-window-width: 1350px;
 
@@ -141,5 +142,12 @@ h2.base-heading {
   &__col-query-text {
     font-family: $font-family--monospace;
     white-space: pre-wrap;
+  }
+}
+
+.summary-card {
+  color: $colors--neutral-7;
+  h5 {
+    color: $colors--neutral-7;
   }
 }
