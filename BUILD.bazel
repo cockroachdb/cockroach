@@ -70,6 +70,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude vendor
+# gazelle:exclude pkg/geo/wkt/wkt_generated.go
 # gazelle:exclude pkg/kv/kvclient/kvcoord/txnstate_string.go
 # gazelle:exclude pkg/kv/kvserver/refreshraftreason_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
