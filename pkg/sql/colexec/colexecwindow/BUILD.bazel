@@ -13,7 +13,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",  # keep
         "//pkg/sql/colcontainer",  # keep
-        "//pkg/sql/colexec/colexecmisc",
+        "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colexecop",  # keep

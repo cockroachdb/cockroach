@@ -1683,7 +1683,7 @@ func TestLint(t *testing.T) {
 			// sql/col* packages.
 			"sql/colexec",
 			"sql/colflow",
-			":!sql/colexec/colexecmisc/simple_project.go",
+			":!sql/colexec/colexecbase/simple_project.go",
 		)
 		if err != nil {
 			t.Fatal(err)
