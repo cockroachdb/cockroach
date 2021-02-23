@@ -255,8 +255,11 @@ message RaftCommand {
   // in a command-specific way. If the value is not zero, the value is greater
   // or equal to that of the previous commands (and all before it).
   //
-  // This field is set through ClosedTimestampFooter hackery.
-  util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
+  // This field is set through ClosedTimestampFooter hackery. Unlike in the
+  // ClosedTimestampFooter, the field is nullable here so that it does not get
+  // encoded when empty. This prevents the field from being encoded twice in the
+  // combined RaftCommand+ClosedTimestampFooter proto.
+  util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
 
@@ -298,5 +301,8 @@ message RaftCommandFooter {
 // buffer to fill in the closed_timestamp field after most of the proto has been
 // marshaled already.
 message ClosedTimestampFooter {
+  // NOTE: unlike in RaftCommand, there's no reason to make this field nullable.
+  // If we don't want to include the field, we don't need to append the encoded
+  // footer to an encoded RaftCommand buffer.
   util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 }
