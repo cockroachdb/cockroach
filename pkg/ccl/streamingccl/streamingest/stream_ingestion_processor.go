@@ -157,15 +157,11 @@ func newStreamIngestionDataProcessor(
 // Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
 
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
 	var err error
-	sip.batcher, err = bulk.MakeStreamSSTBatcher(sip.Ctx, db, evalCtx.Settings,
+	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
@@ -176,14 +172,14 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, err := sip.client.ConsumePartition(sip.Ctx, partitionAddress, startTime)
+		eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
 			return
 		}
 		eventChs[partitionAddress] = eventCh
 	}
-	sip.eventCh = sip.merge(sip.Ctx, eventChs)
+	sip.eventCh = sip.merge(ctx, eventChs)
 }
 
 // Next is part of the RowSource interface.
