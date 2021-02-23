@@ -105,7 +105,7 @@ func (s *streamIngestionResumer) checkForCutoverSignal(
 			if !sp.StreamIngest.CutoverTime.IsEmpty() {
 				// Sanity check that the requested cutover time is less than equal to
 				// the resolved ts recorded in the job progress. This should already
-				// have been enforced when the cutover was signalled via the builtin.
+				// have been enforced when the cutover was signaled via the builtin.
 				// TODO(adityamaru): Remove this when we allow users to specify a
 				// cutover time in the future.
 				resolvedTimestamp := progress.GetHighWater()
@@ -211,8 +211,27 @@ func (s *streamIngestionResumer) revertToLatestResolvedTimestamp(
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	// TODO(adityamaru): Add ClearRange logic.
-	return nil
+	p := execCtx.(sql.JobExecContext)
+	db := p.ExecCfg().DB
+	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, *s.job.ID())
+	if err != nil {
+		return err
+	}
+	details := j.Details()
+	var sd jobspb.StreamIngestionDetails
+	var ok bool
+	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
+		return errors.Newf("unknown details type %T in stream ingestion job %d",
+			details, *s.job.ID())
+	}
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sd.Span.Key,
+			EndKey: sd.Span.EndKey,
+		},
+	})
+	return db.Run(ctx, &b)
 }
 
 var _ jobs.Resumer = &streamIngestionResumer{}
