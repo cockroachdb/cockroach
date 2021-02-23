@@ -261,7 +261,7 @@ func (r *Replica) propose(
 
 	// Make sure the maximum lease index is unset. This field will be set in
 	// propBuf.Insert and its encoded bytes will be appended to the encoding
-	// buffer as a RaftCommandFooter.
+	// buffer as a MaxLeaseFooter.
 	p.command.MaxLeaseIndex = 0
 
 	// Determine the encoding style for the Raft command.
@@ -320,7 +320,7 @@ func (r *Replica) propose(
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
 	needed := preLen + cmdLen +
-		kvserverpb.MaxRaftCommandFooterSize() +
+		kvserverpb.MaxMaxLeaseFooterSize() +
 		kvserverpb.MaxClosedTimestampFooterSize()
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
