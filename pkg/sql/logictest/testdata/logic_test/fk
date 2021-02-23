@@ -3634,11 +3634,18 @@ statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
 
 # Test that foreign keys cannot reference columns that are indexed by a partial
-# unique index. Partial unique indexes do not guarantee uniqueness in the entire
-# table.
+# unique index or a partial unique constraint. Partial unique indexes and
+# constraints do not guarantee uniqueness in the entire table.
 
 statement ok
-CREATE TABLE partial_parent (p INT, UNIQUE INDEX (p) WHERE p > 100)
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE partial_parent (
+  p INT,
+  UNIQUE INDEX (p) WHERE p > 100,
+  UNIQUE WITHOUT INDEX (p) WHERE p > 0
+)
 
 statement error there is no unique constraint matching given keys for referenced table partial_parent
 CREATE TABLE partial_child (p INT REFERENCES partial_parent (p))
