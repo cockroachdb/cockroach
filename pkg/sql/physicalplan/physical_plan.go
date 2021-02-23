@@ -964,38 +964,6 @@ func MergePlans(
 	mergedPlan.Distribution = leftPlanDistribution.compose(rightPlanDistribution)
 }
 
-// MergeResultTypes reconciles the ResultTypes between two plans. It enforces
-// that each pair of ColumnTypes must either match or be null, in which case the
-// non-null type is used. This logic is necessary for cases like
-// SELECT NULL UNION SELECT 1.
-func MergeResultTypes(left, right []*types.T) ([]*types.T, error) {
-	if len(left) != len(right) {
-		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
-	}
-	merged := make([]*types.T, len(left))
-	for i := range left {
-		leftType, rightType := left[i], right[i]
-		if rightType.Family() == types.UnknownFamily {
-			merged[i] = leftType
-		} else if leftType.Family() == types.UnknownFamily {
-			merged[i] = rightType
-		} else if equivalentTypes(leftType, rightType) {
-			merged[i] = leftType
-		} else {
-			return nil, errors.Errorf(
-				"conflicting ColumnTypes: %s and %s", leftType.DebugString(), rightType.DebugString())
-		}
-	}
-	return merged, nil
-}
-
-// equivalentType checks whether a column type is equivalent to another for the
-// purpose of UNION. Precision, Width, Oid, etc. do not affect the merging of
-// values.
-func equivalentTypes(c, other *types.T) bool {
-	return c.Equivalent(other)
-}
-
 // AddJoinStage adds join processors at each of the specified nodes, and wires
 // the left and right-side outputs to these processors.
 func (p *PhysicalPlan) AddJoinStage(

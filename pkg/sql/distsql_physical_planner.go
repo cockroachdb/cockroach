@@ -3268,7 +3268,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	p.PlanToStreamColMap = planToStreamColMap
 
 	// Merge the plans' result types and merge ordering.
-	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.GetResultTypes(), rightPlan.GetResultTypes())
+	resultTypes, err := mergeResultTypesForSetOp(leftPlan, rightPlan)
 	if err != nil {
 		return nil, err
 	}
