@@ -608,382 +608,408 @@ func TestUnmarshalError(t *testing.T) {
 		{
 			desc:  "invalid character",
 			input: "POINT{0 0}",
-			expectedErrStr: `lex error: invalid character at pos 5
-POINT{0 0}
-     ^`,
+			expectedErrStr: `syntax error: invalid character at line 1, pos 5
+LINE 1: POINT{0 0}
+             ^`,
 		},
 		{
 			desc:  "invalid keyword",
 			input: "DOT(0 0)",
-			expectedErrStr: `lex error: invalid keyword at pos 0
-DOT(0 0)
-^`,
+			expectedErrStr: `syntax error: invalid keyword at line 1, pos 0
+LINE 1: DOT(0 0)
+        ^`,
 		},
 		{
 			desc:  "invalid number",
 			input: "POINT(2 2.3.7)",
-			expectedErrStr: `lex error: invalid number at pos 8
-POINT(2 2.3.7)
-        ^`,
+			expectedErrStr: `syntax error: invalid number at line 1, pos 8
+LINE 1: POINT(2 2.3.7)
+                ^`,
 		},
 		{
 			desc:  "invalid scientific notation number missing number before the e",
 			input: "POINT(e-1 2)",
-			expectedErrStr: `lex error: invalid keyword at pos 6
-POINT(e-1 2)
-      ^`,
+			expectedErrStr: `syntax error: invalid keyword at line 1, pos 6
+LINE 1: POINT(e-1 2)
+              ^`,
 		},
 		{
 			desc:  "invalid scientific notation number with non-integer power",
 			input: "POINT(5e-1.5 2)",
-			expectedErrStr: `lex error: invalid number at pos 6
-POINT(5e-1.5 2)
-      ^`,
+			expectedErrStr: `syntax error: invalid number at line 1, pos 6
+LINE 1: POINT(5e-1.5 2)
+              ^`,
 		},
 		{
 			desc:  "invalid number with a + at the start (PostGIS does not allow this)",
 			input: "POINT(+1 2)",
-			expectedErrStr: `lex error: invalid character at pos 6
-POINT(+1 2)
-      ^`,
+			expectedErrStr: `syntax error: invalid character at line 1, pos 6
+LINE 1: POINT(+1 2)
+              ^`,
 		},
 		{
 			desc:  "invalid keyword when extraneous spaces are present in ZM",
 			input: "POINT Z M (1 1 1 1)",
-			expectedErrStr: `lex error: invalid keyword at pos 8
-POINT Z M (1 1 1 1)
-        ^`,
+			expectedErrStr: `syntax error: invalid keyword at line 1, pos 8
+LINE 1: POINT Z M (1 1 1 1)
+                ^`,
+		},
+		{
+			desc: "invalid geometry type split over multiple lines",
+			input: `POINT
+Z
+       Z (
+          0
+          0
+)`,
+			expectedErrStr: `syntax error: invalid keyword at line 3, pos 7
+LINE 3:        Z (
+               ^`,
+		},
+		{
+			desc:  "invalid keyword towards the front of a very long line",
+			input: "POINT(aslfaskfjhaskfjhaksjfhkajshfkjahskfjahskfjhaksjfhkajshfkajhsfkjahskfjhaskfjhaksjhfkajshfkj)",
+			expectedErrStr: `syntax error: invalid keyword at line 1, pos 6
+LINE 1: POINT(aslfaskfjhaskfjhaksjfhkajshfkj...
+              ^`,
+		},
+		{
+			desc:  "invalid character towards the end of a very long line",
+			input: "MULTIPOINT(0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0}",
+			expectedErrStr: `syntax error: invalid character at line 1, pos 64
+LINE 1: ..., 0 0, 0 0, 0 0, 0 0, 0 0, 0 0}
+                                         ^`,
 		},
 		// ParseError
 		{
 			desc:  "invalid point",
 			input: "POINT POINT",
-			expectedErrStr: `syntax error: unexpected POINT, expecting '(' at pos 6
-POINT POINT
-      ^`,
+			expectedErrStr: `syntax error: unexpected POINT, expecting '(' at line 1, pos 6
+LINE 1: POINT POINT
+              ^`,
 		},
 		{
 			desc:  "point missing closing bracket",
 			input: "POINT(0 0",
-			expectedErrStr: `syntax error: unexpected $end, expecting ')' at pos 9
-POINT(0 0
-         ^`,
+			expectedErrStr: `syntax error: unexpected $end, expecting ')' at line 1, pos 9
+LINE 1: POINT(0 0
+                 ^`,
 		},
 		{
 			desc:  "2D point with extra comma",
 			input: "POINT(0, 0)",
-			expectedErrStr: `syntax error: not enough coordinates at pos 7
-POINT(0, 0)
-       ^
+			expectedErrStr: `syntax error: not enough coordinates at line 1, pos 7
+LINE 1: POINT(0, 0)
+               ^
 HINT: each point needs at least 2 coords`,
 		},
 		{
 			desc:  "2D linestring with no points",
 			input: "LINESTRING()",
-			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 11
-LINESTRING()
-           ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at line 1, pos 11
+LINE 1: LINESTRING()
+                   ^`,
 		},
 		{
 			desc:  "2D linestring with not enough points",
 			input: "LINESTRING(0 0)",
-			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 14
-LINESTRING(0 0)
-              ^
+			expectedErrStr: `syntax error: non-empty linestring with only one point at line 1, pos 14
+LINE 1: LINESTRING(0 0)
+                      ^
 HINT: minimum number of points is 2`,
 		},
 		{
 			desc:  "linestring with mixed dimensionality",
 			input: "LINESTRING(0 0, 1 1 1)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 21
-LINESTRING(0 0, 1 1 1)
-                     ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at line 1, pos 21
+LINE 1: LINESTRING(0 0, 1 1 1)
+                             ^`,
 		},
 		{
 			desc:  "2D polygon with not enough points",
 			input: "POLYGON((0 0, 1 1, 2 0))",
-			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 22
-POLYGON((0 0, 1 1, 2 0))
-                      ^
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at line 1, pos 22
+LINE 1: POLYGON((0 0, 1 1, 2 0))
+                              ^
 HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D polygon with ring that isn't closed",
 			input: "POLYGON((0 0, 1 1, 2 0, 1 -1))",
-			expectedErrStr: `syntax error: polygon ring not closed at pos 28
-POLYGON((0 0, 1 1, 2 0, 1 -1))
-                            ^
+			expectedErrStr: `syntax error: polygon ring not closed at line 1, pos 28
+LINE 1: POLYGON((0 0, 1 1, 2 0, 1 -1))
+                                    ^
 HINT: ensure first and last point are the same`,
 		},
 		{
 			desc:  "2D polygon with empty second ring",
 			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), ())",
-			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 32
-POLYGON((0 0, 1 -1, 2 0, 0 0), ())
-                                ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at line 1, pos 32
+LINE 1: ...LYGON((0 0, 1 -1, 2 0, 0 0), ())
+                                         ^`,
 		},
 		{
 			desc:  "2D polygon with EMPTY as second ring",
 			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)",
-			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at pos 31
-POLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)
-                               ^`,
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at line 1, pos 31
+LINE 1: ...OLYGON((0 0, 1 -1, 2 0, 0 0), EMPTY)
+                                         ^`,
 		},
 		{
 			desc:  "2D polygon with invalid second ring",
 			input: "POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))",
-			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 40
-POLYGON((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5))
-                                        ^
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at line 1, pos 40
+LINE 1: ... 0, 1 -1, 2 0, 0 0), (0.5 -0.5))
+                                         ^
 HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D multipoint without any points",
 			input: "MULTIPOINT()",
-			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or NUM or '(' at pos 11
-MULTIPOINT()
-           ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or NUM or '(' at line 1, pos 11
+LINE 1: MULTIPOINT()
+                   ^`,
 		},
 		{
 			desc:  "3D multipoint without comma separating points",
 			input: "MULTIPOINT Z (0 0 0 0 0 0)",
-			expectedErrStr: `syntax error: too many coordinates at pos 25
-MULTIPOINT Z (0 0 0 0 0 0)
-                         ^
+			expectedErrStr: `syntax error: too many coordinates at line 1, pos 25
+LINE 1: MULTIPOINT Z (0 0 0 0 0 0)
+                                 ^
 HINT: each point can have at most 4 coords`,
 		},
 		{
 			desc:  "2D multipoint with EMPTY inside extraneous parentheses",
 			input: "MULTIPOINT((EMPTY))",
-			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM at pos 12
-MULTIPOINT((EMPTY))
-            ^`,
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting NUM at line 1, pos 12
+LINE 1: MULTIPOINT((EMPTY))
+                    ^`,
 		},
 		{
 			desc:  "3D multipoint using EMPTY as a point without using Z in type",
 			input: "MULTIPOINT(0 0 0, EMPTY)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ but encountered layout of XY at pos 18
-MULTIPOINT(0 0 0, EMPTY)
-                  ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ but encountered layout of XY at line 1, pos 18
+LINE 1: MULTIPOINT(0 0 0, EMPTY)
+                          ^
 HINT: EMPTY is XY layout in base geometry type`,
 		},
 		{
 			desc:  "multipoint with mixed dimensionality",
 			input: "MULTIPOINT(0 0 0, 1 1)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ so expecting 3 coords but got 2 coords at pos 21
-MULTIPOINT(0 0 0, 1 1)
-                     ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ so expecting 3 coords but got 2 coords at line 1, pos 21
+LINE 1: MULTIPOINT(0 0 0, 1 1)
+                             ^`,
 		},
 		{
 			desc:  "2D multilinestring containing linestring with no points",
 			input: "MULTILINESTRING(())",
-			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 17
-MULTILINESTRING(())
-                 ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at line 1, pos 17
+LINE 1: MULTILINESTRING(())
+                         ^`,
 		},
 		{
 			desc:  "2D multilinestring containing linestring with only one point",
 			input: "MULTILINESTRING((0 0))",
-			expectedErrStr: `syntax error: non-empty linestring with only one point at pos 20
-MULTILINESTRING((0 0))
-                    ^
+			expectedErrStr: `syntax error: non-empty linestring with only one point at line 1, pos 20
+LINE 1: MULTILINESTRING((0 0))
+                            ^
 HINT: minimum number of points is 2`,
 		},
 		{
 			desc:  "4D multilinestring using EMPTY without using ZM in type",
 			input: "MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 4 coords at pos 31
-MULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))
-                               ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 4 coords at line 1, pos 31
+LINE 1: ...ULTILINESTRING(EMPTY, (0 0 0 0, 2 3 -2 -3))
+                                         ^`,
 		},
 		{
 			desc:  "2D multipolygon with no polygons",
 			input: "MULTIPOLYGON()",
-			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or '(' at pos 13
-MULTIPOLYGON()
-             ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting EMPTY or '(' at line 1, pos 13
+LINE 1: MULTIPOLYGON()
+                     ^`,
 		},
 		{
 			desc:  "2D multipolygon with one polygon missing outer parentheses",
 			input: "MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))",
-			expectedErrStr: `syntax error: unexpected NUM, expecting '(' at pos 14
-MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))
-              ^`,
+			expectedErrStr: `syntax error: unexpected NUM, expecting '(' at line 1, pos 14
+LINE 1: MULTIPOLYGON((1 0, 2 5, -2 5, 1 0))
+                      ^`,
 		},
 		{
 			desc:  "multipolygon with mixed dimensionality",
 			input: "MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 45
-MULTIPOLYGON(((1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))
-                                             ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at line 1, pos 45
+LINE 1: ...1 0, 2 5, -2 5, 1 0)), ((1 0 2, 2 5 1, -2 5 -1, 1 0 2)))
+                                         ^`,
 		},
 		{
 			desc:  "2D multipolygon with polygon that doesn't have enough points",
 			input: "MULTIPOLYGON(((0 0, 1 1, 2 0)))",
-			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 28
-MULTIPOLYGON(((0 0, 1 1, 2 0)))
-                            ^
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at line 1, pos 28
+LINE 1: MULTIPOLYGON(((0 0, 1 1, 2 0)))
+                                    ^
 HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with ring that isn't closed",
 			input: "MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))",
-			expectedErrStr: `syntax error: polygon ring not closed at pos 34
-MULTIPOLYGON(((0 0, 1 1, 2 0, 1 -1)))
-                                  ^
+			expectedErrStr: `syntax error: polygon ring not closed at line 1, pos 34
+LINE 1: ...IPOLYGON(((0 0, 1 1, 2 0, 1 -1)))
+                                         ^
 HINT: ensure first and last point are the same`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with empty second ring",
 			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), ()))",
-			expectedErrStr: `syntax error: unexpected ')', expecting NUM at pos 38
-MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), ()))
-                                      ^`,
+			expectedErrStr: `syntax error: unexpected ')', expecting NUM at line 1, pos 38
+LINE 1: ...YGON(((0 0, 1 -1, 2 0, 0 0), ()))
+                                         ^`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with EMPTY as second ring",
 			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))",
-			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at pos 37
-MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))
-                                     ^`,
+			expectedErrStr: `syntax error: unexpected EMPTY, expecting '(' at line 1, pos 37
+LINE 1: ...LYGON(((0 0, 1 -1, 2 0, 0 0), EMPTY))
+                                         ^`,
 		},
 		{
 			desc:  "2D multipolygon with polygon with invalid second ring",
 			input: "MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))",
-			expectedErrStr: `syntax error: polygon ring doesn't have enough points at pos 46
-MULTIPOLYGON(((0 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))
-                                              ^
+			expectedErrStr: `syntax error: polygon ring doesn't have enough points at line 1, pos 46
+LINE 1: ... 0, 1 -1, 2 0, 0 0), (0.5 -0.5)))
+                                         ^
 HINT: minimum number of points is 4`,
 		},
 		{
 			desc:  "3D multipolygon using EMPTY without using Z in its type",
 			input: "MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 27
-MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
-                           ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at line 1, pos 27
+LINE 1: MULTIPOLYGON(EMPTY, ((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
+                                   ^`,
 		},
 		{
 			desc:  "2D geometrycollection with EMPTY item",
 			input: "GEOMETRYCOLLECTION(EMPTY)",
-			expectedErrStr: `syntax error: unexpected EMPTY at pos 19
-GEOMETRYCOLLECTION(EMPTY)
-                   ^`,
+			expectedErrStr: `syntax error: unexpected EMPTY at line 1, pos 19
+LINE 1: GEOMETRYCOLLECTION(EMPTY)
+                           ^`,
 		},
 		{
 			desc:  "3D geometrycollection with no items",
 			input: "GEOMETRYCOLLECTION Z ()",
-			expectedErrStr: `syntax error: unexpected ')' at pos 22
-GEOMETRYCOLLECTION Z ()
-                      ^`,
+			expectedErrStr: `syntax error: unexpected ')' at line 1, pos 22
+LINE 1: GEOMETRYCOLLECTION Z ()
+                              ^`,
 		},
 		{
 			desc:  "base type geometrycollection with mixed dimensionality",
 			input: "GEOMETRYCOLLECTION(POINT M (0 0 0), LINESTRING(0 0, 1 1))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 36
-GEOMETRYCOLLECTION(POINT M (0 0 0), LINESTRING(0 0, 1 1))
-                                    ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 36
+LINE 1: ...RYCOLLECTION(POINT M (0 0 0), LINESTRING(0 0, 1 1))
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords point missing M type",
 			input: "GEOMETRYCOLLECTION M (POINT(0 0 0))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 27
-GEOMETRYCOLLECTION M (POINT(0 0 0))
-                           ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 27
+LINE 1: GEOMETRYCOLLECTION M (POINT(0 0 0))
+                                   ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords linestring missing M type",
 			input: "GEOMETRYCOLLECTION M (LINESTRING(0 0 0, 1 1 1))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 32
-GEOMETRYCOLLECTION M (LINESTRING(0 0 0, 1 1 1))
-                                ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 32
+LINE 1: ...OMETRYCOLLECTION M (LINESTRING(0 0 0, 1 1 1))
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords polygon missing M type",
 			input: "GEOMETRYCOLLECTION M (POLYGON((0 0 0, 1 1 1, 2 3 1, 0 0 0)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 29
-GEOMETRYCOLLECTION M (POLYGON((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
-                             ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 29
+LINE 1: GEOMETRYCOLLECTION M (POLYGON((0 0 0, 1 1 1, 2 3 1, 0 0 0))...
+                                     ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords multipoint missing M type",
 			input: "GEOMETRYCOLLECTION M (MULTIPOINT((0 0 0), 1 1 1))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 32
-GEOMETRYCOLLECTION M (MULTIPOINT((0 0 0), 1 1 1))
-                                ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 32
+LINE 1: ...OMETRYCOLLECTION M (MULTIPOINT((0 0 0), 1 1 1))
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords multilinestring missing M type",
 			input: "GEOMETRYCOLLECTION M (MULTILINESTRING((0 0 0, 1 1 1)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 37
-GEOMETRYCOLLECTION M (MULTILINESTRING((0 0 0, 1 1 1)))
-                                     ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 37
+LINE 1: ...YCOLLECTION M (MULTILINESTRING((0 0 0, 1 1 1)))
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "2D+M geometrycollection with 3 coords multipolygon missing M type",
 			input: "GEOMETRYCOLLECTION M (MULTIPOLYGON(((0 0 0, 1 1 1, 2 3 1, 0 0 0))))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 34
-GEOMETRYCOLLECTION M (MULTIPOLYGON(((0 0 0, 1 1 1, 2 3 1, 0 0 0))))
-                                  ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 34
+LINE 1: ...ETRYCOLLECTION M (MULTIPOLYGON(((0 0 0, 1 1 1, 2 3 1, 0 0 0)...
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "3D geometrycollection with mixed dimensionality in nested geometry collection",
 			input: "GEOMETRYCOLLECTION Z (GEOMETRYCOLLECTION(POINT(0 0)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ so expecting 3 coords but got 2 coords at pos 50
-GEOMETRYCOLLECTION Z (GEOMETRYCOLLECTION(POINT(0 0)))
-                                                  ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ so expecting 3 coords but got 2 coords at line 1, pos 50
+LINE 1: ... (GEOMETRYCOLLECTION(POINT(0 0)))
+                                         ^`,
 		},
 		{
 			desc:  "base type geometrycollection with 3D geometry and base type EMPTY geometry",
 			input: "GEOMETRYCOLLECTION(POINT(0 0 0), LINESTRING EMPTY)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ but encountered layout of XY at pos 44
-GEOMETRYCOLLECTION(POINT(0 0 0), LINESTRING EMPTY)
-                                            ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYZ but encountered layout of XY at line 1, pos 44
+LINE 1: ...TION(POINT(0 0 0), LINESTRING EMPTY)
+                                         ^
 HINT: EMPTY is XY layout in base geometry type`,
 		},
 		{
 			desc:  "base type geometrycollection with base type EMPTY geometry and 3D geometry",
 			input: "GEOMETRYCOLLECTION(LINESTRING EMPTY, POINT(0 0 0))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at pos 48
-GEOMETRYCOLLECTION(LINESTRING EMPTY, POINT(0 0 0))
-                                                ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY so expecting 2 coords but got 3 coords at line 1, pos 48
+LINE 1: ...(LINESTRING EMPTY, POINT(0 0 0))
+                                         ^`,
 		},
 		{
 			desc:  "2D+M geometrycollection with base type multipoint with mixed dimensionality",
 			input: "GEOMETRYCOLLECTIONM(LINESTRING EMPTY, MULTIPOINT(EMPTY, (0 0 0)))",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 48
-GEOMETRYCOLLECTIONM(LINESTRING EMPTY, MULTIPOINT(EMPTY, (0 0 0)))
-                                                ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 48
+LINE 1: ...M(LINESTRING EMPTY, MULTIPOINT(EMPTY, (0 0 0)))
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "geometrycollection with mixed dimensionality between nested geometrycollection and EMPTY linestring 1",
 			input: "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION M (LINESTRING EMPTY), LINESTRING EMPTY)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 60
-GEOMETRYCOLLECTION(GEOMETRYCOLLECTION M (LINESTRING EMPTY), LINESTRING EMPTY)
-                                                            ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 60
+LINE 1: ...LECTION M (LINESTRING EMPTY), LINESTRING EMPTY)
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "geometrycollection with mixed dimensionality between nested geometrycollection and EMPTY linestring 2",
 			input: "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING M EMPTY), LINESTRING EMPTY)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at pos 59
-GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING M EMPTY), LINESTRING EMPTY)
-                                                           ^
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 1, pos 59
+LINE 1: ...LLECTION(LINESTRING M EMPTY), LINESTRING EMPTY)
+                                         ^
 HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
 		},
 		{
 			desc:  "geometrycollection with mixed dimensionality between nested geometrycollection and EMPTY linestring 3",
 			input: "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING EMPTY), LINESTRING M EMPTY)",
-			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY but encountered layout of XYM at pos 57
-GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING EMPTY), LINESTRING M EMPTY)
-                                                         ^`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XY but encountered layout of XYM at line 1, pos 57
+LINE 1: ...COLLECTION(LINESTRING EMPTY), LINESTRING M EMPTY)
+                                         ^`,
 		},
 	}
 
