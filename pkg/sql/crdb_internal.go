@@ -409,6 +409,11 @@ CREATE TABLE crdb_internal.tables (
 	},
 }
 
+// StatsAsOfTime is a duration which is used to define the AS OF time for
+// querying the system.table_statistics table when building
+// crdb_internal.table_row_statistics. It is mutable for testing.
+var StatsAsOfTime = 10 * time.Second
+
 var crdbInternalTablesTableLastStats = virtualSchemaTable{
 	comment: "the latest stats for all tables accessible by current user in current database (KV scan)",
 	schema: `
@@ -418,8 +423,10 @@ CREATE TABLE crdb_internal.table_row_statistics (
   estimated_row_count        INT
 )`,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		// Collect the latests statistics for all tables.
-		query := `
+		// Collect the statistics for all tables AS OF 10 seconds ago to avoid
+		// contention on the stats table. We pass a nil transaction so that the AS
+		// OF clause can be independent of any outer query.
+		query := fmt.Sprintf(`
            SELECT s."tableID", max(s."rowCount")
              FROM system.table_statistics AS s
              JOIN (
@@ -427,9 +434,10 @@ CREATE TABLE crdb_internal.table_row_statistics (
                       FROM system.table_statistics
                      GROUP BY "tableID"
                   ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
-            GROUP BY s."tableID"`
+            AS OF SYSTEM TIME '-%s'
+            GROUP BY s."tableID"`, StatsAsOfTime.String())
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
-			ctx, "crdb-internal-statistics-table", p.txn,
+			ctx, "crdb-internal-statistics-table", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
 		if err != nil {

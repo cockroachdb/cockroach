@@ -1436,6 +1436,10 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
+	// Update the default AS OF time for querying the system.table_statistics
+	// table to create the crdb_internal.table_row_statistics table.
+	sql.StatsAsOfTime = time.Millisecond
+
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
