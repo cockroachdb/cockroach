@@ -50,7 +50,7 @@ func TestCutoverBuiltin(t *testing.T) {
 		},
 		Progress: jobspb.StreamIngestionProgress{},
 	}
-	job, err := registry.CreateAndStartJob(ctx, nil, streamIngestJobRecord)
+	job, err := jobs.TestingCreateAndStartJob(ctx, registry, tc.Server(0).DB(), streamIngestJobRecord)
 	require.NoError(t, err)
 
 	// Check that sentinel is not set.
