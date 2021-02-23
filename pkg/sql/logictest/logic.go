@@ -1577,6 +1577,14 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 		if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true"); err != nil {
 			t.Fatal(err)
 		}
+
+		// Update the default AS OF time for querying the system.table_statistics
+		// table to create the crdb_internal.table_row_statistics table.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.overrideDistSQLMode != "" {
