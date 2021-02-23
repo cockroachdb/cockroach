@@ -675,9 +675,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	arbiterIndexes, arbiterConstraints := mb.arbiterIndexesAndConstraints(conflictOrds, arbiterPredicate)
-	mb.arbiterIndexes = arbiterIndexes.Ordered()
-	mb.arbiterConstraints = arbiterConstraints.Ordered()
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
 
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
@@ -686,77 +684,27 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
-	// Loop over each arbiter index and constraint, creating an anti-join for
-	// each one.
-	arbiterIndexes.ForEach(func(idx int) {
-		index := mb.tab.Index(idx)
-		var pred tree.Expr
-		if _, isPartial := index.Predicate(); isPartial {
-			pred = mb.parsePartialIndexPredicateExpr(idx)
-		}
-
-		mb.buildAntiJoinForDoNothingArbiter(
-			inScope,
-			getIndexLaxKeyOrdinals(index),
-			pred,
-		)
-	})
-	arbiterConstraints.ForEach(func(uc int) {
-		uniqueConstraint := mb.tab.Unique(uc)
-		var pred tree.Expr
-		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
-			pred = mb.parseUniqueConstraintPredicateExpr(uc)
-		}
-		mb.buildAntiJoinForDoNothingArbiter(
-			inScope,
-			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			pred,
-		)
+	// Create an anti-join for each arbiter.
+	mb.arbiters.ForEach(func(name string, conflictOrds util.FastIntSet, pred tree.Expr) {
+		mb.buildAntiJoinForDoNothingArbiter(inScope, conflictOrds, pred)
 	})
 
-	// Loop over each arbiter index and constraint, creating an UpsertDistinctOn
-	// for each one. This must happen after all conflicting rows are removed with
-	// the anti-joins created above, to avoid removing valid rows (see #59125).
-	arbiterIndexes.ForEach(func(idx int) {
-		index := mb.tab.Index(idx)
-
-		// If the index is a partial index, project a new column that allows the
-		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial index predicate. See projectPartialArbiterDistinctColumn for more
-		// details.
-		var partialIndexDistinctCol *scopeColumn
-		if _, isPartial := index.Predicate(); isPartial {
-			pred := mb.parsePartialIndexPredicateExpr(idx)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
-				insertColScope, pred, string(index.Name()),
+	// Create an UpsertDistinctOn for each arbiter. This must happen after all
+	// conflicting rows are removed with the anti-joins created above, to avoid
+	// removing valid rows (see #59125).
+	mb.arbiters.ForEach(func(name string, conflictOrds util.FastIntSet, pred tree.Expr) {
+		// If the arbiter has a partial predicate, project a new column that
+		// allows the UpsertDistinctOn to only de-duplicate insert rows that
+		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
+		var partialDistinctCol *scopeColumn
+		if pred != nil {
+			partialDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, name,
 			)
 		}
 
-		mb.buildDistinctOnForDoNothingArbiter(
-			insertColScope,
-			getIndexLaxKeyOrdinals(index),
-			partialIndexDistinctCol,
-		)
-	})
-	arbiterConstraints.ForEach(func(uc int) {
-		uniqueConstraint := mb.tab.Unique(uc)
-
-		// If the constraint is partial, project a new column that allows the
-		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
-		// partial predicate. See projectPartialArbiterDistinctColumn for more
-		// details.
-		var partialIndexDistinctCol *scopeColumn
-		if _, isPartial := uniqueConstraint.Predicate(); isPartial {
-			pred := mb.parseUniqueConstraintPredicateExpr(uc)
-			partialIndexDistinctCol = mb.projectPartialArbiterDistinctColumn(
-				insertColScope, pred, uniqueConstraint.Name(),
-			)
-		}
-		mb.buildDistinctOnForDoNothingArbiter(
-			insertColScope,
-			getUniqueConstraintOrdinals(mb.tab, uniqueConstraint),
-			partialIndexDistinctCol,
-		)
+		mb.buildDistinctOnForArbiter(insertColScope, conflictOrds, partialDistinctCol, "" /* errorOnDup */)
 	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
@@ -774,14 +722,16 @@ func (mb *mutationBuilder) buildInputForUpsert(
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	arbiterIndexes, arbiterConstraints := mb.arbiterIndexesAndConstraints(conflictOrds, arbiterPredicate)
-	mb.arbiterIndexes = arbiterIndexes.Ordered()
-	mb.arbiterConstraints = arbiterConstraints.Ordered()
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
+	// TODO(mgartner): Use arbiters.ForEach to iterate over arbiters rather than
+	// directly accessing the index and constraint sets. This will require
+	// support for partial unique constraints in this function.
+	arbiterIndexes := mb.arbiters.indexes
+	arbiterConstraints := mb.arbiters.uniqueConstraints
 
 	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
 	//  similar to buildInputForDoNothing.
-	if arbiterIndexes.Len() > 1 || arbiterConstraints.Len() > 1 ||
-		(!arbiterIndexes.Empty() && !arbiterConstraints.Empty()) {
+	if mb.arbiters.Len() > 1 {
 		panic(unimplemented.NewWithIssue(53170,
 			"there are multiple unique or exclusion constraints matching the ON CONFLICT specification"))
 	}
@@ -792,151 +742,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// Ignore any ordering requested by the input.
 	mb.outScope.ordering = nil
 
-	// buildInputForArbiter builds the input for a single arbiter index or
-	// constraint.
-	// - colCount is the number of columns in the constraint or lax key columns
-	//   in the index.
-	// - colOrdinal is a function that returns the position of the ith constraint
-	//   or index column in its table.
-	// - predExpr is the partial index predicate. If the arbiter is not a partial
-	//   index, predExpr is nil.
-	// - partialIndexDistinctCol is a column that allows the UpsertDistinctOn to
-	//   only de-duplicate insert rows that satisfy the partial index predicate.
-	//   If the arbiter is not a partial index, partialIndexDistinctCol is nil.
-	buildInputForArbiter := func(
-		getCanaryCol func() *scopeColumn, predExpr tree.Expr, partialIndexDistinctCol *scopeColumn,
-	) {
-		// Ensure that input is distinct on the conflict columns. Otherwise, the
-		// Upsert could affect the same row more than once, which can lead to index
-		// corruption. See issue #44466 for more context.
-		//
-		// Ignore any ordering requested by the input. Since the
-		// EnsureUpsertDistinctOn operator does not allow multiple rows in distinct
-		// groupings, the internal ordering is meaningless (and can trigger a
-		// misleading error in buildDistinctOn if present).
-		var conflictCols opt.ColSet
-		for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
-			conflictCols.Add(mb.insertColIDs[ord])
-		}
-		if partialIndexDistinctCol != nil {
-			conflictCols.Add(partialIndexDistinctCol.id)
-		}
-
-		mb.outScope = mb.b.buildDistinctOn(
-			conflictCols, mb.outScope, true /* nullsAreDistinct */, duplicateUpsertErrText)
-
-		// Remove the partialIndexDistinctCol from the output.
-		if partialIndexDistinctCol != nil {
-			projectionScope := mb.outScope.replace()
-			projectionScope.appendColumnsFromScope(insertColScope)
-			mb.b.constructProjectForScope(mb.outScope, projectionScope)
-			mb.outScope = projectionScope
-		}
-
-		// Re-alias all INSERT columns so that they are accessible as if they were
-		// part of a special data source named "crdb_internal.excluded".
-		for i := range mb.outScope.cols {
-			mb.outScope.cols[i].table = excludedTableName
-		}
-
-		// Build the right side of the left outer join. Use a different instance of
-		// table metadata so that col IDs do not overlap.
-		//
-		// NOTE: Include mutation columns, but be careful to never use them for any
-		//       reason other than as "fetch columns". See buildScan comment.
-		// TODO(andyk): Why does execution engine need mutation columns for Insert?
-		mb.fetchScope = mb.b.buildScan(
-			mb.b.addTable(mb.tab, &mb.alias),
-			tableOrdinals(mb.tab, columnKinds{
-				includeMutations:       true,
-				includeSystem:          true,
-				includeVirtualInverted: false,
-				includeVirtualComputed: true,
-			}),
-			nil, /* indexFlags */
-			noRowLocking,
-			inScope,
-		)
-
-		// If the index is a unique partial index, then rows that are not in the
-		// partial index cannot conflict with insert rows. Therefore, a Select wraps
-		// the scan on the right side of the left outer join with the partial index
-		// predicate expression as the filter.
-		if predExpr != nil {
-			texpr := mb.fetchScope.resolveAndRequireType(predExpr, types.Bool)
-			predScalar := mb.b.buildScalar(texpr, mb.fetchScope, nil, nil, nil)
-			mb.fetchScope.expr = mb.b.factory.ConstructSelect(
-				mb.fetchScope.expr,
-				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(predScalar)},
-			)
-		}
-
-		// Record a not-null "canary" column. After the left-join, this will be null
-		// if no conflict has been detected, or not null otherwise. At least one not-
-		// null column must exist, since primary key columns are not-null.
-		canaryScopeCol := getCanaryCol()
-		mb.canaryColID = canaryScopeCol.id
-
-		// Set fetchColIDs to reference the columns created for the fetch values.
-		mb.setFetchColIDs(mb.fetchScope.cols)
-
-		// Add the fetch columns to the current scope. It's OK to modify the current
-		// scope because it contains only INSERT columns that were added by the
-		// mutationBuilder, and which aren't needed for any other purpose.
-		mb.outScope.appendColumnsFromScope(mb.fetchScope)
-
-		// Build the join condition by creating a conjunction of equality conditions
-		// that test each conflict column:
-		//
-		//   ON ins.x = scan.a AND ins.y = scan.b
-		//
-		var on memo.FiltersExpr
-		for i := range mb.fetchScope.cols {
-			// Include fetch columns with ordinal positions in conflictOrds.
-			if conflictOrds.Contains(i) {
-				condition := mb.b.factory.ConstructEq(
-					mb.b.factory.ConstructVariable(mb.insertColIDs[i]),
-					mb.b.factory.ConstructVariable(mb.fetchScope.cols[i].id),
-				)
-				on = append(on, mb.b.factory.ConstructFiltersItem(condition))
-			}
-		}
-
-		// If the index is a unique partial index, then insert rows that do not
-		// satisfy the partial index predicate cannot conflict with existing rows in
-		// the unique partial index. Therefore, the partial index predicate
-		// expression is added to the ON filters.
-		if predExpr != nil {
-			texpr := insertColScope.resolveAndRequireType(predExpr, types.Bool)
-			predScalar := mb.b.buildScalar(texpr, insertColScope, nil, nil, nil)
-			on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
-		}
-
-		// Construct the left join.
-		mb.outScope.expr = mb.b.factory.ConstructLeftJoin(
-			mb.outScope.expr,
-			mb.fetchScope.expr,
-			on,
-			memo.EmptyJoinPrivate,
-		)
-
-		// Add a filter from the WHERE clause if one exists.
-		if whereClause != nil {
-			where := &tree.Where{
-				Type: whereClause.Type,
-				Expr: &tree.OrExpr{
-					Left: &tree.ComparisonExpr{
-						Operator: tree.IsNotDistinctFrom,
-						Left:     canaryScopeCol,
-						Right:    tree.DNull,
-					},
-					Right: whereClause.Expr,
-				},
-			}
-			mb.b.buildWhere(where, mb.outScope)
-		}
-	}
-
+	var canaryCol *scopeColumn
 	if arbiterIndexes.Len() > 0 {
 		idx, _ := arbiterIndexes.Next(0)
 		index := mb.tab.Index(idx)
@@ -958,19 +764,79 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			)
 		}
 
-		buildInputForArbiter(func() *scopeColumn {
-			return &mb.fetchScope.cols[findNotNullIndexCol(index)]
-		}, pred, partialIndexDistinctCol)
+		// Ensure that input is distinct on the conflict columns. Otherwise, the
+		// Upsert could affect the same row more than once, which can lead to index
+		// corruption. See issue #44466 for more context.
+		//
+		// Ignore any ordering requested by the input. Since the
+		// EnsureUpsertDistinctOn operator does not allow multiple rows in distinct
+		// groupings, the internal ordering is meaningless (and can trigger a
+		// misleading error in buildDistinctOn if present).
+		mb.buildDistinctOnForArbiter(insertColScope, conflictOrds, partialIndexDistinctCol, duplicateUpsertErrText)
+
+		// Re-alias all INSERT columns so that they are accessible as if they were
+		// part of a special data source named "crdb_internal.excluded".
+		for i := range mb.outScope.cols {
+			mb.outScope.cols[i].table = excludedTableName
+		}
+
+		// Create a left-join for the arbiter.
+		mb.buildLeftJoinForUpsertArbiter(
+			inScope, conflictOrds, pred,
+		)
+
+		// Record a not-null "canary" column. After the left-join, this will be
+		// null if no conflict has been detected, or not null otherwise. At
+		// least one not-null column must exist, since primary key columns are
+		// not-null.
+		canaryCol = &mb.fetchScope.cols[findNotNullIndexCol(index)]
+		mb.canaryColID = canaryCol.id
 	} else if arbiterConstraints.Len() > 0 {
-		buildInputForArbiter(func() *scopeColumn {
-			// Use the primary index, since we don't know at this point whether
-			// another index will be used for this plan. This should select one
-			// of the primary keys.
-			return &mb.fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
-		}, nil /* predExpr */, nil /* partialIndexDistinctCol */)
+		// Ensure that input is distinct on the conflict columns. Otherwise, the
+		// Upsert could affect the same row more than once, which can lead to index
+		// corruption. See issue #44466 for more context.
+		//
+		// Ignore any ordering requested by the input. Since the
+		// EnsureUpsertDistinctOn operator does not allow multiple rows in distinct
+		// groupings, the internal ordering is meaningless (and can trigger a
+		// misleading error in buildDistinctOn if present).
+		mb.buildDistinctOnForArbiter(insertColScope, conflictOrds, nil /* partialIndexDistinctCol */, duplicateUpsertErrText)
+
+		// Re-alias all INSERT columns so that they are accessible as if they were
+		// part of a special data source named "crdb_internal.excluded".
+		for i := range mb.outScope.cols {
+			mb.outScope.cols[i].table = excludedTableName
+		}
+
+		// Create a left-join for the arbiter.
+		mb.buildLeftJoinForUpsertArbiter(
+			inScope, conflictOrds, nil, /* pred */
+		)
+
+		// Record a not-null "canary" column. Use the primary index, since we
+		// don't know at this point whether another index will be used for this
+		// plan. This should select one of the primary keys.
+		canaryCol = &mb.fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
+		mb.canaryColID = canaryCol.id
 	} else {
 		// This should never happen.
 		panic(errors.AssertionFailedf("no arbiter index or constraint available"))
+	}
+
+	// Add a filter from the WHERE clause if one exists.
+	if whereClause != nil {
+		where := &tree.Where{
+			Type: whereClause.Type,
+			Expr: &tree.OrExpr{
+				Left: &tree.ComparisonExpr{
+					Operator: tree.IsNotDistinctFrom,
+					Left:     canaryCol,
+					Right:    tree.DNull,
+				},
+				Right: whereClause.Expr,
+			},
+		}
+		mb.b.buildWhere(where, mb.outScope)
 	}
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
