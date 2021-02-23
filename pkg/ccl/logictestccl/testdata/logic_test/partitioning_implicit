@@ -843,3 +843,39 @@ CREATE UNIQUE INDEX uniq_on_t ON t(v)
 statement ok
 DELETE FROM t WHERE partition_by = 2;
 CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+# Tests adding a new partial UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, a INT, b INT);
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+statement ok
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+# Tests adding a partial UNIQUE index with PARTITION ALL BY implicit
+# partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, a INT, b INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
+
+statement ok
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
