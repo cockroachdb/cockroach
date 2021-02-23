@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -28,6 +29,16 @@ import (
 type streamIngestionResumer struct {
 	job *jobs.Job
 }
+
+// checkForCutoverSignalFrequency is the frequency at which the resumer polls
+// the system.jobs table to check whether the stream ingestion job has been
+// signaled to cutover.
+var cutoverSignalPollInterval = settings.RegisterDurationSetting(
+	"bulkio.stream_ingestion.cutover_signal_poll_interval",
+	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
 
 func ingest(
 	ctx context.Context,
@@ -79,9 +90,14 @@ func ingest(
 // checkForCutoverSignal periodically loads the job progress to check for the
 // sentinel value that signals the ingestion job to complete.
 func (s *streamIngestionResumer) checkForCutoverSignal(
-	ctx context.Context, stopPoller chan struct{}, registry *jobs.Registry, cancelIngestionCtx func(),
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	stopPoller chan struct{},
+	cancelIngestionCtx func(),
 ) error {
-	tick := time.NewTicker(time.Second * 10)
+	sv := &execCfg.Settings.SV
+	registry := execCfg.JobRegistry
+	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
 	defer tick.Stop()
 	for {
 		select {
@@ -105,16 +121,16 @@ func (s *streamIngestionResumer) checkForCutoverSignal(
 			if !sp.StreamIngest.CutoverTime.IsEmpty() {
 				// Sanity check that the requested cutover time is less than equal to
 				// the resolved ts recorded in the job progress. This should already
-				// have been enforced when the cutover was signalled via the builtin.
+				// have been enforced when the cutover was signaled via the builtin.
 				// TODO(adityamaru): Remove this when we allow users to specify a
 				// cutover time in the future.
 				resolvedTimestamp := progress.GetHighWater()
 				if resolvedTimestamp == nil {
-					return errors.Newf("cutover has been requested before job %d has had a chance to"+
+					return errors.AssertionFailedf("cutover has been requested before job %d has had a chance to"+
 						" record a resolved ts", *s.job.ID())
 				}
 				if resolvedTimestamp.Less(sp.StreamIngest.CutoverTime) {
-					return errors.Newf("requested cutover time %s is before the resolved time %s recorded"+
+					return errors.AssertionFailedf("requested cutover time %s is before the resolved time %s recorded"+
 						" in job %d", sp.StreamIngest.CutoverTime.String(), resolvedTimestamp.String(),
 						*s.job.ID())
 				}
@@ -132,14 +148,16 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// ingestCtx is used to plan and run the DistSQL flow.
 	ingestCtx, cancelIngest := context.WithCancel(resumeCtx)
+	defer cancelIngest()
 	g := ctxgroup.WithContext(ingestCtx)
 
 	// Start a poller to check if the job has been requested to cutover.
 	stopPoller := make(chan struct{})
 	g.GoCtx(func(ctx context.Context) error {
-		return s.checkForCutoverSignal(ctx, stopPoller, p.ExecCfg().JobRegistry, cancelIngest)
+		return s.checkForCutoverSignal(ctx, p.ExecCfg(), stopPoller, cancelIngest)
 	})
 
+	// Start ingesting KVs from the replication stream.
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopPoller)
 		return ingest(ctx, p, details.StreamAddress, s.job.Progress(), *s.job.ID())
@@ -157,10 +175,6 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 		}
 		return err
 	}
-
-	// TODO(adityamaru): We probably want to use the resultsCh to indicate that
-	// the processors have completed setup. We can then return the job ID in the
-	// plan hook similar to how changefeeds do it.
 
 	return nil
 }
@@ -192,7 +206,8 @@ func (s *streamIngestionResumer) revertToLatestResolvedTimestamp(
 	}
 
 	if sp.StreamIngest.CutoverTime.IsEmpty() {
-		return errors.New("cutover time is unexpectedly empty, cannot revert to a consistent state")
+		return errors.AssertionFailedf("cutover time is unexpectedly empty, " +
+			"cannot revert to a consistent state")
 	}
 
 	var b kv.Batch
@@ -211,8 +226,27 @@ func (s *streamIngestionResumer) revertToLatestResolvedTimestamp(
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	// TODO(adityamaru): Add ClearRange logic.
-	return nil
+	p := execCtx.(sql.JobExecContext)
+	db := p.ExecCfg().DB
+	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, *s.job.ID())
+	if err != nil {
+		return err
+	}
+	details := j.Details()
+	var sd jobspb.StreamIngestionDetails
+	var ok bool
+	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
+		return errors.Newf("unknown details type %T in stream ingestion job %d",
+			details, *s.job.ID())
+	}
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sd.Span.Key,
+			EndKey: sd.Span.EndKey,
+		},
+	})
+	return db.Run(ctx, &b)
 }
 
 var _ jobs.Resumer = &streamIngestionResumer{}

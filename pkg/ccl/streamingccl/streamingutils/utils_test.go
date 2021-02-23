@@ -61,7 +61,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
 	// This should fail since no highwatermark is set on the progress.
-	cutoverTime := timeutil.Now()
+	cutoverTime := timeutil.Now().Round(time.Microsecond)
 	_, err = db.ExecContext(
 		ctx,
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
@@ -71,7 +71,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	var highWater time.Time
 	err = job.HighWaterProgressed(ctx, nil /* txn */, func(ctx context.Context, txn *kv.Txn,
 		details jobspb.ProgressDetails) (hlc.Timestamp, error) {
-		highWater = timeutil.Now()
+		highWater = timeutil.Now().Round(time.Microsecond)
 		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
 		return hlcHighWater, nil
 	})
@@ -79,7 +79,7 @@ func TestCutoverBuiltin(t *testing.T) {
 
 	// This should fail since the highwatermark is less than the cutover time
 	// passed to the builtin.
-	cutoverTime = timeutil.Now()
+	cutoverTime = timeutil.Now().Round(time.Microsecond)
 	_, err = db.ExecContext(
 		ctx,
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
@@ -100,7 +100,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	_, err = db.ExecContext(
 		ctx,
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		*job.ID(), cutoverTime)
+		*job.ID(), highWater)
 	require.Error(t, err, "cutover timestamp already set")
 
 	// Check that sentinel is set on the job progress.
@@ -109,8 +109,5 @@ func TestCutoverBuiltin(t *testing.T) {
 	progress = sj.Progress()
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
-	// The builtin only offers microsecond precision and so we must account for
-	// that when comparing against our chosen time.
-	cutoverTime = cutoverTime.Round(time.Microsecond)
 	require.Equal(t, hlc.Timestamp{WallTime: highWater.UnixNano()}, sp.StreamIngest.CutoverTime)
 }
