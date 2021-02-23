@@ -133,7 +133,7 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -420,7 +420,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DTimestamp:
 		b.putInt32(8)

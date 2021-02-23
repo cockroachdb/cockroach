@@ -277,6 +277,11 @@ var inputs = map[string][]string{
 		"hello123",
 	},
 
+	`'%s'::char(8) COLLATE "en_US"`: {
+		"hello",
+		"hello123",
+	},
+
 	"'%s'::timestamp": {
 		"1999-01-08 04:05:06+00",
 		"1999-01-08 04:05:06+00:00",
@@ -520,5 +525,10 @@ var inputs = map[string][]string{
 		`1::char(2)`,
 		`1::char(1)`,
 		`1::varchar(4)`,
+		`1::text`,
+		`1::char(2) COLLATE "en_US"`,
+		`1::char(1) COLLATE "en_US"`,
+		`1::varchar(4) COLLATE "en_US"`,
+		`1::text COLLATE "en_US"`,
 	},
 }
