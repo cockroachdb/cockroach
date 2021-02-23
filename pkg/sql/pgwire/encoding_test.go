@@ -185,6 +185,11 @@ func TestEncodings(t *testing.T) {
 			case *tree.DTuple:
 				// Unsupported.
 				continue
+			case *tree.DCollatedString:
+				// Decoding collated strings is unsupported by this test. The encoded
+				// value is the same as a normal string, so decoding it turns it into
+				// a DString.
+				continue
 			}
 			for code, value := range map[pgwirebase.FormatCode][]byte{
 				pgwirebase.FormatText:   tc.TextAsBinary,

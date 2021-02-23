@@ -46,7 +46,7 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 	comma := ""
 	for i, v := range d.D {
 		ctx.WriteString(comma)
-		t := d.typ.TupleContents()[i]
+		t := d.ResolvedType().TupleContents()[i]
 		switch dv := UnwrapDatum(nil, v).(type) {
 		case dNull:
 		case *DString:
