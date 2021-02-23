@@ -1,4 +1,5 @@
 import { Col, Row, Tabs } from "antd";
+import { Text, Heading } from "@cockroachlabs/ui-components";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
@@ -32,7 +33,7 @@ import {
   latencyBreakdown,
   genericBarChart,
   longToInt,
-  rowsBreakdown,
+  formatTwoPlaces,
 } from "src/barCharts";
 import {
   AggregateStatistics,
@@ -389,7 +390,6 @@ export class StatementDetails extends React.Component<
 
     const count = FixLong(stats.count).toInt();
 
-    const { rowsBarChart } = rowsBreakdown(this.props.statement);
     const {
       parseBarChart,
       planBarChart,
@@ -424,194 +424,125 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={16}>
               <SqlBox value={statement} />
             </Col>
+          </Row>
+          <Row gutter={16}>
             <Col className="gutter-row" span={8}>
-              <SummaryCard>
+              <SummaryCard className={cx("summary-card")}>
                 <Row>
-                  <Col span={12}>
-                    <div
-                      className={summaryCardStylesCx("summary--card__counting")}
-                    >
-                      <h3
-                        className={summaryCardStylesCx(
-                          "summary--card__counting--value",
-                        )}
-                      >
-                        {formatNumberForDisplay(
-                          count * stats.service_lat.mean,
-                          duration,
-                        )}
-                      </h3>
-                      <p
-                        className={summaryCardStylesCx(
-                          "summary--card__counting--label",
-                        )}
-                      >
-                        Total Time
-                      </p>
-                    </div>
-                  </Col>
-                  <Col span={12}>
-                    <div
-                      className={summaryCardStylesCx("summary--card__counting")}
-                    >
-                      <h3
-                        className={summaryCardStylesCx(
-                          "summary--card__counting--value",
-                        )}
-                      >
+                  <Col>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Heading type="h5">Statement time</Heading>
+                      <Text>
                         {formatNumberForDisplay(
                           stats.service_lat.mean,
                           duration,
                         )}
-                      </h3>
-                      <p
-                        className={summaryCardStylesCx(
-                          "summary--card__counting--label",
+                      </Text>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Planning time</Text>
+                      <Text>
+                        {formatNumberForDisplay(stats.plan_lat.mean, duration)}
+                      </Text>
+                    </div>
+                    <p
+                      className={summaryCardStylesCx("summary--card__divider")}
+                    />
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Execution time</Text>
+                      <Text>
+                        {formatNumberForDisplay(stats.run_lat.mean, duration)}
+                      </Text>
+                    </div>
+                    <p
+                      className={summaryCardStylesCx("summary--card__divider")}
+                    />
+                  </Col>
+                </Row>
+              </SummaryCard>
+              <SummaryCard className={cx("summary-card")}>
+                <Heading type="h5">Resource usage</Heading>
+                <Row>
+                  <Col>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Mean rows/bytes read</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.rows_read.mean,
+                          formatTwoPlaces,
                         )}
-                      >
-                        Mean Service Latency
-                      </p>
+                        {" / "}
+                        {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
+                      </Text>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Max memory usage</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.max_mem_usage.mean,
+                          Bytes,
+                        )}
+                      </Text>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Network usage</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.bytes_sent_over_network.mean,
+                          Bytes,
+                        )}
+                      </Text>
                     </div>
                   </Col>
                 </Row>
-                <p className={summaryCardStylesCx("summary--card__divider")} />
-                <div
-                  className={summaryCardStylesCx("summary--card__item")}
-                  style={{ justifyContent: "flex-start" }}
-                >
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    App:
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
+              </SummaryCard>
+            </Col>
+            <Col className="gutter-row" span={8}>
+              <SummaryCard className={cx("summary-card")}>
+                <Heading type="h5">Statement details</Heading>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text type="body-strong">App</Text>
+                  <Text>
                     {intersperse<ReactNode>(
                       app.map(a => <AppLink app={a} key={a} />),
                       ", ",
                     )}
-                  </p>
+                  </Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Transaction Type
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {renderTransactionType(implicit_txn)}
-                  </p>
+                  <Text type="body-strong">Failed?</Text>
+                  <Text>{renderBools(failed)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Distributed execution?
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {renderBools(distSQL)}
-                  </p>
+                  <Text type="body-strong">Used cost-based optimizer?</Text>
+                  <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Vectorized execution?
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {renderBools(vec)}
-                  </p>
+                  <Text type="body-strong">Distributed execution?</Text>
+                  <Text>{renderBools(distSQL)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Used cost-based optimizer?
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {renderBools(opt)}
-                  </p>
+                  <Text type="body-strong">Vectorized execution?</Text>
+                  <Text>{renderBools(vec)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Failed?
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {renderBools(failed)}
-                  </p>
+                  <Text type="body-strong">Transaction type</Text>
+                  <Text>{renderTransactionType(implicit_txn)}</Text>
                 </div>
-              </SummaryCard>
-              <SummaryCard>
-                <h2
-                  className={classNames(
-                    cx("base-heading"),
-                    summaryCardStylesCx("summary--card__title"),
-                  )}
-                >
-                  Execution Count
-                </h2>
+                <p className={summaryCardStylesCx("summary--card__divider")} />
+
+                <Heading type="h5">Execution counts</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    First Attempts
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {firstAttemptsBarChart}
-                  </p>
+                  <Text type="body-strong">First attempts</Text>
+                  <Text>{firstAttemptsBarChart}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Retries
-                  </h4>
-                  <p
+                  <Text type="body-strong">Total executions</Text>
+                  <Text>{totalCountBarChart}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text type="body-strong">Retries</Text>
+                  <Text
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
                       {
@@ -620,17 +551,11 @@ export class StatementDetails extends React.Component<
                     )}
                   >
                     {retriesBarChart}
-                  </p>
+                  </Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Max Retries
-                  </h4>
-                  <p
+                  <Text type="body-strong">Max retries</Text>
+                  <Text
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
                       {
@@ -640,64 +565,7 @@ export class StatementDetails extends React.Component<
                     )}
                   >
                     {maxRetriesBarChart}
-                  </p>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Total
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {totalCountBarChart}
-                  </p>
-                </div>
-                <p className={summaryCardStylesCx("summary--card__divider")} />
-                <h2
-                  className={classNames(
-                    cx("base-heading"),
-                    summaryCardStylesCx("summary--card__title"),
-                  )}
-                >
-                  Rows Affected
-                </h2>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Mean Rows
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {rowsBarChart(true)}
-                  </p>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4
-                    className={summaryCardStylesCx(
-                      "summary--card__item--label",
-                    )}
-                  >
-                    Standard Deviation
-                  </h4>
-                  <p
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                    )}
-                  >
-                    {rowsBarChart()}
-                  </p>
+                  </Text>
                 </div>
               </SummaryCard>
             </Col>
