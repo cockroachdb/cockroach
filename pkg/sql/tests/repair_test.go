@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ import (
 // with sql queries, and show that not invalid objects are found.
 func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 60803, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
