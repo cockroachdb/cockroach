@@ -83,3 +83,33 @@ INSERT INTO geom_4d VALUES ('point(1 2)')
 
 statement error pq: object type PointZ does not match column dimensionality GeometryZM
 INSERT INTO geom_4d VALUES ('pointz(1 2 3)')
+
+# Point specific operations
+query RRRRI
+SELECT
+  ST_X(a.geom),
+  ST_Y(a.geom),
+  ST_Z(a.geom),
+  ST_M(a.geom),
+  ST_Zmflag(a.geom)
+FROM (VALUES
+  (NULL::geometry),
+  ('POINT EMPTY'::geometry),
+  ('POINT M EMPTY'::geometry),
+  ('POINT Z EMPTY'::geometry),
+  ('POINT ZM EMPTY'::geometry),
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) a(geom)
+----
+NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  0
+NULL  NULL  NULL  NULL  1
+NULL  NULL  NULL  NULL  2
+NULL  NULL  NULL  NULL  3
+1     2     NULL  NULL  0
+1     2     NULL  3     1
+1     2     3     NULL  2
+1     2     3     4     3

@@ -2483,6 +2483,84 @@ The requested number of points must be not larger than 65336.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_z": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() || t.Layout().ZIndex() == -1 {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.Z())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to ST_Z() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the Z coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_m": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() || t.Layout().MIndex() == -1 {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.M())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to ST_M() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the M coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_zmflag": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t.Layout() {
+				case geom.XY:
+					return tree.NewDInt(tree.DInt(0)), nil
+				case geom.XYM:
+					return tree.NewDInt(tree.DInt(1)), nil
+				case geom.XYZ:
+					return tree.NewDInt(tree.DInt(2)), nil
+				case geom.XYZM:
+					return tree.NewDInt(tree.DInt(3)), nil
+				default:
+					panic("unknown geom.Layout")
+				}
+			},
+			types.Int2,
+			infoBuilder{
+				info: "Returns a code based on the ZM coordinate dimension of a geometry. (XY = 0, XYM = 1, XYZ = 2, XYZM = 3)",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_area": makeBuiltin(
 		defProps(),
 		append(
