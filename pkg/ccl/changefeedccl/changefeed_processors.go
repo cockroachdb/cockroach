@@ -373,8 +373,13 @@ func (ca *changeAggregator) tick() error {
 		return err
 	}
 
-	for _, resolvedSpan := range resolvedSpans {
-		resolvedBytes, err := protoutil.Marshal(&resolvedSpan)
+	// Iterate the spans in reverse so that if there are a very large number of
+	// spans which we're propagating upwards get processed in newest to oldest
+	// order. This will ultimately improve the efficiency of the checkpointing
+	// code which wants to checkpoint whenever the frontier changes.
+	for i := len(resolvedSpans) - 1; i >= 0; i-- {
+		resolvedSpan := &resolvedSpans[i]
+		resolvedBytes, err := protoutil.Marshal(resolvedSpan)
 		if err != nil {
 			return err
 		}
