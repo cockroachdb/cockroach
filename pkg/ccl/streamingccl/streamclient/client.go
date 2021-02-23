@@ -41,6 +41,8 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	}
 
 	switch streamURL.Scheme {
+	case "postgres":
+		return &sinklessReplicationClient{}, nil
 	case TestScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
