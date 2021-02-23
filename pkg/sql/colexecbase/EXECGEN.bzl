@@ -1,41 +1,18 @@
-# NB: The helpers here were grafted from pkg/sql/colexec/COLEXEC.bzl.
-# Future changes here may apply there.
-
-# Map between target name and relevant template.
-targets = [
-    ('hash_any_not_null_agg.eg.go', 'any_not_null_agg_tmpl.go'),
-    ('hash_avg_agg.eg.go', 'avg_agg_tmpl.go'),
-    ('hash_bool_and_or_agg.eg.go', 'bool_and_or_agg_tmpl.go'),
-    ('hash_concat_agg.eg.go', 'concat_agg_tmpl.go'),
-    ('hash_count_agg.eg.go', 'count_agg_tmpl.go'),
-    ('hash_default_agg.eg.go', 'default_agg_tmpl.go'),
-    ('hash_min_max_agg.eg.go', 'min_max_agg_tmpl.go'),
-    ('hash_sum_agg.eg.go', 'sum_agg_tmpl.go'),
-    ('hash_sum_int_agg.eg.go', 'sum_agg_tmpl.go'),
-    ('ordered_any_not_null_agg.eg.go', 'any_not_null_agg_tmpl.go'),
-    ('ordered_avg_agg.eg.go', 'avg_agg_tmpl.go'),
-    ('ordered_bool_and_or_agg.eg.go', 'bool_and_or_agg_tmpl.go'),
-    ('ordered_concat_agg.eg.go', 'concat_agg_tmpl.go'),
-    ('ordered_count_agg.eg.go', 'count_agg_tmpl.go'),
-    ('ordered_default_agg.eg.go', 'default_agg_tmpl.go'),
-    ('ordered_min_max_agg.eg.go', 'min_max_agg_tmpl.go'),
-    ('ordered_sum_agg.eg.go', 'sum_agg_tmpl.go'),
-    ('ordered_sum_int_agg.eg.go', 'sum_agg_tmpl.go'),
-]
-
-def rule_name_for(target):
-    # e.g. 'vec_comparators.eg.go' -> 'gen-vec-comparators'
-    return 'gen-{}'.format(target.replace('.eg.go', '').replace('_', '-'))
+# This file defines a couple of utility methods that are used to generate all
+# code for the vectorized engine based on the templates. It should be loaded
+# as an extension in relevant packages, and the two functions below should be
+# invoked with the corresponding targets mapping (from .eg.go file to its
+# _tmpl.go file).
 
 # Define a file group for all the .eg.go targets.
-def eg_go_filegroup(name):
+def eg_go_filegroup(name, targets):
     native.filegroup(
         name = name,
         srcs = [':{}'.format(rule_name_for(target)) for target, _ in targets],
     )
 
 # Define gen rules for individual eg.go files.
-def gen_eg_go_rules():
+def gen_eg_go_rules(targets):
     # Define some aliases for ease of use.
     native.alias(
         name = "execgen",
@@ -71,3 +48,7 @@ def gen_eg_go_rules():
               """,
             tools = [":execgen", ":goimports"],
         )
+
+def rule_name_for(target):
+    # e.g. 'vec_comparators.eg.go' -> 'gen-vec-comparators'
+    return 'gen-{}'.format(target.replace('.eg.go', '').replace('_', '-'))
