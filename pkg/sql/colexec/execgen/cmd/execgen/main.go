@@ -21,7 +21,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/gostdlib/x/tools/imports"
 )

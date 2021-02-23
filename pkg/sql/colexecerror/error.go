@@ -110,13 +110,13 @@ const (
 //
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func shouldCatchPanic(panicEmittedFrom string) bool {
-	const panicFromTheCatcherItselfPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror.CatchVectorizedRuntimeError"
+	const panicFromTheCatcherItselfPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.CatchVectorizedRuntimeError"
 	if strings.HasPrefix(panicEmittedFrom, panicFromTheCatcherItselfPrefix) {
 		// This panic came from the catcher itself, so we will propagate it
 		// unchanged by the higher-level catchers.
 		return false
 	}
-	const nonVectorizedTestPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror.NonVectorizedTestPanic"
+	const nonVectorizedTestPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.NonVectorizedTestPanic"
 	if strings.HasPrefix(panicEmittedFrom, nonVectorizedTestPrefix) {
 		// This panic came from NonVectorizedTestPanic() method and should not
 		// be caught for testing purposes.

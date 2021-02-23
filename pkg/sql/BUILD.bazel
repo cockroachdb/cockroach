@@ -284,7 +284,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colexec",
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colflow",
         "//pkg/sql/contention",
         "//pkg/sql/covering",

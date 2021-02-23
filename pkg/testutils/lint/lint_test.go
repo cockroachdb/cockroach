@@ -1086,7 +1086,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",
-			":!sql/colexecbase/colexecerror/error.go",
+			":!sql/colexecerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1634,9 +1634,9 @@ func TestLint(t *testing.T) {
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
-			// sql/colexecbase/colexecerror/error.go file.
+			// sql/colexecerror/error.go file.
 			"sql/col*",
-			":!sql/colexecbase/colexecerror/error.go",
+			":!sql/colexecerror/error.go",
 			// This exception is because execgen itself uses panics during code
 			// generation - not at execution time. The (glob,exclude) directive
 			// (see git help gitglossary) makes * behave like a normal, single dir

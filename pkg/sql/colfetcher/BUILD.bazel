@@ -22,7 +22,7 @@ go_library(
         "//pkg/sql/colconv",
         "//pkg/sql/colencoding",
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
