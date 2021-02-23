@@ -11,6 +11,7 @@
 import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
+import { compose } from "redux";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
@@ -84,24 +85,26 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
   };
 });
 
-// The properties required by a NodeGraphs component.
-interface NodeGraphsOwnProps {
+type MapStateToProps = {
+  nodesSummary: NodesSummary;
+  hoverState: HoverState;
+};
+
+type MapDispatchToProps = {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
-  nodesQueryValid: boolean;
-  livenessQueryValid: boolean;
-  nodesSummary: NodesSummary;
-  hoverState: HoverState;
-}
+};
 
-type NodeGraphsProps = NodeGraphsOwnProps & RouteComponentProps;
+type NodeGraphsProps = RouteComponentProps &
+  MapStateToProps &
+  MapDispatchToProps;
 
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */
-export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
+export class NodeGraphs extends React.Component<NodeGraphsProps> {
   /**
    * Selector to compute node dropdown options from the current node summary
    * collection.
@@ -132,14 +135,10 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     },
   );
 
-  refresh(props = this.props) {
-    if (!props.nodesQueryValid) {
-      props.refreshNodes();
-    }
-    if (!props.livenessQueryValid) {
-      props.refreshLiveness();
-    }
-  }
+  refresh = () => {
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
+  };
 
   setClusterPath(nodeID: string, dashboardName: string) {
     const push = this.props.history.push;
@@ -169,7 +168,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   componentDidUpdate() {
-    this.refresh(this.props);
+    this.refresh();
   }
 
   render() {
@@ -277,21 +276,19 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 }
 
-export default withRouter(
-  connect(
-    (state: AdminUIState) => {
-      return {
-        nodesSummary: nodesSummarySelector(state),
-        nodesQueryValid: state.cachedData.nodes.valid,
-        livenessQueryValid: state.cachedData.nodes.valid,
-        hoverState: hoverStateSelector(state),
-      };
-    },
-    {
-      refreshNodes,
-      refreshLiveness,
-      hoverOn,
-      hoverOff,
-    },
-  )(NodeGraphs),
-);
+const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
+  nodesSummary: nodesSummarySelector(state),
+  hoverState: hoverStateSelector(state),
+});
+
+const mapDispatchToProps: MapDispatchToProps = {
+  refreshNodes,
+  refreshLiveness,
+  hoverOn,
+  hoverOff,
+};
+
+export default compose(
+  withRouter,
+  connect(mapStateToProps, mapDispatchToProps),
+)(NodeGraphs);

@@ -185,7 +185,7 @@ export function sumNodeStats(
     unavailableRanges: 0,
     replicas: 0,
   };
-  if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
+  if (_.isArray(nodeStatuses) && !_.isEmpty(livenessStatusByNodeID)) {
     nodeStatuses.forEach((n) => {
       const status = livenessStatusByNodeID[n.desc.node_id];
       if (status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED) {
