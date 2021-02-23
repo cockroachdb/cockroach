@@ -349,6 +349,15 @@ message RevertRangeRequest {
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
 
   bool enable_time_bound_iterator_optimization = 3;
+
+  // IgnoreGcThreshold can be set by a caller to ignore the target-time when
+  // checking that the earliest time at which the command operates is above the
+  // GC threshold. This is safe to set only in very specific situations, such as
+  // when the target span was OFFLINE since the target time as it is during
+  // IMPORT INTO. In this case, since the IMPORT knows it is the only writer and
+  // it only writes new keys, no keys to which it would need to revert have been
+  // shadowed / could have been GC'ed, so it can safely ignore the GC threshold.
+  bool ignore_gc_threshold = 4;
 }
 
 // A RevertRangeResponse is the return value from the RevertRange() method.

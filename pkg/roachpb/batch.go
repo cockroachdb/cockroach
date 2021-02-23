@@ -81,7 +81,11 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 				ts.Backward(t.StartTime)
 			}
 		case *RevertRangeRequest:
-			ts.Backward(t.TargetTime)
+			// This method is only used to check GC Threshold so Revert requests that
+			// opt-out of checking the target vs threshold should skip this.
+			if !t.IgnoreGcThreshold {
+				ts.Backward(t.TargetTime)
+			}
 		}
 	}
 	return ts
