@@ -1717,6 +1717,13 @@
   dependencies:
     regenerator-runtime "^0.13.2"
 
+"@babel/runtime@^7.12.13":
+  version "7.12.13"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.12.13.tgz#0a21452352b02542db0ffb928ac2d3ca7cb6d66d"
+  integrity sha512-8+3UMPBrjFa/6TtKi/7sehPKqfAm4g6K+YQjyyFOLUTxzOngcRZTlAVY8sc2CORJYqdHQY8gRPHmn+qo15rCBw==
+  dependencies:
+    regenerator-runtime "^0.13.4"
+
 "@babel/runtime@^7.4.0":
   version "7.8.3"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.8.3.tgz#0811944f73a6c926bb2ad35e918dcc1bfab279f1"
@@ -1806,12 +1813,13 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.1.46":
-  version "0.1.46"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.1.46.tgz#4b5d0d92ffcd2662f8af0a61a6aaa0312631a1f1"
-  integrity sha512-Nul9UI2FCGZoc5sTrCdHO3dVZG4cUduUdBPB/KqrJ8pFvNrENZRGTQnhO7Mcx6DZB3ykWBhh5G1gtg4dhDX1ww==
+"@cockroachlabs/cluster-ui@^0.2.3":
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.3.tgz#b7d078c87f455d6f9af8d0f1c443dd7adf4aba4a"
+  integrity sha512-wcn58R61/KlX0+wy0u6H4Rg69SnZ/GYTik4EOZxEeqHswuyZsAwee1rwfPsVbX7TDE9HyqeZZ5q1kwrzHFuIZQ==
   dependencies:
-    "@cockroachlabs/crdb-protobuf-client" "^0.0.4"
+    "@babel/runtime" "^7.12.13"
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.6"
     "@cockroachlabs/icons" "0.3.0"
     "@cockroachlabs/ui-components" "0.2.14-alpha.0"
     "@popperjs/core" "^2.4.0"
@@ -1828,10 +1836,10 @@
     react-select "^1.2.1"
     reselect "^4.0.0"
 
-"@cockroachlabs/crdb-protobuf-client@^0.0.4":
-  version "0.0.4"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.4.tgz#9b53ef7cbb187cd7d73b4269c95b0f573caafd45"
-  integrity sha512-n/SEmLzU7i9h5m8cAw9NPRAcQSgzHNdm5+F0dN3myfQSCuEMTgTlbWsfm6EnjTRL1FnZlieqY2gZzgyx4Ke0Ug==
+"@cockroachlabs/crdb-protobuf-client@^0.0.6":
+  version "0.0.6"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.6.tgz#e3ccc5b81987be7c525c6f71d52e2a2fced22deb"
+  integrity sha512-8A9QiLJ/9PlFJTtzzMTMCGb/VCt3jckHtwt/XWWqbFyZn4JuekUhZVM3XwiWf/vYG+rtrVaRpxuUKy8dLMw1pA==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"
@@ -11832,6 +11840,11 @@ regenerator-runtime@^0.13.2:
   version "0.13.3"
   resolved "https://registry.yarnpkg.com/regenerator-runtime/-/regenerator-runtime-0.13.3.tgz#7cf6a77d8f5c6f60eb73c5fc1955b2ceb01e6bf5"
   integrity sha512-naKIZz2GQ8JWh///G7L3X6LaQUAMp2lvb1rvwwsURe/VXwD6VMfr+/1NuNw3ag8v2kY1aQ/go5SNn79O9JU7yw==
+
+regenerator-runtime@^0.13.4:
+  version "0.13.7"
+  resolved "https://registry.yarnpkg.com/regenerator-runtime/-/regenerator-runtime-0.13.7.tgz#cac2dacc8a1ea675feaabaeb8ae833898ae46f55"
+  integrity sha512-a54FxoJDIr27pgf7IgeQGxmqUNYrcV338lf/6gH456HZ/PhX+5BcwHXG9ajESmwe6WRO0tAzRUrRmNONWgkrew==
 
 regenerator-transform@^0.14.0:
   version "0.14.1"
