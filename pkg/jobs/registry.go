@@ -286,32 +286,6 @@ func (r *Registry) MakeJobID() int64 {
 	return int64(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
 }
 
-// TestingCreateAndStartJob creates and asynchronously starts a job from record.
-// An error is returned if the job type has not been registered with
-// RegisterConstructor. The ctx passed to this function is not the context the
-// job will be started with (canceling ctx will not cause the job to cancel).
-func (r *Registry) TestingCreateAndStartJob(
-	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
-) (*StartableJob, error) {
-	var rj *StartableJob
-	jobID := r.MakeJobID()
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		return r.CreateStartableJobWithTxn(ctx, &rj, jobID, txn, record)
-	}); err != nil {
-		if rj != nil {
-			if cleanupErr := rj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-			}
-		}
-		return nil, err
-	}
-	err := rj.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return rj, nil
-}
-
 // NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
 func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
 	select {
@@ -1365,4 +1339,30 @@ func (r *Registry) unregister(jobID int64) {
 // a job to be adopted.
 func (r *Registry) TestingNudgeAdoptionQueue() {
 	r.adoptionCh <- claimAndResumeClaimedJobs
+}
+
+// TestingCreateAndStartJob creates and asynchronously starts a job from record.
+// An error is returned if the job type has not been registered with
+// RegisterConstructor. The ctx passed to this function is not the context the
+// job will be started with (canceling ctx will not cause the job to cancel).
+func TestingCreateAndStartJob(
+	ctx context.Context, r *Registry, db *kv.DB, record Record,
+) (*StartableJob, error) {
+	var rj *StartableJob
+	jobID := r.MakeJobID()
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		return r.CreateStartableJobWithTxn(ctx, &rj, jobID, txn, record)
+	}); err != nil {
+		if rj != nil {
+			if cleanupErr := rj.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+			}
+		}
+		return nil, err
+	}
+	err := rj.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rj, nil
 }
