@@ -752,7 +752,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 	}
 
 	// Update the survival goal in the database descriptor
-	survivalGoal, err := translateSurvivalGoal(n.n.SurvivalGoal)
+	survivalGoal, err := TranslateSurvivalGoal(n.n.SurvivalGoal)
 	if err != nil {
 		return err
 	}

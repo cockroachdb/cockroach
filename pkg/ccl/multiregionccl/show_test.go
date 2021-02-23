@@ -110,5 +110,9 @@ ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@primary CONFIGURE ZONE USI
 			Database: "mrdb",
 		},
 	}
-	sqltestutils.ShowCreateTableTest(t, testCases)
+	sqltestutils.ShowCreateTableTest(
+		t,
+		`CREATE DATABASE mrdb PRIMARY REGION = "us-west1"`,
+		testCases,
+	)
 }
