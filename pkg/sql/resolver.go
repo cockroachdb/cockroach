@@ -844,12 +844,14 @@ func (p *planner) ResolveMutableTypeDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	name.SetAnnotation(&p.semaCtx.Annotations, tn)
 
 	if desc != nil {
 		// Ensure that the user can access the target schema.
 		if err := p.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
 			return nil, err
+		}
+		if tn != nil {
+			name.SetAnnotation(&p.semaCtx.Annotations, tn)
 		}
 	}
 

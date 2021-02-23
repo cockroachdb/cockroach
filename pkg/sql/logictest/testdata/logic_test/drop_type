@@ -346,3 +346,10 @@ DROP TYPE d."b+c"
 
 statement ok
 DROP DATABASE d
+
+# Check IF EXISTS with one type that exists, one that does not.
+subtest regression_58461
+
+statement ok
+CREATE TYPE pet AS ENUM('cat');
+DROP TYPE IF EXISTS pet, alien;
