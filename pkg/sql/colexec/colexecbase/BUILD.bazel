@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
-    name = "colexecmisc",
+    name = "colexecbase",
     srcs = [
         "distinct.go",
         "fn_op.go",
@@ -10,7 +10,7 @@ go_library(
         "simple_project.go",
         ":gen-exec",  # keep
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
@@ -31,7 +31,7 @@ go_library(
 )
 
 go_test(
-    name = "colexecmisc_test",
+    name = "colexecbase_test",
     srcs = [
         "cast_test.go",
         "const_test.go",
@@ -42,7 +42,7 @@ go_test(
         "simple_project_test.go",
     ],
     deps = [
-        ":colexecmisc",
+        ":colexecbase",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",

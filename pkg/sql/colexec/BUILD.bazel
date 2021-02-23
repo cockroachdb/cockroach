@@ -50,10 +50,10 @@ go_library(
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexeccmp",  # keep
         "//pkg/sql/colexec/colexechash",  # keep
         "//pkg/sql/colexec/colexecjoin",
-        "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",
@@ -134,8 +134,8 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecjoin",
-        "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",

@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexecmisc_test
+package colexecbase_test
 
 import (
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -68,7 +68,7 @@ func TestSimpleProjectOp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return colexecmisc.NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
+			return colexecbase.NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
 		})
 	}
 
@@ -76,13 +76,13 @@ func TestSimpleProjectOp(t *testing.T) {
 	// nothing.
 	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{{{1, 2, 3}, {1, 2, 3}}}, nil, colexectestutils.Tuples{{}, {}}, colexectestutils.OrderedVerifier,
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return colexecmisc.NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
+			return colexecbase.NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
 		typs := []*types.T{types.Int, types.Int}
 		input := colexectestutils.NewFiniteBatchSource(testAllocator, testAllocator.NewMemBatchWithMaxCapacity(typs), typs, 1)
-		projectOp := colexecmisc.NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
+		projectOp := colexecbase.NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
 	})
 }
@@ -121,8 +121,8 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 				parallelUnorderedSynchronizerInputs[i].Op = inputs[i]
 			}
 			input = colexec.NewParallelUnorderedSynchronizer(parallelUnorderedSynchronizerInputs, &wg)
-			input = colexecmisc.NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
-			return colexecmisc.NewConstOp(testAllocator, input, types.Int, constVal, 1)
+			input = colexecbase.NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
+			return colexecbase.NewConstOp(testAllocator, input, types.Int, constVal, 1)
 		})
 	wg.Wait()
 }
