@@ -261,6 +261,9 @@ DATABASE multi_region_test_survive_zone_failure_db  ALTER DATABASE multi_region_
                                                     voter_constraints = '[+region=us-east-1]',
                                                     lease_preferences = '[[+region=us-east-1]]'
 
+statement error PRIMARY REGION must be specified when using SURVIVE
+CREATE DATABASE no_primary_region SURVIVE ZONE FAILURE
+
 statement error PRIMARY REGION must be specified if REGIONS are specified
 CREATE DATABASE no_primary_region_db REGIONS "ap-southeast-2"
 
