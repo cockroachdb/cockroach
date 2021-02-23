@@ -355,9 +355,9 @@ func TestParseGeometry(t *testing.T) {
 		{
 			"invalid",
 			Geometry{},
-			`lex error: invalid keyword at pos 0
-invalid
-^`,
+			`syntax error: invalid keyword at line 1, pos 0
+LINE 1: invalid
+        ^`,
 		},
 		{
 			"",
@@ -571,9 +571,9 @@ func TestParseGeography(t *testing.T) {
 		{
 			"invalid",
 			Geography{},
-			`lex error: invalid keyword at pos 0
-invalid
-^`,
+			`syntax error: invalid keyword at line 1, pos 0
+LINE 1: invalid
+        ^`,
 		},
 		{
 			"",
