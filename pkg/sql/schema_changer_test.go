@@ -5226,7 +5226,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Start schema change that eventually runs a backfill.
 	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); !testutils.IsError(
-		err, fmt.Sprintf("%d entries, expected %d violates unique constraint", maxValue, maxValue+1),
+		err, " duplicate key value violates unique constraint \"foo\"",
 	) {
 		t.Fatal(err)
 	}
