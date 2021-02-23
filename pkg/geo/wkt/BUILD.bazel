@@ -5,7 +5,7 @@ go_library(
     srcs = [
         "lex.go",
         "wkt.go",
-        "wkt_generated.go",
+        ":wkt-generated",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/wkt",
     visibility = ["//visibility:public"],
@@ -20,5 +20,22 @@ go_test(
     deps = [
         "@com_github_stretchr_testify//require",
         "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+# Based on pkg/geo/wkt/generate.sh file
+genrule(
+    name = "wkt-generated",
+    srcs = [
+        "wkt.y",
+    ],
+    outs = ["wkt_generated.go"],
+    cmd = """
+    $(location @org_golang_x_tools//cmd/goyacc) -o $(location wkt_generated.go) -p "wkt" $(location wkt.y)
+    cat $(location wkt_generated.go) | sed -e 's/wktErrorVerbose = false/wktErrorVerbose = true/' > wkt_generated.go.tmp
+    mv wkt_generated.go.tmp $(location wkt_generated.go)
+    """,
+    tools = [
+        "@org_golang_x_tools//cmd/goyacc",
     ],
 )
