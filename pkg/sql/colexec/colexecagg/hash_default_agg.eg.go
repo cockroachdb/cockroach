@@ -44,7 +44,9 @@ func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
 }
 
-func (a *defaultHashAgg) Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int) {
+func (a *defaultHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.

@@ -147,10 +147,10 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexecmisc.distinctChainOps
+│     └ *colexecbase.distinctChainOps
 │       └ *colexec.ParallelUnorderedSynchronizer
 │         ├ *colexec.countOp
-│         │ └ *colexecmisc.simpleProjectOp
+│         │ └ *colexecbase.simpleProjectOp
 │         │   └ *colexecutils.CancelChecker
 │         │     └ *colfetcher.ColBatchScan
 │         ├ *colrpc.Inbox
@@ -161,28 +161,28 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
       └ *colexec.countOp
-        └ *colexecmisc.simpleProjectOp
+        └ *colexecbase.simpleProjectOp
           └ *colexecutils.CancelChecker
             └ *colfetcher.ColBatchScan
 
@@ -193,10 +193,10 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexecmisc.distinctChainOps
+│     └ *colexecbase.distinctChainOps
 │       └ *colexec.ParallelUnorderedSynchronizer
 │         ├ *colexec.countOp
-│         │ └ *colexecmisc.simpleProjectOp
+│         │ └ *colexecbase.simpleProjectOp
 │         │   └ *colexec.diskSpillerBase
 │         │     ├ *colexecjoin.hashJoiner
 │         │     │ ├ *colexec.ParallelUnorderedSynchronizer
@@ -230,7 +230,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
 │           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
@@ -260,7 +260,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
 │           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
@@ -290,7 +290,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexecmisc.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
 │           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
@@ -320,7 +320,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
       └ *colexec.countOp
-        └ *colexecmisc.simpleProjectOp
+        └ *colexecbase.simpleProjectOp
           └ *colexec.diskSpillerBase
             ├ *colexecjoin.hashJoiner
             │ ├ *colexec.ParallelUnorderedSynchronizer

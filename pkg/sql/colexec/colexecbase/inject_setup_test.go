@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexecmisc_test
+package colexecbase_test
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	// Inject a testing helper for NewColOperator so colexecmisc tests can
+	// Inject a testing helper for NewColOperator so colexecbase tests can
 	// use NewColOperator without an import cycle.
 	colexecargs.TestNewColOperator = colbuilder.NewColOperator
 }

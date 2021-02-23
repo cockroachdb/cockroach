@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -47,7 +47,7 @@ func NewWindowSortingPartitioner(
 	}
 
 	var distinctCol []bool
-	input, distinctCol, err = colexecmisc.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
+	input, distinctCol, err = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
 	if err != nil {
 		return nil, err
 	}

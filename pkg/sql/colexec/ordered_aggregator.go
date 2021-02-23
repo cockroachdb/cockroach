@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -148,7 +148,7 @@ func NewOrderedAggregator(
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
 		}
 	}
-	op, groupCol, err := colexecmisc.OrderedDistinctColsToOperators(args.Input, args.Spec.GroupCols, args.InputTypes)
+	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(args.Input, args.Spec.GroupCols, args.InputTypes)
 	if err != nil {
 		return nil, err
 	}

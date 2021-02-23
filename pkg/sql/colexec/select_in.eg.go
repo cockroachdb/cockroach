@@ -2293,10 +2293,7 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 }
 
 func cmpInInterval(
-	targetElem duration.Duration,
-	targetCol coldata.Durations,
-	filterRow []duration.Duration,
-	hasNulls bool,
+	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
 ) comparisonResult {
 	// Filter row input is already sorted due to normalization, so we can use a
 	// binary search right away.

@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -910,7 +910,7 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
-				result.Op, err = colexecmisc.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
+				result.Op, err = colexecbase.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 			} else {
 				// We have separate unit tests that instantiate in-memory
 				// distinct operators, so we don't need to look at
@@ -958,7 +958,7 @@ func NewColOperator(
 				return r, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Op = colexecmisc.NewOrdinalityOp(streamingAllocator, inputs[0], outputIdx)
+			result.Op = colexecbase.NewOrdinalityOp(streamingAllocator, inputs[0], outputIdx)
 			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
@@ -1232,7 +1232,7 @@ func NewColOperator(
 						projection = append(projection, i)
 					}
 					projection = append(projection, wf.OutputColIdx+tempColOffset)
-					result.Op = colexecmisc.NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
+					result.Op = colexecbase.NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
 				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []*types.T{}...)
@@ -1308,7 +1308,7 @@ func NewColOperator(
 			input := r.Op
 			castedIdx := len(r.ColumnTypes)
 			resultTypes := appendOneType(r.ColumnTypes, expected)
-			r.Op, err = colexecmisc.GetCastOperator(
+			r.Op, err = colexecbase.GetCastOperator(
 				streamingAllocator, input, i, castedIdx, actual, expected,
 			)
 			if err != nil {
@@ -1441,7 +1441,7 @@ func (r *postProcessResult) planPostProcessSpec(
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		r.Op = colexecmisc.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
+		r.Op = colexecbase.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
 		newTypes := make([]*types.T, len(renderedCols))
 		for i, j := range renderedCols {
 			newTypes[i] = r.ColumnTypes[j]
@@ -1578,7 +1578,7 @@ func planFilterExpr(
 		for i := range columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
-		op = colexecmisc.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
+		op = colexecbase.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
 	}
 	return op, nil
 }
@@ -1592,7 +1592,7 @@ func addProjection(
 	for i, j := range projection {
 		newTypes[i] = typs[j]
 	}
-	return colexecmisc.NewSimpleProjectOp(op, len(typs), projection), newTypes
+	return colexecbase.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
 func planSelectionOperators(
@@ -1763,7 +1763,7 @@ func planCastOperator(
 	factory coldata.ColumnFactory,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
-	op, err = colexecmisc.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
+	op, err = colexecbase.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
 	typs = appendOneType(columnTypes, toType)
 	return op, outputIdx, typs, err
 }
@@ -1790,10 +1790,10 @@ func planProjectionOperators(
 		if datumType.Family() == types.UnknownFamily {
 			// We handle Unknown type by planning a special constant null
 			// operator.
-			return colexecmisc.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
+			return colexecbase.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
 		}
 		constVal := colconv.GetDatumToPhysicalFn(datumType)(datum)
-		return colexecmisc.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
+		return colexecbase.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
 	}
 	resultIdx = -1
 	switch t := expr.(type) {

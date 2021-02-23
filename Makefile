@@ -865,6 +865,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecagg/ordered_min_max_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_int_agg.eg.go \
+  pkg/sql/colexec/colexecbase/cast.eg.go \
+  pkg/sql/colexec/colexecbase/const.eg.go \
+  pkg/sql/colexec/colexecbase/distinct.eg.go \
   pkg/sql/colexec/colexeccmp/default_cmp_expr.eg.go \
   pkg/sql/colexec/colexechash/hashtable_distinct.eg.go \
   pkg/sql/colexec/colexechash/hashtable_full_default.eg.go \
@@ -883,9 +886,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightanti.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightsemi.eg.go \
-  pkg/sql/colexec/colexecmisc/cast.eg.go \
-  pkg/sql/colexec/colexecmisc/const.eg.go \
-  pkg/sql/colexec/colexecmisc/distinct.eg.go \
   pkg/sql/colexec/colexecproj/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/colexecproj/proj_const_left_ops.eg.go \
   pkg/sql/colexec/colexecproj/proj_const_right_ops.eg.go \

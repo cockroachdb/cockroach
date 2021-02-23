@@ -57,7 +57,7 @@ import (
 %s
 `
 
-const distinctOpsTmpl = "pkg/sql/colexec/colexecmisc/distinct_tmpl.go"
+const distinctOpsTmpl = "pkg/sql/colexec/colexecbase/distinct_tmpl.go"
 
 func genDistinctOps(targetPkg, targetTmpl string) generator {
 	return func(inputFileContents string, wr io.Writer) error {
@@ -108,6 +108,6 @@ func init() {
 {{end}}
 {{end}}
 `
-	registerGenerator(genDistinctOps("colexecmisc", distinctOp), "distinct.eg.go", distinctOpsTmpl)
+	registerGenerator(genDistinctOps("colexecbase", distinctOp), "distinct.eg.go", distinctOpsTmpl)
 	registerGenerator(genDistinctOps("colexec", sortPartitioner), "sort_partitioner.eg.go", distinctOpsTmpl)
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -273,7 +273,7 @@ func NewMergeJoinOp(
 			}
 			if castLeftToRight {
 				castColumnIdx := len(actualLeftTypes)
-				left, err = colexecmisc.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
+				left, err = colexecbase.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
 				if err != nil {
 					return nil, err
 				}
@@ -281,7 +281,7 @@ func NewMergeJoinOp(
 				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
 			} else {
 				castColumnIdx := len(actualRightTypes)
-				right, err = colexecmisc.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
+				right, err = colexecbase.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
 				if err != nil {
 					return nil, err
 				}
@@ -355,7 +355,7 @@ func NewMergeJoinOp(
 		// numActualLeftTypes + numActualRightTypes) range.
 		projection = append(projection, uint32(numActualLeftTypes+i))
 	}
-	return colexecmisc.NewSimpleProjectOp(
+	return colexecbase.NewSimpleProjectOp(
 		mergeJoinerOp, numActualLeftTypes+numActualRightTypes, projection,
 	).(colexecop.ResettableOperator), nil
 }
@@ -442,13 +442,13 @@ func newMergeJoinBase(
 	}
 	var err error
 	base.left.distincterInput = &colexecop.FeedOperator{}
-	base.left.distincter, base.left.distinctOutput, err = colexecmisc.OrderedDistinctColsToOperators(
+	base.left.distincter, base.left.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
 	base.right.distincterInput = &colexecop.FeedOperator{}
-	base.right.distincter, base.right.distinctOutput, err = colexecmisc.OrderedDistinctColsToOperators(
+	base.right.distincter, base.right.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
 		return base, err
