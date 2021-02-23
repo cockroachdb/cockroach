@@ -466,10 +466,11 @@ func (b *writeBuffer) writeBinaryDatum(
 		subWriter := newWriteBuffer(nil /* bytecount */)
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
-		for _, elem := range v.D {
-			oid := elem.ResolvedType().Oid()
+		tupleTypes := t.TupleContents()
+		for i, elem := range v.D {
+			oid := tupleTypes[i].Oid()
 			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
