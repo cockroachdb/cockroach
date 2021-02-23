@@ -18,7 +18,7 @@ go_library(
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",  # keep

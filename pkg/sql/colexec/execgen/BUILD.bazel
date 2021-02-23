@@ -14,7 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
