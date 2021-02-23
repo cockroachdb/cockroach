@@ -54,13 +54,11 @@ func doCompleteIngestion(
 	// TODO(adityamaru): This will change once we allow a future cutover time to
 	// be specified.
 	hw := progress.GetHighWater()
-	if hw == nil {
-		return errors.Newf("cannot cutover to a timestamp %s that is after the latest resolved time"+
-			" %s for job %d", cutoverTimestamp.String(), hlc.Timestamp{}.String(), jobID)
-	}
-
-	highWaterTimestamp := *hw
-	if highWaterTimestamp.Less(cutoverTimestamp) {
+	if hw == nil || hw.Less(cutoverTimestamp) {
+		var highWaterTimestamp hlc.Timestamp
+		if hw != nil {
+			highWaterTimestamp = *hw
+		}
 		return errors.Newf("cannot cutover to a timestamp %s that is after the latest resolved time"+
 			" %s for job %d", cutoverTimestamp.String(), highWaterTimestamp.String(), jobID)
 	}
@@ -69,7 +67,7 @@ func doCompleteIngestion(
 	// been set.
 	// TODO(adityamaru): This should change in the future, a user should be
 	// allowed to correct their cutover time if the process of reverting the job
-	// has not started..
+	// has not started.
 	if !sp.StreamIngest.CutoverTime.IsEmpty() {
 		return errors.Newf("cutover timestamp already set to %s, "+
 			"job %d is in the process of cutting over", sp.StreamIngest.CutoverTime.String(), jobID)
