@@ -2358,9 +2358,9 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		err := errors.Newf("attempting to send snapshot that does not contain the recipient as a replica; "+
-			"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
-		return errors.Mark(err, errMarkSnapshotError)
+		return errors.Wrapf(errMarkSnapshotError,
+			"attempting to send snapshot that does not contain the recipient as a replica; "+
+				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
 	}
 
 	sender, err := r.GetReplicaDescriptor()
@@ -2372,7 +2372,7 @@ func (r *Replica) sendSnapshot(
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
-		return &benignError{errors.New("raft status not initialized")}
+		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 	}
 
 	usesReplicatedTruncatedState, err := storage.MVCCGetProto(
