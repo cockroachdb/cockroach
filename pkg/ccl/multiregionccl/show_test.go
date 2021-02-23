@@ -74,15 +74,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC),
 	FAMILY "primary" (a, crdb_region, rowid)
-) LOCALITY REGIONAL BY ROW;
-ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@a_idx CONFIGURE ZONE USING
-	num_voters = 3,
-	voter_constraints = '[+region=us-west1]',
-	lease_preferences = '[[+region=us-west1]]';
-ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@primary CONFIGURE ZONE USING
-	num_voters = 3,
-	voter_constraints = '[+region=us-west1]',
-	lease_preferences = '[[+region=us-west1]]'`,
+) LOCALITY REGIONAL BY ROW`,
 			Database: "mrdb",
 		},
 		{
@@ -98,15 +90,7 @@ ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@primary CONFIGURE ZONE USI
 	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC),
 	FAMILY "primary" (a, crdb_region_col, rowid)
-) LOCALITY REGIONAL BY ROW AS crdb_region_col;
-ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@a_idx CONFIGURE ZONE USING
-	num_voters = 3,
-	voter_constraints = '[+region=us-west1]',
-	lease_preferences = '[[+region=us-west1]]';
-ALTER PARTITION "us-west1" OF INDEX mrdb.public.%[1]s@primary CONFIGURE ZONE USING
-	num_voters = 3,
-	voter_constraints = '[+region=us-west1]',
-	lease_preferences = '[[+region=us-west1]]'`,
+) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
 			Database: "mrdb",
 		},
 	}
