@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -63,17 +62,6 @@ func pgTypeForParserType(t *types.T) pgType {
 		oid:  t.Oid(),
 		size: size,
 	}
-}
-
-// resolveBlankPaddedChar pads the given string with spaces if blank padding is
-// required or returns the string unmodified otherwise.
-func resolveBlankPaddedChar(s string, t *types.T) string {
-	if t.Oid() == oid.T_bpchar {
-		// Pad spaces on the right of the string to make it of length specified in
-		// the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
-	}
-	return s
 }
 
 // writeTextDatum writes d to the buffer. Type t must be specified for types
@@ -142,7 +130,7 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
@@ -429,7 +417,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)

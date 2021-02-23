@@ -43,3 +43,24 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# 80 = ASCII 'P' for Portal
+# ResultFormatCodes [0] = FormatText
+send
+Parse {"Name": "s3", "Query": "SELECT ('a'::text, 'b'::varchar(4), 'c'::char(1), 'd'::char(2), 'e'::\"char\") AS row"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ResultFormatCodes": [0]}
+Describe {"ObjectType": 80, "Name": "p3"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+# PostgreSQL reports a DataTypeSize of -1 for tuples, whereas CockroachDB
+# computes the size of the tuple.
+until ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"row","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":2249,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"(a,b,c,\"d \",e)"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
