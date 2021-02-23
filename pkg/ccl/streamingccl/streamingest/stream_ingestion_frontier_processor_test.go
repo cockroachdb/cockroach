@@ -53,10 +53,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DB:          kvDB,
-			DiskMonitor: testDiskMonitor,
 			JobRegistry: registry,
 		},
-		EvalCtx: &evalCtx,
+		EvalCtx:     &evalCtx,
+		DiskMonitor: testDiskMonitor,
 	}
 
 	out := &distsqlutils.RowBuffer{}

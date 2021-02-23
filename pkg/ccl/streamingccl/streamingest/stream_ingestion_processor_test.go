@@ -389,11 +389,11 @@ func runStreamIngestionProcessor(
 
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DB:          kvDB,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
+			DB:       kvDB,
 		},
-		EvalCtx: &evalCtx,
+		EvalCtx:     &evalCtx,
+		DiskMonitor: testDiskMonitor,
 	}
 	flowCtx.Cfg.TestingKnobs.StreamIngestionTestingKnobs = &sql.StreamIngestionTestingKnobs{
 		Interceptors: interceptEvents}

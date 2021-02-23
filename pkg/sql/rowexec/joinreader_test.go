@@ -772,9 +772,9 @@ func TestJoinReader(t *testing.T) {
 								Cfg: &execinfra.ServerConfig{
 									Settings:    st,
 									TempStorage: tempEngine,
-									DiskMonitor: diskMonitor,
 								},
-								Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
+								Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+								DiskMonitor: diskMonitor,
 							}
 							encRows := make(rowenc.EncDatumRows, len(c.input))
 							for rowIdx, row := range c.input {
@@ -930,9 +930,9 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
-		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		DiskMonitor: diskMonitor,
 	}
 	// Set the memory limit to the minimum allocation size so that the row
 	// container can buffer some rows in memory before spilling to disk. This
@@ -1032,9 +1032,9 @@ func TestJoinReaderDrain(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
-		Txn: leafTxn,
+		Txn:         leafTxn,
+		DiskMonitor: diskMonitor,
 	}
 
 	encRow := make(rowenc.EncDatumRow, 1)
@@ -1246,9 +1246,9 @@ func BenchmarkJoinReader(b *testing.B) {
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
-				DiskMonitor: diskMonitor,
-				Settings:    st,
+				Settings: st,
 			},
+			DiskMonitor: diskMonitor,
 		}
 	)
 	defer logScope.Close(b)

@@ -274,7 +274,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 			fmt.Sprintf("router-limited-%d", rb.outputs[i].streamID),
 		)
 		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
-			ctx, flowCtx.Cfg.DiskMonitor,
+			ctx, flowCtx.DiskMonitor,
 			fmt.Sprintf("router-disk-%d", rb.outputs[i].streamID),
 		)
 		// Note that the monitor is an unlimited one since we don't know how
