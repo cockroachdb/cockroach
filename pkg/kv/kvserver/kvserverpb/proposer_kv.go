@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-var maxRaftCommandFooterSize = (&RaftCommandFooter{
+var maxMaxLeaseFooterSize = (&MaxLeaseFooter{
 	MaxLeaseIndex: math.MaxUint64,
 }).Size()
 
@@ -28,10 +28,10 @@ var maxClosedTimestampFooterSize = (&ClosedTimestampFooter{
 	},
 }).Size()
 
-// MaxRaftCommandFooterSize returns the maximum possible size of an
-// encoded RaftCommandFooter proto.
-func MaxRaftCommandFooterSize() int {
-	return maxRaftCommandFooterSize
+// MaxMaxLeaseFooterSize returns the maximum possible size of an encoded
+// MaxLeaseFooter proto.
+func MaxMaxLeaseFooterSize() int {
+	return maxMaxLeaseFooterSize
 }
 
 // MaxClosedTimestampFooterSize returns the maximmum possible size of an encoded

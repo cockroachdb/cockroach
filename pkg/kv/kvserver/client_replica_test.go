@@ -3356,15 +3356,15 @@ func TestProposalOverhead(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.Server(0).DB()
-	// NB: the expected overhead reflects the space overhead currently
-	// present in Raft commands. This test will fail if that overhead
-	// changes. Try to make this number go down and not up. It slightly
-	// undercounts because our proposal filter is called before
-	// maxLeaseIndex is filled in. The difference between the user and system
-	// overhead is that users ranges do not have rangefeeds on by default whereas
-	// system ranges do.
+	// NB: the expected overhead reflects the space overhead currently present
+	// in Raft commands. This test will fail if that overhead changes. Try to
+	// make this number go down and not up. It slightly undercounts because our
+	// proposal filter is called before MaxLeaseIndex or ClosedTimestamp are
+	// filled in. The difference between the user and system overhead is that
+	// users ranges do not have rangefeeds on by default whereas system ranges
+	// do.
 	const (
-		expectedUserOverhead uint32 = 45
+		expectedUserOverhead uint32 = 42
 	)
 	t.Run("user-key overhead", func(t *testing.T) {
 		userKey := tc.ScratchRange(t)
