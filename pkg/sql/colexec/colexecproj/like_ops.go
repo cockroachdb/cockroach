@@ -13,7 +13,7 @@ package colexecproj
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,12 +26,12 @@ import (
 func GetLikeProjectionOperator(
 	allocator *colmem.Allocator,
 	ctx *tree.EvalContext,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	colIdx int,
 	resultIdx int,
 	pattern string,
 	negate bool,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	likeOpType, pattern, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func GetLikeProjectionOperator(
 	pat := []byte(pattern)
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	base := projConstOpBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    resultIdx,

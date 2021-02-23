@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -978,7 +978,7 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
-	hjOpConstructor func(sources []colexecbase.Operator) (colexecbase.Operator, error),
+	hjOpConstructor func(sources []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	tc.init()
 	inputs := []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples}
@@ -1011,7 +1011,7 @@ func TestHashJoiner(t *testing.T) {
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 		for _, tc := range tcs {
 			for _, tc := range tc.mutateTypes() {
-				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
@@ -1077,7 +1077,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
+										leftSource := colexecop.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := colexectestutils.NewFiniteBatchSource(testAllocator, batch, sourceTypes, nBatches)
 										joinType := descpb.InnerJoin
 										if fullOuter {
@@ -1092,7 +1092,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										hj := colexecjoin.NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
-											colexecjoin.HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
+											colexecjoin.HashJoinerInitialNumBuckets, colexecop.DefaultMemoryLimit,
 										)
 										hj.Init()
 
@@ -1163,7 +1163,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	rightSource := colexectestutils.NewOpTestInput(testAllocator, 1, rightTuples, rightTypes)
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{leftSource, rightSource},
+		Inputs:              []colexecop.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

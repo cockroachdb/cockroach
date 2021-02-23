@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -202,7 +202,7 @@ func TestAndOrOps(t *testing.T) {
 					[][]*types.T{{types.Bool, types.Bool}},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						projOp, err := colexectestutils.CreateTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
 							fmt.Sprintf("@1 %s @2", test.operation), false /* canFallbackToRowexec */, testMemAcc,
@@ -262,7 +262,7 @@ func benchmarkLogicalProjOp(
 		}
 	}
 	typs := []*types.T{types.Bool, types.Bool}
-	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	input := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	logicalProjOp, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, input, typs,
 		fmt.Sprintf("@1 %s @2", operation), false /* canFallbackToRowexec */, testMemAcc,

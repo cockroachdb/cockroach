@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -52,7 +52,7 @@ func TestConst(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
 					"9" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
@@ -89,7 +89,7 @@ func TestConstNull(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{{types.Int}}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
 					"NULL::INT" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,

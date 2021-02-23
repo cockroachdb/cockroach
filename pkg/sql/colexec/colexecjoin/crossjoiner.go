@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -34,12 +34,12 @@ func NewCrossJoiner(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType descpb.JoinType,
-	left colexecbase.Operator,
-	right colexecbase.Operator,
+	left colexecop.Operator,
+	right colexecop.Operator,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &crossJoiner{
 		crossJoinerBase: newCrossJoinerBase(
 			unlimitedAllocator,
@@ -75,8 +75,8 @@ type crossJoiner struct {
 	isLeftAllNulls, isRightAllNulls bool
 }
 
-var _ colexecbase.ClosableOperator = &crossJoiner{}
-var _ colexecbase.ResettableOperator = &crossJoiner{}
+var _ colexecop.ClosableOperator = &crossJoiner{}
+var _ colexecop.ResettableOperator = &crossJoiner{}
 
 func (c *crossJoiner) Init() {
 	c.inputOne.Init()
@@ -240,10 +240,10 @@ func setAllNulls(vecs []coldata.Vec, length int) {
 }
 
 func (c *crossJoiner) Reset(ctx context.Context) {
-	if r, ok := c.inputOne.(colexecbase.Resetter); ok {
+	if r, ok := c.inputOne.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
-	if r, ok := c.inputTwo.(colexecbase.Resetter); ok {
+	if r, ok := c.inputTwo.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	c.crossJoinerBase.Reset(ctx)

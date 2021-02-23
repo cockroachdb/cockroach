@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +34,7 @@ var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, arg
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
 	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []colexecbase.Operator
+	Inputs               []colexecop.Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
@@ -78,12 +78,12 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op              colexecbase.Operator
+	Op              colexecop.Operator
 	KVReader        execinfra.KVReader
 	ColumnTypes     []*types.T
 	MetadataSources []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed.
-	ToClose     []colexecbase.Closer
+	ToClose     []colexecop.Closer
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount
 	Releasables []execinfra.Releasable

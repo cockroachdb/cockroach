@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,9 +44,7 @@ func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
 }
 
-func (a *defaultHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
-) {
+func (a *defaultHashAgg) Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
@@ -151,7 +149,7 @@ type defaultHashAggAlloc struct {
 }
 
 var _ aggregateFuncAlloc = &defaultHashAggAlloc{}
-var _ colexecbase.Closer = &defaultHashAggAlloc{}
+var _ colexecop.Closer = &defaultHashAggAlloc{}
 
 const sizeOfDefaultHashAgg = int64(unsafe.Sizeof(defaultHashAgg{}))
 const defaultHashAggSliceOverhead = int64(unsafe.Sizeof([]defaultHashAggAlloc{}))

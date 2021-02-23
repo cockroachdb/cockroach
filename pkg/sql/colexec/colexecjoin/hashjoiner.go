@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -236,8 +236,8 @@ type hashJoiner struct {
 	}
 }
 
-var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
-var _ colexecbase.Resetter = &hashJoiner{}
+var _ colexecop.BufferingInMemoryOperator = &hashJoiner{}
+var _ colexecop.Resetter = &hashJoiner{}
 
 // HashJoinerInitialNumBuckets is the number of the hash buckets initially
 // allocated by the hash table that is used by the in-memory hash joiner.
@@ -664,9 +664,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	})
 }
 
-func (hj *hashJoiner) ExportBuffered(
-	ctx context.Context, input colexecbase.Operator,
-) coldata.Batch {
+func (hj *hashJoiner) ExportBuffered(ctx context.Context, input colexecop.Operator) coldata.Batch {
 	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
@@ -716,8 +714,8 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 }
 
 func (hj *hashJoiner) Reset(ctx context.Context) {
-	for _, input := range []colexecbase.Operator{hj.inputOne, hj.inputTwo} {
-		if r, ok := input.(colexecbase.Resetter); ok {
+	for _, input := range []colexecop.Operator{hj.inputOne, hj.inputTwo} {
+		if r, ok := input.(colexecop.Resetter); ok {
 			r.Reset(ctx)
 		}
 	}
@@ -804,10 +802,10 @@ func MakeHashJoinerSpec(
 func NewHashJoiner(
 	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
 	spec HashJoinerSpec,
-	leftSource, rightSource colexecbase.Operator,
+	leftSource, rightSource colexecop.Operator,
 	initialNumBuckets uint64,
 	memoryLimit int64,
-) colexecbase.ResettableOperator {
+) colexecop.ResettableOperator {
 	return &hashJoiner{
 		twoInputNode:               newTwoInputNode(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,

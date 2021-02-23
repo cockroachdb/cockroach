@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -173,14 +173,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	colIdx         int
 	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	col1Idx        int
 	col2Idx        int
 	overloadHelper execgen.OverloadHelper
@@ -293,17 +293,17 @@ func (p *_OP_NAME) Init() {
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
 	cmpOp tree.ComparisonOperator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
 	evalCtx *tree.EvalContext,
 	cmpExpr *tree.ComparisonExpr,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
 	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
@@ -349,16 +349,16 @@ func GetSelectionConstOperator(
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
 	cmpOp tree.ComparisonOperator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
 	evalCtx *tree.EvalContext,
 	cmpExpr *tree.ComparisonExpr,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}

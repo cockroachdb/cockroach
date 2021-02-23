@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -165,8 +165,8 @@ func TestEval(t *testing.T) {
 					},
 					ResultTypes: []*types.T{typedExpr.ResolvedType()},
 				},
-				Inputs: []colexecbase.Operator{
-					&colexecbase.CallbackOperator{
+				Inputs: []colexecop.Operator{
+					&colexecop.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch

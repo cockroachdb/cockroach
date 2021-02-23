@@ -25,7 +25,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		// allowlist:
 		"github.com/cockroachdb/cockroach/pkg/col/coldata",
 		"github.com/cockroachdb/cockroach/pkg/sql/colcontainer",
-		"github.com/cockroachdb/cockroach/pkg/sql/colexecbase",
+		"github.com/cockroachdb/cockroach/pkg/sql/colexecop",
 		"github.com/cockroachdb/cockroach/pkg/sql/execinfra",
 		"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",
 		"github.com/cockroachdb/cockroach/pkg/sql/types",

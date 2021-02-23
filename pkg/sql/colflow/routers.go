@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -140,7 +140,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-var _ colexecbase.Operator = &routerOutputOp{}
+var _ colexecop.Operator = &routerOutputOp{}
 
 type routerOutputOpTestingKnobs struct {
 	// blockedThreshold is the number of buffered values above which we consider
@@ -402,7 +402,7 @@ const (
 // destination for each row. These destinations are exposed as Operators
 // returned by the constructor.
 type HashRouter struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []uint32
 
@@ -413,7 +413,7 @@ type HashRouter struct {
 	metadataSources execinfrapb.MetadataSources
 	// closers is a slice of Closers that need to be closed when the hash router
 	// terminates.
-	closers colexecbase.Closers
+	closers colexecop.Closers
 
 	// unblockedEventsChan is a channel shared between the HashRouter and its
 	// outputs. outputs send events on this channel when they are unblocked by a
@@ -453,7 +453,7 @@ type HashRouter struct {
 // needs to have a separate disk account.
 func NewHashRouter(
 	unlimitedAllocators []*colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	types []*types.T,
 	hashCols []uint32,
 	memoryLimit int64,
@@ -461,13 +461,13 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
-) (*HashRouter, []colexecbase.DrainableOperator) {
+	toClose []colexecop.Closer,
+) (*HashRouter, []colexecop.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colexecbase.DrainableOperator, len(unlimitedAllocators))
+	outputsAsOps := make([]colexecop.DrainableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these
@@ -496,15 +496,15 @@ func NewHashRouter(
 }
 
 func newHashRouterWithOutputs(
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 ) *HashRouter {
 	r := &HashRouter{
-		OneInputNode:        colexecbase.NewOneInputNode(input),
+		OneInputNode:        colexecop.NewOneInputNode(input),
 		hashCols:            hashCols,
 		outputs:             outputs,
 		closers:             toClose,
@@ -650,7 +650,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 
 // resetForTests resets the HashRouter for a test or benchmark run.
 func (r *HashRouter) resetForTests(ctx context.Context) {
-	if i, ok := r.Input.(colexecbase.Resetter); ok {
+	if i, ok := r.Input.(colexecop.Resetter); ok {
 		i.Reset(ctx)
 	}
 	r.setDrainState(hashRouterDrainStateRunning)

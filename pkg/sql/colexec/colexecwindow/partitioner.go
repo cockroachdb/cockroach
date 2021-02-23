@@ -16,26 +16,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// NewWindowSortingPartitioner creates a new colexecbase.Operator that orders
+// NewWindowSortingPartitioner creates a new colexecop.Operator that orders
 // input first based on the partitionIdxs columns and second on ordCols (i.e. it
 // handles both PARTITION BY and ORDER BY clauses of a window function) and puts
 // true in partitionColIdx'th column (which is appended if needed) for every
 // tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTyps []*types.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
-	createDiskBackedSorter func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error),
-) (op colexecbase.Operator, err error) {
+	createDiskBackedSorter func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error),
+) (op colexecop.Operator, err error) {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
@@ -54,7 +54,7 @@ func NewWindowSortingPartitioner(
 
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
-		OneInputNode:    colexecbase.NewOneInputNode(input),
+		OneInputNode:    colexecop.NewOneInputNode(input),
 		allocator:       allocator,
 		distinctCol:     distinctCol,
 		partitionColIdx: partitionColIdx,
@@ -62,7 +62,7 @@ func NewWindowSortingPartitioner(
 }
 
 type windowSortingPartitioner struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator *colmem.Allocator
 	// distinctCol is the output column of the chain of ordered distinct

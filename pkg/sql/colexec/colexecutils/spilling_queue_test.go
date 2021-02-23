@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -125,7 +125,7 @@ func TestSpillingQueue(t *testing.T) {
 						Types:              typs,
 						MemoryLimit:        memoryLimit,
 						DiskQueueCfg:       queueCfg,
-						FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
 					},
 				)
@@ -136,7 +136,7 @@ func TestSpillingQueue(t *testing.T) {
 						Types:              typs,
 						MemoryLimit:        memoryLimit,
 						DiskQueueCfg:       queueCfg,
-						FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
 					},
 				)
@@ -292,7 +292,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 			Types:              typs,
 			MemoryLimit:        memoryLimit,
 			DiskQueueCfg:       queueCfg,
-			FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
 		},
 	)
@@ -360,7 +360,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				Types:              typs,
 				MemoryLimit:        defaultMemoryLimit,
 				DiskQueueCfg:       queueCfg,
-				FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
 			}
 			var q *SpillingQueue
@@ -463,7 +463,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			Types:              typs,
 			MemoryLimit:        memoryLimit,
 			DiskQueueCfg:       queueCfg,
-			FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
 		}
 		q := NewSpillingQueue(newQueueArgs)

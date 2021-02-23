@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -35,11 +35,11 @@ import (
 // ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
 // put its output (if there is no such column, a new column is appended).
 func NewRowNumberOperator(
-	allocator *colmem.Allocator, input colexecbase.Operator, outputColIdx int, partitionColIdx int,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input colexecop.Operator, outputColIdx int, partitionColIdx int,
+) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	base := rowNumberBase{
-		OneInputNode:    colexecbase.NewOneInputNode(input),
+		OneInputNode:    colexecop.NewOneInputNode(input),
 		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
@@ -54,7 +54,7 @@ func NewRowNumberOperator(
 // variations of row number operators. Note that it is not an operator itself
 // and should not be used directly.
 type rowNumberBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	allocator       *colmem.Allocator
 	outputColIdx    int
 	partitionColIdx int
@@ -96,7 +96,7 @@ type _ROW_NUMBER_STRINGOp struct {
 	rowNumberBase
 }
 
-var _ colexecbase.Operator = &_ROW_NUMBER_STRINGOp{}
+var _ colexecop.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input.Next(ctx)

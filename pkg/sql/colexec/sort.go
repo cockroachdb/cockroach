@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -30,10 +30,10 @@ import (
 // in the input operator.
 func NewSorter(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
@@ -42,7 +42,7 @@ func newSorter(
 	input spooler,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (colexecbase.ResettableOperator, error) {
+) (colexecop.ResettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
@@ -99,8 +99,8 @@ type spooler interface {
 // allSpooler is the spooler that spools all tuples from the input. It is used
 // by the general sorter over the whole input.
 type allSpooler struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from the input.
@@ -114,13 +114,13 @@ type allSpooler struct {
 }
 
 var _ spooler = &allSpooler{}
-var _ colexecbase.Resetter = &allSpooler{}
+var _ colexecop.Resetter = &allSpooler{}
 
 func newAllSpooler(
-	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []*types.T,
+	allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T,
 ) spooler {
 	return &allSpooler{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		allocator:    allocator,
 		inputTypes:   inputTypes,
 	}
@@ -176,7 +176,7 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 }
 
 func (p *allSpooler) Reset(ctx context.Context) {
-	if r, ok := p.Input.(colexecbase.Resetter); ok {
+	if r, ok := p.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	p.spooled = false
@@ -216,8 +216,8 @@ type sortOp struct {
 	exported int
 }
 
-var _ colexecbase.BufferingInMemoryOperator = &sortOp{}
-var _ colexecbase.Resetter = &sortOp{}
+var _ colexecop.BufferingInMemoryOperator = &sortOp{}
+var _ colexecop.Resetter = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
@@ -405,7 +405,7 @@ func (p *sortOp) sort(ctx context.Context) {
 }
 
 func (p *sortOp) Reset(ctx context.Context) {
-	if r, ok := p.input.(colexecbase.Resetter); ok {
+	if r, ok := p.input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	p.emitted = 0
@@ -426,7 +426,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

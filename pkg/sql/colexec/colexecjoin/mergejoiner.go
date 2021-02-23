@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,12 +184,12 @@ type mergeJoinInput struct {
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
-	distincterInput *colexecbase.FeedOperator
-	distincter      colexecbase.Operator
+	distincterInput *colexecop.FeedOperator
+	distincter      colexecop.Operator
 	distinctOutput  []bool
 
 	// source specifies the input operator to the merge join.
-	source colexecbase.Operator
+	source colexecop.Operator
 }
 
 // The merge join operator uses a probe and build approach to generate the
@@ -217,14 +217,14 @@ func NewMergeJoinOp(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType descpb.JoinType,
-	left colexecbase.Operator,
-	right colexecbase.Operator,
+	left colexecop.Operator,
+	right colexecop.Operator,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (colexecbase.ResettableOperator, error) {
+) (colexecop.ResettableOperator, error) {
 	// Merge joiner only supports the case when the physical types in the
 	// equality columns in both inputs are the same. We, however, also need to
 	// support joining on numeric columns of different types or widths. If we
@@ -298,7 +298,7 @@ func NewMergeJoinOp(
 	if err != nil {
 		return nil, err
 	}
-	var mergeJoinerOp colexecbase.ResettableOperator
+	var mergeJoinerOp colexecop.ResettableOperator
 	switch joinType {
 	case descpb.InnerJoin:
 		mergeJoinerOp = &mergeJoinInnerOp{base}
@@ -357,7 +357,7 @@ func NewMergeJoinOp(
 	}
 	return colexecmisc.NewSimpleProjectOp(
 		mergeJoinerOp, numActualLeftTypes+numActualRightTypes, projection,
-	).(colexecbase.ResettableOperator), nil
+	).(colexecop.ResettableOperator), nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -393,8 +393,8 @@ func newMergeJoinBase(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType descpb.JoinType,
-	left colexecbase.Operator,
-	right colexecbase.Operator,
+	left colexecop.Operator,
+	right colexecop.Operator,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -441,13 +441,13 @@ func newMergeJoinBase(
 		diskAcc: diskAcc,
 	}
 	var err error
-	base.left.distincterInput = &colexecbase.FeedOperator{}
+	base.left.distincterInput = &colexecop.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = colexecmisc.OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
-	base.right.distincterInput = &colexecbase.FeedOperator{}
+	base.right.distincterInput = &colexecop.FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = colexecmisc.OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
@@ -459,7 +459,7 @@ func newMergeJoinBase(
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
 	twoInputNode
-	colexecbase.CloserHelper
+	colexecop.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
 	memoryLimit        int64
@@ -487,14 +487,14 @@ type mergeJoinBase struct {
 	diskAcc *mon.BoundAccount
 }
 
-var _ colexecbase.Resetter = &mergeJoinBase{}
-var _ colexecbase.Closer = &mergeJoinBase{}
+var _ colexecop.Resetter = &mergeJoinBase{}
+var _ colexecop.Closer = &mergeJoinBase{}
 
 func (o *mergeJoinBase) Reset(ctx context.Context) {
-	if r, ok := o.left.source.(colexecbase.Resetter); ok {
+	if r, ok := o.left.source.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
-	if r, ok := o.right.source.(colexecbase.Resetter); ok {
+	if r, ok := o.right.source.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	o.outputReady = false
@@ -698,7 +698,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 	}
 
 	isBufferedGroupComplete := false
-	input.distincter.(colexecbase.Resetter).Reset(ctx)
+	input.distincter.(colexecop.Resetter).Reset(ctx)
 	// Ignore the first row of the distincter in the first pass since we already
 	// know that we are in the same group and, thus, the row is not distinct,
 	// regardless of what the distincter outputs.
@@ -779,8 +779,8 @@ func (o *mergeJoinBase) Close(ctx context.Context) error {
 		return nil
 	}
 	var lastErr error
-	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
-		if c, ok := op.(colexecbase.Closer); ok {
+	for _, op := range []colexecop.Operator{o.left.source, o.right.source} {
+		if c, ok := op.(colexecop.Closer); ok {
 			if err := c.Close(ctx); err != nil {
 				lastErr = err
 			}
