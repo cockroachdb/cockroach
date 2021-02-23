@@ -4844,6 +4844,9 @@ may increase either contention or retry errors, or both.`,
 				jobID := int(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
+				if streaming.CompleteIngestionHook == nil {
+					return nil, errors.New("completing a stream ingestion job requires a CCL binary")
+				}
 				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
