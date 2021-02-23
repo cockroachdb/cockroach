@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -63,7 +63,7 @@ const (
 // Note that throughout this file "buckets" and "groups" mean the same thing
 // and are used interchangeably.
 type hashAggregator struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator *colmem.Allocator
 	spec      *execinfrapb.AggregatorSpec
@@ -125,12 +125,12 @@ type hashAggregator struct {
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
 	datumAlloc  rowenc.DatumAlloc
-	toClose     colexecbase.Closers
+	toClose     colexecop.Closers
 }
 
-var _ colexecbase.ResettableOperator = &hashAggregator{}
-var _ colexecbase.BufferingInMemoryOperator = &hashAggregator{}
-var _ colexecbase.ClosableOperator = &hashAggregator{}
+var _ colexecop.ResettableOperator = &hashAggregator{}
+var _ colexecop.BufferingInMemoryOperator = &hashAggregator{}
+var _ colexecop.ClosableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
 // aggregator's allocators. This number was chosen after running benchmarks of
@@ -148,7 +148,7 @@ const hashAggregatorAllocSize = 128
 // tuples.
 func NewHashAggregator(
 	args *colexecagg.NewAggregatorArgs, newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
-) (colexecbase.ResettableOperator, error) {
+) (colexecop.ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
@@ -163,7 +163,7 @@ func NewHashAggregator(
 		maxBuffered = coldata.MaxBatchSize
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:       colexecbase.NewOneInputNode(args.Input),
+		OneInputNode:       colexecop.NewOneInputNode(args.Input),
 		allocator:          args.Allocator,
 		spec:               args.Spec,
 		state:              hashAggregatorBuffering,
@@ -476,9 +476,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	}
 }
 
-func (op *hashAggregator) ExportBuffered(
-	ctx context.Context, _ colexecbase.Operator,
-) coldata.Batch {
+func (op *hashAggregator) ExportBuffered(ctx context.Context, _ colexecop.Operator) coldata.Batch {
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
 		// zero-length batch.
@@ -495,7 +493,7 @@ func (op *hashAggregator) ExportBuffered(
 }
 
 func (op *hashAggregator) Reset(ctx context.Context) {
-	if r, ok := op.Input.(colexecbase.Resetter); ok {
+	if r, ok := op.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	op.bufferingState.tuples.ResetInternalBatch()

@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,8 +38,8 @@ func newPartitionerToOperator(
 // partition on every call to Next. It is a converter from filled in
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
-	colexecbase.ZeroInputNode
-	colexecbase.NonExplainable
+	colexecop.ZeroInputNode
+	colexecop.NonExplainable
 
 	allocator    *colmem.Allocator
 	types        []*types.T
@@ -48,7 +48,7 @@ type partitionerToOperator struct {
 	batch        coldata.Batch
 }
 
-var _ colexecbase.Operator = &partitionerToOperator{}
+var _ colexecop.Operator = &partitionerToOperator{}
 
 func (p *partitionerToOperator) Init() {
 	if p.batch == nil {

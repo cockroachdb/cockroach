@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -78,7 +78,7 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // so, it'll be redeclared because we execute that template twice. To go
 // around the problem we specify it here.
 type projConstOpBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
@@ -87,7 +87,7 @@ type projConstOpBase struct {
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	allocator      *colmem.Allocator
 	col1Idx        int
 	col2Idx        int
@@ -251,17 +251,17 @@ func GetProjectionOperator(
 	inputTypes []*types.T,
 	outputType *types.T,
 	op tree.Operator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputNode:   colexecbase.NewOneInputNode(input),
+		OneInputNode:   colexecop.NewOneInputNode(input),
 		allocator:      allocator,
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,

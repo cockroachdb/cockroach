@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -23,8 +23,8 @@ import (
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
 // columns.
 func NewUnorderedDistinct(
-	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) colexecbase.ResettableOperator {
+	allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, typs []*types.T,
+) colexecop.ResettableOperator {
 	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
 	const hashTableNumBuckets = 128
@@ -40,7 +40,7 @@ func NewUnorderedDistinct(
 	)
 
 	return &unorderedDistinct{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		ht:           ht,
 	}
 }
@@ -50,7 +50,7 @@ func NewUnorderedDistinct(
 // distinct tuples from each input batch. Once at least one tuple is appended,
 // all of the distinct tuples from the batch are emitted in the output.
 type unorderedDistinct struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	ht *colexechash.HashTable
 	// lastInputBatch tracks the last input batch read from the input and not
@@ -60,8 +60,8 @@ type unorderedDistinct struct {
 	lastInputBatch coldata.Batch
 }
 
-var _ colexecbase.BufferingInMemoryOperator = &unorderedDistinct{}
-var _ colexecbase.ResettableOperator = &unorderedDistinct{}
+var _ colexecop.BufferingInMemoryOperator = &unorderedDistinct{}
+var _ colexecop.ResettableOperator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.Input.Init()
@@ -89,7 +89,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
+func (op *unorderedDistinct) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
 	if op.lastInputBatch != nil {
 		batch := op.lastInputBatch
 		op.lastInputBatch = nil
@@ -103,7 +103,7 @@ func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operato
 
 // reset resets the unorderedDistinct.
 func (op *unorderedDistinct) Reset(ctx context.Context) {
-	if r, ok := op.Input.(colexecbase.Resetter); ok {
+	if r, ok := op.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	op.ht.Reset(ctx)
@@ -112,8 +112,8 @@ func (op *unorderedDistinct) Reset(ctx context.Context) {
 // unorderedDistinctFilterer filters out tuples that are duplicates of the
 // tuples already emitted by the unordered distinct.
 type unorderedDistinctFilterer struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	ht *colexechash.HashTable
 	// seenBatch tracks whether the operator has already read at least one
@@ -121,7 +121,7 @@ type unorderedDistinctFilterer struct {
 	seenBatch bool
 }
 
-var _ colexecbase.Operator = &unorderedDistinctFilterer{}
+var _ colexecop.Operator = &unorderedDistinctFilterer{}
 
 func (f *unorderedDistinctFilterer) Init() {
 	f.Input.Init()

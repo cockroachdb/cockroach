@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -82,7 +82,7 @@ const (
 // output batch if a worst case input batch is encountered (one where every
 // value is part of a new group).
 type orderedAggregator struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	state orderedAggregatorState
 
@@ -133,16 +133,16 @@ type orderedAggregator struct {
 	// observed.
 	seenNonEmptyBatch bool
 	datumAlloc        rowenc.DatumAlloc
-	toClose           colexecbase.Closers
+	toClose           colexecop.Closers
 }
 
-var _ colexecbase.ResettableOperator = &orderedAggregator{}
-var _ colexecbase.ClosableOperator = &orderedAggregator{}
+var _ colexecop.ResettableOperator = &orderedAggregator{}
+var _ colexecop.ClosableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator.
 func NewOrderedAggregator(
 	args *colexecagg.NewAggregatorArgs,
-) (colexecbase.ResettableOperator, error) {
+) (colexecop.ResettableOperator, error) {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
@@ -165,7 +165,7 @@ func NewOrderedAggregator(
 	}
 
 	a := &orderedAggregator{
-		OneInputNode:       colexecbase.NewOneInputNode(op),
+		OneInputNode:       colexecop.NewOneInputNode(op),
 		allocator:          args.Allocator,
 		spec:               args.Spec,
 		groupCol:           groupCol,
@@ -399,7 +399,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 }
 
 func (a *orderedAggregator) Reset(ctx context.Context) {
-	if r, ok := a.Input.(colexecbase.Resetter); ok {
+	if r, ok := a.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	a.state = orderedAggregatorAggregating

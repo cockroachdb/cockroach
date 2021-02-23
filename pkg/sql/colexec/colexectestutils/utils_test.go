@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +34,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	RunTestsWithFn(t, testAllocator, inputs, nil, func(t *testing.T, sources []colexecbase.Operator) {
+	RunTestsWithFn(t, testAllocator, inputs, nil, func(t *testing.T, sources []colexecop.Operator) {
 		out := NewOpTestOutput(sources[0], inputs[0])
 
 		if err := out.Verify(); err != nil {
@@ -53,7 +53,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 		batchLen = coldata.BatchSize()
 	}
 	batch.SetLength(batchLen)
-	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	input := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	b := input.Next(context.Background())
 	b.SetLength(0)
@@ -83,7 +83,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
-	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	input := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	b := input.Next(context.Background())
 
 	b.SetLength(0)

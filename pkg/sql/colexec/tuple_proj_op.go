@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -30,12 +30,12 @@ func NewTupleProjOp(
 	inputTypes []*types.T,
 	tupleContentsIdxs []int,
 	outputType *types.T,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
-		OneInputNode:      colexecbase.NewOneInputNode(input),
+		OneInputNode:      colexecop.NewOneInputNode(input),
 		allocator:         allocator,
 		converter:         colconv.NewVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
 		tupleContentsIdxs: tupleContentsIdxs,
@@ -45,7 +45,7 @@ func NewTupleProjOp(
 }
 
 type tupleProjOp struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator         *colmem.Allocator
 	converter         *colconv.VecToDatumConverter
@@ -54,7 +54,7 @@ type tupleProjOp struct {
 	outputIdx         int
 }
 
-var _ colexecbase.Operator = &tupleProjOp{}
+var _ colexecop.Operator = &tupleProjOp{}
 
 func (t *tupleProjOp) Init() {
 	t.Input.Init()

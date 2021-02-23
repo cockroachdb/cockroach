@@ -13,8 +13,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -23,11 +23,11 @@ import (
 
 func NewAndProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -65,11 +65,11 @@ func NewAndProjOp(
 
 func NewOrProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -107,12 +107,12 @@ func NewOrProjOp(
 
 type andProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -129,10 +129,10 @@ type andProjOp struct {
 // outputIdx.
 func newAndProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -545,12 +545,12 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 
 type andRightNullProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -567,10 +567,10 @@ type andRightNullProjOp struct {
 // outputIdx.
 func newAndRightNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andRightNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -950,12 +950,12 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 
 type andLeftNullProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -972,10 +972,10 @@ type andLeftNullProjOp struct {
 // outputIdx.
 func newAndLeftNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andLeftNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -1336,12 +1336,12 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 
 type orProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1358,10 +1358,10 @@ type orProjOp struct {
 // outputIdx.
 func newOrProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -1775,12 +1775,12 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 
 type orRightNullProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1797,10 +1797,10 @@ type orRightNullProjOp struct {
 // outputIdx.
 func newOrRightNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orRightNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -2181,12 +2181,12 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 
 type orLeftNullProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -2203,10 +2203,10 @@ type orLeftNullProjOp struct {
 // outputIdx.
 func newOrLeftNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orLeftNullProjOp{
 		allocator:        allocator,
 		input:            input,

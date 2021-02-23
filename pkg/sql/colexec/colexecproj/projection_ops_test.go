@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +49,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		},
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1}, {2}, {nil}}}, colexectestutils.Tuples{{1, 2}, {2, 3}, {nil, nil}}, colexectestutils.OrderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
 				"@1 + 1" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
@@ -71,7 +71,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		},
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1, 2}, {3, 4}, {5, nil}}}, colexectestutils.Tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}}, colexectestutils.OrderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
 				"@1 + @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
@@ -93,7 +93,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		},
 	}
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, colexectestutils.Tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}}, colexectestutils.OrderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
 				"@1 / @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
@@ -105,7 +105,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	binOp := tree.Mult
-	var input colexecbase.Operator
+	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
 	inputTypes[colIdx] = types.Float
@@ -121,7 +121,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	}
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: colexecbase.NewOneInputNode(op.(*projMultFloat64Float64ConstOp).Input),
+			OneInputNode: colexecop.NewOneInputNode(op.(*projMultFloat64Float64ConstOp).Input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -137,7 +137,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	cmpOp := tree.GE
-	var input colexecbase.Operator
+	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
 	inputTypes[colIdx] = types.Int
@@ -153,7 +153,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: colexecbase.NewOneInputNode(op.(*projGEInt64Int16ConstOp).Input),
+			OneInputNode: colexecop.NewOneInputNode(op.(*projGEInt64Int16ConstOp).Input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -265,7 +265,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
 	binOp := tree.Mult
-	var input colexecbase.Operator
+	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
 	inputTypes := make([]*types.T, col2Idx+1)
@@ -281,7 +281,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputNode: colexecbase.NewOneInputNode(op.(*projMultInt16Int16Op).Input),
+			OneInputNode: colexecop.NewOneInputNode(op.(*projMultInt16Int16Op).Input),
 			allocator:    testAllocator,
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
@@ -296,7 +296,7 @@ func TestGetProjectionOperator(t *testing.T) {
 func benchmarkProjOp(
 	b *testing.B,
 	name string,
-	makeProjOp func(source *colexecbase.RepeatableBatchSource) (colexecbase.Operator, error),
+	makeProjOp func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error),
 	inputTypes []*types.T,
 	useSelectionVector bool,
 	hasNulls bool,
@@ -329,7 +329,7 @@ func benchmarkProjOp(
 			sel[i] = i
 		}
 	}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
 	op, err := makeProjOp(source)
 	require.NoError(b, err)
 	op.Init()
@@ -379,7 +379,7 @@ func BenchmarkProjOp(b *testing.B) {
 						inputTypes = inputTypes[:1]
 					}
 					name := fmt.Sprintf("proj%sInt64Int64%s/useSel=%t/hasNulls=%t", opName, kind, useSel, hasNulls)
-					benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource) (colexecbase.Operator, error) {
+					benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 						expr := fmt.Sprintf("@1 %s @2", opInfixForm)
 						if rightConst {
 							expr = fmt.Sprintf("@1 %s 2", opInfixForm)

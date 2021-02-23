@@ -12,7 +12,7 @@ package colexecsel
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -21,15 +21,15 @@ import (
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input colexecbase.Operator, colIdx int, pattern string, negate bool,
-) (colexecbase.Operator, error) {
+	ctx *tree.EvalContext, input colexecop.Operator, colIdx int, pattern string, negate bool,
+) (colexecop.Operator, error) {
 	likeOpType, pattern, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
 	}
 	pat := []byte(pattern)
 	base := selConstOpBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
 	switch likeOpType {

@@ -21,8 +21,8 @@ go_library(
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/colexecwindow",  # keep
-        "//pkg/sql/colexecbase",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
         "//pkg/sql/colfetcher",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
@@ -57,7 +57,7 @@ go_test(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecargs",
-        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/rowenc",

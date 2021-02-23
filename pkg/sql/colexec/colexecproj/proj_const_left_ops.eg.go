@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -28689,17 +28689,17 @@ func GetProjectionLConstOperator(
 	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
-		OneInputNode:   colexecbase.NewOneInputNode(input),
+		OneInputNode:   colexecop.NewOneInputNode(input),
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,

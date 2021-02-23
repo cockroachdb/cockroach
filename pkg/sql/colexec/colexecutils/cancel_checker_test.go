@@ -14,8 +14,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,7 +32,7 @@ func TestCancelChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	op := NewCancelChecker(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs))
+	op := NewCancelChecker(colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
 	cancel()
 	err := colexecerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)

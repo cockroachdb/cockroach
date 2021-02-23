@@ -15,8 +15,8 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -24,11 +24,11 @@ import (
 // panicInjector is a helper Operator that will randomly inject panics into
 // Init and Next methods of the wrapped operator.
 type panicInjector struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	rng *rand.Rand
 }
 
-var _ colexecbase.Operator = panicInjector{}
+var _ colexecop.Operator = panicInjector{}
 
 const (
 	// These constants were chosen arbitrarily with the guiding thought that
@@ -41,10 +41,10 @@ const (
 )
 
 // newPanicInjector creates a new panicInjector.
-func newPanicInjector(input colexecbase.Operator) colexecbase.Operator {
+func newPanicInjector(input colexecop.Operator) colexecop.Operator {
 	rng, _ := randutil.NewPseudoRand()
 	return &panicInjector{
-		OneInputNode: colexecbase.OneInputNode{Input: input},
+		OneInputNode: colexecop.OneInputNode{Input: input},
 		rng:          rng,
 	}
 }

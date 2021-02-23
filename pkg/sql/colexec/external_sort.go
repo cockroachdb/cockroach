@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -108,9 +108,9 @@ const (
 // some amount of RAM for its buffer. This is determined by
 // maxNumberPartitions variable.
 type externalSorter struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
-	colexecbase.CloserHelper
+	colexecop.OneInputNode
+	colexecop.NonExplainable
+	colexecop.CloserHelper
 
 	// mergeUnlimitedAllocator is used to track the memory under the batches
 	// dequeued from partitions during the merge operation.
@@ -128,7 +128,7 @@ type externalSorter struct {
 	ordering   execinfrapb.Ordering
 	// columnOrdering is the same as ordering used when creating mergers.
 	columnOrdering     colinfo.ColumnOrdering
-	inMemSorter        colexecbase.ResettableOperator
+	inMemSorter        colexecop.ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
 	partitioner        colcontainer.PartitionedQueue
 	partitionerCreator func() colcontainer.PartitionedQueue
@@ -168,7 +168,7 @@ type externalSorter struct {
 		acquiredFDs int
 	}
 
-	emitter colexecbase.Operator
+	emitter colexecop.Operator
 
 	testingKnobs struct {
 		// delegateFDAcquisitions if true, means that a test wants to force the
@@ -179,8 +179,8 @@ type externalSorter struct {
 	}
 }
 
-var _ colexecbase.ResettableOperator = &externalSorter{}
-var _ colexecbase.ClosableOperator = &externalSorter{}
+var _ colexecop.ResettableOperator = &externalSorter{}
+var _ colexecop.ClosableOperator = &externalSorter{}
 
 // NewExternalSorter returns a disk-backed general sort operator.
 // - unlimitedAllocators must have been created with a memory account derived
@@ -199,7 +199,7 @@ func NewExternalSorter(
 	sortUnlimitedAllocator *colmem.Allocator,
 	mergeUnlimitedAllocator *colmem.Allocator,
 	outputUnlimitedAllocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
@@ -209,7 +209,7 @@ func NewExternalSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) colexecop.Operator {
 	// The cache mode is chosen to reuse the cache to have a smaller cache per
 	// partition without affecting performance.
 	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
@@ -221,14 +221,14 @@ func NewExternalSorter(
 		// TODO(asubiotto): this number should be tuned.
 		maxNumberPartitions = fdSemaphore.GetLimit() / 16
 	}
-	if maxNumberPartitions < colexecbase.ExternalSorterMinPartitions {
-		maxNumberPartitions = colexecbase.ExternalSorterMinPartitions
+	if maxNumberPartitions < colexecop.ExternalSorterMinPartitions {
+		maxNumberPartitions = colexecop.ExternalSorterMinPartitions
 	}
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
-		memoryLimit = colexecbase.DefaultMemoryLimit
+		memoryLimit = colexecop.DefaultMemoryLimit
 	}
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
 	// memoryLimit of the partitions to sort in memory by those cache sizes.
@@ -262,7 +262,7 @@ func NewExternalSorter(
 		partitionedDiskQueueSemaphore = nil
 	}
 	es := &externalSorter{
-		OneInputNode:             colexecbase.NewOneInputNode(inMemSorter),
+		OneInputNode:             colexecop.NewOneInputNode(inMemSorter),
 		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		mergeMemoryLimit:         mergeMemoryLimit,
@@ -492,7 +492,7 @@ func (s *externalSorter) shouldMergeAllPartitions() bool {
 }
 
 func (s *externalSorter) Reset(ctx context.Context) {
-	if r, ok := s.Input.(colexecbase.Resetter); ok {
+	if r, ok := s.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	s.state = externalSorterNewPartition
@@ -552,7 +552,7 @@ func (s *externalSorter) createPartitionerToOperators() {
 // partitions in [firstPartitionIdx, firstPartitionIdx+numPartitions) range.
 func (s *externalSorter) createMergerForPartitions(
 	ctx context.Context,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	s.createPartitionerToOperators()
 	syncInputs := make([]SynchronizerInput, s.numPartitions)
 	for i := range syncInputs {
@@ -592,10 +592,10 @@ func (s *externalSorter) createMergerForPartitions(
 }
 
 func newInputPartitioningOperator(
-	input colexecbase.Operator, memoryLimit int64,
-) colexecbase.ResettableOperator {
+	input colexecop.Operator, memoryLimit int64,
+) colexecop.ResettableOperator {
 	return &inputPartitioningOperator{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		memoryLimit:  memoryLimit,
 	}
 }
@@ -605,8 +605,8 @@ func newInputPartitioningOperator(
 // limit. From that point, the operator returns a zero-length batch (until it is
 // reset).
 type inputPartitioningOperator struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	// memoryLimit determines the size of each partition.
 	memoryLimit int64
@@ -632,7 +632,7 @@ type inputPartitioningOperator struct {
 	interceptReset bool
 }
 
-var _ colexecbase.ResettableOperator = &inputPartitioningOperator{}
+var _ colexecop.ResettableOperator = &inputPartitioningOperator{}
 
 func (o *inputPartitioningOperator) Init() {
 	o.Input.Init()
@@ -658,7 +658,7 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 
 func (o *inputPartitioningOperator) Reset(ctx context.Context) {
 	if !o.interceptReset {
-		if r, ok := o.Input.(colexecbase.Resetter); ok {
+		if r, ok := o.Input.(colexecop.Resetter); ok {
 			r.Reset(ctx)
 		}
 	}

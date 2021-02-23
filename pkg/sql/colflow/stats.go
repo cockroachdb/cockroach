@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -29,7 +29,7 @@ import (
 
 // vectorizedStatsCollector is the common interface implemented by collectors.
 type vectorizedStatsCollector interface {
-	colexecbase.Operator
+	colexecop.Operator
 	outputStats(ctx context.Context)
 }
 
@@ -45,8 +45,8 @@ type childStatsCollector interface {
 // Next on the underlying Operator and how many batches and tuples were
 // returned.
 type batchInfoCollector struct {
-	colexecbase.Operator
-	colexecbase.NonExplainable
+	colexecop.Operator
+	colexecop.NonExplainable
 	componentID execinfrapb.ComponentID
 
 	numBatches, numTuples uint64
@@ -62,10 +62,10 @@ type batchInfoCollector struct {
 	childStatsCollectors []childStatsCollector
 }
 
-var _ colexecbase.Operator = &batchInfoCollector{}
+var _ colexecop.Operator = &batchInfoCollector{}
 
 func makeBatchInfoCollector(
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	childStatsCollectors []childStatsCollector,
@@ -117,7 +117,7 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 // (either an operator or a wrapped processor) that performs KV reads that is
 // present in the chain of operators rooted at 'op'.
 func newVectorizedStatsCollector(
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	kvReader execinfra.KVReader,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
@@ -201,7 +201,7 @@ func (vsc *vectorizedStatsCollectorImpl) outputStats(ctx context.Context) {
 // for streams. In addition to the base stats, newNetworkVectorizedStatsCollector
 // collects the network latency for a stream.
 func newNetworkVectorizedStatsCollector(
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	inbox *colrpc.Inbox,

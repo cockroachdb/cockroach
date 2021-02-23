@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -35,16 +35,16 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colmem.Allocator, colexecbase.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newOutboxFn func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
 	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
@@ -190,7 +190,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
 			allocator *colmem.Allocator,
-			op colexecbase.Operator,
+			op colexecop.Operator,
 			typs []*types.T,
 			sources []execinfrapb.MetadataSource,
 		) (*colrpc.Outbox, error) {
@@ -261,7 +261,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 					Cfg: &execinfra.ServerConfig{
 						TempFS:          ngn,
 						TempStoragePath: tempPath,
-						VecFDSemaphore:  &colexecbase.TestingSemaphore{},
+						VecFDSemaphore:  &colexecop.TestingSemaphore{},
 						Metrics:         &execinfra.DistSQLMetrics{},
 					},
 					EvalCtx: &evalCtx,

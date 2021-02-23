@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -151,7 +151,7 @@ func TestRandomizedCast(t *testing.T) {
 			output = append(output, colexectestutils.Tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 		}
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{c.fromTyp}}, output, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
 			})
 	}
@@ -193,7 +193,7 @@ func BenchmarkCastOp(b *testing.B) {
 							testAllocator, rng, typs,
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
-						source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+						source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 						op, err := createTestCastOperator(ctx, flowCtx, source, typePair[0], typePair[1])
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
@@ -211,10 +211,10 @@ func BenchmarkCastOp(b *testing.B) {
 func createTestCastOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	fromTyp *types.T,
 	toTyp *types.T,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	// We currently don't support casting to decimal type (other than when
 	// casting from decimal with the same precision), so we will allow falling
 	// back to row-by-row engine.

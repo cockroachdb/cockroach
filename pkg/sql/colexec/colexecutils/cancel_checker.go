@@ -14,16 +14,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
 // CancelChecker is an Operator that checks whether query cancellation has
 // occurred. The check happens on every batch.
 type CancelChecker struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	// Number of times check() has been called since last context cancellation
 	// check.
@@ -35,11 +35,11 @@ func (c *CancelChecker) Init() {
 	c.Input.Init()
 }
 
-var _ colexecbase.Operator = &CancelChecker{}
+var _ colexecop.Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
-func NewCancelChecker(op colexecbase.Operator) *CancelChecker {
-	return &CancelChecker{OneInputNode: colexecbase.NewOneInputNode(op)}
+func NewCancelChecker(op colexecop.Operator) *CancelChecker {
+	return &CancelChecker{OneInputNode: colexecop.NewOneInputNode(op)}
 }
 
 // Next is part of Operator interface.

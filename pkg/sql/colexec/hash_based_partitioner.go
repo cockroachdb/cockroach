@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -113,17 +113,17 @@ const (
 // "fallback" disk-backed strategy (when the recursive repartitioning doesn't
 // seem to make progress in reducing the size of the partitions).
 type hashBasedPartitioner struct {
-	colexecbase.NonExplainable
-	colexecbase.CloserHelper
+	colexecop.NonExplainable
+	colexecop.CloserHelper
 
 	unlimitedAllocator                 *colmem.Allocator
 	name                               string
 	state                              hashBasedPartitionerState
-	inputs                             []colexecbase.Operator
+	inputs                             []colexecop.Operator
 	inputTypes                         [][]*types.T
 	hashCols                           [][]uint32
-	inMemMainOp                        colexecbase.ResettableOperator
-	diskBackedFallbackOp               colexecbase.ResettableOperator
+	inMemMainOp                        colexecop.ResettableOperator
+	diskBackedFallbackOp               colexecop.ResettableOperator
 	maxPartitionSizeToProcessUsingMain int64
 	// fdState is used to acquire file descriptors up front.
 	fdState struct {
@@ -181,7 +181,7 @@ type hashBasedPartitioner struct {
 	}
 }
 
-var _ colexecbase.ClosableOperator = &hashBasedPartitioner{}
+var _ colexecop.ClosableOperator = &hashBasedPartitioner{}
 
 // hbpPartitionInfo is a helper struct that tracks the memory usage of a
 // partition. Note that if the hash-based partitioner has two inputs, we take
@@ -194,7 +194,7 @@ type hbpPartitionInfo struct {
 
 // DiskBackedSorterConstructor is used by the external operators to instantiate
 // a disk-backed sorter used in the fallback strategies.
-type DiskBackedSorterConstructor func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecbase.Operator
+type DiskBackedSorterConstructor func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator
 
 // newHashBasedPartitioner returns a disk-backed operator that utilizes
 // partitioning by hash approach to divide up the input set into separate
@@ -207,15 +207,15 @@ func newHashBasedPartitioner(
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
 	name string,
-	inputs []colexecbase.Operator,
+	inputs []colexecop.Operator,
 	inputTypes [][]*types.T,
 	hashCols [][]uint32,
-	inMemMainOpConstructor func([]*partitionerToOperator) colexecbase.ResettableOperator,
+	inMemMainOpConstructor func([]*partitionerToOperator) colexecop.ResettableOperator,
 	diskBackedFallbackOpConstructor func(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		fdSemaphore semaphore.Semaphore,
-	) colexecbase.ResettableOperator,
+	) colexecop.ResettableOperator,
 	diskAcc *mon.BoundAccount,
 	numRequiredActivePartitions int,
 ) *hashBasedPartitioner {
@@ -251,7 +251,7 @@ func newHashBasedPartitioner(
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
-		memoryLimit = colexecbase.DefaultMemoryLimit
+		memoryLimit = colexecop.DefaultMemoryLimit
 	}
 	maxPartitionSizeToProcessUsingMain := memoryLimit - int64(diskQueuesMemUsed)
 	if maxPartitionSizeToProcessUsingMain < hbpMinimalMaxPartitionSizeForMain {
@@ -633,7 +633,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	}
 	// The in-memory main operator might be a Closer (e.g. the in-memory hash
 	// aggregator), and we need to close it if so.
-	if c, ok := op.inMemMainOp.(colexecbase.Closer); ok {
+	if c, ok := op.inMemMainOp.(colexecop.Closer); ok {
 		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}
@@ -641,7 +641,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	// Note that it is ok if the disk-backed fallback operator is not a Closer -
 	// it will still be closed appropriately because we accumulate all closers
 	// in NewColOperatorResult.
-	if c, ok := op.diskBackedFallbackOp.(colexecbase.Closer); ok {
+	if c, ok := op.diskBackedFallbackOp.(colexecop.Closer); ok {
 		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}

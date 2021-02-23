@@ -14,19 +14,19 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 )
 
 // fnOp is an operator that executes an arbitrary function for its side-effects,
 // once per input batch, passing the input batch unmodified along.
 type fnOp struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	fn func()
 }
 
-var _ colexecbase.ResettableOperator = fnOp{}
+var _ colexecop.ResettableOperator = fnOp{}
 
 func (f fnOp) Init() {
 	f.Input.Init()
@@ -39,7 +39,7 @@ func (f fnOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (f fnOp) Reset(ctx context.Context) {
-	if resettableOp, ok := f.Input.(colexecbase.Resetter); ok {
+	if resettableOp, ok := f.Input.(colexecop.Resetter); ok {
 		resettableOp.Reset(ctx)
 	}
 }
