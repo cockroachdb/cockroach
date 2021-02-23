@@ -35,6 +35,7 @@ func RevertTables(
 	execCfg *ExecutorConfig,
 	tables []catalog.TableDescriptor,
 	targetTime hlc.Timestamp,
+	ignoreGCThreshold bool,
 	batchSize int64,
 ) error {
 	reverting := make(map[descpb.ID]bool, len(tables))
@@ -88,7 +89,8 @@ func RevertTables(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: targetTime,
+				TargetTime:         targetTime,
+				AllowTargetBelowGc: ignoreGCThreshold,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = batchSize

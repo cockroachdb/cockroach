@@ -81,7 +81,9 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 				ts.Backward(t.StartTime)
 			}
 		case *RevertRangeRequest:
-			ts.Backward(t.TargetTime)
+			if !t.AllowTargetBelowGc {
+				ts.Backward(t.TargetTime)
+			}
 		}
 	}
 	return ts
