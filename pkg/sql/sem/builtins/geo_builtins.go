@@ -2519,7 +2519,7 @@ The requested number of points must be not larger than 65336.`,
 					return tree.NewDFloat(tree.DFloat(t.X())), nil
 				}
 				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to ST_X() must have shape POINT")
+				return nil, errors.Newf("argument to st_x() must have shape POINT")
 			},
 			types.Float,
 			infoBuilder{
@@ -2544,11 +2544,89 @@ The requested number of points must be not larger than 65336.`,
 					return tree.NewDFloat(tree.DFloat(t.Y())), nil
 				}
 				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to ST_Y() must have shape POINT")
+				return nil, errors.Newf("argument to st_y() must have shape POINT")
 			},
 			types.Float,
 			infoBuilder{
 				info: "Returns the Y coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_z": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() || t.Layout().ZIndex() == -1 {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.Z())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to st_z() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the Z coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_m": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() || t.Layout().MIndex() == -1 {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.M())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to st_m() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the M coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_zmflag": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch layout := t.Layout(); layout {
+				case geom.XY:
+					return tree.NewDInt(tree.DInt(0)), nil
+				case geom.XYM:
+					return tree.NewDInt(tree.DInt(1)), nil
+				case geom.XYZ:
+					return tree.NewDInt(tree.DInt(2)), nil
+				case geom.XYZM:
+					return tree.NewDInt(tree.DInt(3)), nil
+				default:
+					return nil, errors.Newf("unknown geom.Layout %d", layout)
+				}
+			},
+			types.Int2,
+			infoBuilder{
+				info: "Returns a code based on the ZM coordinate dimension of a geometry (XY = 0, XYM = 1, XYZ = 2, XYZM = 3).",
 			},
 			tree.VolatilityImmutable,
 		),
