@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/sql/colexecbase:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
     name = "colexec",
@@ -211,8 +211,59 @@ go_test(
     ],
 )
 
+# Map between target name and relevant template.
+targets = [
+    ("and_or_projection.eg.go", "and_or_projection_tmpl.go"),
+    ("cast.eg.go", "cast_tmpl.go"),
+    ("const.eg.go", "const_tmpl.go"),
+    ("crossjoiner.eg.go", "crossjoiner_tmpl.go"),
+    ("default_cmp_expr.eg.go", "default_cmp_expr_tmpl.go"),
+    ("default_cmp_proj_ops.eg.go", "default_cmp_proj_ops_tmpl.go"),
+    ("default_cmp_sel_ops.eg.go", "default_cmp_sel_ops_tmpl.go"),
+    ("distinct.eg.go", "distinct_tmpl.go"),
+    ("hash_aggregator.eg.go", "hash_aggregator_tmpl.go"),
+    ("hash_utils.eg.go", "hash_utils_tmpl.go"),
+    ("hashjoiner.eg.go", "hashjoiner_tmpl.go"),
+    ("hashtable_distinct.eg.go", "hashtable_tmpl.go"),
+    ("hashtable_full_default.eg.go", "hashtable_tmpl.go"),
+    ("hashtable_full_deleting.eg.go", "hashtable_tmpl.go"),
+    ("is_null_ops.eg.go", "is_null_ops_tmpl.go"),
+    ("mergejoinbase.eg.go", "mergejoinbase_tmpl.go"),
+    ("mergejoiner_exceptall.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_fullouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_inner.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_intersectall.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftanti.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftsemi.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightanti.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightsemi.eg.go", "mergejoiner_tmpl.go"),
+    ("ordered_synchronizer.eg.go", "ordered_synchronizer_tmpl.go"),
+    ("proj_const_left_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_const_right_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_like_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_non_const_ops.eg.go", "proj_non_const_ops_tmpl.go"),
+    ("quicksort.eg.go", "quicksort_tmpl.go"),
+    ("rank.eg.go", "rank_tmpl.go"),
+    ("relative_rank.eg.go", "relative_rank_tmpl.go"),
+    ("row_number.eg.go", "row_number_tmpl.go"),
+    ("rowstovec.eg.go", "rowstovec_tmpl.go"),
+    ("select_in.eg.go", "select_in_tmpl.go"),
+    ("selection_ops.eg.go", "selection_ops_tmpl.go"),
+    ("sel_like_ops.eg.go", "selection_ops_tmpl.go"),
+    ("sort.eg.go", "sort_tmpl.go"),
+    ("substring.eg.go", "substring_tmpl.go"),
+    ("values_differ.eg.go", "values_differ_tmpl.go"),
+    ("vec_comparators.eg.go", "vec_comparators_tmpl.go"),
+    ("window_peer_grouper.eg.go", "window_peer_grouper_tmpl.go"),
+]
+
 # Define a file group for all the .eg.go targets.
-eg_go_filegroup(name = "gen-exec")
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
 
 # Define gen rules for individual eg.go files.
-gen_eg_go_rules()
+gen_eg_go_rules(targets)
