@@ -256,28 +256,29 @@ describe("selectCommissionedNodeStatuses", function () {
 });
 
 describe("sumNodeStats", function () {
+  // Each of these nodes only has half of its capacity "usable" for cockroach data.
+  // See diagram for what these stats mean:
+  // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
+  const nodeStatuses: INodeStatus[] = [
+    {
+      desc: { node_id: 1 },
+      metrics: {
+        [MetricConstants.capacity]: 100,
+        [MetricConstants.usedCapacity]: 10,
+        [MetricConstants.availableCapacity]: 40,
+      },
+    },
+    {
+      desc: { node_id: 2 },
+      metrics: {
+        [MetricConstants.capacity]: 100,
+        [MetricConstants.usedCapacity]: 10,
+        [MetricConstants.availableCapacity]: 40,
+      },
+    },
+  ];
+
   it("sums stats from an array of nodes", function () {
-    // Each of these nodes only has half of its capacity "usable" for cockroach data.
-    // See diagram for what these stats mean:
-    // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
-    const nodeStatuses: INodeStatus[] = [
-      {
-        desc: { node_id: 1 },
-        metrics: {
-          [MetricConstants.capacity]: 100,
-          [MetricConstants.usedCapacity]: 10,
-          [MetricConstants.availableCapacity]: 40,
-        },
-      },
-      {
-        desc: { node_id: 2 },
-        metrics: {
-          [MetricConstants.capacity]: 100,
-          [MetricConstants.usedCapacity]: 10,
-          [MetricConstants.availableCapacity]: 40,
-        },
-      },
-    ];
     const livenessStatusByNodeID: { [key: string]: LivenessStatus } = {
       1: LivenessStatus.NODE_STATUS_LIVE,
       2: LivenessStatus.NODE_STATUS_LIVE,
@@ -288,5 +289,11 @@ describe("sumNodeStats", function () {
     assert.equal(actual.capacityUsed, 20);
     // usable = used + available.
     assert.equal(actual.capacityUsable, 100);
+  });
+
+  it("returns empty stats if liveness statuses are not provided", () => {
+    const { nodeCounts, ...restStats } = sumNodeStats(nodeStatuses, {});
+    Object.entries(restStats).forEach(([_, value]) => assert.equal(value, 0));
+    Object.entries(nodeCounts).forEach(([_, value]) => assert.equal(value, 0));
   });
 });

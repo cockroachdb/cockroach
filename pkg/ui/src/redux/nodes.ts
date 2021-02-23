@@ -152,20 +152,45 @@ const nodeStatusByIDSelector = createSelector(
   },
 );
 
+export type NodeSummaryStats = {
+  nodeCounts: {
+    total: number;
+    healthy: number;
+    suspect: number;
+    dead: number;
+    decommissioned: number;
+  };
+  capacityUsed: number;
+  capacityAvailable: number;
+  capacityTotal: number;
+  capacityUsable: number;
+  usedBytes: number;
+  usedMem: number;
+  totalRanges: number;
+  underReplicatedRanges: number;
+  unavailableRanges: number;
+  replicas: number;
+};
+
+export type LivenessResponseStatuses = { [id: string]: LivenessStatus };
+
 /**
  * nodeSumsSelector returns an object with certain cluster-wide totals which are
  * used in different places in the UI.
  */
-const nodeSumsSelector = createSelector(
+export const nodeSumsSelector = createSelector(
   nodeStatusesSelector,
-  livenessStatusByNodeIDSelector,
+  (state: AdminUIState): LivenessResponseStatuses =>
+    state.cachedData.liveness.data?.statuses,
+  (state: AdminUIState) =>
+    state.cachedData.liveness.valid && state.cachedData.nodes.valid,
   sumNodeStats,
 );
 
 export function sumNodeStats(
   nodeStatuses: INodeStatus[],
-  livenessStatusByNodeID: { [id: string]: LivenessStatus },
-) {
+  livenessStatusByNodeID: LivenessResponseStatuses,
+): NodeSummaryStats {
   const result = {
     nodeCounts: {
       total: 0,
@@ -185,7 +210,7 @@ export function sumNodeStats(
     unavailableRanges: 0,
     replicas: 0,
   };
-  if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
+  if (_.isArray(nodeStatuses) && !_.isEmpty(livenessStatusByNodeID)) {
     nodeStatuses.forEach((n) => {
       const status = livenessStatusByNodeID[n.desc.node_id];
       if (status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED) {
