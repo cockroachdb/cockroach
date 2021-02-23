@@ -1766,7 +1766,7 @@ func (r *restoreResumer) dropDescriptors(
 		Progress:      jobspb.SchemaChangeGCProgress{},
 		NonCancelable: true,
 	}
-	if _, err := jr.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+	if _, err := jr.CreateJobWithTxn(ctx, gcJobRecord, jr.MakeJobID(), txn); err != nil {
 		return err
 	}
 

@@ -488,6 +488,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ResumeSpans: []roachpb.Span{span},
 				}
 			}
+			jobID := jr.MakeJobID()
 			j, err = jr.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 				Description:   "testing",
 				Statement:     "testing",
@@ -500,15 +501,15 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ResumeSpanList:  resumeSpanList,
 				},
 				Progress: jobspb.SchemaChangeGCProgress{},
-			}, txn)
+			}, jobID, txn)
 			if err != nil {
 				return err
 			}
 			mut.MutationJobs = append(mut.MutationJobs, descpb.TableDescriptor_MutationJob{
-				JobID:      *j.ID(),
+				JobID:      jobID,
 				MutationID: 1,
 			})
-			jobToBlock.Store(*j.ID())
+			jobToBlock.Store(jobID)
 			mut.MaybeIncrementVersion()
 			table = mut.ImmutableCopy().(catalog.TableDescriptor)
 			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)

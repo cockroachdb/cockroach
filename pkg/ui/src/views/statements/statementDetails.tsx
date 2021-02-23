@@ -17,6 +17,8 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
+  refreshLiveness,
+  refreshNodes,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
 } from "src/redux/apiReducers";
@@ -192,6 +194,8 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   createStatementDiagnosticsReport: createStatementDiagnosticsReportAction,
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
+  refreshNodes: refreshNodes,
+  refreshNodesLiveness: refreshLiveness,
 };
 
 export default withRouter(

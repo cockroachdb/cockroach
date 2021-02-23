@@ -72,11 +72,12 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	}
 	mkJobAndRecord := func() (j *jobs.Job, rec *ptpb.Record) {
 		ts := s0.Clock().Now()
+		jobID := jr.MakeJobID()
 		require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), txn); err != nil {
+			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), jobID, txn); err != nil {
 				return err
 			}
-			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), *j.ID(), ts, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
+			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), jobID, ts, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
 			return ptp.Protect(ctx, txn, rec)
 		}))
 		return j, rec

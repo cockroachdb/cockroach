@@ -112,15 +112,17 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 func (evalCtx *extendedEvalContext) QueueJob(
 	ctx context.Context, record jobs.Record,
 ) (*jobs.Job, error) {
+	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
 	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
 		ctx,
 		record,
+		jobID,
 		evalCtx.Txn,
 	)
 	if err != nil {
 		return nil, err
 	}
-	*evalCtx.Jobs = append(*evalCtx.Jobs, *job.ID())
+	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
 	return job, nil
 }
 

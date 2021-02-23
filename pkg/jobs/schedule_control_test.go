@@ -150,7 +150,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 
 	// Create few jobs not started by any schedule.
 	for i := 0; i < numJobs; i++ {
-		require.NoError(t, registry.NewJob(record).Created(context.Background()))
+		require.NoError(t, registry.NewJob(record, registry.MakeJobID()).Created(context.Background()))
 	}
 
 	var scheduleID int64 = 123
@@ -179,7 +179,8 @@ func TestJobsControlForSchedules(t *testing.T) {
 					Name: CreatedByScheduledJobs,
 					ID:   scheduleID,
 				}
-				newJob := registry.NewJob(record)
+				jobID := registry.MakeJobID()
+				newJob := registry.NewJob(record, jobID)
 				require.NoError(t, newJob.Created(context.Background()))
 
 				if tc.command == "resume" {
@@ -188,7 +189,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 					// We can't just pause the job (since it will stay in pause-requested state forever).
 					// So, just force set job status to paused.
 					th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", StatusPaused,
-						*newJob.ID())
+						jobID)
 				}
 			}
 		}
@@ -269,9 +270,10 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				Name: CreatedByScheduledJobs,
 				ID:   scheduleID,
 			}
-			newJob := registry.NewJob(record)
+			jobID := registry.MakeJobID()
+			newJob := registry.NewJob(record, jobID)
 			require.NoError(t, newJob.Created(context.Background()))
-			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, *newJob.ID())
+			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
 		}
 
 		jobControl := fmt.Sprintf(tc.command+" JOBS FOR SCHEDULE %d", scheduleID)

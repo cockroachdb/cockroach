@@ -136,8 +136,19 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
-	job, err := n.p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, *record)
-	if err != nil {
+	var job *jobs.StartableJob
+	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
+	if err := n.p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
+	}); err != nil {
+		if job != nil {
+			if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+			}
+		}
+		return err
+	}
+	if err := job.Start(ctx); err != nil {
 		return err
 	}
 
@@ -146,7 +157,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
 			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
-				ctx, "delete-job", nil /* txn */, stmt, *job.ID(),
+				ctx, "delete-job", nil /* txn */, stmt, jobID,
 			); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
