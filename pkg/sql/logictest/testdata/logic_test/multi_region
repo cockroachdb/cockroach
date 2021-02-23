@@ -1,0 +1,7 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement error pgcode XXC01 creating multi-region databases requires a CCL binary
+CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAILURE
+
+statement error pgcode XXC01 creating multi-region databases requires a CCL binary
+ALTER DATABASE test PRIMARY REGION "ap-southeast-2"
