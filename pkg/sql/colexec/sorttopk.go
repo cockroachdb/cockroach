@@ -13,6 +13,7 @@ package colexec
 import (
 	"container/heap"
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -216,7 +217,10 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit)
+	// For now, we don't enforce any footprint-based memory limit.
+	// TODO(yuzefovich): refactor this.
+	const maxBatchMemSize = math.MaxInt64
+	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit, maxBatchMemSize)
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do

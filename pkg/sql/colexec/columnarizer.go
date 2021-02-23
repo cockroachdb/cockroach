@@ -38,6 +38,7 @@ type Columnarizer struct {
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
+	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
 	typs            []*types.T
@@ -55,9 +56,10 @@ func NewColumnarizer(
 ) (*Columnarizer, error) {
 	var err error
 	c := &Columnarizer{
-		allocator: allocator,
-		input:     input,
-		ctx:       ctx,
+		allocator:       allocator,
+		input:           input,
+		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx.Cfg),
+		ctx:             ctx,
 	}
 	if err = c.ProcessorBase.Init(
 		nil,
@@ -90,7 +92,9 @@ func (c *Columnarizer) Init() {
 // Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	var reallocated bool
-	c.batch, reallocated = c.allocator.ResetMaybeReallocate(c.typs, c.batch, 1 /* minCapacity */)
+	c.batch, reallocated = c.allocator.ResetMaybeReallocate(
+		c.typs, c.batch, 1 /* minCapacity */, c.maxBatchMemSize,
+	)
 	if reallocated {
 		oldRows := c.buffered
 		c.buffered = make(rowenc.EncDatumRows, c.batch.Capacity())

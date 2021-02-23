@@ -1791,7 +1791,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			right: hashJoinerSourceSpec{
 				eqCols: []uint32{0}, sourceTypes: typs,
 			},
-		}, leftHJSource, rightHJSource)
+		}, leftHJSource, rightHJSource, defaultMemoryLimit)
 	hj.Init()
 
 	var mjOutputTuples, hjOutputTuples tuples

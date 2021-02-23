@@ -809,9 +809,13 @@ func NewColOperator(
 				return r, err
 			}
 
+			memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+			if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
+				memoryLimit = 1
+			}
 			inMemoryHashJoiner := colexec.NewHashJoiner(
 				colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
-				hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
+				hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1], memoryLimit,
 			)
 			if args.TestingKnobs.DiskSpillingDisabled {
 				// We will not be creating a disk-backed hash joiner because we're

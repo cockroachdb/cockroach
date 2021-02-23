@@ -375,7 +375,7 @@ func NewExternalHashJoiner(
 		// limit, so we use the same unlimited allocator for both
 		// buildSideAllocator and outputUnlimitedAllocator arguments.
 		inMemHashJoiner: NewHashJoiner(
-			unlimitedAllocator, unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
+			unlimitedAllocator, unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput, memoryLimit,
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
 	}

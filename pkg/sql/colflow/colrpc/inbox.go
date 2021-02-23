@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -301,10 +302,13 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
 			colexecerror.InternalError(err)
 		}
+		// For now, we don't enforce any footprint-based memory limit.
+		// TODO(yuzefovich): refactor this.
+		const maxBatchMemSize = math.MaxInt64
 		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(
 			// We don't support type-less schema, so len(i.scratch.data) is
 			// always at least 1.
-			i.typs, i.scratch.b, i.scratch.data[0].Len(),
+			i.typs, i.scratch.b, i.scratch.data[0].Len(), maxBatchMemSize,
 		)
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
