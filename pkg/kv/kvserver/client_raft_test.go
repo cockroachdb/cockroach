@@ -2520,7 +2520,6 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 // races (primarily in asynchronous coalesced heartbeats).
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59209, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2529,9 +2528,9 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
-
-	key := tc.ScratchRange(t)
+	key := tc.ScratchRangeWithExpirationLease(t)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
 
 outer:
 	for i := 0; i < 5; i++ {
@@ -2551,11 +2550,30 @@ outer:
 						tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(replicaIdx))
 					}
 					tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
-					cb := tc.Servers[replicaIdx].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
-					cb.Break()
+					// We want to stop all nodes from talking to the replicaIdx, so need
+					// to trip the breaker on all servers but it.
+					for i := range tc.Servers {
+						if i != replicaIdx {
+							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
+							cb.Break()
+						}
+					}
 					time.Sleep(tc.GetFirstStoreFromServer(t, replicaIdx).GetStoreConfig().CoalescedHeartbeatsInterval)
-					cb.Reset()
+					for i := range tc.Servers {
+						if i != replicaIdx {
+							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
+							cb.Reset()
+						}
+					}
+					// Make sure the old replica was actually removed, before we try to re-adding it.
+					testutils.SucceedsSoon(t, func() error {
+						if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
+							return errors.Errorf("Expected replica %s to be removed", oldRepl)
+						}
+						return nil
+					})
 					tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
+					require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
 					continue outer
 				}
 				t.Fatal("could not find raft replica")
