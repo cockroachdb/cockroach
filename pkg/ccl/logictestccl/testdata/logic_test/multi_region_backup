@@ -1,5 +1,7 @@
 # LogicTest: multiregion-9node-3region-3azs
 
+skip flaky # see #60773
+
 query TTTT
 SHOW REGIONS
 ----
@@ -676,8 +678,6 @@ defaultdb
 postgres
 system
 test
-
-skip flaky # see #60773
 
 statement ok
 RESTORE DATABASE "mr-backup-1", "mr-backup-2" FROM 'nodelocal://1/mr-backup-combined/'
