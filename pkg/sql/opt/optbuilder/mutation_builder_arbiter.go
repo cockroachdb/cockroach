@@ -25,10 +25,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// arbiterIndexesAndConstraints returns sets of index ordinals and unique
-// constraint ordinals to be used as arbiter constraints for an INSERT ON
-// CONFLICT statement. This function panics if no arbiter indexes or constraints
-// are found.
+// findArbiters returns a set of arbiters for an INSERT ON CONFLICT statement.
+// Both unique indexes and unique constraints can be arbiters. This function
+// panics if no arbiters are found.
 //
 // Arbiter constraints ensure that the columns designated by conflictOrds
 // reference at most one target row of a UNIQUE index or constraint. Using ANTI
@@ -69,23 +68,25 @@ import (
 //      found.
 //   3. Otherwise, returns all partial arbiter indexes and constraints.
 //
-func (mb *mutationBuilder) arbiterIndexesAndConstraints(
+func (mb *mutationBuilder) findArbiters(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
-) (indexes util.FastIntSet, uniqueConstraints util.FastIntSet) {
+) arbiterSet {
+	arbiters := makeArbiterSet(mb)
+
 	// If conflictOrds is empty, then all unique indexes and unique without
 	// index constraints are arbiters.
 	if conflictOrds.Empty() {
 		for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 			if mb.tab.Index(idx).IsUnique() {
-				indexes.Add(idx)
+				arbiters.AddIndex(idx)
 			}
 		}
 		for uc, ucCount := 0, mb.tab.UniqueCount(); uc < ucCount; uc++ {
 			if mb.tab.Unique(uc).WithoutIndex() {
-				uniqueConstraints.Add(uc)
+				arbiters.AddUniqueConstraint(uc)
 			}
 		}
-		return indexes, uniqueConstraints
+		return arbiters
 	}
 
 	h := &mb.arbiterPredicateHelper
@@ -112,7 +113,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
 		if _, isPartial := index.Predicate(); !isPartial {
-			return util.MakeFastIntSet(idx), util.FastIntSet{}
+			return makeSingleIndexArbiterSet(mb, idx)
 		}
 
 		// If the index is a pseudo-partial index, it can always be an arbiter.
@@ -120,13 +121,13 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// uniqueness of its columns across all rows.
 		pred := h.partialIndexPredicate(idx)
 		if pred.IsTrue() {
-			return util.MakeFastIntSet(idx), util.FastIntSet{}
+			return makeSingleIndexArbiterSet(mb, idx)
 		}
 
 		// If the index is a partial index, then it can only be an arbiter if
 		// the arbiterPredicate implies it.
 		if h.predicateIsImpliedByArbiterPredicate(pred) {
-			indexes.Add(idx)
+			arbiters.AddIndex(idx)
 		}
 	}
 
@@ -158,7 +159,7 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// If the unique constraint is not partial, it should be returned
 		// without any partial index arbiters.
 		if _, isPartial := uniqueConstraint.Predicate(); !isPartial {
-			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+			return makeSingleUniqueConstraintArbiterSet(mb, uc)
 		}
 
 		// If the constraint is a pseudo-partial unique constraint, it can
@@ -166,38 +167,38 @@ func (mb *mutationBuilder) arbiterIndexesAndConstraints(
 		// arbiters.
 		pred := h.partialUniqueConstraintPredicate(uc)
 		if pred.IsTrue() {
-			return util.FastIntSet{}, util.MakeFastIntSet(uc)
+			return makeSingleUniqueConstraintArbiterSet(mb, uc)
 		}
 
 		// If the unique constraint is partial, then it can only be an arbiter
 		// if the arbiterPredicate implies it.
 		if h.predicateIsImpliedByArbiterPredicate(pred) {
-			uniqueConstraints.Add(uc)
+			arbiters.AddUniqueConstraint(uc)
 		}
 	}
 
-	// Err if we did not previously return and did not find partial indexes or
-	// partial unique constraints.
-	if indexes.Empty() && uniqueConstraints.Empty() {
+	// Err if we did not previously return and did not find any partial
+	// arbiters.
+	if arbiters.Empty() {
 		panic(pgerror.Newf(pgcode.InvalidColumnReference,
 			"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 	}
 
-	return indexes, uniqueConstraints
+	return arbiters
 }
 
-// buildAntiJoinForDoNothingArbiter builds an anti-join for a single arbiter index
-// or constraint for an INSERT ON CONFLICT DO NOTHING mutation. The anti-join
-// wraps the current mb.outScope.expr and removes rows that would conflict with
-// existing rows.
+// buildAntiJoinForDoNothingArbiter builds an anti-join for a single arbiter
+// index or constraint for an INSERT ON CONFLICT DO NOTHING mutation. The
+// anti-join wraps the current mb.outScope.expr (which produces the insert rows)
+// and removes rows that would conflict with existing rows.
 //
-// 	 - columnOrds is the set of table column ordinals that the arbiter
+// 	 - conflictOrds is the set of table column ordinals that the arbiter
 //     guarantees uniqueness of.
 // 	 - pred is the partial index or constraint predicate. If the arbiter is
 //     not a partial index or constraint, pred is nil.
 //
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, columnOrds util.FastIntSet, pred tree.Expr,
+	inScope *scope, conflictOrds util.FastIntSet, pred tree.Expr,
 ) {
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -234,7 +235,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	//   ON ins.x = scan.a AND ins.y = scan.b
 	//
 	var on memo.FiltersExpr
-	for i, ok := columnOrds.Next(0); ok; i, ok = columnOrds.Next(i + 1) {
+	for i, ok := conflictOrds.Next(0); ok; i, ok = conflictOrds.Next(i + 1) {
 		fetchCol := fetchScope.getColumnForTableOrdinal(i)
 		if fetchCol == nil {
 			panic(errors.AssertionFailedf("missing column in fetchScope"))
@@ -266,24 +267,121 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	)
 }
 
+// buildLeftJoinForUpsertArbiter builds a left-join for a single arbiter index
+// or constraint for an UPSERT or INSERT ON CONFLICT DO UPDATE mutation. It
+// left-joins each insert row to the target table, using the given conflict
+// columns as the join condition.
+//
+//   - conflictOrds is the set of table column ordinals that the arbiter
+//     guarantees uniqueness of.
+//   - pred is the partial index predicate. If the arbiter is not a partial
+//     index, pred is nil.
+//   - partialIndexDistinctCol is a column that allows the UpsertDistinctOn to
+//     only de-duplicate insert rows that satisfy the partial index predicate.
+//     If the arbiter is not a partial index, partialIndexDistinctCol is nil.
+//
+func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
+	inScope *scope, conflictOrds util.FastIntSet, pred tree.Expr,
+) {
+	// Build the right side of the left outer join. Use a different instance of
+	// table metadata so that col IDs do not overlap.
+	//
+	// NOTE: Include mutation columns, but be careful to never use them for any
+	//       reason other than as "fetch columns". See buildScan comment.
+	// TODO(andyk): Why does execution engine need mutation columns for Insert?
+	mb.fetchScope = mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		tableOrdinals(mb.tab, columnKinds{
+			includeMutations:       true,
+			includeSystem:          true,
+			includeVirtualInverted: false,
+			includeVirtualComputed: true,
+		}),
+		nil, /* indexFlags */
+		noRowLocking,
+		inScope,
+	)
+	// Set fetchColIDs to reference the columns created for the fetch values.
+	mb.setFetchColIDs(mb.fetchScope.cols)
+
+	// If the index is a unique partial index, then rows that are not in the
+	// partial index cannot conflict with insert rows. Therefore, a Select wraps
+	// the scan on the right side of the left outer join with the partial index
+	// predicate expression as the filter.
+	if pred != nil {
+		texpr := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
+		predScalar := mb.b.buildScalar(texpr, mb.fetchScope, nil, nil, nil)
+		mb.fetchScope.expr = mb.b.factory.ConstructSelect(
+			mb.fetchScope.expr,
+			memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(predScalar)},
+		)
+	}
+
+	// Build the join condition by creating a conjunction of equality conditions
+	// that test each conflict column:
+	//
+	//   ON ins.x = scan.a AND ins.y = scan.b
+	//
+	var on memo.FiltersExpr
+	for i := range mb.fetchScope.cols {
+		// Include fetch columns with ordinal positions in conflictOrds.
+		if conflictOrds.Contains(i) {
+			condition := mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(mb.insertColIDs[i]),
+				mb.b.factory.ConstructVariable(mb.fetchScope.cols[i].id),
+			)
+			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
+		}
+	}
+
+	// If the index is a unique partial index, then insert rows that do not
+	// satisfy the partial index predicate cannot conflict with existing rows in
+	// the unique partial index. Therefore, the partial index predicate
+	// expression is added to the ON filters.
+	if pred != nil {
+		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool)
+		predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
+		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
+	}
+
+	// Add the fetch columns to the current scope. It's OK to modify the current
+	// scope because it contains only INSERT columns that were added by the
+	// mutationBuilder, and which are no longer needed for any other purpose.
+	mb.outScope.appendColumnsFromScope(mb.fetchScope)
+
+	// Construct the left join.
+	mb.outScope.expr = mb.b.factory.ConstructLeftJoin(
+		mb.outScope.expr,
+		mb.fetchScope.expr,
+		on,
+		memo.EmptyJoinPrivate,
+	)
+}
+
 // buildDistinctOnForDoNothingArbiter adds an UpsertDistinctOn operator for a
 // single arbiter index or constraint.
 //
-// 	 - columnOrds is the set of table column ordinals that the arbiter
+//   - insertColScope contains the columns of the insert rows.
+//   - conflictOrds is the set of table column ordinals that the arbiter
 //     guarantees uniqueness of.
 //   - partialArbiterDistinctCol is a column that allows the UpsertDistinctOn to
 //     only de-duplicate insert rows that satisfy the partial index or
 //     constraint predicate. If the arbiter is not a partial index or
 //     constraint, partialArbiterDistinctCol is nil.
+//   - errorOnDup indicates whether multiple rows in the same distinct group
+//     should trigger an error. If empty, no error is triggered.
 //
-func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
-	insertColScope *scope, colOrds util.FastIntSet, partialArbiterDistinctCol *scopeColumn,
+func (mb *mutationBuilder) buildDistinctOnForArbiter(
+	insertColScope *scope,
+	conflictOrds util.FastIntSet,
+	partialArbiterDistinctCol *scopeColumn,
+	errorOnDup string,
 ) {
 	// Add an UpsertDistinctOn operator to ensure there are no duplicate input
 	// rows for this arbiter. Duplicate rows can trigger conflict errors at
 	// runtime, which DO NOTHING is not supposed to do. See issue #37880.
 	var conflictCols opt.ColSet
-	for i, ok := colOrds.Next(0); ok; i, ok = colOrds.Next(i + 1) {
+	for i, ok := conflictOrds.Next(0); ok; i, ok = conflictOrds.Next(i + 1) {
 		conflictCols.Add(mb.insertColIDs[i])
 	}
 	if partialArbiterDistinctCol != nil {
@@ -293,7 +391,8 @@ func (mb *mutationBuilder) buildDistinctOnForDoNothingArbiter(
 	// Treat NULL values as distinct from one another. And if duplicates are
 	// detected, remove them rather than raising an error.
 	mb.outScope = mb.b.buildDistinctOn(
-		conflictCols, mb.outScope, true /* nullsAreDistinct */, "" /* errorOnDup */)
+		conflictCols, mb.outScope, true /* nullsAreDistinct */, errorOnDup,
+	)
 
 	// Remove the partialArbiterDistinctCol from the output.
 	if partialArbiterDistinctCol != nil {
