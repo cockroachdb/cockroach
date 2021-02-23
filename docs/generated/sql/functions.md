@@ -1925,6 +1925,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_longestline"></a><code>st_longestline(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the LineString corresponds to the max distance across every pair of points comprising the given geometries.</p>
 <p>Note if geometries are the same, it will return the LineString with the maximum distance between the geometry’s vertexes. The function will return the longest line that was discovered first when comparing maximum distances if more than one is found.</p>
 </span></td></tr>
+<tr><td><a name="st_m"></a><code>st_m(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the M coordinate of a geometry if it is a Point.</p>
+</span></td></tr>
 <tr><td><a name="st_makebox2d"></a><code>st_makebox2d(geometry_a: geometry, geometry_b: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Creates a box2d from two points. Errors if arguments are not two non-empty points.</p>
 </span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
@@ -2279,6 +2281,10 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="st_x"></a><code>st_x(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the X coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
 <tr><td><a name="st_y"></a><code>st_y(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Y coordinate of a geometry if it is a Point.</p>
+</span></td></tr>
+<tr><td><a name="st_z"></a><code>st_z(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Z coordinate of a geometry if it is a Point.</p>
+</span></td></tr>
+<tr><td><a name="st_zmflag"></a><code>st_zmflag(geometry: geometry) &rarr; int2</code></td><td><span class="funcdesc"><p>Returns a code based on the ZM coordinate dimension of a geometry (XY = 0, XYM = 1, XYZ = 2, XYZM = 3).</p>
 </span></td></tr></tbody>
 </table>
 
