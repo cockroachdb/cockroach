@@ -22,33 +22,65 @@ import (
 // Constant expected by parser when lexer reaches EOF.
 const eof = 0
 
-// LexError is an error that occurs during lexing.
-type LexError struct {
-	// TODO(ayang): refactor these two errors into one error type
-	expectedTokType string
-	pos             int
-	str             string
+// SyntaxError is an error that occurs during parsing of a WKT string.
+type SyntaxError struct {
+	wkt       string
+	problem   string
+	lineNum   int
+	lineStart int
+	linePos   int
+	hint      string
 }
 
-func (e *LexError) Error() string {
-	return fmt.Sprintf("lex error: invalid %s at pos %d\n%s\n%s^",
-		e.expectedTokType, e.pos, e.str, strings.Repeat(" ", e.pos))
-}
+// Error generates a detailed syntax error message with line and pos numbers as well as a snippet of
+// the erroneous input.
+func (e *SyntaxError) Error() string {
+	// These constants define the maximum number of characters of the line to show on each side of the cursor.
+	const (
+		leftPadding  = 30
+		rightPadding = 30
+	)
 
-// ParseError is an error that occurs during parsing, which happens after lexing.
-type ParseError struct {
-	problem string
-	pos     int
-	str     string
-	hint    string
-}
+	// Print the problem along with line and pos number.
+	err := fmt.Sprintf("syntax error: %s at line %d, pos %d\n", e.problem, e.lineNum, e.linePos)
 
-func (e *ParseError) Error() string {
-	// TODO(ayang): print only relevant line (with line and pos no) instead of entire input
-	err := fmt.Sprintf("%s at pos %d\n%s\n%s^", e.problem, e.pos, e.str, strings.Repeat(" ", e.pos))
+	// Find the position of the end of the line.
+	lineEnd := strings.IndexRune(e.wkt[e.lineStart:], '\n')
+	if lineEnd == -1 {
+		lineEnd = len(e.wkt)
+	} else {
+		lineEnd += e.lineStart
+	}
+
+	// Prepend the line with the line number.
+	strLinePrefix := fmt.Sprintf("LINE %d: ", e.lineNum)
+	strLineSuffix := "\n"
+
+	// Trim the start and end of the line as needed.
+	snipPos := e.linePos
+	snipStart := e.lineStart
+	leftMin := e.lineStart + e.linePos - leftPadding
+	if snipStart < leftMin {
+		snipPos -= leftMin - snipStart
+		snipStart = leftMin
+		strLinePrefix += "..."
+	}
+	snipEnd := lineEnd
+	rightMax := e.lineStart + e.linePos + rightPadding
+	if snipEnd > rightMax {
+		snipEnd = rightMax
+		strLineSuffix = "..." + strLineSuffix
+	}
+
+	// Print a cursor pointing to the token where the problem occurred.
+	err += strLinePrefix + e.wkt[snipStart:snipEnd] + strLineSuffix
+	err += fmt.Sprintf("%s^", strings.Repeat(" ", len(strLinePrefix)+snipPos))
+
+	// Print a hint, if applicable.
 	if e.hint != "" {
 		err += fmt.Sprintf("\nHINT: %s", e.hint)
 	}
+
 	return err
 }
 
@@ -187,26 +219,48 @@ func (s layoutStack) atTopLevel() bool {
 	return len(s.data) == 1
 }
 
+// lexPos is a struct for keeping track of both the actual and human-readable lexed position in the string.
+type lexPos struct {
+	wktPos    int
+	lineNum   int
+	lineStart int
+	linePos   int
+}
+
+// advanceOne advances a lexPos by one position on the same line.
+func (lp *lexPos) advanceOne() {
+	lp.wktPos++
+	lp.linePos++
+}
+
+// advanceLine advances a lexPos by a newline.
+func (lp *lexPos) advanceLine() {
+	lp.wktPos++
+	lp.lineNum++
+	lp.lineStart = lp.wktPos
+	lp.linePos = 0
+}
+
 // wktLex is the lexer for lexing WKT tokens.
 type wktLex struct {
-	line     string
-	pos      int
-	lastPos  int
+	wkt      string
+	curPos   lexPos
+	lastPos  lexPos
 	ret      geom.T
 	lytStack layoutStack
 	lastErr  error
 }
 
 // newWKTLex returns a pointer to a newly created wktLex.
-func newWKTLex(line string) *wktLex {
-	return &wktLex{line: line, lytStack: makeLayoutStack()}
+func newWKTLex(wkt string) *wktLex {
+	return &wktLex{wkt: wkt, lytStack: makeLayoutStack()}
 }
 
 // Lex lexes a token from the input.
 func (l *wktLex) Lex(yylval *wktSymType) int {
 	// Skip leading spaces.
 	l.trimLeft()
-	l.lastPos = l.pos
+	l.lastPos = l.curPos
 
 	// Lex a token.
 	switch c := l.peek(); c {
@@ -284,22 +338,26 @@ func (l *wktLex) num(yylval *wktSymType) int {
 
 // peek returns the next rune to be read.
 func (l *wktLex) peek() rune {
-	if l.pos == len(l.line) {
+	if l.curPos.wktPos == len(l.wkt) {
 		return eof
 	}
-	return rune(l.line[l.pos])
+	return rune(l.wkt[l.curPos.wktPos])
 }
 
-// next returns the next rune to be read and advances the pos counter.
+// next returns the next rune to be read and advances the curPos counter.
 func (l *wktLex) next() rune {
 	c := l.peek()
 	if c != eof {
-		l.pos++
+		if c == '\n' {
+			l.curPos.advanceLine()
+		} else {
+			l.curPos.advanceOne()
+		}
 	}
 	return c
 }
 
-// trimLeft increments the pos counter until the next rune to be read is no longer a whitespace character.
+// trimLeft increments the curPos counter until the next rune to be read is no longer a whitespace character.
 func (l *wktLex) trimLeft() {
 	for {
 		c := l.peek()
@@ -475,32 +533,29 @@ func (l *wktLex) nextScannedPointMustBeEmpty() bool {
 
 // setLexError is called by Lex when a lexing (tokenizing) error is detected.
 func (l *wktLex) setLexError(expectedTokType string) {
-	l.setError(&LexError{
-		expectedTokType: expectedTokType,
-		pos:             l.lastPos,
-		str:             l.line,
-	})
+	l.Error(fmt.Sprintf("invalid %s", expectedTokType))
 }
 
 // setParseError is called when a context-sensitive error is detected during parsing.
 // The generated wktParse function can only catch context-free errors.
 func (l *wktLex) setParseError(problem string, hint string) {
-	errProblem := "syntax error: " + problem
-	l.setError(&ParseError{
-		problem: errProblem,
-		pos:     l.lastPos,
-		str:     l.line,
-		hint:    hint,
-	})
+	l.setSyntaxError(problem, hint)
 }
 
 // Error is called by wktParse if an error is encountered during parsing (takes place after lexing).
 func (l *wktLex) Error(s string) {
-	// NB: Lex errors are set in the Lex function.
-	l.setError(&ParseError{
-		problem: s,
-		pos:     l.lastPos,
-		str:     l.line,
+	l.setSyntaxError(strings.TrimPrefix(s, "syntax error: "), "")
+}
+
+// setSyntaxError is called when a syntax error occurs.
+func (l *wktLex) setSyntaxError(problem string, hint string) {
+	l.setError(&SyntaxError{
+		wkt:       l.wkt,
+		problem:   problem,
+		lineNum:   l.lastPos.lineNum + 1,
+		lineStart: l.lastPos.lineStart,
+		linePos:   l.lastPos.linePos,
+		hint:      hint,
 	})
 }
 
