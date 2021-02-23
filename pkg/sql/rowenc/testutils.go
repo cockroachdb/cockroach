@@ -178,6 +178,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		for i := range typ.TupleContents() {
 			tuple.D[i] = RandDatum(rng, typ.TupleContents()[i], true)
 		}
+		// Calling ResolvedType causes the internal TupleContents types to be
+		// populated.
+		tuple.ResolvedType()
 		return &tuple
 	case types.BitFamily:
 		width := typ.Width()
