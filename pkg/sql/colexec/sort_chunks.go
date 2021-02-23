@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -30,11 +30,11 @@ import (
 // matchLen columns.
 func NewSortChunks(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"sort chunks should only be used when the input is "+
@@ -59,15 +59,15 @@ func NewSortChunks(
 type sortChunksOp struct {
 	allocator *colmem.Allocator
 	input     *chunker
-	sorter    colexecbase.ResettableOperator
+	sorter    colexecop.ResettableOperator
 
 	exportedFromBuffer int
 	exportedFromBatch  int
 	windowedBatch      coldata.Batch
 }
 
-var _ colexecbase.Operator = &sortChunksOp{}
-var _ colexecbase.BufferingInMemoryOperator = &sortChunksOp{}
+var _ colexecop.Operator = &sortChunksOp{}
+var _ colexecop.BufferingInMemoryOperator = &sortChunksOp{}
 
 func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 1
@@ -111,7 +111,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
@@ -199,8 +199,8 @@ const (
 // in the middle of processing the input). Instead, sortChunksOp will empty the
 // buffer when appropriate.
 type chunker struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from input.
@@ -254,7 +254,7 @@ var _ spooler = &chunker{}
 
 func newChunker(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	alreadySortedCols []uint32,
 ) (*chunker, error) {
@@ -268,7 +268,7 @@ func newChunker(
 	}
 	deselector := colexecutils.NewDeselectorOp(allocator, input, inputTypes)
 	return &chunker{
-		OneInputNode:      colexecbase.NewOneInputNode(deselector),
+		OneInputNode:      colexecop.NewOneInputNode(deselector),
 		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,

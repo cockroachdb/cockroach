@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -369,14 +369,14 @@ func TestCrossJoiner(t *testing.T) {
 		for _, tc := range getCJTestCases() {
 			for _, tc := range tc.mutateTypes() {
 				log.Infof(ctx, "spillForced=%t", spillForced)
-				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              sources,
 						StreamingMemAccount: testMemAcc,
 						DiskQueueCfg:        queueCfg,
-						FDSemaphore:         colexecbase.NewTestingSemaphore(externalHJMinPartitions),
+						FDSemaphore:         colexecop.NewTestingSemaphore(externalHJMinPartitions),
 					}
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
@@ -443,10 +443,10 @@ func BenchmarkCrossJoiner(b *testing.B) {
 				args := &colexecargs.NewColOperatorArgs{
 					Spec: spec,
 					// Inputs will be set below.
-					Inputs:              []colexecbase.Operator{nil, nil},
+					Inputs:              []colexecop.Operator{nil, nil},
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         colexecbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
+					FDSemaphore:         colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
 				}
 				b.Run(fmt.Sprintf("spillForced=%t/type=%s/rows=%d", spillForced, joinType, nRows), func(b *testing.B) {
 					var nOutputRows int

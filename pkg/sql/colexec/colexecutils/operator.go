@@ -14,23 +14,23 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 type zeroOperator struct {
-	colexecbase.OneInputNode
-	colexecbase.NonExplainable
+	colexecop.OneInputNode
+	colexecop.NonExplainable
 }
 
-var _ colexecbase.Operator = &zeroOperator{}
+var _ colexecop.Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
-func NewZeroOp(input colexecbase.Operator) colexecbase.Operator {
-	return &zeroOperator{OneInputNode: colexecbase.NewOneInputNode(input)}
+func NewZeroOp(input colexecop.Operator) colexecop.Operator {
+	return &zeroOperator{OneInputNode: colexecop.NewOneInputNode(input)}
 }
 
 func (s *zeroOperator) Init() {
@@ -42,18 +42,18 @@ func (s *zeroOperator) Next(context.Context) coldata.Batch {
 }
 
 type fixedNumTuplesNoInputOp struct {
-	colexecbase.ZeroInputNode
-	colexecbase.NonExplainable
+	colexecop.ZeroInputNode
+	colexecop.NonExplainable
 	batch         coldata.Batch
 	numTuplesLeft int
 }
 
-var _ colexecbase.Operator = &fixedNumTuplesNoInputOp{}
+var _ colexecop.Operator = &fixedNumTuplesNoInputOp{}
 
 // NewFixedNumTuplesNoInputOp creates a new Operator which returns batches with
 // no actual columns that have specified number of tuples as the sum of their
 // lengths.
-func NewFixedNumTuplesNoInputOp(allocator *colmem.Allocator, numTuples int) colexecbase.Operator {
+func NewFixedNumTuplesNoInputOp(allocator *colmem.Allocator, numTuples int) colexecop.Operator {
 	capacity := numTuples
 	if capacity > coldata.BatchSize() {
 		capacity = coldata.BatchSize()
@@ -106,22 +106,22 @@ func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	colexecbase.OneInputCloserHelper
-	colexecbase.NonExplainable
+	colexecop.OneInputCloserHelper
+	colexecop.NonExplainable
 
 	allocator *colmem.Allocator
 	typ       *types.T
 	idx       int
 }
 
-var _ colexecbase.ResettableOperator = &vectorTypeEnforcer{}
+var _ colexecop.ResettableOperator = &vectorTypeEnforcer{}
 
 // NewVectorTypeEnforcer returns a new vectorTypeEnforcer.
 func NewVectorTypeEnforcer(
-	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input colexecop.Operator, typ *types.T, idx int,
+) colexecop.Operator {
 	return &vectorTypeEnforcer{
-		OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
+		OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
 		allocator:            allocator,
 		typ:                  typ,
 		idx:                  idx,
@@ -142,7 +142,7 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 }
 
 func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
-	if r, ok := e.Input.(colexecbase.Resetter); ok {
+	if r, ok := e.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
@@ -161,15 +161,15 @@ func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
 // NOTE: the type schema passed into BatchSchemaSubsetEnforcer *must* include
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
-	colexecbase.OneInputCloserHelper
-	colexecbase.NonExplainable
+	colexecop.OneInputCloserHelper
+	colexecop.NonExplainable
 
 	allocator                    *colmem.Allocator
 	typs                         []*types.T
 	subsetStartIdx, subsetEndIdx int
 }
 
-var _ colexecbase.Operator = &BatchSchemaSubsetEnforcer{}
+var _ colexecop.Operator = &BatchSchemaSubsetEnforcer{}
 
 // NewBatchSchemaSubsetEnforcer creates a new BatchSchemaSubsetEnforcer.
 // - subsetStartIdx and subsetEndIdx define the boundaries of the range of
@@ -177,12 +177,12 @@ var _ colexecbase.Operator = &BatchSchemaSubsetEnforcer{}
 // own.
 func NewBatchSchemaSubsetEnforcer(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	subsetStartIdx, subsetEndIdx int,
 ) *BatchSchemaSubsetEnforcer {
 	return &BatchSchemaSubsetEnforcer{
-		OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
+		OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
 		allocator:            allocator,
 		typs:                 typs,
 		subsetStartIdx:       subsetStartIdx,
@@ -190,7 +190,7 @@ func NewBatchSchemaSubsetEnforcer(
 	}
 }
 
-// Init implements the colexecbase.Operator interface.
+// Init implements the colexecop.Operator interface.
 func (e *BatchSchemaSubsetEnforcer) Init() {
 	e.Input.Init()
 	if e.subsetStartIdx >= e.subsetEndIdx {
@@ -198,7 +198,7 @@ func (e *BatchSchemaSubsetEnforcer) Init() {
 	}
 }
 
-// Next implements the colexecbase.Operator interface.
+// Next implements the colexecop.Operator interface.
 func (e *BatchSchemaSubsetEnforcer) Next(ctx context.Context) coldata.Batch {
 	b := e.Input.Next(ctx)
 	if b.Length() == 0 {

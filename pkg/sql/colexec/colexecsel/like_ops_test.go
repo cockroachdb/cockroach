@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -94,7 +94,7 @@ func TestLikeOperators(t *testing.T) {
 	} {
 		colexectestutils.RunTests(
 			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
 			})
@@ -125,11 +125,11 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize())
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	base := selConstOpBase{
-		OneInputNode: colexecbase.NewOneInputNode(source),
+		OneInputNode: colexecop.NewOneInputNode(source),
 		colIdx:       0,
 	}
 	prefixOp := &selPrefixBytesBytesConstOp{
@@ -152,7 +152,7 @@ func BenchmarkLikeOps(b *testing.B) {
 
 	testCases := []struct {
 		name string
-		op   colexecbase.Operator
+		op   colexecop.Operator
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},

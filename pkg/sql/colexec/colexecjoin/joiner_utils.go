@@ -11,20 +11,20 @@
 package colexecjoin
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
 )
 
 // newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
-func newTwoInputNode(inputOne, inputTwo colexecbase.Operator) twoInputNode {
+func newTwoInputNode(inputOne, inputTwo colexecop.Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
 }
 
 type twoInputNode struct {
-	inputOne colexecbase.Operator
-	inputTwo colexecbase.Operator
+	inputOne colexecop.Operator
+	inputTwo colexecop.Operator
 }
 
 func (twoInputNode) ChildCount(verbose bool) int {

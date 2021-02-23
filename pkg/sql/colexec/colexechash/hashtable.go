@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -190,7 +190,7 @@ type HashTable struct {
 	probeMode HashTableProbeMode
 }
 
-var _ colexecbase.Resetter = &HashTable{}
+var _ colexecop.Resetter = &HashTable{}
 
 // NewHashTable returns a new HashTable.
 //
@@ -347,7 +347,7 @@ func (ht *HashTable) buildFromBufferedTuples(ctx context.Context) {
 // FullBuild executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process. Note that
 // the hash table is assumed to operate in HashTableFullBuildMode.
-func (ht *HashTable) FullBuild(ctx context.Context, input colexecbase.Operator) {
+func (ht *HashTable) FullBuild(ctx context.Context, input colexecop.Operator) {
 	if ht.BuildMode != HashTableFullBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.FullBuild is called in unexpected build mode %d", ht.BuildMode,

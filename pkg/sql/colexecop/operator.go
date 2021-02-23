@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexecbase
+package colexecop
 
 import (
 	"context"
@@ -184,10 +184,10 @@ func NewFeedOperator() *FeedOperator {
 	return &FeedOperator{}
 }
 
-// Init implements the colexecbase.Operator interface.
+// Init implements the colexecop.Operator interface.
 func (FeedOperator) Init() {}
 
-// Next implements the colexecbase.Operator interface.
+// Next implements the colexecop.Operator interface.
 func (o *FeedOperator) Next(context.Context) coldata.Batch {
 	return o.batch
 }

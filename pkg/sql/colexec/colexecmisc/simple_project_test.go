@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,7 +67,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexecmisc.NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
 		})
 	}
@@ -75,7 +75,7 @@ func TestSimpleProjectOp(t *testing.T) {
 	// Empty projection. The all nulls injection test case will also return
 	// nothing.
 	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{{{1, 2, 3}, {1, 2, 3}}}, nil, colexectestutils.Tuples{{}, {}}, colexectestutils.OrderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexecmisc.NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
 
@@ -114,8 +114,8 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"bb", constVal},
 	}
 	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected, colexectestutils.UnorderedVerifier,
-		func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			var input colexecbase.Operator
+		func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+			var input colexecop.Operator
 			parallelUnorderedSynchronizerInputs := make([]colexec.SynchronizerInput, len(inputs))
 			for i := range parallelUnorderedSynchronizerInputs {
 				parallelUnorderedSynchronizerInputs[i].Op = inputs[i]

@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -28,7 +28,7 @@ type defaultCmpProjOp struct {
 	datumToVecConverter func(tree.Datum) interface{}
 }
 
-var _ colexecbase.Operator = &defaultCmpProjOp{}
+var _ colexecop.Operator = &defaultCmpProjOp{}
 
 func (d *defaultCmpProjOp) Init() {
 	d.Input.Init()
@@ -89,7 +89,7 @@ type defaultCmpRConstProjOp struct {
 	datumToVecConverter func(tree.Datum) interface{}
 }
 
-var _ colexecbase.Operator = &defaultCmpRConstProjOp{}
+var _ colexecop.Operator = &defaultCmpRConstProjOp{}
 
 func (d *defaultCmpRConstProjOp) Init() {
 	d.Input.Init()

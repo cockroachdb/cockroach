@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -77,7 +77,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	for _, tc := range testCases {
 		log.Infof(ctx, "%s", tc.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes,
 					tc.expr, false /* canFallbackToRowexec */, testMemAcc,
@@ -128,7 +128,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	}
 
 	typs := []*types.T{types.Int}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	op, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, source, typs,
 		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
@@ -173,8 +173,8 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		eCol[i] = 4
 	}
 	batch.SetLength(coldata.BatchSize())
-	var source colexecbase.Operator
-	source = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	var source colexecop.Operator
+	source = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source = colexecutils.NewVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
 
 	// Set up the default operator.
@@ -191,7 +191,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode:        colexecbase.NewOneInputNode(source),
+		OneInputNode:        colexecop.NewOneInputNode(source),
 		allocator:           testAllocator,
 		evalCtx:             evalCtx,
 		funcExpr:            typedExpr.(*tree.FuncExpr),

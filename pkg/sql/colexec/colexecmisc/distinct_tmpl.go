@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -71,8 +71,8 @@ const _TYPE_WIDTH = 0
 // {{define "distinctOpConstructor"}}
 
 func newSingleDistinct(
-	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
-) (colexecbase.Operator, error) {
+	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -80,7 +80,7 @@ func newSingleDistinct(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &distinct_TYPEOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -144,7 +144,7 @@ type distinct_TYPEOp struct {
 	// still works across batch boundaries.
 	lastVal _GOTYPE
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -156,7 +156,7 @@ type distinct_TYPEOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinct_TYPEOp{}
+var _ colexecop.ResettableOperator = &distinct_TYPEOp{}
 
 func (p *distinct_TYPEOp) Init() {
 	p.Input.Init()
@@ -165,7 +165,7 @@ func (p *distinct_TYPEOp) Init() {
 func (p *distinct_TYPEOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }

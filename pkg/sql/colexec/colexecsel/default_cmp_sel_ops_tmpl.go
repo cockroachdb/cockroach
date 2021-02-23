@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -44,7 +44,7 @@ type defaultCmp_KINDSelOp struct {
 	toDatumConverter *colconv.VecToDatumConverter
 }
 
-var _ colexecbase.Operator = &defaultCmp_KINDSelOp{}
+var _ colexecop.Operator = &defaultCmp_KINDSelOp{}
 
 func (d *defaultCmp_KINDSelOp) Init() {
 	d.Input.Init()

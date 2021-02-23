@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -35,21 +35,21 @@ const (
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint64,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &topKSorter{
 		allocator:    allocator,
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
 	}
 }
 
-var _ colexecbase.BufferingInMemoryOperator = &topKSorter{}
+var _ colexecop.BufferingInMemoryOperator = &topKSorter{}
 
 // topKSortState represents the state of the sort operator.
 type topKSortState int
@@ -67,7 +67,7 @@ const (
 )
 
 type topKSorter struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
@@ -269,7 +269,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {

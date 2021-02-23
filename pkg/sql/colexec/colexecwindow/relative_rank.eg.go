@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +38,7 @@ func NewRelativeRankOperator(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
@@ -46,7 +46,7 @@ func NewRelativeRankOperator(
 	partitionColIdx int,
 	peersColIdx int,
 	diskAcc *mon.BoundAccount,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	if len(orderingCols) == 0 {
 		constValue := float64(0)
 		if windowFn == execinfrapb.WindowerSpec_CUME_DIST {
@@ -56,7 +56,7 @@ func NewRelativeRankOperator(
 	}
 	rrInitFields := relativeRankInitFields{
 		rankInitFields: rankInitFields{
-			OneInputNode:    colexecbase.NewOneInputNode(input),
+			OneInputNode:    colexecop.NewOneInputNode(input),
 			allocator:       unlimitedAllocator,
 			outputColIdx:    outputColIdx,
 			partitionColIdx: partitionColIdx,
@@ -98,7 +98,7 @@ func NewRelativeRankOperator(
 // clause (or both) is used - we need 3 FDs for each of the spilling queues used
 // by the operator directly plus we use an external sort to handle PARTITION BY
 // and/or ORDER BY clauses.
-const relativeRankNumRequiredFDs = 3 + colexecbase.ExternalSorterMinPartitions
+const relativeRankNumRequiredFDs = 3 + colexecop.ExternalSorterMinPartitions
 
 // NOTE: in the context of window functions "partitions" mean a different thing
 // from "partition" in the context of external algorithms and some disk
@@ -131,7 +131,7 @@ const (
 
 type relativeRankInitFields struct {
 	rankInitFields
-	colexecbase.CloserHelper
+	colexecop.CloserHelper
 
 	state        relativeRankState
 	memoryLimit  int64
@@ -180,7 +180,7 @@ type percentRankNoPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ colexecbase.ClosableOperator = &percentRankNoPartitionOp{}
+var _ colexecop.ClosableOperator = &percentRankNoPartitionOp{}
 
 func (r *percentRankNoPartitionOp) Init() {
 	r.Input.Init()
@@ -382,7 +382,7 @@ type percentRankWithPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ colexecbase.ClosableOperator = &percentRankWithPartitionOp{}
+var _ colexecop.ClosableOperator = &percentRankWithPartitionOp{}
 
 func (r *percentRankWithPartitionOp) Init() {
 	r.Input.Init()
@@ -689,7 +689,7 @@ type cumeDistNoPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ colexecbase.ClosableOperator = &cumeDistNoPartitionOp{}
+var _ colexecop.ClosableOperator = &cumeDistNoPartitionOp{}
 
 func (r *cumeDistNoPartitionOp) Init() {
 	r.Input.Init()
@@ -981,7 +981,7 @@ type cumeDistWithPartitionOp struct {
 	output         coldata.Batch
 }
 
-var _ colexecbase.ClosableOperator = &cumeDistWithPartitionOp{}
+var _ colexecop.ClosableOperator = &cumeDistWithPartitionOp{}
 
 func (r *cumeDistWithPartitionOp) Init() {
 	r.Input.Init()

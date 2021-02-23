@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
@@ -32,9 +32,9 @@ type SerialUnorderedSynchronizer struct {
 }
 
 var (
-	_ colexecbase.Operator = &SerialUnorderedSynchronizer{}
-	_ execinfra.OpNode     = &SerialUnorderedSynchronizer{}
-	_ colexecbase.Closer   = &SerialUnorderedSynchronizer{}
+	_ colexecop.Operator = &SerialUnorderedSynchronizer{}
+	_ execinfra.OpNode   = &SerialUnorderedSynchronizer{}
+	_ colexecop.Closer   = &SerialUnorderedSynchronizer{}
 )
 
 // ChildCount implements the execinfra.OpNode interface.

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -28,15 +28,15 @@ import (
 )
 
 func newSingleDistinct(
-	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
-) (colexecbase.Operator, error) {
+	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			return &distinctBoolOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -46,7 +46,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctBytesOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -56,7 +56,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDecimalOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -65,20 +65,20 @@ func newSingleDistinct(
 		switch t.Width() {
 		case 16:
 			return &distinctInt16Op{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
 		case 32:
 			return &distinctInt32Op{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
 		case -1:
 		default:
 			return &distinctInt64Op{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -88,7 +88,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctFloat64Op{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -98,7 +98,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctTimestampOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -108,7 +108,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctIntervalOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -118,7 +118,7 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDatumOp{
-				OneInputNode:   colexecbase.NewOneInputNode(input),
+				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -139,7 +139,7 @@ type distinctBoolOp struct {
 	// still works across batch boundaries.
 	lastVal bool
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -151,7 +151,7 @@ type distinctBoolOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctBoolOp{}
+var _ colexecop.ResettableOperator = &distinctBoolOp{}
 
 func (p *distinctBoolOp) Init() {
 	p.Input.Init()
@@ -160,7 +160,7 @@ func (p *distinctBoolOp) Init() {
 func (p *distinctBoolOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -403,7 +403,7 @@ type distinctBytesOp struct {
 	// still works across batch boundaries.
 	lastVal []byte
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -415,7 +415,7 @@ type distinctBytesOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctBytesOp{}
+var _ colexecop.ResettableOperator = &distinctBytesOp{}
 
 func (p *distinctBytesOp) Init() {
 	p.Input.Init()
@@ -424,7 +424,7 @@ func (p *distinctBytesOp) Init() {
 func (p *distinctBytesOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -635,7 +635,7 @@ type distinctDecimalOp struct {
 	// still works across batch boundaries.
 	lastVal apd.Decimal
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -647,7 +647,7 @@ type distinctDecimalOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctDecimalOp{}
+var _ colexecop.ResettableOperator = &distinctDecimalOp{}
 
 func (p *distinctDecimalOp) Init() {
 	p.Input.Init()
@@ -656,7 +656,7 @@ func (p *distinctDecimalOp) Init() {
 func (p *distinctDecimalOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -867,7 +867,7 @@ type distinctInt16Op struct {
 	// still works across batch boundaries.
 	lastVal int16
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -879,7 +879,7 @@ type distinctInt16Op struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctInt16Op{}
+var _ colexecop.ResettableOperator = &distinctInt16Op{}
 
 func (p *distinctInt16Op) Init() {
 	p.Input.Init()
@@ -888,7 +888,7 @@ func (p *distinctInt16Op) Init() {
 func (p *distinctInt16Op) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -1143,7 +1143,7 @@ type distinctInt32Op struct {
 	// still works across batch boundaries.
 	lastVal int32
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1155,7 +1155,7 @@ type distinctInt32Op struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctInt32Op{}
+var _ colexecop.ResettableOperator = &distinctInt32Op{}
 
 func (p *distinctInt32Op) Init() {
 	p.Input.Init()
@@ -1164,7 +1164,7 @@ func (p *distinctInt32Op) Init() {
 func (p *distinctInt32Op) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -1419,7 +1419,7 @@ type distinctInt64Op struct {
 	// still works across batch boundaries.
 	lastVal int64
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1431,7 +1431,7 @@ type distinctInt64Op struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctInt64Op{}
+var _ colexecop.ResettableOperator = &distinctInt64Op{}
 
 func (p *distinctInt64Op) Init() {
 	p.Input.Init()
@@ -1440,7 +1440,7 @@ func (p *distinctInt64Op) Init() {
 func (p *distinctInt64Op) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -1695,7 +1695,7 @@ type distinctFloat64Op struct {
 	// still works across batch boundaries.
 	lastVal float64
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1707,7 +1707,7 @@ type distinctFloat64Op struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctFloat64Op{}
+var _ colexecop.ResettableOperator = &distinctFloat64Op{}
 
 func (p *distinctFloat64Op) Init() {
 	p.Input.Init()
@@ -1716,7 +1716,7 @@ func (p *distinctFloat64Op) Init() {
 func (p *distinctFloat64Op) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -2003,7 +2003,7 @@ type distinctTimestampOp struct {
 	// still works across batch boundaries.
 	lastVal time.Time
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2015,7 +2015,7 @@ type distinctTimestampOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctTimestampOp{}
+var _ colexecop.ResettableOperator = &distinctTimestampOp{}
 
 func (p *distinctTimestampOp) Init() {
 	p.Input.Init()
@@ -2024,7 +2024,7 @@ func (p *distinctTimestampOp) Init() {
 func (p *distinctTimestampOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -2263,7 +2263,7 @@ type distinctIntervalOp struct {
 	// still works across batch boundaries.
 	lastVal duration.Duration
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2275,7 +2275,7 @@ type distinctIntervalOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctIntervalOp{}
+var _ colexecop.ResettableOperator = &distinctIntervalOp{}
 
 func (p *distinctIntervalOp) Init() {
 	p.Input.Init()
@@ -2284,7 +2284,7 @@ func (p *distinctIntervalOp) Init() {
 func (p *distinctIntervalOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }
@@ -2495,7 +2495,7 @@ type distinctDatumOp struct {
 	// still works across batch boundaries.
 	lastVal interface{}
 
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2507,7 +2507,7 @@ type distinctDatumOp struct {
 	lastValNull bool
 }
 
-var _ colexecbase.ResettableOperator = &distinctDatumOp{}
+var _ colexecop.ResettableOperator = &distinctDatumOp{}
 
 func (p *distinctDatumOp) Init() {
 	p.Input.Init()
@@ -2516,7 +2516,7 @@ func (p *distinctDatumOp) Init() {
 func (p *distinctDatumOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
-	if resetter, ok := p.Input.(colexecbase.Resetter); ok {
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
 		resetter.Reset(ctx)
 	}
 }

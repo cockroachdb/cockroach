@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,12 +32,12 @@ import (
 // NOTE: the input *must* already be ordered on ordCols.
 func NewWindowPeerGrouper(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,
-) (op colexecbase.Operator, err error) {
+) (op colexecop.Operator, err error) {
 	allPeers := len(orderingCols) == 0
 	var distinctCol []bool
 	if !allPeers {
@@ -54,7 +54,7 @@ func NewWindowPeerGrouper(
 	}
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
-		OneInputNode:    colexecbase.NewOneInputNode(input),
+		OneInputNode:    colexecop.NewOneInputNode(input),
 		allocator:       allocator,
 		partitionColIdx: partitionColIdx,
 		distinctCol:     distinctCol,
@@ -81,7 +81,7 @@ func NewWindowPeerGrouper(
 }
 
 type windowPeerGrouperInitFields struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator       *colmem.Allocator
 	partitionColIdx int
@@ -96,7 +96,7 @@ type windowPeerGrouperNoPartitionOp struct {
 	windowPeerGrouperInitFields
 }
 
-var _ colexecbase.Operator = &windowPeerGrouperNoPartitionOp{}
+var _ colexecop.Operator = &windowPeerGrouperNoPartitionOp{}
 
 func (p *windowPeerGrouperNoPartitionOp) Init() {
 	p.Input.Init()
@@ -135,7 +135,7 @@ type windowPeerGrouperWithPartitionOp struct {
 	windowPeerGrouperInitFields
 }
 
-var _ colexecbase.Operator = &windowPeerGrouperWithPartitionOp{}
+var _ colexecop.Operator = &windowPeerGrouperWithPartitionOp{}
 
 func (p *windowPeerGrouperWithPartitionOp) Init() {
 	p.Input.Init()
@@ -185,7 +185,7 @@ type windowPeerGrouperAllPeersNoPartitionOp struct {
 	seenFirstTuple bool
 }
 
-var _ colexecbase.Operator = &windowPeerGrouperAllPeersNoPartitionOp{}
+var _ colexecop.Operator = &windowPeerGrouperAllPeersNoPartitionOp{}
 
 func (p *windowPeerGrouperAllPeersNoPartitionOp) Init() {
 	p.Input.Init()
@@ -226,7 +226,7 @@ type windowPeerGrouperAllPeersWithPartitionOp struct {
 	windowPeerGrouperInitFields
 }
 
-var _ colexecbase.Operator = &windowPeerGrouperAllPeersWithPartitionOp{}
+var _ colexecop.Operator = &windowPeerGrouperAllPeersWithPartitionOp{}
 
 func (p *windowPeerGrouperAllPeersWithPartitionOp) Init() {
 	p.Input.Init()

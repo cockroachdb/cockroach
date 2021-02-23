@@ -13,8 +13,8 @@ package colexecmisc
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -23,17 +23,17 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.ResettableOperator, []bool, error) {
+	input colexecop.Operator, distinctCols []uint32, typs []*types.T,
+) (colexecop.ResettableOperator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		fn:           func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
 	}
 	var (
 		err error
-		r   colexecbase.ResettableOperator
+		r   colexecop.ResettableOperator
 		ok  bool
 	)
 	for i := range distinctCols {
@@ -42,7 +42,7 @@ func OrderedDistinctColsToOperators(
 			return nil, nil, err
 		}
 	}
-	if r, ok = input.(colexecbase.ResettableOperator); !ok {
+	if r, ok = input.(colexecop.ResettableOperator); !ok {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a Resetter"))
 	}
 	distinctChain := &distinctChainOps{
@@ -52,22 +52,22 @@ func OrderedDistinctColsToOperators(
 }
 
 type distinctChainOps struct {
-	colexecbase.ResettableOperator
+	colexecop.ResettableOperator
 }
 
-var _ colexecbase.ResettableOperator = &distinctChainOps{}
+var _ colexecop.ResettableOperator = &distinctChainOps{}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
 func NewOrderedDistinct(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.ResettableOperator, error) {
+	input colexecop.Operator, distinctCols []uint32, typs []*types.T,
+) (colexecop.ResettableOperator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
 	}
 	return &colexecutils.BoolVecToSelOp{
-		OneInputNode: colexecbase.NewOneInputNode(op),
+		OneInputNode: colexecop.NewOneInputNode(op),
 		OutputCol:    outputCol,
 	}, nil
 }

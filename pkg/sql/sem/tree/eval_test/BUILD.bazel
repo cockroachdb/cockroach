@@ -18,7 +18,7 @@ go_test(
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecargs",
-        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/parser",

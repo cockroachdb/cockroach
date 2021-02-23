@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -95,7 +95,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 		ctx   = context.Background()
 		typs  = []*types.T{types.Int}
 		batch = testAllocator.NewMemBatchWithMaxCapacity(typs)
-		sem   = &colexecbase.TestingSemaphore{}
+		sem   = &colexecop.TestingSemaphore{}
 	)
 	batch.SetLength(coldata.BatchSize())
 
@@ -170,7 +170,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// maxPartitions+1 are created. The +1 is the file descriptor of the
 		// new partition being written to when closedForWrites from maxPartitions
 		// and writing the merged result to a single new partition.
-		sem := colexecbase.NewTestingSemaphore(maxPartitions + 1)
+		sem := colexecop.NewTestingSemaphore(maxPartitions + 1)
 		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
 
 		// Define sortRepartition to be able to call this helper function
@@ -250,7 +250,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// The limit for a hash join is maxPartitions + 2. maxPartitions is the
 		// number of partitions partitioned to and 2 represents the file descriptors
 		// for the left and right side in the case of a repartition.
-		sem := colexecbase.NewTestingSemaphore(maxPartitions + 2)
+		sem := colexecop.NewTestingSemaphore(maxPartitions + 2)
 		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		// joinRepartition will perform the partitioning that happens during a hash

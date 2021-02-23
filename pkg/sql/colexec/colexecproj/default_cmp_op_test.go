@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -108,7 +108,7 @@ func TestDefaultCmpProjOps(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.cmpExpr, func(t *testing.T) {
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, colexectestutils.OrderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return colexectestutils.CreateTestProjectingOperator(
 						ctx, flowCtx, input[0], c.inputTypes,
 						c.cmpExpr, false /* canFallbackToRowexec */, testMemAcc,
@@ -133,7 +133,7 @@ func BenchmarkDefaultCmpProjOp(b *testing.B) {
 		for _, hasNulls := range []bool{false, true} {
 			inputTypes := []*types.T{types.String, types.String}
 			name := fmt.Sprintf("IS DISTINCT FROM/useSel=%t/hasNulls=%t", useSel, hasNulls)
-			benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource) (colexecbase.Operator, error) {
+			benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, source, inputTypes,
 					"@1 IS DISTINCT FROM @2", false /* canFallbackToRowexec */, testMemAcc,

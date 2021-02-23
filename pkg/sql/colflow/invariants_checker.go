@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -24,15 +24,15 @@ import (
 // are present in the vectorized engine are maintained on all batches. It
 // should be planned between other Operators in tests.
 type invariantsChecker struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 }
 
-var _ colexecbase.Operator = invariantsChecker{}
+var _ colexecop.Operator = invariantsChecker{}
 
 // newInvariantsChecker creates a new invariantsChecker.
-func newInvariantsChecker(input colexecbase.Operator) colexecbase.Operator {
+func newInvariantsChecker(input colexecop.Operator) colexecop.Operator {
 	return &invariantsChecker{
-		OneInputNode: colexecbase.OneInputNode{Input: input},
+		OneInputNode: colexecop.OneInputNode{Input: input},
 	}
 }
 

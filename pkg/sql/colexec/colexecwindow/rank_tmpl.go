@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecmisc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,19 +45,19 @@ var _ = colexecerror.InternalError
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
 	peersColIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	if len(orderingCols) == 0 {
 		return colexecmisc.NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
 	}
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	initFields := rankInitFields{
-		OneInputNode:    colexecbase.NewOneInputNode(input),
+		OneInputNode:    colexecop.NewOneInputNode(input),
 		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
@@ -96,7 +96,7 @@ func _UPDATE_RANK_INCREMENT() {
 // */}}
 
 type rankInitFields struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator       *colmem.Allocator
 	outputColIdx    int
@@ -154,7 +154,7 @@ type _RANK_STRINGOp struct {
 	rankIncrement int64
 }
 
-var _ colexecbase.Operator = &_RANK_STRINGOp{}
+var _ colexecop.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input.Init()

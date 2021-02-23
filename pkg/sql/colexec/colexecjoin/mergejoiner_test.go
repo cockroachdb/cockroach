@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,8 +95,8 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	mj, err := NewMergeJoinOp(
-		testAllocator, colexecbase.DefaultMemoryLimit, queueCfg,
-		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+		testAllocator, colexecop.DefaultMemoryLimit, queueCfg,
+		colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -115,7 +115,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			Right: hashJoinerSourceSpec{
 				EqCols: []uint32{0}, SourceTypes: typs,
 			},
-		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets, colexecbase.DefaultMemoryLimit,
+		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets, colexecop.DefaultMemoryLimit,
 	)
 	hj.Init()
 
@@ -184,10 +184,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	benchMemAccount := testMemMonitor.MakeBoundAccount()
 	defer benchMemAccount.Close(ctx)
 
-	getNewMergeJoiner := func(leftSource, rightSource colexecbase.Operator) colexecbase.Operator {
+	getNewMergeJoiner := func(leftSource, rightSource colexecop.Operator) colexecop.Operator {
 		benchMemAccount.Clear(ctx)
 		base, err := newMergeJoinBase(
-			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), colexecbase.DefaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), colexecop.DefaultMemoryLimit, queueCfg, colexecop.NewTestingSemaphore(mjFDLimit),
 			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

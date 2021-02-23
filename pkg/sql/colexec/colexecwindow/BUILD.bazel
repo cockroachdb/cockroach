@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/sql/colexecbase:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
 go_library(
     name = "colexecwindow",
@@ -15,8 +15,8 @@ go_library(
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colexec/colexecmisc",
         "//pkg/sql/colexec/colexecutils",  # keep
-        "//pkg/sql/colexecbase",  # keep
         "//pkg/sql/colexecerror",  # keep
+        "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/sem/tree",  # keep
@@ -43,8 +43,8 @@ go_test(
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
-        "//pkg/sql/colexecbase",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

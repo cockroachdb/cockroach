@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexecbase
+package colexecop
 
 // ExternalSorterMinPartitions determines the minimum number of file descriptors
 // that the external sorter needs to have in order to make progress (when

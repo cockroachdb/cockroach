@@ -23,8 +23,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,11 +36,11 @@ import (
 
 func New_OPERATIONProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -82,12 +82,12 @@ func New_OPERATIONProjOp(
 
 type _OP_LOWERProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *colexecbase.FeedOperator
-	rightFeedOp      *colexecbase.FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -104,10 +104,10 @@ type _OP_LOWERProjOp struct {
 // outputIdx.
 func new_OP_TITLEProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *colexecbase.FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &_OP_LOWERProjOp{
 		allocator:        allocator,
 		input:            input,

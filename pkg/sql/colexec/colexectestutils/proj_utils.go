@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -64,12 +64,12 @@ func (p *MockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func CreateTestProjectingOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	projectingExpr string,
 	canFallbackToRowexec bool,
 	testMemAcc *mon.BoundAccount,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func CreateTestProjectingOperator(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{input},
+		Inputs:              []colexecop.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	if canFallbackToRowexec {

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -60,11 +60,11 @@ const _TYPE_WIDTH = 0
 // type t at index outputIdx.
 func NewConstOp(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	t *types.T,
 	constVal interface{},
 	outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
@@ -73,7 +73,7 @@ func NewConstOp(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &const_TYPEOp{
-				OneInputNode: colexecbase.NewOneInputNode(input),
+				OneInputNode: colexecop.NewOneInputNode(input),
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(_GOTYPE),
@@ -89,7 +89,7 @@ func NewConstOp(
 // {{range .WidthOverloads}}
 
 type const_TYPEOp struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	allocator *colmem.Allocator
 	outputIdx int
@@ -144,21 +144,21 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input colexecop.Operator, outputIdx int,
+) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &constNullOp{}
+var _ colexecop.Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
 	c.Input.Init()

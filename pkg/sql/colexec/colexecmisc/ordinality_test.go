@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +70,7 @@ func TestOrdinality(t *testing.T) {
 
 	for _, tc := range tcs {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})
 	}
@@ -91,7 +91,7 @@ func BenchmarkOrdinality(b *testing.B) {
 	typs := []*types.T{types.Int, types.Int, types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []*types.T{types.Int, types.Int, types.Int})
 	require.NoError(b, err)
 	ordinality.Init()
@@ -103,11 +103,8 @@ func BenchmarkOrdinality(b *testing.B) {
 }
 
 func createTestOrdinalityOperator(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
-	inputTypes []*types.T,
-) (colexecbase.Operator, error) {
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input colexecop.Operator, inputTypes []*types.T,
+) (colexecop.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -117,7 +114,7 @@ func createTestOrdinalityOperator(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{input},
+		Inputs:              []colexecop.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

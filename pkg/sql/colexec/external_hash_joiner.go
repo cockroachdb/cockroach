@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,7 +41,7 @@ const (
 	//   sorter emits its first batch, it must be the case that the input to it
 	//   has returned a zero batch, and thus the FD has been closed.
 	sortMergeNonSortMinFDsOpen = 2
-	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (colexecbase.ExternalSorterMinPartitions * 2)
+	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (colexecop.ExternalSorterMinPartitions * 2)
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
@@ -87,10 +87,10 @@ func NewExternalHashJoiner(
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
 	spec colexecjoin.HashJoinerSpec,
-	leftInput, rightInput colexecbase.Operator,
+	leftInput, rightInput colexecop.Operator,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) colexecop.Operator {
 	// This memory limit will restrict the size of the batches output by the
 	// in-memory hash joiner in the main strategy as well as by the merge joiner
 	// in the fallback strategy.
@@ -99,9 +99,9 @@ func NewExternalHashJoiner(
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
-		memoryLimit = colexecbase.DefaultMemoryLimit
+		memoryLimit = colexecop.DefaultMemoryLimit
 	}
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to join using in-memory hash joiner fit under the limit, so we use
 		// the same unlimited allocator for both buildSideAllocator and
@@ -117,7 +117,7 @@ func NewExternalHashJoiner(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		fdSemaphore semaphore.Semaphore,
-	) colexecbase.ResettableOperator {
+	) colexecop.ResettableOperator {
 		// We need to allocate 2 FDs for reading the partitions (reused by the merge
 		// joiner) that we need to join using sort + merge join strategy, and all
 		// others are divided between the two inputs.
@@ -145,7 +145,7 @@ func NewExternalHashJoiner(
 		flowCtx,
 		args,
 		"external hash joiner", /* name */
-		[]colexecbase.Operator{leftInput, rightInput},
+		[]colexecop.Operator{leftInput, rightInput},
 		[][]*types.T{spec.Left.SourceTypes, spec.Right.SourceTypes},
 		[][]uint32{spec.Left.EqCols, spec.Right.EqCols},
 		inMemMainOpConstructor,

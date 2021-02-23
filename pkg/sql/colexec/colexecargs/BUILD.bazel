@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/sql/colcontainer",
-        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/parser",

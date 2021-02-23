@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -315,9 +315,9 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // created wrapper with those corresponding to operators in inputs (the latter
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	kvReader execinfra.KVReader,
-	inputs []colexecbase.Operator,
+	inputs []colexecop.Operator,
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
 ) (vectorizedStatsCollector, error) {
@@ -352,7 +352,7 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 	inbox *colrpc.Inbox, component execinfrapb.ComponentID, latency time.Duration,
 ) (vectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
-	op := colexecbase.Operator(inbox)
+	op := colexecop.Operator(inbox)
 	nvsc := newNetworkVectorizedStatsCollector(op, component, inputWatch, inbox, latency)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
@@ -393,9 +393,9 @@ type flowCreatorHelper interface {
 // as the metadataSources and closers in this DAG that need to be drained and
 // closed.
 type opDAGWithMetaSources struct {
-	rootOperator    colexecbase.Operator
+	rootOperator    colexecop.Operator
 	metadataSources []execinfrapb.MetadataSource
-	toClose         []colexecbase.Closer
+	toClose         []colexecop.Closer
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
@@ -403,10 +403,10 @@ type opDAGWithMetaSources struct {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
-		input colexecbase.Operator,
+		input colexecop.Operator,
 		typs []*types.T,
 		metadataSources []execinfrapb.MetadataSource,
-		toClose []colexecbase.Closer,
+		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
 	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -415,10 +415,10 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose)
 }
@@ -489,7 +489,7 @@ type vectorizedFlowCreator struct {
 	numClosers int32
 	numClosed  int32
 
-	inputsScratch []colexecbase.Operator
+	inputsScratch []colexecop.Operator
 }
 
 var _ execinfra.Releasable = &vectorizedFlowCreator{}
@@ -631,11 +631,11 @@ func (s *vectorizedFlowCreator) newStreamingMemAccount(
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	outputTyps []*types.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 	factory coldata.ColumnFactory,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
@@ -690,11 +690,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	outputTyps []*types.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 	factory coldata.ColumnFactory,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
@@ -742,7 +742,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 			}
 		case execinfrapb.StreamEndpointSpec_LOCAL:
 			foundLocalOutput = true
-			localOp := colexecbase.Operator(op)
+			localOp := colexecop.Operator(op)
 			if s.recordingStats {
 				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
 				// Wrap local outputs with vectorized stats collectors when recording
@@ -785,7 +785,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
 	factory coldata.ColumnFactory,
-) (colexecbase.Operator, []execinfrapb.MetadataSource, []colexecbase.Closer, error) {
+) (colexecop.Operator, []execinfrapb.MetadataSource, []colexecop.Closer, error) {
 	inputStreamOps := make([]colexec.SynchronizerInput, 0, len(input.Streams))
 	// Before we can safely use types we received over the wire in the
 	// operators, we need to make sure they are hydrated. In row execution
@@ -830,7 +830,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, nil, err
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
-			op := colexecbase.Operator(inbox)
+			op := colexecop.Operator(inbox)
 			if s.recordingStats {
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
 				// not originate from this node (we are the target node).
@@ -863,13 +863,13 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			op = os
 			metaSources = []execinfrapb.MetadataSource{os}
-			toClose = []colexecbase.Closer{os}
+			toClose = []colexecop.Closer{os}
 		} else {
 			if opt == flowinfra.FuseAggressively {
 				sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
 				op = sync
 				metaSources = []execinfrapb.MetadataSource{sync}
-				toClose = []colexecbase.Closer{sync}
+				toClose = []colexecop.Closer{sync}
 			} else {
 				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
 				op = sync
@@ -886,7 +886,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			statsInputs = nil
 		}
 		if s.recordingStats {
-			statsInputsAsOps := make([]colexecbase.Operator, len(statsInputs))
+			statsInputsAsOps := make([]colexecop.Operator, len(statsInputs))
 			for i := range statsInputs {
 				statsInputsAsOps[i] = statsInputs[i].Op
 			}
@@ -913,10 +913,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
-	op colexecbase.Operator,
+	op colexecop.Operator,
 	opOutputTypes []*types.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 	factory coldata.ColumnFactory,
 ) error {
 	output := &pspec.Output[0]
@@ -1030,7 +1030,7 @@ type callbackCloser struct {
 	closeCb func(context.Context) error
 }
 
-var _ colexecbase.Closer = &callbackCloser{}
+var _ colexecop.Closer = &callbackCloser{}
 
 // Close implements the Closer interface.
 func (c *callbackCloser) Close(ctx context.Context) error {
@@ -1083,7 +1083,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// toClose is similar to metadataSourcesQueue with the difference that these
 			// components do not produce metadata and should be Closed even during
 			// non-graceful termination.
-			var toClose []colexecbase.Closer
+			var toClose []colexecop.Closer
 			inputs := s.inputsScratch[:0]
 			for i := range pspec.Input {
 				input, metadataSources, closers, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
@@ -1136,7 +1136,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 				for _, closer := range result.ToClose {
-					func(c colexecbase.Closer) {
+					func(c colexecop.Closer) {
 						closed := false
 						toClose = append(toClose, &callbackCloser{closeCb: func(ctx context.Context) error {
 							if !closed {

@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,16 +74,16 @@ func _R_SET(to, from interface{}) {
 
 func GetCastOperator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	colIdx int,
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
-			OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
+			OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
 			allocator:            allocator,
 			colIdx:               colIdx,
 			outputIdx:            resultIdx,
@@ -103,7 +103,7 @@ func GetCastOperator(
 				// {{range .RightWidths}}
 				case _RIGHT_TYPE_WIDTH:
 					return &cast_NAMEOp{
-						OneInputCloserHelper: colexecbase.MakeOneInputCloserHelper(input),
+						OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
@@ -121,14 +121,14 @@ func GetCastOperator(
 }
 
 type castOpNullAny struct {
-	colexecbase.OneInputCloserHelper
+	colexecop.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ colexecbase.ClosableOperator = &castOpNullAny{}
+var _ colexecop.ClosableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.Input.Init()
@@ -180,7 +180,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 // {{range .RightWidths}}
 
 type cast_NAMEOp struct {
-	colexecbase.OneInputCloserHelper
+	colexecop.OneInputCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -188,15 +188,15 @@ type cast_NAMEOp struct {
 	toType    *types.T
 }
 
-var _ colexecbase.ResettableOperator = &cast_NAMEOp{}
-var _ colexecbase.ClosableOperator = &cast_NAMEOp{}
+var _ colexecop.ResettableOperator = &cast_NAMEOp{}
+var _ colexecop.ClosableOperator = &cast_NAMEOp{}
 
 func (c *cast_NAMEOp) Init() {
 	c.Input.Init()
 }
 
 func (c *cast_NAMEOp) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecbase.Resetter); ok {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }

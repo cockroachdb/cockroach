@@ -14,15 +14,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	colexecbase.OneInputCloserHelper
-	colexecbase.NonExplainable
+	colexecop.OneInputCloserHelper
+	colexecop.NonExplainable
 
 	projection []uint32
 	batches    map[coldata.Batch]*projectingBatch
@@ -32,8 +32,8 @@ type simpleProjectOp struct {
 	numBatchesLoggingThreshold int
 }
 
-var _ colexecbase.ClosableOperator = &simpleProjectOp{}
-var _ colexecbase.ResettableOperator = &simpleProjectOp{}
+var _ colexecop.ClosableOperator = &simpleProjectOp{}
+var _ colexecop.ResettableOperator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
 // underlying batch, discarding all columns but the ones in its projection
@@ -92,8 +92,8 @@ func (b *projectingBatch) ReplaceCol(col coldata.Vec, idx int) {
 // when input already outputs batches that satisfy the projection, a
 // simpleProjectOp is not planned and input is returned.
 func NewSimpleProjectOp(
-	input colexecbase.Operator, numInputCols int, projection []uint32,
-) colexecbase.Operator {
+	input colexecop.Operator, numInputCols int, projection []uint32,
+) colexecop.Operator {
 	if numInputCols == len(projection) {
 		projectionIsRedundant := true
 		for i := range projection {
@@ -106,7 +106,7 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		OneInputCloserHelper:       colexecbase.MakeOneInputCloserHelper(input),
+		OneInputCloserHelper:       colexecop.MakeOneInputCloserHelper(input),
 		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,
@@ -141,7 +141,7 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (d *simpleProjectOp) Reset(ctx context.Context) {
-	if r, ok := d.Input.(colexecbase.Resetter); ok {
+	if r, ok := d.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
