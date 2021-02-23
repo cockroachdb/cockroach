@@ -17,10 +17,18 @@ import { Pick } from "src/util/pick";
 import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
 import { connect } from "react-redux";
-import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
+import {
+  CachedDataReducerState,
+  refreshLiveness,
+  refreshNodes,
+  refreshSessions,
+} from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
-import { terminateQueryAction } from "src/redux/sessions/sessionsSagas";
+import {
+  terminateQueryAction,
+  terminateSessionAction,
+} from "src/redux/sessions/sessionsSagas";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -51,7 +59,10 @@ const SessionDetailsPageConnected = withRouter(
     }),
     {
       refreshSessions,
-      cancel: terminateQueryAction,
+      cancelSession: terminateSessionAction,
+      cancelQuery: terminateQueryAction,
+      refreshNodes: refreshNodes,
+      refreshNodesLiveness: refreshLiveness,
     },
   )(SessionDetails),
 );
