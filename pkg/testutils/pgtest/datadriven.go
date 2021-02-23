@@ -182,6 +182,14 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 					}
 				}
 			}
+		case "ignore_data_type_sizes":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.RowDescription); ok {
+					for i := range m.Fields {
+						m.Fields[i].DataTypeSize = 0
+					}
+				}
+			}
 		case "ignore":
 			for _, typ := range arg.Vals {
 				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
