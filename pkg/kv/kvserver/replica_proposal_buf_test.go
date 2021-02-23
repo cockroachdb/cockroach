@@ -716,7 +716,12 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	type reqType int
 	checkClosedTS := func(t *testing.T, r *testProposerRaft, exp hlc.Timestamp) {
 		require.Len(t, r.lastProps, 1)
-		require.Equal(t, exp, r.lastProps[0].ClosedTimestamp)
+		if exp.IsEmpty() {
+			require.Nil(t, r.lastProps[0].ClosedTimestamp)
+		} else {
+			require.NotNil(t, r.lastProps[0].ClosedTimestamp)
+			require.Equal(t, exp, *r.lastProps[0].ClosedTimestamp)
+		}
 	}
 
 	// The lease that the proposals are made under.

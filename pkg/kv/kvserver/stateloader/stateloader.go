@@ -298,24 +298,23 @@ func (rsl StateLoader) LoadMVCCStats(
 // keys. We now deem those keys to be "legacy" because they have been replaced
 // by the range applied state key.
 //
-// TODO(andrei): closedTimestamp is a pointer to avoid an allocation when
-// putting it in RangeAppliedState. RangeAppliedState.ClosedTimestamp is made
-// non-nullable (see comments on the field), this argument should be taken by
-// value.
+// TODO(andrei): closedTS is a pointer to avoid an allocation when putting it in
+// RangeAppliedState. RangeAppliedState.ClosedTimestamp is made non-nullable
+// (see comments on the field), this argument should be taken by value.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	appliedIndex, leaseAppliedIndex uint64,
 	newMS *enginepb.MVCCStats,
-	closedTimestamp *hlc.Timestamp,
+	closedTS *hlc.Timestamp,
 ) error {
 	as := enginepb.RangeAppliedState{
 		RaftAppliedIndex:  appliedIndex,
 		LeaseAppliedIndex: leaseAppliedIndex,
 		RangeStats:        newMS.ToPersistentStats(),
 	}
-	if closedTimestamp != nil && !closedTimestamp.IsEmpty() {
-		as.ClosedTimestamp = closedTimestamp
+	if closedTS != nil && !closedTS.IsEmpty() {
+		as.ClosedTimestamp = closedTS
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in C.MVCCComputeStats and ComputeStatsForRange.
@@ -498,7 +497,7 @@ func (rsl StateLoader) SetMVCCStats(
 
 // SetClosedTimestamp overwrites the closed timestamp.
 func (rsl StateLoader) SetClosedTimestamp(
-	ctx context.Context, readWriter storage.ReadWriter, closedTS hlc.Timestamp,
+	ctx context.Context, readWriter storage.ReadWriter, closedTS *hlc.Timestamp,
 ) error {
 	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
@@ -506,7 +505,7 @@ func (rsl StateLoader) SetClosedTimestamp(
 	}
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex,
-		as.RangeStats.ToStatsPtr(), &closedTS)
+		as.RangeStats.ToStatsPtr(), closedTS)
 }
 
 // SetLegacyRaftTruncatedState overwrites the truncated state.
