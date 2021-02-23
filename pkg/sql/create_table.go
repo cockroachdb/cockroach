@@ -2491,6 +2491,12 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					def.Columns = append(def.Columns, tree.IndexElem{Column: tree.Name(colNames[i])})
 				}
 				defs = append(defs, &def)
+				if c.IsPartial() {
+					def.Predicate, err = parser.ParseExpr(c.Predicate)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 		if opts.Has(tree.LikeTableOptIndexes) {
