@@ -32,10 +32,10 @@
 
 /pkg/geo                     @cockroachdb/geospatial
 
-/pkg/ui/                     @cockroachdb/admin-ui-prs
-/pkg/ui/embedded.go          @cockroachdb/admin-ui-prs
-/pkg/ui/src/js/protos.d.ts   @cockroachdb/admin-ui-prs
-/pkg/ui/src/js/protos.js     @cockroachdb/admin-ui-prs
+/pkg/ui/                     @cockroachdb/cluster-ui-prs
+/pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
+/pkg/ui/src/js/protos.d.ts   @cockroachdb/cluster-ui-prs
+/pkg/ui/src/js/protos.js     @cockroachdb/cluster-ui-prs
 
 /docs/generated/http         @cockroachdb/http-api-prs
 /pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs
