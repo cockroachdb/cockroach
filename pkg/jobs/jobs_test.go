@@ -316,7 +316,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -338,7 +338,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +359,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -393,7 +393,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -431,7 +431,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -458,7 +458,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -484,7 +484,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -514,7 +514,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -553,7 +553,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		job, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -659,7 +659,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -690,7 +690,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		// Make marking success fail.
 		rts.successErr = errors.New("injected failure at marking as succeeded")
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -723,7 +723,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		// Make marking success fail.
 		rts.successErr = errors.New("resume failed")
-		j, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -759,7 +759,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			return nil
 		}
 
-		job, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		require.NoError(t, err)
 		rts.job = job
 
@@ -794,7 +794,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			return errors.New("boom")
 		}
 
-		job, err := rts.registry.TestingCreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
 		require.NoError(t, err)
 		rts.job = job
 
@@ -872,7 +872,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.StartableJob, expectation) {
 		beforeTime := timeutil.Now()
-		job, err := registry.TestingCreateAndStartJob(ctx, nil, record)
+		job, err := jobs.TestingCreateAndStartJob(ctx, registry, s.DB(), record)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1838,7 +1838,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	t.Run("show job", func(t *testing.T) {
 		// Start a job and cancel it so it is in state finished and then query it with
 		// SHOW JOB WHEN COMPLETE.
-		job, err := registry.TestingCreateAndStartJob(ctx, nil, mockJob)
+		job, err := jobs.TestingCreateAndStartJob(ctx, registry, s.DB(), mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1874,15 +1874,15 @@ func TestShowJobWhenComplete(t *testing.T) {
 	t.Run("show jobs", func(t *testing.T) {
 		// Start two jobs and cancel the first one to make sure the
 		// query still blocks until the second job is also canceled.
-		var jobs [2]*jobs.StartableJob
-		for i := range jobs {
-			job, err := registry.TestingCreateAndStartJob(ctx, nil, mockJob)
+		var jobsToStart [2]*jobs.StartableJob
+		for i := range jobsToStart {
+			job, err := jobs.TestingCreateAndStartJob(ctx, registry, s.DB(), mockJob)
 			if err != nil {
 				t.Fatal(err)
 			}
-			jobs[i] = job
+			jobsToStart[i] = job
 		}
-		if _, err := db.ExecContext(ctx, "CANCEL JOB $1", *jobs[0].ID()); err != nil {
+		if _, err := db.ExecContext(ctx, "CANCEL JOB $1", *jobsToStart[0].ID()); err != nil {
 			t.Fatal(err)
 		}
 		group := ctxgroup.WithContext(ctx)
@@ -1890,7 +1890,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 			rows, err := db.QueryContext(ctx,
 				`SELECT job_id, status
 				 FROM [SHOW JOBS WHEN COMPLETE (SELECT $1 UNION SELECT $2)]`,
-				*jobs[0].ID(), *jobs[1].ID())
+				*jobsToStart[0].ID(), *jobsToStart[1].ID())
 			if err != nil {
 				return err
 			}
@@ -1901,8 +1901,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 				}
 				cnt += 1
 				switch out.id {
-				case *jobs[0].ID():
-				case *jobs[1].ID():
+				case *jobsToStart[0].ID():
+				case *jobsToStart[1].ID():
 					// SHOW JOBS WHEN COMPLETE finishes only after all jobs are
 					// canceled.
 					if out.status != "canceled" {
@@ -1913,7 +1913,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 				default:
 					return errors.Errorf(
 						"Expected either id:%d or id:%d but got: %d",
-						*jobs[0].ID(), *jobs[1].ID(), out.id)
+						*jobsToStart[0].ID(), *jobsToStart[1].ID(), out.id)
 				}
 			}
 			if cnt != 2 {
@@ -1925,7 +1925,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 		// SHOW JOBS WHEN COMPLETE does block until the job is canceled.
 		time.Sleep(2 * time.Millisecond)
 		var err error
-		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", *jobs[1].ID()); err == nil {
+		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", *jobsToStart[1].ID()); err == nil {
 			err = group.Wait()
 		}
 		if err != nil {

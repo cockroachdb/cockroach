@@ -22,7 +22,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
-        "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
