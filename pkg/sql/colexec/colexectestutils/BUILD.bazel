@@ -15,7 +15,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

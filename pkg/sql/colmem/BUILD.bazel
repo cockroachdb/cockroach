@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/typeconv",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/duration",
@@ -27,7 +27,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

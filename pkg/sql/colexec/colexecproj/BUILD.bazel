@@ -19,7 +19,7 @@ go_library(
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",  # keep
+        "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",  # keep
@@ -51,7 +51,7 @@ go_test(
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/rowenc",
