@@ -29,6 +29,9 @@ add-apt-repository ppa:longsleep/golang-backports
 add-apt-repository ppa:git-core/ppa
 apt-get update --yes
 
+# Install the sudo version patched for CVE-2021-3156
+apt-get install --yes sudo
+
 # Install the necessary dependencies. Keep this list small!
 apt-get install --yes \
   docker-ce \
