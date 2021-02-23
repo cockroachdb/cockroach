@@ -219,7 +219,7 @@ func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) (*ProposalData, [
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
 	needed := raftCommandPrefixLen + cmdLen +
-		kvserverpb.MaxRaftCommandFooterSize() +
+		kvserverpb.MaxMaxLeaseFooterSize() +
 		kvserverpb.MaxClosedTimestampFooterSize()
 	data := make([]byte, raftCommandPrefixLen, needed)
 	encodeRaftCommandPrefix(data, raftVersionStandard, p.idKey)

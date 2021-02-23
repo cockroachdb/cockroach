@@ -48,7 +48,7 @@ func (m *Split) Reset()         { *m = Split{} }
 func (m *Split) String() string { return proto.CompactTextString(m) }
 func (*Split) ProtoMessage()    {}
 func (*Split) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{0}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{0}
 }
 func (m *Split) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -83,7 +83,7 @@ func (m *Merge) Reset()         { *m = Merge{} }
 func (m *Merge) String() string { return proto.CompactTextString(m) }
 func (*Merge) ProtoMessage()    {}
 func (*Merge) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{1}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{1}
 }
 func (m *Merge) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -117,7 +117,7 @@ type ChangeReplicas struct {
 func (m *ChangeReplicas) Reset()      { *m = ChangeReplicas{} }
 func (*ChangeReplicas) ProtoMessage() {}
 func (*ChangeReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{2}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{2}
 }
 func (m *ChangeReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -169,7 +169,7 @@ func (m *ComputeChecksum) Reset()         { *m = ComputeChecksum{} }
 func (m *ComputeChecksum) String() string { return proto.CompactTextString(m) }
 func (*ComputeChecksum) ProtoMessage()    {}
 func (*ComputeChecksum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{3}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{3}
 }
 func (m *ComputeChecksum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -206,7 +206,7 @@ func (m *Compaction) Reset()         { *m = Compaction{} }
 func (m *Compaction) String() string { return proto.CompactTextString(m) }
 func (*Compaction) ProtoMessage()    {}
 func (*Compaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{4}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{4}
 }
 func (m *Compaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -243,7 +243,7 @@ func (m *SuggestedCompaction) Reset()         { *m = SuggestedCompaction{} }
 func (m *SuggestedCompaction) String() string { return proto.CompactTextString(m) }
 func (*SuggestedCompaction) ProtoMessage()    {}
 func (*SuggestedCompaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{5}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{5}
 }
 func (m *SuggestedCompaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -305,7 +305,7 @@ func (m *ReplicatedEvalResult) Reset()         { *m = ReplicatedEvalResult{} }
 func (m *ReplicatedEvalResult) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult) ProtoMessage()    {}
 func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{6}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{6}
 }
 func (m *ReplicatedEvalResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -349,7 +349,7 @@ func (m *ReplicatedEvalResult_AddSSTable) Reset()         { *m = ReplicatedEvalR
 func (m *ReplicatedEvalResult_AddSSTable) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult_AddSSTable) ProtoMessage()    {}
 func (*ReplicatedEvalResult_AddSSTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{6, 0}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{6, 0}
 }
 func (m *ReplicatedEvalResult_AddSSTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -386,7 +386,7 @@ func (m *WriteBatch) Reset()         { *m = WriteBatch{} }
 func (m *WriteBatch) String() string { return proto.CompactTextString(m) }
 func (*WriteBatch) ProtoMessage()    {}
 func (*WriteBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{7}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{7}
 }
 func (m *WriteBatch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -423,7 +423,7 @@ func (m *LogicalOpLog) Reset()         { *m = LogicalOpLog{} }
 func (m *LogicalOpLog) String() string { return proto.CompactTextString(m) }
 func (*LogicalOpLog) ProtoMessage()    {}
 func (*LogicalOpLog) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{8}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{8}
 }
 func (m *LogicalOpLog) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -506,7 +506,12 @@ type RaftCommand struct {
 	// updated accordingly. Managing retry of proposals becomes trickier as
 	// well as that uproots whatever ordering was originally envisioned.
 	//
-	// This field is set through RaftCommandFooter hackery.
+	// This field is set through MaxLeaseFooter hackery. Unlike with the
+	// ClosedTimestamp, which needs to be nullable in this proto (see comment),
+	// there are no nullability concerns with this field. This is because
+	// max_lease_index is a primitive type, so it does not get encoded when zero.
+	// This alone ensures that the field is not encoded twice in the combined
+	// RaftCommand+MaxLeaseFooter proto.
 	MaxLeaseIndex uint64 `protobuf:"varint,4,opt,name=max_lease_index,json=maxLeaseIndex,proto3" json:"max_lease_index,omitempty"`
 	// The closed timestamp carried by this command. Once a follower is told to
 	// apply this command, it knows that there will be no further writes at
@@ -547,7 +552,7 @@ func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
 func (m *RaftCommand) String() string { return proto.CompactTextString(m) }
 func (*RaftCommand) ProtoMessage()    {}
 func (*RaftCommand) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{9}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{9}
 }
 func (m *RaftCommand) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -572,26 +577,26 @@ func (m *RaftCommand) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RaftCommand proto.InternalMessageInfo
 
-// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
+// MaxLeaseFooter contains a subset of the fields in RaftCommand. It is used
 // to optimize a pattern where most of the fields in RaftCommand are marshaled
 // outside of a heavily contended critical section, except for the fields in the
 // footer, which are assigned and marhsaled inside of the critical section and
 // appended to the marshaled byte buffer. This minimizes the memory allocation
 // and marshaling work performed under lock.
-type RaftCommandFooter struct {
+type MaxLeaseFooter struct {
 	MaxLeaseIndex uint64 `protobuf:"varint,4,opt,name=max_lease_index,json=maxLeaseIndex,proto3" json:"max_lease_index,omitempty"`
 }
 
-func (m *RaftCommandFooter) Reset()         { *m = RaftCommandFooter{} }
-func (m *RaftCommandFooter) String() string { return proto.CompactTextString(m) }
-func (*RaftCommandFooter) ProtoMessage()    {}
-func (*RaftCommandFooter) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{10}
+func (m *MaxLeaseFooter) Reset()         { *m = MaxLeaseFooter{} }
+func (m *MaxLeaseFooter) String() string { return proto.CompactTextString(m) }
+func (*MaxLeaseFooter) ProtoMessage()    {}
+func (*MaxLeaseFooter) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{10}
 }
-func (m *RaftCommandFooter) XXX_Unmarshal(b []byte) error {
+func (m *MaxLeaseFooter) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RaftCommandFooter) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *MaxLeaseFooter) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -599,19 +604,19 @@ func (m *RaftCommandFooter) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 	}
 	return b[:n], nil
 }
-func (dst *RaftCommandFooter) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RaftCommandFooter.Merge(dst, src)
+func (dst *MaxLeaseFooter) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MaxLeaseFooter.Merge(dst, src)
 }
-func (m *RaftCommandFooter) XXX_Size() int {
+func (m *MaxLeaseFooter) XXX_Size() int {
 	return m.Size()
 }
-func (m *RaftCommandFooter) XXX_DiscardUnknown() {
-	xxx_messageInfo_RaftCommandFooter.DiscardUnknown(m)
+func (m *MaxLeaseFooter) XXX_DiscardUnknown() {
+	xxx_messageInfo_MaxLeaseFooter.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RaftCommandFooter proto.InternalMessageInfo
+var xxx_messageInfo_MaxLeaseFooter proto.InternalMessageInfo
 
-// ClosedTimestampFooter is similar to RaftCommandFooter, allowing the proposal
+// ClosedTimestampFooter is similar to MaxLeaseFooter, allowing the proposal
 // buffer to fill in the closed_timestamp field after most of the proto has been
 // marshaled already.
 type ClosedTimestampFooter struct {
@@ -625,7 +630,7 @@ func (m *ClosedTimestampFooter) Reset()         { *m = ClosedTimestampFooter{} }
 func (m *ClosedTimestampFooter) String() string { return proto.CompactTextString(m) }
 func (*ClosedTimestampFooter) ProtoMessage()    {}
 func (*ClosedTimestampFooter) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_4be80e2a938c97b0, []int{11}
+	return fileDescriptor_proposer_kv_7221db15568d8c0d, []int{11}
 }
 func (m *ClosedTimestampFooter) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -663,7 +668,7 @@ func init() {
 	proto.RegisterType((*LogicalOpLog)(nil), "cockroach.kv.kvserver.storagepb.LogicalOpLog")
 	proto.RegisterType((*RaftCommand)(nil), "cockroach.kv.kvserver.storagepb.RaftCommand")
 	proto.RegisterMapType((map[string]string)(nil), "cockroach.kv.kvserver.storagepb.RaftCommand.TraceDataEntry")
-	proto.RegisterType((*RaftCommandFooter)(nil), "cockroach.kv.kvserver.storagepb.RaftCommandFooter")
+	proto.RegisterType((*MaxLeaseFooter)(nil), "cockroach.kv.kvserver.storagepb.MaxLeaseFooter")
 	proto.RegisterType((*ClosedTimestampFooter)(nil), "cockroach.kv.kvserver.storagepb.ClosedTimestampFooter")
 }
 func (this *Split) Equal(that interface{}) bool {
@@ -1387,7 +1392,7 @@ func (m *RaftCommand) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *RaftCommandFooter) Marshal() (dAtA []byte, err error) {
+func (m *MaxLeaseFooter) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -1397,7 +1402,7 @@ func (m *RaftCommandFooter) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RaftCommandFooter) MarshalTo(dAtA []byte) (int, error) {
+func (m *MaxLeaseFooter) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1681,7 +1686,7 @@ func (m *RaftCommand) Size() (n int) {
 	return n
 }
 
-func (m *RaftCommandFooter) Size() (n int) {
+func (m *MaxLeaseFooter) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3449,7 +3454,7 @@ func (m *RaftCommand) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RaftCommandFooter) Unmarshal(dAtA []byte) error {
+func (m *MaxLeaseFooter) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3472,10 +3477,10 @@ func (m *RaftCommandFooter) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RaftCommandFooter: wiretype end group for non-group")
+			return fmt.Errorf("proto: MaxLeaseFooter: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RaftCommandFooter: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: MaxLeaseFooter: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 4:
@@ -3704,14 +3709,14 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/proposer_kv.proto", fileDescriptor_proposer_kv_4be80e2a938c97b0)
+	proto.RegisterFile("kv/kvserver/kvserverpb/proposer_kv.proto", fileDescriptor_proposer_kv_7221db15568d8c0d)
 }
 
-var fileDescriptor_proposer_kv_4be80e2a938c97b0 = []byte{
-	// 1459 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_proposer_kv_7221db15568d8c0d = []byte{
+	// 1460 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x57, 0x5f, 0x6f, 0x13, 0xc7,
 	0x16, 0x8f, 0x63, 0x3b, 0x59, 0x1f, 0x27, 0xf6, 0x66, 0x08, 0xb0, 0x37, 0xf7, 0x5e, 0x3b, 0xf2,
-	0xe5, 0xa2, 0xdc, 0x5b, 0xba, 0x46, 0x49, 0x2b, 0x55, 0x80, 0x2a, 0x62, 0x07, 0x4a, 0x4c, 0x92,
+	0xe5, 0xa2, 0xdc, 0x5b, 0xba, 0x46, 0x49, 0x2b, 0x21, 0x8a, 0x2a, 0x62, 0x07, 0x4a, 0x4c, 0x92,
 	0xc2, 0x38, 0xd0, 0x8a, 0x3e, 0xac, 0xc6, 0xbb, 0xc3, 0x7a, 0xeb, 0xb5, 0x77, 0xd9, 0x19, 0x1b,
 	0xf2, 0x29, 0xda, 0x4a, 0x95, 0xda, 0xa7, 0x96, 0xc7, 0x7e, 0x8d, 0xbe, 0xf1, 0xc8, 0x23, 0xea,
 	0x83, 0x55, 0xc2, 0x4b, 0x3f, 0x03, 0x4f, 0xd5, 0xcc, 0xce, 0xfa, 0x0f, 0x0a, 0x8d, 0xa1, 0x6f,
@@ -3729,7 +3734,7 @@ var fileDescriptor_proposer_kv_4be80e2a938c97b0 = []byte{
 	0xcf, 0x87, 0xe5, 0x14, 0x4e, 0x34, 0xd1, 0x21, 0xe4, 0xa2, 0x36, 0xb3, 0x1c, 0xea, 0x73, 0x62,
 	0xcc, 0x4b, 0x98, 0xff, 0x4e, 0xc0, 0xa8, 0xeb, 0x99, 0xc9, 0xf5, 0xcc, 0xfd, 0xfb, 0xf5, 0x7a,
 	0x93, 0x13, 0xce, 0x6a, 0xba, 0x00, 0x3b, 0x1e, 0x96, 0x35, 0x7c, 0xab, 0xb9, 0x23, 0xd4, 0xb1,
-	0x16, 0xb5, 0x99, 0x5c, 0x5d, 0xc9, 0xfc, 0xf1, 0xb4, 0x9c, 0xaa, 0x60, 0xc8, 0xee, 0xd3, 0xc8,
+	0x16, 0xb5, 0x99, 0x5c, 0x5d, 0xcd, 0xfc, 0xf1, 0xb4, 0x9c, 0xaa, 0x60, 0xc8, 0xee, 0xd3, 0xc8,
 	0xa5, 0xb3, 0x79, 0x2a, 0x8f, 0xbe, 0xdd, 0x53, 0x85, 0xe9, 0x40, 0xa1, 0xde, 0x26, 0x3d, 0x97,
 	0x62, 0x1a, 0xfa, 0x9e, 0x4d, 0x18, 0xda, 0x7b, 0x13, 0x7c, 0xe3, 0x04, 0xf0, 0x69, 0x9d, 0xbf,
 	0xb2, 0xf2, 0xe3, 0xd3, 0xf2, 0x5c, 0xe5, 0xe5, 0x3c, 0x14, 0xeb, 0x41, 0x37, 0xec, 0x73, 0x5a,
@@ -3783,22 +3788,22 @@ var fileDescriptor_proposer_kv_4be80e2a938c97b0 = []byte{
 	0xc1, 0xcb, 0x5d, 0xf2, 0x44, 0x66, 0x63, 0x57, 0x08, 0xd1, 0x21, 0xfc, 0x63, 0xa2, 0x53, 0x47,
 	0xef, 0x46, 0xa9, 0x27, 0x67, 0x5b, 0x7e, 0xd3, 0x38, 0x61, 0x7e, 0xc5, 0x84, 0x71, 0x7e, 0xac,
 	0x7a, 0x47, 0x69, 0xca, 0x0d, 0x34, 0x80, 0xf3, 0xd3, 0x50, 0x16, 0x13, 0xe4, 0xd2, 0xb3, 0xa9,
-	0xe4, 0x9c, 0x74, 0xed, 0xd3, 0xd7, 0xc3, 0xf2, 0x95, 0x77, 0x1a, 0x01, 0x12, 0xb8, 0xa9, 0x50,
+	0xe4, 0x9c, 0x74, 0xed, 0xd3, 0xd7, 0xc3, 0xf2, 0xd5, 0x77, 0x1a, 0x01, 0x12, 0xb8, 0xa9, 0x50,
 	0xf0, 0xd9, 0x70, 0xd2, 0x5e, 0x22, 0x46, 0x8f, 0xe0, 0x5c, 0x34, 0xea, 0x38, 0x8b, 0x0e, 0x88,
 	0x6f, 0x45, 0xb2, 0xe7, 0x64, 0x4f, 0xe7, 0x37, 0x3f, 0x7e, 0xaf, 0x86, 0x55, 0x71, 0x5e, 0x8d,
 	0x4e, 0x1a, 0x0c, 0x7b, 0x90, 0x7f, 0x2c, 0xb2, 0x6d, 0xb5, 0x44, 0xba, 0x8d, 0xc2, 0x8c, 0xf3,
 	0x68, 0x5c, 0x21, 0x18, 0x1e, 0x8f, 0xab, 0xa5, 0x09, 0x05, 0x3f, 0x4e, 0xaf, 0x15, 0x84, 0x82,
 	0x92, 0x8c, 0xe2, 0x8c, 0xf3, 0x66, 0xb2, 0xa0, 0xf0, 0x92, 0x3f, 0x59, 0x5e, 0x0f, 0x00, 0x78,
-	0x44, 0x6c, 0x6a, 0xc9, 0x42, 0xd4, 0x65, 0x95, 0x5d, 0x3d, 0x3d, 0x12, 0xe3, 0x6a, 0x32, 0x0f,
-	0x85, 0xfa, 0x0e, 0xe1, 0xe4, 0x46, 0x8f, 0x47, 0x47, 0x38, 0xc7, 0x93, 0x6f, 0x74, 0x0b, 0x74,
-	0xdb, 0x0f, 0x18, 0x75, 0xac, 0xf1, 0xcc, 0x58, 0x99, 0x81, 0x58, 0x70, 0x31, 0x56, 0x1b, 0x09,
-	0xd6, 0xae, 0x41, 0x61, 0xda, 0x0c, 0xd2, 0x21, 0x9d, 0xbc, 0x42, 0x72, 0x58, 0x2c, 0xc5, 0xfb,
-	0x67, 0x40, 0xfc, 0x7e, 0x3c, 0x85, 0x73, 0x38, 0xfe, 0xb8, 0x32, 0xff, 0x89, 0x68, 0xd6, 0xb4,
-	0x9e, 0x19, 0xb5, 0xec, 0xbc, 0x9e, 0x8e, 0xdb, 0xf1, 0xe7, 0x83, 0xca, 0x55, 0x58, 0x99, 0xb8,
-	0xca, 0xcd, 0x20, 0xe0, 0x34, 0x9a, 0xb5, 0x3d, 0x2a, 0x2e, 0x9c, 0xad, 0x4f, 0xfb, 0xa9, 0x00,
-	0x0e, 0xde, 0xf3, 0xde, 0xaa, 0x96, 0xde, 0xbc, 0x7d, 0xed, 0xd2, 0xb3, 0x97, 0xa5, 0xb9, 0x67,
-	0xc7, 0xa5, 0xd4, 0xf3, 0xe3, 0x52, 0xea, 0xc5, 0x71, 0x29, 0xf5, 0xfb, 0x71, 0x29, 0xf5, 0xed,
-	0xab, 0xd2, 0xdc, 0xf3, 0x57, 0xa5, 0xb9, 0x17, 0xaf, 0x4a, 0x73, 0x0f, 0x60, 0xfc, 0x6b, 0xd4,
-	0x5a, 0x90, 0x7f, 0x39, 0x5b, 0x7f, 0x06, 0x00, 0x00, 0xff, 0xff, 0x67, 0x8b, 0xdb, 0x5f, 0x00,
-	0x0e, 0x00, 0x00,
+	0x44, 0x6c, 0x6a, 0xc9, 0x42, 0xd4, 0x65, 0x95, 0x7d, 0x72, 0x7a, 0x24, 0xc6, 0xd5, 0x64, 0x1e,
+	0x0a, 0xf5, 0x1d, 0xc2, 0xc9, 0x8d, 0x1e, 0x8f, 0x8e, 0x70, 0x8e, 0x27, 0xdf, 0xe8, 0x16, 0xe8,
+	0xb6, 0x1f, 0x30, 0xea, 0x58, 0xe3, 0x99, 0xb1, 0x32, 0x03, 0xb1, 0xe0, 0x62, 0xac, 0x36, 0x12,
+	0xac, 0x5d, 0x83, 0xc2, 0xb4, 0x19, 0xa4, 0x43, 0x3a, 0x79, 0x85, 0xe4, 0xb0, 0x58, 0x8a, 0xf7,
+	0xcf, 0x80, 0xf8, 0xfd, 0x78, 0x0a, 0xe7, 0x70, 0xfc, 0x71, 0x75, 0xfe, 0x8a, 0x68, 0xd6, 0xb4,
+	0x9e, 0x19, 0xb5, 0xec, 0xbc, 0x9e, 0x8e, 0xdb, 0xf1, 0xe7, 0x83, 0xca, 0x15, 0x28, 0xec, 0xab,
+	0x92, 0xbf, 0x19, 0x04, 0x9c, 0x46, 0xb3, 0xf6, 0x46, 0xc5, 0x85, 0xb3, 0xf5, 0x69, 0x27, 0x15,
+	0xc0, 0xc1, 0x7b, 0x5e, 0x5a, 0x15, 0xd2, 0x9b, 0x57, 0xaf, 0x5d, 0x7a, 0xf6, 0xb2, 0x34, 0xf7,
+	0xec, 0xb8, 0x94, 0x7a, 0x7e, 0x5c, 0x4a, 0xbd, 0x38, 0x2e, 0xa5, 0x7e, 0x3f, 0x2e, 0xa5, 0xbe,
+	0x7d, 0x55, 0x9a, 0x7b, 0xfe, 0xaa, 0x34, 0xf7, 0xe2, 0x55, 0x69, 0xee, 0x01, 0x8c, 0xff, 0x8b,
+	0x5a, 0x0b, 0xf2, 0x17, 0x67, 0xeb, 0xcf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x05, 0x7f, 0x93, 0xe3,
+	0xfd, 0x0d, 0x00, 0x00,
 }
