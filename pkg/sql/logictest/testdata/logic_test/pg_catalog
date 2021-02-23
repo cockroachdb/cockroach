@@ -2119,7 +2119,7 @@ objoid      classoid    objsubid  description
 4294967261  4294967194  0         session variables (RAM)
 4294967259  4294967194  0         details for all columns accessible by current user in current database (KV scan)
 4294967258  4294967194  0         indexes accessible by current user in current database (KV scan)
-4294967256  4294967194  0         the latest stats for all tables accessible by current user in current database (KV scan)
+4294967256  4294967194  0         stats for all tables accessible by current user in current database as of 10s ago
 4294967257  4294967194  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
 4294967253  4294967194  0         decoded zone configurations from system.zones (KV scan)
 4294967249  4294967194  0         roles for which the current user has admin option

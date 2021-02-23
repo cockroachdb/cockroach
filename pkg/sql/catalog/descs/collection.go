@@ -323,7 +323,9 @@ func (tc *Collection) getDescriptorFromStore(
 		return false, nil, err
 	} else if desc == nil {
 		// Having done the namespace lookup, the descriptor must exist.
-		return false, nil, errors.AssertionFailedf("descriptor %d not found", descID)
+		return false, nil, errors.NewAssertionErrorWithWrappedErrf(
+			catalog.ErrDescriptorNotFound, "descriptor %d not found", descID,
+		)
 	}
 	isNamespace2 := parentID == keys.SystemDatabaseID && name == systemschema.NamespaceTableName
 	// Immediately after a RENAME an old name still points to the descriptor
