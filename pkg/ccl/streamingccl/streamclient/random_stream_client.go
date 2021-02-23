@@ -36,8 +36,8 @@ const (
 	// random stream client.
 	RandomStreamSchemaPlaceholder = "CREATE TABLE %s (k INT PRIMARY KEY, v INT)"
 
-	// TestScheme is the URI scheme used to create a test load.
-	TestScheme = "test"
+	// RandomGenScheme is the URI scheme used to create a test load.
+	RandomGenScheme = "randomgen"
 	// ValueRangeKey controls the range of the randomly generated values produced
 	// by this workload. The workload will generate between 0 and this value.
 	ValueRangeKey = "VALUE_RANGE"
@@ -147,9 +147,6 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 //
 // The client can be configured to return more than one partition via the stream
 // URL. Each partition covers a single table span.
-//
-// TODO: Move this over to a _test file in the ingestion package when there is a
-// real stream client implementation.
 type randomStreamClient struct {
 	config randomStreamConfig
 
@@ -202,7 +199,7 @@ func (m *randomStreamClient) GetTopology(
 	for i := 0; i < m.config.numPartitions; i++ {
 		tableID := descpb.ID(m.getNextTableID())
 		partitionURI := url.URL{
-			Scheme: TestScheme,
+			Scheme: RandomGenScheme,
 			Host:   strconv.Itoa(int(tableID)),
 		}
 		topology.Partitions = append(topology.Partitions,
@@ -259,11 +256,12 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 
 // ConsumePartition implements the Client interface.
 func (m *randomStreamClient) ConsumePartition(
-	ctx context.Context, partitionAddress streamingccl.PartitionAddress, startTime time.Time,
+	ctx context.Context, partitionAddress streamingccl.PartitionAddress, startTime hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
 	eventCh := make(chan streamingccl.Event)
 	now := timeutil.Now()
-	if startTime.After(now) {
+	startWalltime := timeutil.Unix(0 /* sec */, startTime.WallTime)
+	if startWalltime.After(now) {
 		panic("cannot start random stream client event stream in the future")
 	}
 

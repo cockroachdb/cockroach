@@ -84,6 +84,16 @@ func ingestionPlanHook(
 			return errors.Newf("no tenant specified in ingestion query: %s", ingestionStmt.String())
 		}
 
+		streamAddress := streamingccl.StreamAddress(from[0])
+		url, err := streamAddress.URL()
+		if err != nil {
+			return err
+		}
+		q := url.Query()
+		q.Set("TENANT_ID", ingestionStmt.Targets.Tenant.String())
+		url.RawQuery = q.Encode()
+		streamAddress = streamingccl.StreamAddress(url.String())
+
 		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||
 			ingestionStmt.Targets.Tables != nil || ingestionStmt.Targets.Schemas != nil {
 			return errors.Newf("unsupported target in ingestion query, "+
@@ -103,7 +113,7 @@ func ingestionPlanHook(
 		}
 
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
-			StreamAddress: streamingccl.StreamAddress(from[0]),
+			StreamAddress: streamAddress,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
 		}
