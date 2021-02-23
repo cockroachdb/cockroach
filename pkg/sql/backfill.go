@@ -1668,11 +1668,11 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 				if idxLen != expectedCount {
 					// TODO(vivek): find the offending row and include it in the error.
-					return pgerror.Newf(
-						pgcode.UniqueViolation,
-						"%d entries, expected %d violates unique constraint %q",
-						idxLen, expectedCount, idx.Name,
-					)
+					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
+						"duplicate key value violates unique constraint %q",
+						idx.Name),
+						idx.Name)
+
 				}
 
 			case <-ctx.Done():
