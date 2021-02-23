@@ -1851,7 +1851,13 @@ func (r *importResumer) dropTables(
 		// it was rolled back to its pre-IMPORT state, and instead provide a manual
 		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
-		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
+
+		// disallowShadowing means no existing keys could have been covered by a key
+		// imported and the table was offline to other writes, so even if GC has run
+		// it would not have GC'ed any keys to which we need to revert, so we can
+		// safely ignore the target-time GC check.
+		const ignoreGC = true
+		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, ignoreGC, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back partially completed IMPORT")
 		}
 	}

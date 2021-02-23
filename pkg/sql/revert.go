@@ -28,13 +28,16 @@ import (
 // TODO(dt): tune this via experimentation.
 const RevertTableDefaultBatchSize = 500000
 
-// RevertTables reverts the passed table to the target time.
+// RevertTables reverts the passed table to the target time, which much be above
+// the GC threshold for every range (unless the flag ignoreGCThreshold is passed
+// which should be done with care -- see RevertRangeRequest.IgnoreGCThreshold).
 func RevertTables(
 	ctx context.Context,
 	db *kv.DB,
 	execCfg *ExecutorConfig,
 	tables []catalog.TableDescriptor,
 	targetTime hlc.Timestamp,
+	ignoreGCThreshold bool,
 	batchSize int64,
 ) error {
 	reverting := make(map[descpb.ID]bool, len(tables))
@@ -88,7 +91,8 @@ func RevertTables(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: targetTime,
+				TargetTime:        targetTime,
+				IgnoreGcThreshold: ignoreGCThreshold,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = batchSize
