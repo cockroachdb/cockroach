@@ -476,6 +476,22 @@ uniq_idx                     crdb_region  true
 statement ok
 DROP INDEX uniq_idx
 
+statement ok
+INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+  ('ca-central-1', 5, 5, 5, 5),
+  ('ca-central-1', 6, 6, 5, -5)
+
+statement error could not create unique constraint "uniq_idx"\nDETAIL: Key \(a\)=\(5\) is duplicated
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
+
+statement ok
+DELETE FROM regional_by_row_table WHERE pk = 5;
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
+
+statement ok
+DELETE FROM regional_by_row_table WHERe pk = 6;
+DROP INDEX uniq_idx
+
 query TI
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
 ('ca-central-1', 7, 7, 8, 9)
