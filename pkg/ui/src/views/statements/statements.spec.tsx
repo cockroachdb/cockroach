@@ -17,7 +17,11 @@ import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
-import { CollectedStatementStatistics } from "src/util/appStats";
+import {
+  CollectedStatementStatistics,
+  ExecStats,
+  StatementStatistics,
+} from "src/util/appStats";
 import { appAttr, statementAttr } from "src/util/constants";
 import {
   selectStatements,
@@ -476,11 +480,13 @@ function makeFingerprint(
 }
 
 let makeStatsIndex = 1;
-function makeStats() {
+function makeStats(): Required<StatementStatistics> {
   return {
     count: Long.fromNumber(makeStatsIndex++),
     first_attempt_count: Long.fromNumber(1),
     max_retries: Long.fromNumber(0),
+    legacy_last_err: "",
+    legacy_last_err_redacted: "",
     num_rows: makeStat(),
     parse_lat: makeStat(),
     plan_lat: makeStat(),
@@ -490,10 +496,17 @@ function makeStats() {
     sensitive_info: makeEmptySensitiveInfo(),
     rows_read: makeStat(),
     bytes_read: makeStat(),
-    bytes_sent_over_network: makeStat(),
+    exec_stats: makeExecStats(),
+  };
+}
+
+function makeExecStats(): Required<ExecStats> {
+  return {
+    count: Long.fromNumber(10),
+    network_bytes: makeStat(),
     max_mem_usage: makeStat(),
-    exec_stat_collection_count: Long.fromNumber(10),
     contention_time: makeStat(),
+    network_messages: makeStat(),
   };
 }
 

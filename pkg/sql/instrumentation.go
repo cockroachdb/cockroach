@@ -250,19 +250,7 @@ func (ih *instrumentationHelper) Finish(
 		// TODO(radu): this should be unified with other stmt stats accesses.
 		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 		if stmtStats != nil {
-			stmtStats.mu.Lock()
-			stmtStats.mu.data.ExecStatCollectionCount++
-			// Record trace-related statistics.
-			stmtStats.mu.data.BytesSentOverNetwork.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.NetworkBytesSent),
-			)
-			stmtStats.mu.data.MaxMemUsage.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.MaxMemUsage),
-			)
-			stmtStats.mu.data.ContentionTime.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, queryLevelStats.ContentionTime.Seconds(),
-			)
-			stmtStats.mu.Unlock()
+			stmtStats.recordExecStats(queryLevelStats)
 			txnStats.Accumulate(queryLevelStats)
 		}
 	}

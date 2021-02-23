@@ -81,34 +81,19 @@ message StatementStatistics {
   // sent to the reg cluster.
   optional SensitiveInfo sensitive_info = 12 [(gogoproto.nullable) = false];
 
-  reserved 13, 14;
-
   // BytesRead collects the number of bytes read from disk.
   optional NumericStat bytes_read = 15 [(gogoproto.nullable) = false];
 
   // RowsRead collects the number of rows read from disk.
   optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
-  // BytesSentOverNetwork collects the number of bytes sent over the network.
-  optional NumericStat bytes_sent_over_network = 17 [(gogoproto.nullable) = false];
+  // ExecStats are the execution statistics for this statement. These statistics
+  // are sampled.
+  optional ExecStats exec_stats = 21 [(gogoproto.nullable) = false];
 
-  // MaxMemUsage collects the maximum memory usage that occurred on a node.
-  optional NumericStat max_mem_usage = 18 [(gogoproto.nullable) = false];
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
-  // ExecStatCollectionCount keeps track of how many times execution stats were
-  // recorded for this statement. Since this collection follows a sampling
-  // approach, this number is not necessarily equal to Count. Used to calculate
-  // the mean of the following NumericStat values:
-  //  bytes_sent_over_network
-  //  max_mem_usage
-  //  contention_time
-  optional int64 exec_stat_collection_count = 19 [(gogoproto.nullable) = false];
-
-  // ContentionTime collects the time this statement spent contending.
-  optional NumericStat contention_time = 20 [(gogoproto.nullable) = false];
-
-  // Note: be sure to update `sql/app_stats.go` and the comment above
-  // exec_stat_collection_count when adding/removing fields here!
+  reserved 13, 14, 17, 18, 19, 20;
 }
 
 message TransactionStatistics {
@@ -247,7 +232,6 @@ message TxnStats {
 // ExecStats contains execution statistics that apply to both statements
 // and transactions. These stats are currently collected using a sampling
 // approach.
-// TODO(asubiotto): Use this in StatementStatistics.
 message ExecStats {
   // Count keeps track of how many times execution stats were recorded. This is
   // not necessarily equal to the number of times a statement/transaction was
@@ -262,6 +246,10 @@ message ExecStats {
 
   // ContentionTime collects the time this statement spent contending.
   optional NumericStat contention_time = 4 [(gogoproto.nullable) = false];
+
+  // NetworkMessages collects the number of messages that were sent over the
+  // network.
+  optional NumericStat network_messages = 5 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
