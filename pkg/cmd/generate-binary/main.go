@@ -515,5 +515,10 @@ var inputs = map[string][]string{
 		`'name'::NAME`,
 		`'false'::JSONB`,
 		`'{"a": []}'::JSONB`,
+		`1::int4`,
+		`1::int2`,
+		`1::char(2)`,
+		`1::char(1)`,
+		`1::varchar(4)`,
 	},
 }

@@ -100,6 +100,13 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 			// The width of a bpchar type is fixed and equal to the length of the
 			// Text string returned by postgres.
 			tc.T.InternalType.Width = int32(len(tc.Text))
+		case oid.T_record:
+			tupleExpr := te.(*tree.Tuple)
+			typs := make([]*types.T, len(tupleExpr.Exprs))
+			for i := range tupleExpr.Exprs {
+				typs[i] = tupleExpr.Exprs[i].(tree.TypedExpr).ResolvedType()
+			}
+			tc.T = types.MakeTuple(typs)
 		}
 	}
 
