@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,7 +27,9 @@ func TestMultiRegionNoLicense(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingDisableEnterprise()()
 
-	_, sqlDB, cleanup := createTestMultiRegionCluster(t, 3, base.TestingKnobs{})
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{},
+	)
 	defer cleanup()
 
 	_, err := sqlDB.Exec(`CREATE DATABASE test`)
@@ -51,7 +54,9 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 
 	skip.UnderRace(t, "#61163")
 
-	_, sqlDB, cleanup := createTestMultiRegionCluster(t, 3, base.TestingKnobs{})
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{},
+	)
 	defer cleanup()
 
 	_, err := sqlDB.Exec(`
