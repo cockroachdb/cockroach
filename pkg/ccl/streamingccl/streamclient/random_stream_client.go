@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -224,7 +223,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 		IngestionDatabaseID,
 		tableID,
 		fmt.Sprintf(RandomStreamSchemaPlaceholder, tableName),
-		descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+		&descpb.PrivilegeDescriptor{},
 	)
 	if err != nil {
 		return nil, nil, err

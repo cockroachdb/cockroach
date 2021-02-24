@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1204,4 +1205,147 @@ func (desc *wrapper) validatePartitioning() error {
 			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
 		)
 	})
+}
+
+// validateTableLocalityConfig validates whether the descriptor's locality
+// config is valid under the given database.
+func (desc *wrapper) validateTableLocalityConfig(
+	db catalog.DatabaseDescriptor, vdg catalog.ValidationDescGetter,
+) error {
+
+	if desc.LocalityConfig == nil {
+		if db.IsMultiRegion() {
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"database %s is multi-region enabled, but table %s has no locality set",
+				db.GetName(),
+				desc.GetName(),
+			)
+		}
+		// Nothing to validate for non-multi-region databases.
+		return nil
+	}
+
+	if !db.IsMultiRegion() {
+		s := tree.NewFmtCtx(tree.FmtSimple)
+		var locality string
+		// Formatting the table locality config should never fail; if it does, the
+		// error message is more clear if we construct a dummy locality here.
+		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
+			locality = "INVALID LOCALITY"
+		}
+		locality = s.String()
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"database %s is not multi-region enabled, but table %s has locality %s set",
+			db.GetName(),
+			desc.GetName(),
+			locality,
+		)
+	}
+
+	regionsEnumID, err := db.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	regionsEnumDesc, err := vdg.GetTypeDescriptor(regionsEnumID)
+	if err != nil {
+		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", errors.Safe(regionsEnumID))
+	}
+
+	// REGIONAL BY TABLE tables homed in the primary region should include a
+	// reference to the multi-region type descriptor and a corresponding
+	// backreference. All other patterns should only contain a reference if there
+	// is an explicit column which uses the multi-region type descriptor as its
+	// *types.T. While the specific cases are validated below, we search for the
+	// region enum ID in the references list just once, up top here.
+	typeIDs, err := desc.GetAllReferencedTypeIDs(db, vdg.GetTypeDescriptor)
+	if err != nil {
+		return err
+	}
+	regionEnumIDReferenced := false
+	for _, typeID := range typeIDs {
+		if typeID == regionsEnumID {
+			regionEnumIDReferenced = true
+			break
+		}
+	}
+	columnTypesTypeIDs, err := desc.getAllReferencedTypesInTableColumns(vdg.GetTypeDescriptor)
+	if err != nil {
+		return err
+	}
+	switch lc := desc.LocalityConfig.Locality.(type) {
+	case *descpb.TableDescriptor_LocalityConfig_Global_:
+		if regionEnumIDReferenced {
+			if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
+				return errors.AssertionFailedf(
+					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
+						" but found: %d",
+					desc.GetName(),
+					regionsEnumDesc.GetID(),
+				)
+			}
+		}
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		if !desc.IsPartitionAllBy() {
+			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
+		}
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+
+		// Table is homed in an explicit (non-primary) region.
+		if lc.RegionalByTable.Region != nil {
+			foundRegion := false
+			regions, err := regionsEnumDesc.RegionNames()
+			if err != nil {
+				return err
+			}
+			for _, r := range regions {
+				if *lc.RegionalByTable.Region == r {
+					foundRegion = true
+					break
+				}
+			}
+			if !foundRegion {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`region "%s" has not been added to database "%s"`,
+						*lc.RegionalByTable.Region,
+						db.DatabaseDesc().Name,
+					),
+					"available regions: %s",
+					strings.Join(regions.ToStrings(), ", "),
+				)
+			}
+			if !regionEnumIDReferenced {
+				return errors.AssertionFailedf(
+					"expected multi-region enum ID %d to be referenced on REGIONAL BY TABLE: %q locality "+
+						"config, but did not find it",
+					regionsEnumID,
+					desc.GetName(),
+				)
+			}
+		} else {
+			if regionEnumIDReferenced {
+				// It may be the case that the multi-region type descriptor is used
+				// as the type of the table column. Validations should only fail if
+				// that is not the case.
+				if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
+					return errors.AssertionFailedf(
+						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
+							"primary region, but found: %d",
+						desc.GetName(),
+						regionsEnumDesc.GetID(),
+					)
+				}
+			}
+		}
+	default:
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"unknown locality level: %T",
+			lc,
+		)
+	}
+	return nil
 }
