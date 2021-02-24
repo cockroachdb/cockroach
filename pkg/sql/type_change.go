@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -306,7 +307,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
 					return fn()
 				}
-				repartitionedTables, err = repartitionRegionalByRowTables(
+				repartitionedTables, err = performMultiRegionFinalization(
 					ctx,
 					immut,
 					txn,
@@ -366,6 +367,36 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	return nil
 }
 
+// performMultiRegionFinalization updates the zone configurations on the
+// database and re-partitions all REGIONAL BY ROW tables after REGION ADD/DROP
+// has completed. A list of re-partitioned tables, if any, is returned.
+func performMultiRegionFinalization(
+	ctx context.Context,
+	typeDesc *typedesc.Immutable,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	descsCol *descs.Collection,
+) ([]descpb.ID, error) {
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return nil, err
+	}
+	// Once the region promotion/demotion is complete, we update the
+	// zone configuration on the database.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		ctx,
+		dbDesc.ID,
+		*dbDesc.RegionConfig,
+		txn,
+		execCfg,
+	); err != nil {
+		return nil, err
+	}
+
+	return repartitionRegionalByRowTables(ctx, typeDesc, dbDesc, txn, execCfg, descsCol)
+}
+
 // repartitionRegionalByRowTables takes a multi-region enum and re-partitions
 // all REGIONAL BY ROW tables in the enclosing database such that there is a
 // partition and corresponding zone configuration for all PUBLIC enum members
@@ -378,6 +409,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 func repartitionRegionalByRowTables(
 	ctx context.Context,
 	typeDesc *typedesc.Immutable,
+	dbDesc *dbdesc.Immutable,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
@@ -400,11 +432,6 @@ func repartitionRegionalByRowTables(
 	defer cleanup()
 	localPlanner := p.(*planner)
 
-	_, dbDesc, err := localPlanner.Descriptors().GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
 	allDescs, err := localPlanner.Descriptors().GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return nil, err
