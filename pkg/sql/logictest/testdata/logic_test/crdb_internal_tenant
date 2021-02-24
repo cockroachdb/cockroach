@@ -309,10 +309,20 @@ select crdb_internal.set_vmodule('doesntexist=2,butitsok=4')
 ----
 0
 
+query T
+select crdb_internal.get_vmodule()
+----
+doesntexist=2,butitsok=4
+
 query I
 select crdb_internal.set_vmodule('')
 ----
 0
+
+query T
+select crdb_internal.get_vmodule()
+----
+·
 
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
