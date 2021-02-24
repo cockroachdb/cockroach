@@ -114,20 +114,9 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
 
+	t.ExecStats.Add(other.ExecStats)
+
 	t.Count += other.Count
-
-	// Execution stats collected using a sampling approach.
-	execStatCollectionCount := t.ExecStats.Count
-	if execStatCollectionCount == 0 && other.ExecStats.Count == 0 {
-		// If both are zero, artificially set the receiver's count to one to avoid
-		// division by zero in Add.
-		execStatCollectionCount = 1
-	}
-	t.ExecStats.NetworkBytes.Add(other.ExecStats.NetworkBytes, execStatCollectionCount, other.ExecStats.Count)
-	t.ExecStats.MaxMemUsage.Add(other.ExecStats.MaxMemUsage, execStatCollectionCount, other.ExecStats.Count)
-	t.ExecStats.ContentionTime.Add(other.ExecStats.ContentionTime, execStatCollectionCount, other.ExecStats.Count)
-
-	t.ExecStats.Count += other.ExecStats.Count
 }
 
 // Add combines other into this StatementStatistics.
@@ -145,17 +134,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 
-	// Execution stats collected using a sampling approach.
-	execStatCollectionCount := s.ExecStatCollectionCount
-	if execStatCollectionCount == 0 && other.ExecStatCollectionCount == 0 {
-		// If both are zero, artificially set the receiver's count to one to avoid
-		// division by zero in Add.
-		execStatCollectionCount = 1
-	}
-	s.BytesSentOverNetwork.Add(other.BytesSentOverNetwork, execStatCollectionCount, other.ExecStatCollectionCount)
-	s.MaxMemUsage.Add(other.MaxMemUsage, execStatCollectionCount, other.ExecStatCollectionCount)
-	s.ContentionTime.Add(other.ContentionTime, execStatCollectionCount, other.ExecStatCollectionCount)
-	s.ExecStatCollectionCount += other.ExecStatCollectionCount
+	s.ExecStats.Add(other.ExecStats)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
@@ -183,7 +162,32 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
 		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
-		s.BytesSentOverNetwork.AlmostEqual(other.BytesSentOverNetwork, eps) &&
+		s.ExecStats.AlmostEqual(&other.ExecStats, eps)
+}
+
+// Add combines other into this ExecStats.
+func (s *ExecStats) Add(other ExecStats) {
+	// Execution stats collected using a sampling approach.
+	execStatCollectionCount := s.Count
+	if execStatCollectionCount == 0 && other.Count == 0 {
+		// If both are zero, artificially set the receiver's count to one to avoid
+		// division by zero in Add.
+		execStatCollectionCount = 1
+	}
+	s.NetworkBytes.Add(other.NetworkBytes, execStatCollectionCount, other.Count)
+	s.MaxMemUsage.Add(other.MaxMemUsage, execStatCollectionCount, other.Count)
+	s.ContentionTime.Add(other.ContentionTime, execStatCollectionCount, other.Count)
+	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
+
+	s.Count += s.Count
+}
+
+// AlmostEqual compares two ExecStats and their contained NumericStats objects
+// within an window of size eps.
+func (s *ExecStats) AlmostEqual(other *ExecStats, eps float64) bool {
+	return s.Count == other.Count &&
+		s.NetworkBytes.AlmostEqual(other.NetworkBytes, eps) &&
 		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps) &&
-		s.ContentionTime.AlmostEqual(other.ContentionTime, eps)
+		s.ContentionTime.AlmostEqual(other.ContentionTime, eps) &&
+		s.NetworkMessages.AlmostEqual(other.NetworkMessages, eps)
 }

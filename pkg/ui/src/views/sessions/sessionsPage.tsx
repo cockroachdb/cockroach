@@ -18,7 +18,10 @@ import { createSelector } from "reselect";
 import { SessionsResponseMessage } from "src/util/api";
 
 import { SessionsPage } from "@cockroachlabs/cluster-ui";
-import { terminateQueryAction } from "src/redux/sessions/sessionsSagas";
+import {
+  terminateQueryAction,
+  terminateSessionAction,
+} from "src/redux/sessions/sessionsSagas";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -46,7 +49,8 @@ const SessionsPageConnected = withRouter(
     }),
     {
       refreshSessions,
-      cancel: terminateQueryAction,
+      cancelSession: terminateSessionAction,
+      cancelQuery: terminateQueryAction,
     },
   )(SessionsPage),
 );

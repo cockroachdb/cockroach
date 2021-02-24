@@ -421,15 +421,15 @@ func TestRepartitionFailureRollback(t *testing.T) {
 	defer cleanup()
 
 	_, err := sqlDB.Exec(
-		`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"; 
+		`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2";
 CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 	require.NoError(t, err)
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = sqlDB.Exec(`BEGIN; 
-ALTER DATABASE db ADD REGION "us-east3"; 
+	_, err = sqlDB.Exec(`BEGIN;
+ALTER DATABASE db ADD REGION "us-east3";
 ALTER DATABASE db DROP REGION "us-east2";
 COMMIT;`)
 	require.Error(t, err, "boom")

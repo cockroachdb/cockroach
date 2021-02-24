@@ -81,9 +81,6 @@ type instrumentationHelper struct {
 	// collectExecStats is set when we are collecting execution statistics for a
 	// statement.
 	collectExecStats bool
-	// startedExplicitTrace is set to true when the instrumentation helper started
-	// an explicit trace to collect execution stats.
-	startedExplicitTrace bool
 
 	// discardRows is set if we want to discard any results rather than sending
 	// them back to the client. Used for testing/benchmarking. Note that the
@@ -182,7 +179,6 @@ func (ih *instrumentationHelper) Setup(
 			// If we need to collect stats, create a non-verbose child span. Stats
 			// will be added as structured metadata and processed in Finish.
 			ih.origCtx = ctx
-			ih.startedExplicitTrace = true
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
 			return newCtx, true
 		}
@@ -240,9 +236,7 @@ func (ih *instrumentationHelper) Finish(
 	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
 	if err != nil {
 		const msg = "error getting query level stats for statement: %s: %+v"
-		if util.CrdbTestBuild && ih.startedExplicitTrace {
-			// A panic is much more visible in tests than an error.
-			// TODO(asubiotto): Remove ih.startedExplicitTrace. See #60609.
+		if util.CrdbTestBuild {
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
@@ -250,19 +244,7 @@ func (ih *instrumentationHelper) Finish(
 		// TODO(radu): this should be unified with other stmt stats accesses.
 		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 		if stmtStats != nil {
-			stmtStats.mu.Lock()
-			stmtStats.mu.data.ExecStatCollectionCount++
-			// Record trace-related statistics.
-			stmtStats.mu.data.BytesSentOverNetwork.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.NetworkBytesSent),
-			)
-			stmtStats.mu.data.MaxMemUsage.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, float64(queryLevelStats.MaxMemUsage),
-			)
-			stmtStats.mu.data.ContentionTime.Record(
-				stmtStats.mu.data.ExecStatCollectionCount, queryLevelStats.ContentionTime.Seconds(),
-			)
-			stmtStats.mu.Unlock()
+			stmtStats.recordExecStats(queryLevelStats)
 			txnStats.Accumulate(queryLevelStats)
 		}
 	}

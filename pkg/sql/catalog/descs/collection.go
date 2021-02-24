@@ -1363,9 +1363,9 @@ func (tc *Collection) addUncommittedDescriptor(
 	return ud, nil
 }
 
-// validateOnWriteEnabled is the cluster setting used to enable or disable
+// ValidateOnWriteEnabled is the cluster setting used to enable or disable
 // validating descriptors prior to writing.
-var validateOnWriteEnabled = settings.RegisterBoolSetting(
+var ValidateOnWriteEnabled = settings.RegisterBoolSetting(
 	"sql.catalog.descs.validate_on_write.enabled",
 	"set to true to validate descriptors prior to writing, false to disable; default is true",
 	true, /* defaultValue */
@@ -1377,7 +1377,7 @@ func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	if validateOnWriteEnabled.Get(&tc.settings.SV) {
+	if ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		if err := desc.ValidateSelf(ctx); err != nil {
 			return err
 		}
@@ -1449,7 +1449,7 @@ func (cdg collectionDescGetter) GetDesc(
 
 // ValidateUncommittedDescriptors validates all uncommitted descriptors
 func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	if !validateOnWriteEnabled.Get(&tc.settings.SV) {
+	if !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
 	cdg := collectionDescGetter{tc: tc, txn: txn}

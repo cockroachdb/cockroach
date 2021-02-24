@@ -18,6 +18,7 @@ import { FixLong } from "src/util/fixLong";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
+export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 export interface NumericStat {
@@ -61,13 +62,6 @@ export function addStatementStats(
 ): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
-  let execStatCountA = FixLong(a.exec_stat_collection_count).toInt();
-  const execStatCountB = FixLong(b.exec_stat_collection_count).toInt();
-  if (execStatCountA === 0 && execStatCountB === 0) {
-    // If both counts are zero, artificially set the one count to one to avoid
-    // division by zero when calculating the mean in addNumericStats.
-    execStatCountA = 1;
-  }
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -90,37 +84,54 @@ export function addStatementStats(
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
-    bytes_sent_over_network:
-      a.bytes_sent_over_network && b.bytes_sent_over_network
-        ? addNumericStats(
-            a.bytes_sent_over_network,
-            b.bytes_sent_over_network,
-            execStatCountA,
-            execStatCountB,
-          )
-        : null,
-    max_mem_usage:
-      a.max_mem_usage && b.max_mem_usage
-        ? addNumericStats(
-            a.max_mem_usage,
-            b.max_mem_usage,
-            execStatCountA,
-            execStatCountB,
-          )
-        : null,
-    exec_stat_collection_count: a.exec_stat_collection_count.add(
-      b.exec_stat_collection_count,
-    ),
-    contention_time:
-      a.contention_time && b.contention_time
-        ? addNumericStats(
-            a.contention_time,
-            b.contention_time,
-            execStatCountA,
-            execStatCountB,
-          )
-        : null,
+    exec_stats: addExecStats(a.exec_stats, b.exec_stats),
   };
+}
+
+function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
+  let countA = FixLong(a.count).toInt();
+  const countB = FixLong(b.count).toInt();
+  if (countA === 0 && countB === 0) {
+    // If both counts are zero, artificially set the one count to one to avoid
+    // division by zero when calculating the mean in addNumericStats.
+    countA = 1;
+  }
+  return {
+    count: a.count.add(b.count),
+    network_bytes: addMaybeUnsetNumericStat(
+      a.network_bytes,
+      b.network_bytes,
+      countA,
+      countB,
+    ),
+    max_mem_usage: addMaybeUnsetNumericStat(
+      a.max_mem_usage,
+      b.max_mem_usage,
+      countA,
+      countB,
+    ),
+    contention_time: addMaybeUnsetNumericStat(
+      a.contention_time,
+      b.contention_time,
+      countA,
+      countB,
+    ),
+    network_messages: addMaybeUnsetNumericStat(
+      a.network_messages,
+      b.network_messages,
+      countA,
+      countB,
+    ),
+  };
+}
+
+function addMaybeUnsetNumericStat(
+  a: NumericStat,
+  b: NumericStat,
+  countA: number,
+  countB: number,
+): NumericStat {
+  return a && b ? addNumericStats(a, b, countA, countB) : null;
 }
 
 export function coalesceSensitiveInfo(a: ISensitiveInfo, b: ISensitiveInfo) {

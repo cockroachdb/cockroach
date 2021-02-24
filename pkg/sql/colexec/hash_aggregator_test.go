@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -157,7 +158,7 @@ func TestHashAggregator(t *testing.T) {
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
@@ -200,21 +201,21 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		for _, groupSize := range groupSizes {
 			for _, agg := range []aggType{
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 						return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
 					},
 					name: "tracking=false",
 				},
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
+					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
-						return NewHashAggregator(args, &NewSpillingQueueArgs{
+						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 							Types:              args.InputTypes,
-							MemoryLimit:        defaultMemoryLimit,
+							MemoryLimit:        colexecop.DefaultMemoryLimit,
 							DiskQueueCfg:       queueCfg,
-							FDSemaphore:        &colexecbase.TestingSemaphore{},
+							FDSemaphore:        &colexecop.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,
 						})
 					},

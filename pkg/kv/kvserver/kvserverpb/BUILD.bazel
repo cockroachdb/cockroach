@@ -30,6 +30,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
+        "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util/hlc:hlc_proto",
@@ -46,6 +47,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",

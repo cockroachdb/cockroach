@@ -64,12 +64,6 @@ tableID=1 indexID=1
 # Add another index on the same table.
 evcheck tableid=1 indexid=2 key=key id=a duration=1
 ----
-tableID=1 indexID=2
-  num contention events: 1
-  cumulative contention time: 1ns
-  keys:
-    /Table/1/2/"key" contending txns:
-      id=a count=1
 tableID=1 indexID=1
   num contention events: 5
   cumulative contention time: 21ns
@@ -81,11 +75,27 @@ tableID=1 indexID=1
       id=a count=1
     /Table/1/1/"keyc" contending txns:
       id=a count=1
-
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
 
 # Add another table.
 evcheck tableid=2 indexid=1 key=key id=a duration=1
 ----
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
 tableID=2 indexID=1
   num contention events: 1
   cumulative contention time: 1ns
@@ -98,14 +108,95 @@ tableID=1 indexID=2
   keys:
     /Table/1/2/"key" contending txns:
       id=a count=1
+
+# Test merging the serialized representation of registries.
+use registry=b
+----
+
+# Add an event that overlaps with an event in registry a.
+evcheck tableid=1 indexid=1 key=key id=b duration=2
+----
 tableID=1 indexID=1
-  num contention events: 5
-  cumulative contention time: 21ns
+  num contention events: 1
+  cumulative contention time: 2ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=b count=1
+
+# Add an event that overlaps with a key but not with a txnID in registry a.
+evcheck tableid=1 indexid=1 key=key id=c duration=3
+----
+tableID=1 indexID=1
+  num contention events: 2
+  cumulative contention time: 5ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+
+# Add an event that doesn't overlap with events in registry a.
+evcheck tableid=1 indexid=1 key=new_key id=b duration=4
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+
+# Add yet another table.
+evcheck tableid=3 indexid=3 key=key id=c duration=1
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+tableID=3 indexID=3
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/3/3/"key" contending txns:
+      id=c count=1
+
+merge first=a second=b
+----
+tableID=1 indexID=1
+  num contention events: 8
+  cumulative contention time: 30ns
   keys:
     /Table/1/1/"key" contending txns:
       id=a count=2
-      id=b count=1
+      id=b count=2
+      id=c count=1
     /Table/1/1/"keyb" contending txns:
       id=a count=1
     /Table/1/1/"keyc" contending txns:
       id=a count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+tableID=2 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/2/1/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+tableID=3 indexID=3
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/3/3/"key" contending txns:
+      id=c count=1

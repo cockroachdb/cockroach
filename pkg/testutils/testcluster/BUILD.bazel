@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_stretchr_testify//require",
         "@io_etcd_go_etcd_raft_v3//:raft",
     ],
 )

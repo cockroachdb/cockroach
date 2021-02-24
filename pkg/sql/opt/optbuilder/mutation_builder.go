@@ -132,14 +132,9 @@ type mutationBuilder struct {
 	// an insert; otherwise it's an update.
 	canaryColID opt.ColumnID
 
-	// arbiterIndexes stores the ordinals of indexes that are used to detect
-	// conflicts for UPSERT and INSERT ON CONFLICT statements.
-	arbiterIndexes cat.IndexOrdinals
-
-	// arbiterConstraints stores the ordinals of unique without index constraints
-	// that are used to detect conflicts for UPSERT and INSERT ON CONFLICT
-	// statements.
-	arbiterConstraints cat.UniqueOrdinals
+	// arbiters is the set of indexes and unique constraints that are used to
+	// detect conflicts for UPSERT and INSERT ON CONFLICT statements.
+	arbiters arbiterSet
 
 	// roundedDecimalCols is the set of columns that have already been rounded.
 	// Keeping this set avoids rounding the same column multiple times.
@@ -1011,8 +1006,8 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		FetchCols:           checkEmptyList(mb.fetchColIDs),
 		UpdateCols:          checkEmptyList(mb.updateColIDs),
 		CanaryCol:           mb.canaryColID,
-		ArbiterIndexes:      mb.arbiterIndexes,
-		ArbiterConstraints:  mb.arbiterConstraints,
+		ArbiterIndexes:      mb.arbiters.IndexOrdinals(),
+		ArbiterConstraints:  mb.arbiters.UniqueConstraintOrdinals(),
 		CheckCols:           checkEmptyList(mb.checkColIDs),
 		PartialIndexPutCols: checkEmptyList(mb.partialIndexPutColIDs),
 		PartialIndexDelCols: checkEmptyList(mb.partialIndexDelColIDs),
@@ -1206,12 +1201,12 @@ func (mb *mutationBuilder) parsePartialIndexPredicateExpr(idx cat.IndexOrdinal) 
 // parseUniqueConstraintPredicateExpr parses the predicate of the given partial
 // unique constraint and caches it for reuse. This function panics if the unique
 // constraint at the given ordinal is not partial.
-func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdinal) tree.Expr {
-	uniqueConstraint := mb.tab.Unique(idx)
+func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(uniq cat.UniqueOrdinal) tree.Expr {
+	uniqueConstraint := mb.tab.Unique(uniq)
 
 	predStr, isPartial := uniqueConstraint.Predicate()
 	if !isPartial {
-		panic(errors.AssertionFailedf("unique constraint at ordinal %d is not a partial unique constraint", idx))
+		panic(errors.AssertionFailedf("unique constraint at ordinal %d is not a partial unique constraint", uniq))
 	}
 
 	if mb.parsedUniqueConstraintExprs == nil {
@@ -1219,8 +1214,8 @@ func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdi
 	}
 
 	// Return expression from the cache, if it was already parsed previously.
-	if mb.parsedUniqueConstraintExprs[idx] != nil {
-		return mb.parsedUniqueConstraintExprs[idx]
+	if mb.parsedUniqueConstraintExprs[uniq] != nil {
+		return mb.parsedUniqueConstraintExprs[uniq]
 	}
 
 	expr, err := parser.ParseExpr(predStr)
@@ -1228,7 +1223,7 @@ func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(idx cat.UniqueOrdi
 		panic(err)
 	}
 
-	mb.parsedUniqueConstraintExprs[idx] = expr
+	mb.parsedUniqueConstraintExprs[uniq] = expr
 	return expr
 }
 

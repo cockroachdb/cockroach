@@ -2728,7 +2728,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			if err != nil {
 				return nil, err
 			}
-			job := n.p.ExecCfg().JobRegistry.NewJob(*record)
+			job := n.p.ExecCfg().JobRegistry.NewJob(*record, 0)
 			plan, err = dsp.createPlanForCreateStats(planCtx, job)
 		}
 
@@ -3268,7 +3268,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	p.PlanToStreamColMap = planToStreamColMap
 
 	// Merge the plans' result types and merge ordering.
-	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.GetResultTypes(), rightPlan.GetResultTypes())
+	resultTypes, err := mergeResultTypesForSetOp(leftPlan, rightPlan)
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,8 @@ Each `.json` file is a packer template.
     ```bash
     brew install packer
     ```
-2. Run:
+2. Configure `gcloud` with your personal [User Application Default Credentials][gauth].
+3. Run:
    ```bash
    packer build <VM_TEMPLATE>.json
    ```
@@ -30,4 +31,4 @@ the `gcloud` tool or provide your Google Cloud JSON credentials in a
 
 
 [Packer]: https://www.packer.io
-[gauth]: https://www.packer.io/docs/builders/googlecompute.html#running-without-a-compute-engine-service-account
+[gauth]: https://www.packer.io/docs/builders/googlecompute#running-locally-on-your-workstation

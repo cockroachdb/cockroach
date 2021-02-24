@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -79,7 +80,7 @@ type crdbSpanMu struct {
 	tags opentracing.Tags
 
 	stats      SpanStats
-	structured []Structured
+	structured ring.Buffer // of Structured events
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -96,9 +97,7 @@ func (s *crdbSpan) recordingType() RecordingType {
 // child spans will be stored.
 //
 // If parent != nil, the Span will be registered as a child of the respective
-// parent.
-// If separate recording is specified, the child is not registered with the
-// parent. Thus, the parent's recording will not include this child.
+// parent. If nil, the parent's recording will not include this child.
 func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if parent != nil {
 		parent.addChild(s)
@@ -113,9 +112,17 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if recType == RecordingVerbose {
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
-	// Clear any previously recorded info. This is needed by SQL SessionTracing,
-	// who likes to start and stop recording repeatedly on the same Span, and
-	// collect the (separate) recordings every time.
+}
+
+// resetRecording clears any previously recorded info.
+//
+// NB: This is needed by SQL SessionTracing, who likes to start and stop
+// recording repeatedly on the same Span, and collect the (separate) recordings
+// every time.
+func (s *crdbSpan) resetRecording() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.mu.recording.recordedLogs = nil
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
@@ -218,7 +225,11 @@ func (s *crdbSpan) record(msg string) {
 func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.structured = append(s.mu.structured, item)
+
+	if s.mu.structured.Len() == maxStructuredEventsPerSpan {
+		s.mu.structured.RemoveLast()
+	}
+	s.mu.structured.AddFirst(item)
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
@@ -294,10 +305,11 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		rs.DeprecatedStats = stats
 	}
 
-	if s.mu.structured != nil {
-		rs.InternalStructured = make([]*types.Any, 0, len(s.mu.structured))
-		for i := range s.mu.structured {
-			item, err := types.MarshalAny(s.mu.structured[i])
+	if numEvents := s.mu.structured.Len(); numEvents != 0 {
+		rs.InternalStructured = make([]*types.Any, 0, numEvents)
+		for i := 0; i < numEvents; i++ {
+			event := s.mu.structured.Get(i).(Structured)
+			item, err := types.MarshalAny(event)
 			if err != nil {
 				// An error here is an error from Marshal; these
 				// are unlikely to happen.

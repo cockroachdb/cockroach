@@ -2187,7 +2187,6 @@ func TestReplicateAddAndRemove(t *testing.T) {
 // to constantly catch up the slower node via snapshots. See #8659.
 func TestQuotaPool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59382, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const quota = 10000
@@ -2208,29 +2207,8 @@ func TestQuotaPool(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
+	key := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
-
-	assertEqualLastIndex := func() error {
-		var expectedIndex uint64
-		for i := range tc.Servers {
-			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
-			require.NotNil(t, repl)
-
-			index, err := repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if i == 0 {
-				expectedIndex = index
-			} else if expectedIndex != index {
-				return fmt.Errorf("%s: expected lastIndex %d, but found %d", repl, expectedIndex, index)
-			}
-		}
-		return nil
-	}
-	testutils.SucceedsSoon(t, assertEqualLastIndex)
 
 	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate	goroutine.
 	raftLockReplica := func(repl *kvserver.Replica) {
@@ -2239,7 +2217,7 @@ func TestQuotaPool(t *testing.T) {
 		<-ch
 	}
 
-	leaderRepl := tc.GetRaftLeader(t, key)
+	leaderRepl := tc.GetRaftLeader(t, roachpb.RKey(key))
 	// Grab the raftMu to re-initialize the QuotaPool to ensure that we don't
 	// race with ongoing applications.
 	raftLockReplica(leaderRepl)
@@ -2247,9 +2225,24 @@ func TestQuotaPool(t *testing.T) {
 		t.Fatalf("failed to initialize quota pool: %v", err)
 	}
 	leaderRepl.RaftUnlock()
+	// Wait until the follower will is not ignored by updateProposalQuotaRaftMuLocked.
+	// Otherwise the quota gets prematurely released into the pool. We can use status.Applied
+	// instead of proposalQuotaBaseIndex because it's strictly ahead or the same.
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		status := leaderRepl.RaftStatus()
+		minIndex := status.Applied
+		for id, progress := range status.Progress {
+			if progress.Match < minIndex {
+				err = errors.Errorf("Replica %d is behind leader expected %d but was %d", id, minIndex, progress.Match)
+			}
+		}
+		return err
+	})
+
 	followerRepl := func() *kvserver.Replica {
 		for i := range tc.Servers {
-			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
+			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
 			if repl == leaderRepl {
 				continue
@@ -2281,10 +2274,10 @@ func TestQuotaPool(t *testing.T) {
 		// second write, previously blocked by virtue of there not being enough
 		// quota, is now free to proceed. We expect the final quota in the system
 		// to be the same as what we started with.
-		key := roachpb.Key("k")
+		keyToWrite := key.Next()
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		var ba roachpb.BatchRequest
-		ba.Add(putArgs(key, value))
+		ba.Add(putArgs(keyToWrite, value))
 		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
 			t.Fatal(err)
 		}
@@ -2305,7 +2298,7 @@ func TestQuotaPool(t *testing.T) {
 
 		go func() {
 			var ba roachpb.BatchRequest
-			ba.Add(putArgs(key, value))
+			ba.Add(putArgs(keyToWrite, value))
 			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
 				ch <- roachpb.NewError(err)
 				return
@@ -2527,7 +2520,6 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 // races (primarily in asynchronous coalesced heartbeats).
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59209, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2536,9 +2528,9 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
-
-	key := tc.ScratchRange(t)
+	key := tc.ScratchRangeWithExpirationLease(t)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
 
 outer:
 	for i := 0; i < 5; i++ {
@@ -2558,11 +2550,30 @@ outer:
 						tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(replicaIdx))
 					}
 					tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
-					cb := tc.Servers[replicaIdx].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
-					cb.Break()
+					// We want to stop all nodes from talking to the replicaIdx, so need
+					// to trip the breaker on all servers but it.
+					for i := range tc.Servers {
+						if i != replicaIdx {
+							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
+							cb.Break()
+						}
+					}
 					time.Sleep(tc.GetFirstStoreFromServer(t, replicaIdx).GetStoreConfig().CoalescedHeartbeatsInterval)
-					cb.Reset()
+					for i := range tc.Servers {
+						if i != replicaIdx {
+							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
+							cb.Reset()
+						}
+					}
+					// Make sure the old replica was actually removed, before we try to re-adding it.
+					testutils.SucceedsSoon(t, func() error {
+						if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
+							return errors.Errorf("Expected replica %s to be removed", oldRepl)
+						}
+						return nil
+					})
 					tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
+					require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
 					continue outer
 				}
 				t.Fatal("could not find raft replica")

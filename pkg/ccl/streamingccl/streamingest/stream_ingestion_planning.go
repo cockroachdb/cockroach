@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,6 +40,20 @@ func streamIngestionJobDescription(
 func ingestionPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+	// Check if the experimental feature is enabled.
+	if !p.SessionData().EnableStreamReplication {
+		return nil, nil, nil, false, errors.WithTelemetry(
+			pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.Newf("stream replication is only supported experimentally"),
+					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
+				),
+				pgcode.FeatureNotSupported,
+			),
+			"replication.ingest.disabled",
+		)
+	}
+
 	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
 	if !ok {
 		return nil, nil, nil, false, nil
@@ -98,9 +114,9 @@ func ingestionPlanHook(
 		}
 
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
-			return err
+			return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
 		}); err != nil {
 			if sj != nil {
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {

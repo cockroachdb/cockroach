@@ -4,6 +4,7 @@ go_library(
     name = "optbuilder",
     srcs = [
         "alter_table.go",
+        "arbiter_set.go",
         "builder.go",
         "create_table.go",
         "create_view.go",

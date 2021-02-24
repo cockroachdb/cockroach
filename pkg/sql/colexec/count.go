@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -24,19 +24,19 @@ import (
 // column containing a single integer, the count of rows received from the
 // upstream.
 type countOp struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	internalBatch coldata.Batch
 	done          bool
 	count         int64
 }
 
-var _ colexecbase.Operator = &countOp{}
+var _ colexecop.Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexecbase.Operator {
+func NewCountOp(allocator *colmem.Allocator, input colexecop.Operator) colexecop.Operator {
 	c := &countOp{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 	}
 	c.internalBatch = allocator.NewMemBatchWithFixedCapacity(
 		[]*types.T{types.Int}, 1, /* capacity */

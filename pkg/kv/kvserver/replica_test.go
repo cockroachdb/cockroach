@@ -6238,10 +6238,12 @@ func TestRangeStatsComputation(t *testing.T) {
 	tc.Start(t, stopper)
 
 	baseStats := initialStats()
-	// The initial stats contain no lease, but there will be an initial
-	// nontrivial lease requested with the first write below.
+	// The initial stats contain an empty lease and no prior read summary, but
+	// there will be an initial nontrivial lease requested with the first write
+	// below. This lease acquisition will, in turn, create a prior read summary.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 28,
+		SysBytes: 64,
+		SysCount: 1,
 	})
 
 	// Our clock might not be set to zero.
@@ -6588,7 +6590,15 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 				NodeID:  tc.store.Ident.NodeID,
 				StoreID: 9999,
 			})
-			if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+			if _, err := tc.repl.ChangeReplicas(
+				context.Background(),
+				tc.repl.Desc(),
+				SnapshotRequest_REBALANCE,
+				kvserverpb.ReasonRebalance,
+				"",
+				chgs,
+			); err == nil || !strings.Contains(err.Error(),
+				"only valid actions are a removal or a rebalance") {
 				t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 			}
 		})
@@ -12971,17 +12981,17 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Demoting two voters.
 		mk(
-			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
 		),
 		// Leave joint config entered via demotion.
 		mk(
 			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER (n300,s300):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_DEMOTING, noop},
-			typOp{roachpb.VOTER_DEMOTING, noop},
+			typOp{roachpb.VOTER_DEMOTING_LEARNER, noop},
+			typOp{roachpb.VOTER_DEMOTING_LEARNER, noop},
 		),
 	}
 

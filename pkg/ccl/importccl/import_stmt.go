@@ -914,30 +914,31 @@ func importPlanHook(
 		if isDetached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
-			aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, p.ExtendedEvalContext().Txn)
+			jobID := p.ExecCfg().JobRegistry.MakeJobID()
+			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, jobID, p.ExtendedEvalContext().Txn)
 			if err != nil {
 				return err
 			}
 
-			if err = protectTimestampForImport(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spansToProtect,
+			if err = protectTimestampForImport(ctx, p, p.ExtendedEvalContext().Txn, jobID, spansToProtect,
 				walltime, importDetails); err != nil {
 				return err
 			}
 
 			addToFileFormatTelemetry(format.Format.String(), "started")
-			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 			return nil
 		}
 
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
-			if err != nil {
+			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
 				return err
 			}
 
-			return protectTimestampForImport(ctx, p, txn, *sj.ID(), spansToProtect, walltime, importDetails)
+			return protectTimestampForImport(ctx, p, txn, jobID, spansToProtect, walltime, importDetails)
 		}); err != nil {
 			if sj != nil {
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
@@ -1303,7 +1304,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	select {
 	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDInt(tree.DInt(r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(r.res.Rows)),
@@ -1504,7 +1505,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*r.job.ID()))
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 
 		var tableDescs []*tabledesc.Mutable
@@ -1915,7 +1916,8 @@ func (r *importResumer) dropTables(
 		Progress:      jobspb.SchemaChangeGCProgress{},
 		NonCancelable: true,
 	}
-	if _, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+	if _, err := execCfg.JobRegistry.CreateJobWithTxn(
+		ctx, gcJobRecord, execCfg.JobRegistry.MakeJobID(), txn); err != nil {
 		return err
 	}
 

@@ -2030,126 +2030,127 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
+	testutils.RunTrueAndFalse(t, "future-read", func(t *testing.T, futureRead bool) {
+		manualClock := hlc.NewHybridManualClock()
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ClockSource: manualClock.UnixNano,
+					},
+				},
+			},
+		})
+		defer tc.Stopper().Stop(context.Background())
+		store0 := tc.GetFirstStoreFromServer(t, 0)
+		store2 := tc.GetFirstStoreFromServer(t, 2)
+
+		keyA := tc.ScratchRange(t)
+		keyB := keyA.Next()
+		keyC := keyB.Next()
+
+		// First, do a couple of writes; we'll use these to determine when
+		// the dust has settled.
+		incA := incrementArgs(keyA, 1)
+		if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incA); pErr != nil {
+			t.Fatal(pErr)
+		}
+		incC := incrementArgs(keyC, 2)
+		if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incC); pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+		tc.WaitForValues(t, keyA, []int64{1, 1, 1})
+		tc.WaitForValues(t, keyC, []int64{2, 2, 2})
+
+		// Pause the cluster's clock. This ensures that if we perform a read at
+		// a future timestamp, the read time remains in the future, regardless
+		// of the passage of real time.
+		manualClock.Pause()
+
+		// Determine when to read.
+		readTS := tc.Servers[0].Clock().Now()
+		if futureRead {
+			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+		}
+
+		// Read the key at readTS.
+		// NB: don't use SendWrapped because we want access to br.Timestamp.
+		var ba roachpb.BatchRequest
+		ba.Timestamp = readTS
+		ba.Add(getArgs(keyA))
+		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		require.Equal(t, readTS, br.Timestamp)
+		v, err := br.Responses[0].GetGet().Value.GetInt()
+		require.NoError(t, err)
+		require.Equal(t, int64(1), v)
+
+		repl0 := store0.LookupReplica(roachpb.RKey(keyA))
+
+		// Partition node 2 from the rest of its range. Once partitioned, perform
+		// another write and truncate the Raft log on the two connected nodes. This
+		// ensures that that when node 2 comes back up it will require a snapshot
+		// from Raft.
+		funcs := noopRaftHandlerFuncs()
+		funcs.dropReq = func(*kvserver.RaftMessageRequest) bool {
+			return true
+		}
+		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
+			rangeID:                    repl0.GetRangeID(),
+			RaftMessageHandler:         store2,
+			unreliableRaftHandlerFuncs: funcs,
+		})
+
+		if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incC); pErr != nil {
+			t.Fatal(pErr)
+		}
+		tc.WaitForValues(t, keyC, []int64{4, 4, 2})
+
+		// Truncate the log at index+1 (log entries < N are removed, so this
+		// includes the increment). This necessitates a snapshot when the
+		// partitioned replica rejoins the rest of the range.
+		index, err := repl0.GetLastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		truncArgs := truncateLogArgs(index+1, repl0.GetRangeID())
+		truncArgs.Key = keyA
+		if _, err := kv.SendWrapped(ctx, store0.TestSender(), truncArgs); err != nil {
+			t.Fatal(err)
+		}
+
+		// Finally, transfer the lease to node 2 while it is still unavailable and
+		// behind. We try to avoid this case when picking new leaseholders in practice,
+		// but we're never 100% successful.
+		if err := repl0.AdminTransferLease(ctx, store2.Ident.StoreID); err != nil {
+			t.Fatal(err)
+		}
+
+		// Remove the partition. A snapshot to node 2 should follow. This snapshot
+		// will inform node 2 that it is the new leaseholder for the range. Node 2
+		// should act accordingly and update its internal state to reflect this.
+		tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, store2)
+		tc.WaitForValues(t, keyC, []int64{4, 4, 4})
+
+		// Attempt to write under the read on the new leaseholder. The batch
+		// should get forwarded to a timestamp after the read. With the bug in
+		// #34025, the new leaseholder who heard about the lease transfer from a
+		// snapshot had an empty timestamp cache and would simply let us write
+		// under the previous read.
+		// NB: don't use SendWrapped because we want access to br.Timestamp.
+		ba = roachpb.BatchRequest{}
+		ba.Timestamp = readTS
+		ba.Add(incrementArgs(keyA, 1))
+		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotEqual(t, readTS, br.Timestamp)
+		require.True(t, readTS.Less(br.Timestamp))
+		require.Equal(t, readTS.Synthetic, br.Timestamp.Synthetic)
 	})
-	defer tc.Stopper().Stop(context.Background())
-	store0 := tc.GetFirstStoreFromServer(t, 0)
-	store2 := tc.GetFirstStoreFromServer(t, 2)
-
-	keyA := tc.ScratchRange(t)
-	keyB := keyA.Next()
-	keyC := keyB.Next()
-
-	// First, do a couple of writes; we'll use these to determine when
-	// the dust has settled.
-	incA := incrementArgs(keyA, 1)
-	if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incA); pErr != nil {
-		t.Fatal(pErr)
-	}
-	incC := incrementArgs(keyC, 2)
-	if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incC); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
-	tc.WaitForValues(t, keyA, []int64{1, 1, 1})
-	tc.WaitForValues(t, keyC, []int64{2, 2, 2})
-
-	// Create a transaction that will try to write "under" a served read.
-	// The read will have been served by the original leaseholder (node 0)
-	// and the write will be attempted on the new leaseholder (node 2).
-	// It should not succeed because it should run into the timestamp cache.
-	txnOld := kv.NewTxn(ctx, store0.DB(), 0 /* gatewayNodeID */)
-
-	// Perform a write with txnOld so that its timestamp gets set.
-	if _, err := txnOld.Inc(ctx, keyB, 3); err != nil {
-		t.Fatal(err)
-	}
-
-	// Read keyC with txnOld, which is updated below. This prevents the
-	// transaction from refreshing when it hits the serializable error.
-	if _, err := txnOld.Get(ctx, keyC); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure that the transaction sends its first hearbeat so that it creates
-	// its transaction record and doesn't run into trouble with the low water
-	// mark of the new leaseholder's timestamp cache. Amusingly, if the bug
-	// we're regression testing against here still existed, we would not have
-	// to do this.
-	hb, hbH := heartbeatArgs(txnOld.TestingCloneTxn(), tc.Servers[0].Clock().Now())
-	if _, pErr := kv.SendWrappedWith(ctx, store0.TestSender(), hbH, hb); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Another client comes along at a higher timestamp and reads. We should
-	// never be able to write under this time or we would be rewriting history.
-	if _, err := store0.DB().Get(ctx, keyA); err != nil {
-		t.Fatal(err)
-	}
-
-	repl0 := store0.LookupReplica(roachpb.RKey(keyA))
-
-	// Partition node 2 from the rest of its range. Once partitioned, perform
-	// another write and truncate the Raft log on the two connected nodes. This
-	// ensures that that when node 2 comes back up it will require a snapshot
-	// from Raft.
-	funcs := noopRaftHandlerFuncs()
-	funcs.dropReq = func(*kvserver.RaftMessageRequest) bool {
-		return true
-	}
-	tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
-		rangeID:                    repl0.GetRangeID(),
-		RaftMessageHandler:         store2,
-		unreliableRaftHandlerFuncs: funcs,
-	})
-
-	if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incC); pErr != nil {
-		t.Fatal(pErr)
-	}
-	tc.WaitForValues(t, keyC, []int64{4, 4, 2})
-
-	// Truncate the log at index+1 (log entries < N are removed, so this
-	// includes the increment). This necessitates a snapshot when the
-	// partitioned replica rejoins the rest of the range.
-	index, err := repl0.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
-	truncArgs := truncateLogArgs(index+1, repl0.GetRangeID())
-	truncArgs.Key = keyA
-	if _, err := kv.SendWrapped(ctx, store0.TestSender(), truncArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	// Finally, transfer the lease to node 2 while it is still unavailable and
-	// behind. We try to avoid this case when picking new leaseholders in practice,
-	// but we're never 100% successful.
-	if err := repl0.AdminTransferLease(ctx, store2.Ident.StoreID); err != nil {
-		t.Fatal(err)
-	}
-
-	// Remove the partition. A snapshot to node 2 should follow. This snapshot
-	// will inform node 2 that it is the new leaseholder for the range. Node 2
-	// should act accordingly and update its internal state to reflect this.
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, store2)
-	tc.WaitForValues(t, keyC, []int64{4, 4, 4})
-
-	// Perform a write on the new leaseholder underneath the previously served
-	// read. This write should hit the timestamp cache and flag the txn for a
-	// restart when we try to commit it below. With the bug in #34025, the new
-	// leaseholder who heard about the lease transfer from a snapshot had an
-	// empty timestamp cache and would simply let us write under the previous
-	// read.
-	if _, err := txnOld.Inc(ctx, keyA, 4); err != nil {
-		t.Fatal(err)
-	}
-	const exp = `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`
-	if err := txnOld.Commit(ctx); !testutils.IsError(err, exp) {
-		t.Fatalf("expected retry error, got: %v; did we write under a read?", err)
-	}
 }
 
 // TestConcurrentAdminChangeReplicasRequests ensures that when two attempts to
@@ -2272,8 +2273,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 		if rand.Intn(2) == 0 {
 			op = roachpb.ADD_NON_VOTER
 		}
-		_, err := db.AdminChangeReplicas(
-			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(op, pickTargets()...))
+		_, err := db.AdminChangeReplicas(ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(op, pickTargets()...))
 		return err
 	}
 	wg.Add(actors)
@@ -2284,13 +2284,46 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	var gotSuccess bool
 	for _, err := range errors {
 		if err != nil {
-			assert.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
+			require.Truef(t, kvserver.IsRetriableReplicationChangeError(err), "%s; desc: %v", err, rangeInfo.Desc)
 		} else if gotSuccess {
 			t.Error("expected only one success")
 		} else {
 			gotSuccess = true
 		}
 	}
+}
+
+func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t)
+
+	const numNodes = 7
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	// NB: The test cluster starts with firstVoter having a voting replica (and
+	// the lease) for all ranges.
+	firstVoter, secondVoter, nonVoter := tc.Target(0), tc.Target(1), tc.Target(3)
+	firstStore, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	firstRepl := firstStore.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, firstRepl, `the first node in the TestCluster must have a replica for the ScratchRange`)
+
+	// TODO(aayush): Trying to swap the last voting replica with a non-voter hits
+	// the safeguard inside Replica.propose() as the last voting replica is always
+	// the leaseholder. There are a bunch of subtleties around getting a
+	// leaseholder to remove itself without another voter to immediately transfer
+	// the lease to. Determine if/how this needs to be fixed.
+	tc.AddNonVotersOrFatal(t, key, nonVoter)
+	_, err = tc.SwapVoterWithNonVoter(key, firstVoter, nonVoter)
+	require.Regexp(t, "received invalid ChangeReplicasTrigger", err)
+
+	tc.AddVotersOrFatal(t, key, secondVoter)
+	tc.SwapVoterWithNonVoterOrFatal(t, key, secondVoter, nonVoter)
 }
 
 // TestReplicaTombstone ensures that tombstones are written when we expect
@@ -2871,7 +2904,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: blockOnChangeReplicasRead,
-						ReplicaAddStopAfterJointConfig: func() bool {
+						VoterAddStopAfterJointConfig: func() bool {
 							return stopAfterJointConfig.Load().(bool)
 						},
 					},
@@ -3324,15 +3357,15 @@ func TestProposalOverhead(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.Server(0).DB()
-	// NB: the expected overhead reflects the space overhead currently
-	// present in Raft commands. This test will fail if that overhead
-	// changes. Try to make this number go down and not up. It slightly
-	// undercounts because our proposal filter is called before
-	// maxLeaseIndex is filled in. The difference between the user and system
-	// overhead is that users ranges do not have rangefeeds on by default whereas
-	// system ranges do.
+	// NB: the expected overhead reflects the space overhead currently present
+	// in Raft commands. This test will fail if that overhead changes. Try to
+	// make this number go down and not up. It slightly undercounts because our
+	// proposal filter is called before MaxLeaseIndex or ClosedTimestamp are
+	// filled in. The difference between the user and system overhead is that
+	// users ranges do not have rangefeeds on by default whereas system ranges
+	// do.
 	const (
-		expectedUserOverhead uint32 = 45
+		expectedUserOverhead uint32 = 42
 	)
 	t.Run("user-key overhead", func(t *testing.T) {
 		userKey := tc.ScratchRange(t)

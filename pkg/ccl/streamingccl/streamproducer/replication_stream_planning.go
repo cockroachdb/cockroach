@@ -128,7 +128,7 @@ func doCreateReplicationStream(
 
 	if sinkURI != "" {
 		// TODO(yevgeniy): Support replication stream sinks.
-		return errors.AssertionFailedf("replication streaming into sink not supported")
+		return pgerror.New(pgcode.FeatureNotSupported, "replication streaming into sink not supported")
 	}
 
 	var scanStart hlc.Timestamp
@@ -141,7 +141,7 @@ func doCreateReplicationStream(
 	var spans []roachpb.Span
 	if eval.Targets.Tenant == (roachpb.TenantID{}) {
 		// TODO(yevgeniy): Only tenant streaming supported now; Support granular streaming.
-		return errors.AssertionFailedf("granular replication streaming not supported")
+		return pgerror.New(pgcode.FeatureNotSupported, "granular replication streaming not supported")
 	}
 
 	telemetry.Count(`replication.create.tenant`)
@@ -167,6 +167,19 @@ var replicationStreamHeader = colinfo.ResultColumns{
 func createReplicationStreamHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+	if !p.SessionData().EnableStreamReplication {
+		return nil, nil, nil, false, errors.WithTelemetry(
+			pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.Newf("stream replication is only supported experimentally"),
+					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
+				),
+				pgcode.FeatureNotSupported,
+			),
+			"replication.create.disabled",
+		)
+	}
+
 	stream, ok := stmt.(*tree.ReplicationStream)
 	if !ok {
 		return nil, nil, nil, false, nil

@@ -106,7 +106,7 @@ func (p *planner) writeTypeSchemaChange(
 		); err != nil {
 			return err
 		}
-		log.Infof(ctx, "job %d: updated with type change for type %d", *job.ID(), typeDesc.ID)
+		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
 	} else {
 		// Or, create a new job.
 		jobRecord := jobs.Record{
@@ -126,7 +126,7 @@ func (p *planner) writeTypeSchemaChange(
 			return err
 		}
 		p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID] = newJob
-		log.Infof(ctx, "queued new type change job %d for type %d", *newJob.ID(), typeDesc.ID)
+		log.Infof(ctx, "queued new type change job %d for type %d", newJob.ID(), typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
@@ -437,6 +437,11 @@ func repartitionRegionalByRowTables(
 		}
 		partitionAllBy := partitionByForRegionalByRow(*dbDesc.RegionConfig, colName)
 
+		// oldPartitioningDescs saves the old partitioning descriptors for each
+		// index that is repartitioned. This is later used to remove zone
+		// configurations from any partitions that are removed.
+		oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
+
 		// Update the partitioning on all indexes of the table that aren't being
 		// dropped.
 		for _, index := range tableDesc.NonDropIndexes() {
@@ -453,8 +458,38 @@ func repartitionRegionalByRowTables(
 			if err != nil {
 				return nil, err
 			}
+
+			oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
+
 			// Update the index descriptor proto's partitioning.
 			index.IndexDesc().Partitioning = newIdx.Partitioning
+		}
+
+		// Remove zone configurations that applied to partitions that were removed
+		// in the previous step. This requires all indexes to have been
+		// repartitioned such that there is no partitioning on the removed enum
+		// value. This is because `deleteRemovedPartitionZoneConfigs` generates
+		// subzone spans for the entire table (all indexes) downstream for each
+		// index. Spans can only be generated if partitioning values are present on
+		// the type descriptor (removed enum values obviously aren't), so we must
+		// remove the partition from all indexes before trying to delete zone
+		// configurations.
+		for _, index := range tableDesc.NonDropIndexes() {
+			oldPartitioning := oldPartitioningDescs[index.GetID()]
+
+			// Remove zone configurations that reference partition values we removed
+			// in the previous step.
+			if err = deleteRemovedPartitionZoneConfigs(
+				ctx,
+				txn,
+				tableDesc,
+				index.IndexDesc(),
+				&oldPartitioning,
+				&index.IndexDesc().Partitioning,
+				execCfg,
+			); err != nil {
+				return nil, err
+			}
 		}
 
 		// Update the zone configurations now that the partition's been added.

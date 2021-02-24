@@ -12,10 +12,12 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -36,24 +38,37 @@ func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
+	var s serverutils.TestServerInterface
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeChildJobs: func() {
+			RunBeforeResume: func(jobID int64) error {
+				// Block in the job to drop old indexes, which has mutation ID 2.
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				if pl.GetSchemaChange().TableMutationID < 2 {
+					return nil
+				}
 				doOnce.Do(func() {
 					childJobStartNotification <- struct{}{}
 					<-waitBeforeContinuing
 				})
+				return nil
 			},
 		},
 	}
 
-	s, db, _ := serverutils.StartServer(t, params)
+	var db *gosql.DB
+	s, db, _ = serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB.Exec(t, `
@@ -98,24 +113,37 @@ func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
+	var s serverutils.TestServerInterface
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeChildJobs: func() {
+			RunBeforeResume: func(jobID int64) error {
+				// Block in the job to drop old indexes, which has mutation ID 2.
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				if pl.GetSchemaChange().TableMutationID < 2 {
+					return nil
+				}
 				doOnce.Do(func() {
 					childJobStartNotification <- struct{}{}
 					<-waitBeforeContinuing
 				})
+				return nil
 			},
 		},
 	}
 
-	s, db, _ := serverutils.StartServer(t, params)
+	var db *gosql.DB
+	s, db, _ = serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB.Exec(t, `

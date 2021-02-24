@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -290,7 +291,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	case *SplitOperation:
 		v.failIfError(op, t.Result)
 	case *MergeOperation:
-		if resultIsError(t.Result, `cannot merge final range`) {
+		if resultIsErrorStr(t.Result, `cannot merge final range`) {
 			// Because of some non-determinism, it is not worth it (or maybe not
 			// possible) to prevent these usage errors. Additionally, I (dan) think
 			// this hints at some unnecessary friction in the AdminMerge api. There is
@@ -301,7 +302,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// there is no split at that key. #44378
 			//
 			// In the meantime, no-op.
-		} else if resultIsError(t.Result, `merge failed: unexpected value`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: unexpected value`) {
 			// TODO(dan): If this error is going to remain a part of the kv API, we
 			// should make it sniffable with errors.As. Currently this seems to be
 			// broken by wrapping it with `roachpb.NewErrorf("merge failed: %s",
@@ -310,30 +311,27 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
-		} else if resultIsError(t.Result,
-			`merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
 			// This operation executed concurrently with one that was changing
 			// replicas.
-		} else if resultIsError(t.Result, `merge failed: ranges not collocated`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: ranges not collocated`) {
 			// A merge requires that the two ranges have replicas on the same nodes,
 			// but Generator intentiontally does not try to avoid this so that this
 			// edge case is exercised.
-		} else if resultIsError(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
 			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
 			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `merge failed: non-deletion intent on local range descriptor`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: non-deletion intent on local range descriptor`) {
 			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `merge failed: range missing intent on its local descriptor`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: range missing intent on its local descriptor`) {
 			// Probably should be transparently retried.
 		} else {
 			v.failIfError(op, t.Result)
 		}
 	case *ChangeReplicasOperation:
 		var ignore bool
-		if t.Result.Type == ResultType_Error {
-			ctx := context.Background()
-			err := errors.DecodeError(ctx, *t.Result.Err)
+		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
 				kvserver.IsIllegalReplicationChangeError(err)
 		}
@@ -341,13 +339,18 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *TransferLeaseOperation:
-		if resultIsError(t.Result, `cannot transfer lease to replica of type (VOTER_INCOMING|VOTER_OUTGOING|VOTER_DEMOTING|LEARNER|NON_VOTER)`) {
+		if resultIsErrorStr(t.Result, `cannot transfer lease to replica of type (VOTER_INCOMING|VOTER_OUTGOING|VOTER_DEMOTING|LEARNER|NON_VOTER)`) {
 			// Only VOTER_FULL replicas can currently hold a range lease.
 			// Attempts to transfer to lease to any other replica type are
 			// rejected.
-		} else if resultIsError(t.Result, `unable to find store \d+ in range`) {
+		} else if resultIsErrorStr(t.Result, `replica cannot hold lease`) {
+			// Same case as above, but with a slightly different message.
+		} else if resultIsErrorStr(t.Result, `unable to find store \d+ in range`) {
 			// A lease transfer that races with a replica removal may find that
 			// the store it was targeting is no longer part of the range.
+		} else if resultIsError(t.Result, liveness.ErrRecordCacheMiss) {
+			// If the existing leaseholder has not yet heard about the transfer
+			// target's liveness record through gossip, it will return an error.
 		} else {
 			v.failIfError(op, t.Result)
 		}
@@ -619,37 +622,37 @@ func (v *validator) failIfError(op Operation, r Result) {
 	}
 }
 
+func errorFromResult(r Result) error {
+	if r.Type != ResultType_Error {
+		return nil
+	}
+	ctx := context.Background()
+	return errors.DecodeError(ctx, *r.Err)
+}
+
+func resultIsError(r Result, reference error) bool {
+	return errors.Is(errorFromResult(r), reference)
+}
+
+func resultIsRetryable(r Result) bool {
+	return errors.HasInterface(errorFromResult(r), (*roachpb.ClientVisibleRetryError)(nil))
+}
+
+func resultIsAmbiguous(r Result) bool {
+	return errors.HasInterface(errorFromResult(r), (*roachpb.ClientVisibleAmbiguousError)(nil))
+}
+
 // TODO(dan): Checking errors using string containment is fragile at best and a
 // security issue at worst. Unfortunately, some errors that currently make it
 // out of our kv apis are created with `errors.New` and so do not have types
 // that can be sniffed. Some of these may be removed or handled differently but
 // the rest should graduate to documented parts of the public api. Remove this
 // once it happens.
-func resultIsError(r Result, msgRE string) bool {
-	if r.Type != ResultType_Error {
-		return false
+func resultIsErrorStr(r Result, msgRE string) bool {
+	if err := errorFromResult(r); err != nil {
+		return regexp.MustCompile(msgRE).MatchString(err.Error())
 	}
-	ctx := context.Background()
-	err := errors.DecodeError(ctx, *r.Err)
-	return regexp.MustCompile(msgRE).MatchString(err.Error())
-}
-
-func resultIsRetryable(r Result) bool {
-	if r.Type != ResultType_Error {
-		return false
-	}
-	ctx := context.Background()
-	err := errors.DecodeError(ctx, *r.Err)
-	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
-}
-
-func resultIsAmbiguous(r Result) bool {
-	if r.Type != ResultType_Error {
-		return false
-	}
-	ctx := context.Background()
-	err := errors.DecodeError(ctx, *r.Err)
-	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
+	return false
 }
 
 func mustGetStringValue(value []byte) string {

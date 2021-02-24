@@ -11,7 +11,7 @@
 package colexecagg
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,7 +26,7 @@ type NewAggregatorArgs struct {
 	// MemAccount should be the same as the one used by Allocator and will be
 	// used by aggregatorHelper to handle DISTINCT clause.
 	MemAccount     *mon.BoundAccount
-	Input          colexecbase.Operator
+	Input          colexecop.Operator
 	InputTypes     []*types.T
 	Spec           *execinfrapb.AggregatorSpec
 	EvalCtx        *tree.EvalContext

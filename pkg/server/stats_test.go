@@ -63,10 +63,10 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 	// Ensure that our SQL statement data was not affected by the telemetry report.
-	stats := sqlServer.GetUnscrubbedStmtStats()
+	stats := sqlServer.GetScrubbedStmtStats()
 	foundStat := false
 	for _, stat := range stats {
-		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+		if stat.Key.Query == "INSERT INTO _ VALUES ($1)" {
 			foundStat = true
 			if stat.Stats.Count != 2 {
 				t.Fatal("expected to find 2 invocations, found", stat.Stats.Count)
@@ -161,12 +161,12 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Collect stats from the SQL server and ensure our queries are present.
-	stats := sqlServer.GetUnscrubbedStmtStats()
+	stats := sqlServer.GetScrubbedStmtStats()
 	foundStat := false
 	var sqlStatData roachpb.StatementStatistics
 
 	for _, stat := range stats {
-		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 			foundStat = true
 			sqlStatData = stat.Stats
 		}
@@ -182,17 +182,16 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer.ResetSQLStats(ctx)
 
 	// Query the reported statistics.
-	stats = sqlServer.GetUnscrubbedReportingStats()
+	stats = sqlServer.GetScrubbedReportingStats()
 	foundStat = false
 	for _, stat := range stats {
-		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 			foundStat = true
 			if !stat.Stats.AlmostEqual(&sqlStatData, epsilon) {
 				t.Fatal("expected stats", sqlStatData.String(), "found", stat.Stats.String())
 			}
 		}
 	}
-
 	if !foundStat {
 		t.Fatal("expected to find stats for insert query in reported pool, but didn't")
 	}
@@ -202,15 +201,16 @@ func TestSQLStatCollection(t *testing.T) {
 	INSERT INTO t.test VALUES (4);
 	INSERT INTO t.test VALUES (5);
 	INSERT INTO t.test VALUES (6);
+		CREATE USER us WITH PASSWORD 'pass';
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	// Find and record the stats for our second query.
-	stats = sqlServer.GetUnscrubbedStmtStats()
+	stats = sqlServer.GetScrubbedStmtStats()
 	foundStat = false
 	for _, stat := range stats {
-		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 			foundStat = true
 			// Add into the current stat data the collected data.
 			sqlStatData.Add(&stat.Stats)
@@ -224,10 +224,10 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer.ResetSQLStats(ctx)
 
 	// Find our statement stat from the reported stats pool.
-	stats = sqlServer.GetUnscrubbedReportingStats()
+	stats = sqlServer.GetScrubbedReportingStats()
 	foundStat = false
 	for _, stat := range stats {
-		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 			foundStat = true
 			// The new value for the stat should be the aggregate of the previous stat
 			// value, and the old stat value. Additionally, zero out the timestamps for

@@ -95,6 +95,18 @@ type stmtStats struct {
 	}
 }
 
+func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.mu.data.ExecStats.Count++
+	count := s.mu.data.ExecStats.Count
+	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.NetworkBytesSent))
+	s.mu.data.ExecStats.MaxMemUsage.Record(count, float64(stats.MaxMemUsage))
+	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
+	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
+}
+
 type transactionCounts struct {
 	mu struct {
 		syncutil.Mutex
@@ -456,6 +468,7 @@ func (a *appStats) recordTransaction(
 		s.mu.data.ExecStats.NetworkBytes.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkBytesSent))
 		s.mu.data.ExecStats.MaxMemUsage.Record(s.mu.data.ExecStats.Count, float64(execStats.MaxMemUsage))
 		s.mu.data.ExecStats.ContentionTime.Record(s.mu.data.ExecStats.Count, execStats.ContentionTime.Seconds())
+		s.mu.data.ExecStats.NetworkMessages.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkMessages))
 	}
 }
 
@@ -615,25 +628,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 
 	// Re-format to remove most names.
 	f := tree.NewFmtCtx(tree.FmtAnonymize)
-
-	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		virtual, err := vt.getVirtualTableEntry(tn)
-		if err != nil || virtual == nil {
-			ctx.WriteByte('_')
-			return
-		}
-		// Virtual table: we want to keep the name; however
-		// we need to scrub the database name prefix.
-		newTn := *tn
-		newTn.CatalogName = "_"
-
-		ctx.WithFlags(tree.FmtParsable, func() {
-			ctx.WithReformatTableNames(nil, func() {
-				ctx.FormatNode(&newTn)
-			})
-		})
-	}
-	f.SetReformatTableNames(reformatFn)
+	f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }

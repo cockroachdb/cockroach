@@ -208,12 +208,11 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.Equal(t, 1, n)
 
 			exp := fmt.Sprintf(`
-Span %[1]s:
-Span /cockroach.testutils.grpcutils.GRPCTest/%[1]s:
-  tags: component=gRPC span.kind=client test-baggage-key=test-baggage-value
-Span /cockroach.testutils.grpcutils.GRPCTest/%[1]s:
-  tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value`,
-				tc.name)
+				span: %[1]s
+					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
+						tags: component=gRPC span.kind=client test-baggage-key=test-baggage-value
+					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
+						tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value`, tc.name)
 			require.NoError(t, tracing.TestingCheckRecordedSpans(finalRecs, exp))
 		})
 	}

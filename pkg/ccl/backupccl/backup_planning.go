@@ -1224,41 +1224,42 @@ func backupPlanHook(
 		if backupStmt.Options.Detached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
-			aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, p.ExtendedEvalContext().Txn)
+			jobID := p.ExecCfg().JobRegistry.MakeJobID()
+			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, jobID, p.ExtendedEvalContext().Txn)
 			if err != nil {
 				return err
 			}
 
-			if err := doWriteBackupManifestCheckpoint(ctx, *aj.ID()); err != nil {
+			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
 				return err
 			}
 
 			// The protect timestamp logic for a DETACHED BACKUP can be run within the
 			// same txn as the BACKUP is being planned in, because we do not wait for
 			// the BACKUP job to complete.
-			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spans,
+			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spans,
 				startTime, endTime, backupDetails)
 			if err != nil {
 				return err
 			}
 
-			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 			collectTelemetry()
 			return nil
 		}
 
 		var sj *jobs.StartableJob
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
-			if err != nil {
+			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
 				return err
 			}
-			if err := doWriteBackupManifestCheckpoint(ctx, *sj.ID()); err != nil {
+			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
 				return err
 			}
 
-			return protectTimestampForBackup(ctx, p, txn, *sj.ID(), spans, startTime, endTime,
+			return protectTimestampForBackup(ctx, p, txn, jobID, spans, startTime, endTime,
 				backupDetails)
 		}); err != nil {
 			if sj != nil {

@@ -25,7 +25,6 @@ go_library(
         "log.go",
         "log_bridge.go",
         "log_buffer.go",
-        "log_channels_generated.go",
         "log_entry.go",
         "log_flush.go",
         "redact.go",
@@ -40,6 +39,7 @@ go_library(
         "trace.go",
         "tracebacks.go",
         "vmodule.go",
+        ":gen-log-channels",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log",
     visibility = ["//visibility:public"],
@@ -161,4 +161,17 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_x_net//trace",
     ],
+)
+
+genrule(
+    name = "gen-log-channels",
+    srcs = [
+        "//pkg/util/log/logpb:log.proto",
+        "//pkg/util/log/gen",
+    ],
+    outs = ["log_channels_generated.go"],
+    cmd = """
+        $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
+          log_channels.go $(location log_channels_generated.go)
+       """,
 )

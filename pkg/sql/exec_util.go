@@ -349,6 +349,13 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	},
 )
 
+var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_stream_replication.enabled",
+	"default value for experimental_stream_replication session setting;"+
+		"enables the ability to setup a replication stream",
+	false,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -1497,14 +1504,44 @@ func truncateStatementStringForTelemetry(stmt string) string {
 	return stmt
 }
 
-func anonymizeStmtAndConstants(stmt tree.Statement) string {
-	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
+// hideNonVirtualTableNameFunc returns a function that can be used with
+// FmtCtx.SetReformatTableNames. It hides all table names that are not virtual
+// tables.
+func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *tree.TableName) {
+	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
+		virtual, err := vt.getVirtualTableEntry(tn)
+		if err != nil || virtual == nil {
+			ctx.WriteByte('_')
+			return
+		}
+		// Virtual table: we want to keep the name; however
+		// we need to scrub the database name prefix.
+		newTn := *tn
+		newTn.CatalogName = "_"
+
+		ctx.WithFlags(tree.FmtParsable, func() {
+			ctx.WithReformatTableNames(nil, func() {
+				ctx.FormatNode(&newTn)
+			})
+		})
+	}
+	return reformatFn
+}
+
+func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
+	// Re-format to remove most names.
+	f := tree.NewFmtCtx(tree.FmtAnonymize | tree.FmtHideConstants)
+	if vt != nil {
+		f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
+	}
+	f.FormatNode(stmt)
+	return f.CloseAndGetString()
 }
 
 // WithAnonymizedStatement attaches the anonymized form of a statement
 // to an error object.
-func WithAnonymizedStatement(err error, stmt tree.Statement) error {
-	anonStmtStr := anonymizeStmtAndConstants(stmt)
+func WithAnonymizedStatement(err error, stmt tree.Statement, vt VirtualTabler) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt, vt)
 	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
 	return errors.WithSafeDetails(err,
 		"while executing: %s", errors.Safe(anonStmtStr))
@@ -1626,6 +1663,9 @@ func (st *SessionTracing) StartTracing(
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
+		// We want to clear out any existing recordings so they don't show up in
+		// future traces.
+		sp.ResetRecording()
 		sp.SetVerbose(true)
 		st.firstTxnSpan = sp
 	}
@@ -2300,6 +2340,10 @@ func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 
 func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondata.NewSchemaChangerMode) {
 	m.data.NewSchemaChangerMode = val
+}
+
+func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
+	m.data.EnableStreamReplication = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

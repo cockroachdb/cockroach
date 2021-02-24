@@ -53,7 +53,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	skip.UnderRaceWithIssue(t, 60710)
 
 	ctx := context.Background()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	cancelJobCh := make(chan struct{})
 	threshold := 10
@@ -100,7 +100,14 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	defer close(errCh)
 	_, err := conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
+
 	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`, streamAddr)
+	// Attempt to run the ingestion job without enabling the experimental setting.
+	_, err = conn.Exec(query)
+	require.True(t, testutils.IsError(err, "stream replication is only supported experimentally"))
+
+	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
+	require.NoError(t, err)
 	go func() {
 		_, err := conn.Exec(query)
 		errCh <- err

@@ -87,13 +87,6 @@ CREATE TABLE uniq_enum (
 )
 
 statement ok
-CREATE TABLE uniq_partial_index (
-  i INT,
-  UNIQUE WITHOUT INDEX (i),
-  UNIQUE INDEX (i) WHERE i > 0
-)
-
-statement ok
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 
 # Insert some data into the other table.
@@ -437,6 +430,51 @@ r        s    i  j
 eu-west  bar  2  2
 us-west  foo  1  1
 
+# Set a to the same value it already has.
+statement ok
+UPDATE uniq_partial SET a = 1 WHERE a = 1 AND b = 1
+
+# Set a to an existing value.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+UPDATE uniq_partial SET a = 1 WHERE a = 2
+
+# Make b of (1, -1) positive so that it conflicts with (1, 1)
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+UPDATE uniq_partial SET b = 10 WHERE a = 1 AND b = -1
+
+# Set a to NULL.
+statement ok
+UPDATE uniq_partial SET a = NULL, b = 10 WHERE a = 1 AND b = -1
+
+# Update two existing, non-conflicting rows resulting in a conflict.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(10\) already exists\.
+UPDATE uniq_partial SET a = 10 WHERE a IS NULL AND b = 5
+
+# Set a to a non-existing value.
+statement ok
+UPDATE uniq_partial SET a = 10 WHERE a = 9 AND b = 9
+
+# Set a to a value that would conflict if it was a non-partial unique constraint.
+statement ok
+UPDATE uniq_partial SET a = 1 WHERE b = -7
+
+query II colnames,rowsort
+SELECT * FROM uniq_partial
+----
+a     b
+1     1
+1     -3
+1     -7
+2     2
+5     5
+6     6
+7     7
+9     -9
+10    9
+NULL  5
+NULL  5
+NULL  10
+
 
 # -- Tests with UPSERT --
 subtest Upsert
@@ -616,11 +654,18 @@ eu-west  bar  2  2
 # Ensure that we do not choose a partial index as the arbiter when there is a
 # UNIQUE WITHOUT INDEX constraint.
 statement ok
-INSERT INTO uniq_partial_index VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 1;
-INSERT INTO uniq_partial_index VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
+CREATE TABLE uniq_partial_index_and_constraint (
+  i INT,
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE INDEX (i) WHERE i > 0
+)
+
+statement ok
+INSERT INTO uniq_partial_index_and_constraint VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 1;
+INSERT INTO uniq_partial_index_and_constraint VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
 
 query I colnames
-SELECT * FROM uniq_partial_index
+SELECT * FROM uniq_partial_index_and_constraint
 ----
 i
 2

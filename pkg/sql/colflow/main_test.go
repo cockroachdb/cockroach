@@ -12,6 +12,8 @@ package colflow_test
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"os"
 	"testing"
 
@@ -21,10 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -71,6 +76,15 @@ func TestMain(m *testing.M) {
 		testDiskAcc = &diskAcc
 		defer testDiskAcc.Close(ctx)
 
+		flag.Parse()
+		if !skip.UnderBench() {
+			// (If we're running benchmarks, don't set a random batch size.)
+			randomBatchSize := colexectestutils.GenerateBatchSize()
+			fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
+			if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+				colexecerror.InternalError(err)
+			}
+		}
 		return m.Run()
 	}())
 }

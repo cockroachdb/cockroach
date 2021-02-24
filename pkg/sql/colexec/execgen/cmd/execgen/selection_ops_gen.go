@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
+const selectionOpsTmpl = "pkg/sql/colexec/colexecsel/selection_ops_tmpl.go"
 
 func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 	r := strings.NewReplacer(

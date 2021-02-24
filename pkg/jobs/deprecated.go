@@ -228,7 +228,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 
 		// Below we know that this node holds the lease on the job, or that we want
 		// to adopt it anyway because the leaseholder seems dead.
-		job := &Job{id: id, registry: r}
+		job := &Job{id: *id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
@@ -344,7 +344,7 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 		payload := job.Payload()
 		execCtx, cleanup := r.execCtx("resume-"+job.taskName(), payload.UsernameProto.Decode())
 		defer cleanup()
-		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
+		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), job.ID())
 		var span *tracing.Span
 		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 		defer span.Finish()
@@ -358,16 +358,16 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 			}
 			err = r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
 			if err != nil {
-				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
+				log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 			}
 			status, err := job.CurrentStatus(ctx, nil /* txn */)
 			if err != nil {
-				log.Errorf(ctx, "job %d: failed querying status: %v", *job.ID(), err)
+				log.Errorf(ctx, "job %d: failed querying status: %v", job.ID(), err)
 			} else {
-				log.Infof(ctx, "job %d: status %s after adoption finished", *job.ID(), status)
+				log.Infof(ctx, "job %d: status %s after adoption finished", job.ID(), status)
 			}
 		}
-		r.unregister(*job.ID())
+		r.unregister(job.ID())
 	}); err != nil {
 		return err
 	}
@@ -377,11 +377,6 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 func (j *Job) deprecatedInsert(
 	ctx context.Context, txn *kv.Txn, id int64, lease *jobspb.Lease, session sqlliveness.Session,
 ) error {
-	if j.id != nil {
-		// Already created - do nothing.
-		return nil
-	}
-
 	j.mu.payload.Lease = lease
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
@@ -448,7 +443,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
 	}); err != nil {
 		return err
 	}
-	j.id = &id
+	j.id = id
 	return nil
 }
 

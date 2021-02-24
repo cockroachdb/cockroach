@@ -535,7 +535,7 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	case <-ctx.Done():
 		return ctx.Err()
 	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*b.job.ID())),
+		tree.NewDInt(tree.DInt(b.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(b.backupStats.Rows)),
@@ -564,7 +564,7 @@ func (b *backupResumer) readManifestOnResume(
 			return nil, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.
-		tmpCheckpoint := tempCheckpointFileNameForJob(*b.job.ID())
+		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
 		desc, err = readBackupManifest(ctx, defaultStore, tmpCheckpoint, details.EncryptionOptions)
 		if err != nil {
 			return nil, err
@@ -610,7 +610,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
-			*b.job.ID(), jobs.CreatedByScheduledJobs)
+			b.job.ID(), jobs.CreatedByScheduledJobs)
 
 		if err != nil {
 			return errors.Wrap(err, "schedule info lookup")
@@ -622,10 +622,10 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
-			ctx, env, *b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
+			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
 			log.Warningf(ctx,
 				"failed to notify schedule %d of completion of job %d; err=%s",
-				scheduleID, *b.job.ID(), err)
+				scheduleID, b.job.ID(), err)
 		}
 		return nil
 	}); err != nil {

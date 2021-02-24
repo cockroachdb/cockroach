@@ -12,6 +12,8 @@ package schemaexpr
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -128,6 +131,38 @@ func (v *ComputedColumnValidator) Validate(
 	)
 	if err != nil {
 		return "", err
+	}
+
+	// Virtual computed columns must not refer to mutation columns because it
+	// would not be safe in the case that the mutation column was being backfilled
+	// and the virtual computed column value needed to be computed for the purpose
+	// of writing to a secondary index.
+	if d.IsVirtual() {
+		var mutationColumnNames []string
+		var err error
+		depColIDs.ForEach(func(colID descpb.ColumnID) {
+			if err != nil {
+				return
+			}
+			var col catalog.Column
+			if col, err = v.desc.FindColumnWithID(colID); err != nil {
+				err = errors.WithAssertionFailure(err)
+				return
+			}
+			if !col.Public() {
+				mutationColumnNames = append(mutationColumnNames,
+					strconv.Quote(col.GetName()))
+			}
+		})
+		if err != nil {
+			return "", err
+		}
+		if len(mutationColumnNames) > 0 {
+			return "", unimplemented.Newf(
+				"virtual computed columns referencing mutation columns",
+				"virtual computed column %q referencing columns (%s) added in the "+
+					"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
+		}
 	}
 	return expr, nil
 }

@@ -31,6 +31,16 @@ type FlowID struct {
 	uuid.UUID
 }
 
+// Equal returns whether the two FlowIDs are equal.
+func (f FlowID) Equal(other FlowID) bool {
+	return f.UUID.Equal(other.UUID)
+}
+
+// IsUnset returns whether the FlowID is unset.
+func (f FlowID) IsUnset() bool {
+	return f.UUID.Equal(uuid.Nil)
+}
+
 // DistSQLVersion identifies DistSQL engine versions.
 type DistSQLVersion uint32
 
