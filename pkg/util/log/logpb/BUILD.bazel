@@ -26,3 +26,10 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
+
+exports_files(
+    [
+        "log.proto",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate go run ./gen.go logpb/log.proto logging.md ../../../docs/generated/logging.md
-//go:generate go run ./gen.go logpb/log.proto severity.go severity/severity_generated.go
-//go:generate go run ./gen.go logpb/log.proto channel.go channel/channel_generated.go
-//go:generate go run ./gen.go logpb/log.proto log_channels.go log_channels_generated.go
+//go:generate go run gen/main.go logpb/log.proto logging.md ../../../docs/generated/logging.md
+//go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
+//go:generate go run gen/main.go logpb/log.proto channel.go channel/channel_generated.go
+//go:generate go run gen/main.go logpb/log.proto log_channels.go log_channels_generated.go
 
 // Channel aliases a type.
 type Channel = logpb.Channel

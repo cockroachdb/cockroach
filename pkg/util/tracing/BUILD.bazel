@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
+        "//pkg/util/ring",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",

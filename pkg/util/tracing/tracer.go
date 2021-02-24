@@ -41,8 +41,12 @@ import (
 const verboseTracingBaggageKey = "sb"
 
 const (
-	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
+	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable
+	// limit.
 	maxLogsPerSpan = 1000
+	// maxStructuredEventsPerSpan limits the number of structured events in a
+	// span; use a comfortable limit.
+	maxStructuredEventsPerSpan = 50
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
 )
@@ -399,6 +403,7 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 		},
 	}
+	helper.crdbSpan.mu.structured.Reserve(maxStructuredEventsPerSpan)
 	helper.span.i = spanInner{
 		tracer: t,
 		crdb:   &helper.crdbSpan,
