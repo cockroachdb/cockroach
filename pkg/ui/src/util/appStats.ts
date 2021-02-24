@@ -122,6 +122,12 @@ function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
       countA,
       countB,
     ),
+    max_disk_usage: addMaybeUnsetNumericStat(
+      a.max_disk_usage,
+      b.max_disk_usage,
+      countA,
+      countB,
+    ),
   };
 }
 

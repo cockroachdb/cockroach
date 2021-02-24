@@ -187,6 +187,7 @@ function randomExecStats(max_count: number = 10): Required<ExecStats> {
     max_mem_usage: randomStat(),
     contention_time: randomStat(),
     network_messages: randomStat(),
+    max_disk_usage: randomStat(),
   };
 }
 
