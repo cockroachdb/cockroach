@@ -153,7 +153,8 @@ type propBuf struct {
 	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the largest
 	// timestamp that was communicated to other replicas as closed, representing a
 	// promise that this leaseholder will not evaluate writes below this timestamp
-	// any more.
+	// any more. It is set when proposals are flushed from the buffer, and also
+	// by the side-transport which closes timestamps out of band.
 	//
 	// Note that this field is not used by the local replica (or by anybody)
 	// directly to decide whether follower reads can be served. See
@@ -821,8 +822,8 @@ func (b *propBuf) OnLeaseChangeLocked(leaseOwned bool, closedTS hlc.Timestamp) {
 }
 
 // forwardClosedTimestamp forwards the closed timestamp tracked by the propBuf.
-func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) {
-	b.assignedClosedTimestamp.Forward(closedTS)
+func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
+	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
 // EvaluatingRequestsCount returns the count of requests currently tracked by
@@ -909,6 +910,23 @@ func (b *propBuf) TrackEvaluatingRequest(
 	wts.Forward(minTS)
 	tok := b.evalTracker.Track(ctx, wts)
 	return minTS, TrackedRequestToken{tok: tok, b: b}
+}
+
+// MaybeForwardClosedLocked checks whether the closed timestamp can be advanced
+// to target.
+//
+// Returns false in the following cases:
+// 1) target is below the propBuf's closed timestamp. This ensures that the
+//    side-transport (the caller) is prevented from publishing closed timestamp
+//    regressions. In other words, for a given LAI, the side-transport only
+//    publishes closed timestamps higher than what Raft published.
+// 2) There are requests evaluating at timestamps below target (as tracked by
+//    the evalTracker). We can't close timestamps below these requests.
+func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
+	if lb := b.evalTracker.LowerBound(ctx); lb.Less(target) {
+		return false
+	}
+	return b.forwardClosedTimestampLocked(target)
 }
 
 const propBufArrayMinSize = 4

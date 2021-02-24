@@ -6,11 +6,17 @@ package ctpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+
+import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import (
 	context "context"
 	grpc "google.golang.org/grpc"
 )
+
+import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -22,6 +28,188 @@ var _ = math.Inf
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
+type RangeUpdate struct {
+	RangeID github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	LAI     LAI                                                  `protobuf:"varint,2,opt,name=lai,proto3,casttype=LAI" json:"lai,omitempty"`
+	Policy  roachpb.RangeClosedTimestampPolicy                   `protobuf:"varint,3,opt,name=policy,proto3,enum=cockroach.roachpb.RangeClosedTimestampPolicy" json:"policy,omitempty"`
+}
+
+func (m *RangeUpdate) Reset()         { *m = RangeUpdate{} }
+func (m *RangeUpdate) String() string { return proto.CompactTextString(m) }
+func (*RangeUpdate) ProtoMessage()    {}
+func (*RangeUpdate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_service_123b88c5897d6128, []int{0}
+}
+func (m *RangeUpdate) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeUpdate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeUpdate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeUpdate.Merge(dst, src)
+}
+func (m *RangeUpdate) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeUpdate) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeUpdate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeUpdate proto.InternalMessageInfo
+
+// ClosedTimestampUpdate contains information about (the advancement of) closed
+// timestamps for ranges with leases on the sender node. Updates are of two
+// types: snapshots and incrementals. Snapshots are stand-alone messages,
+// explicitly containing state about a bunch of ranges. Incrementals are deltas
+// since the previous message (the previous message can be a snapshot or another
+// incremental); they contain info about which new ranges are included in the
+// info provided, which ranges are removed, and how the closed timestamps for
+// different categories of ranges advanced. Ranges communicated by a previous
+// message and not touched by an incremental are "implicitly" referenced by the
+// incremental. In order to properly handle incrementals, the recipient
+// maintains a "stream's state": the group of ranges that can be implicitly
+// referenced by the next message.
+type ClosedTimestampUpdate struct {
+	// node_id identifies the sending node.
+	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	// seq_num identifies this update across all updates produced by a node. The
+	// sequence is reset when the node restarts, so a recipient can only count on
+	// it increasing within a single PushUpdates stream.
+	//
+	// All messages have sequence numbers, including snapshots. A snapshot can be
+	// applied on top of any state (i.e. it can be applied after having skipped
+	// messages); its sequence number tells the recipient what incremental message
+	// it should expect afterwards.
+	SeqNum UpdateSequenceNumber `protobuf:"varint,2,opt,name=seq_num,json=seqNum,proto3,casttype=UpdateSequenceNumber" json:"seq_num,omitempty"`
+	// snapshot indicates whether this message is standalone, or whether it's just
+	// a delta since the messages with the previous seq_num. A snapshot
+	// re-initializes all of the recipient's state. The first message on a stream
+	// is always a snapshot. Afterwards, there could be others if the stream
+	// experience network problems and some incremental messages were dropped
+	// (although generally we expect that to result in a stream failing and a new
+	// one being established).
+	Snapshot       bool                                                   `protobuf:"varint,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Removed        []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,4,rep,packed,name=removed,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"removed,omitempty"`
+	AddedOrUpdated []RangeUpdate                                          `protobuf:"bytes,5,rep,name=addedOrUpdated,proto3" json:"addedOrUpdated"`
+	// closed_timestamp represents the timestamps that are being closed for each
+	// group of ranges, with a group being represented by its policy.
+	//
+	// The recipient is supposed to forward the closed timestamps of the affected
+	// ranges to these values. Upon receiving one of these updates, the recipient
+	// should generally not assume that it hasn't been informed of a higher closed
+	// timestamp for any range in particular - races between this side-transport
+	// and the regular Raft transport are possible.
+	ClosedTimestamp []ClosedTimestampUpdateGroupUpdate `protobuf:"bytes,6,rep,name=closed_timestamp,json=closedTimestamp,proto3" json:"closed_timestamp"`
+}
+
+func (m *ClosedTimestampUpdate) Reset()         { *m = ClosedTimestampUpdate{} }
+func (m *ClosedTimestampUpdate) String() string { return proto.CompactTextString(m) }
+func (*ClosedTimestampUpdate) ProtoMessage()    {}
+func (*ClosedTimestampUpdate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_service_123b88c5897d6128, []int{1}
+}
+func (m *ClosedTimestampUpdate) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClosedTimestampUpdate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ClosedTimestampUpdate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClosedTimestampUpdate.Merge(dst, src)
+}
+func (m *ClosedTimestampUpdate) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClosedTimestampUpdate) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClosedTimestampUpdate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClosedTimestampUpdate proto.InternalMessageInfo
+
+type ClosedTimestampUpdateGroupUpdate struct {
+	Policy          roachpb.RangeClosedTimestampPolicy `protobuf:"varint,1,opt,name=policy,proto3,enum=cockroach.roachpb.RangeClosedTimestampPolicy" json:"policy,omitempty"`
+	ClosedTimestamp hlc.Timestamp                      `protobuf:"bytes,2,opt,name=closed_timestamp,json=closedTimestamp,proto3" json:"closed_timestamp"`
+}
+
+func (m *ClosedTimestampUpdateGroupUpdate) Reset()         { *m = ClosedTimestampUpdateGroupUpdate{} }
+func (m *ClosedTimestampUpdateGroupUpdate) String() string { return proto.CompactTextString(m) }
+func (*ClosedTimestampUpdateGroupUpdate) ProtoMessage()    {}
+func (*ClosedTimestampUpdateGroupUpdate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_service_123b88c5897d6128, []int{1, 0}
+}
+func (m *ClosedTimestampUpdateGroupUpdate) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClosedTimestampUpdateGroupUpdate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ClosedTimestampUpdateGroupUpdate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClosedTimestampUpdateGroupUpdate.Merge(dst, src)
+}
+func (m *ClosedTimestampUpdateGroupUpdate) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClosedTimestampUpdateGroupUpdate) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClosedTimestampUpdateGroupUpdate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClosedTimestampUpdateGroupUpdate proto.InternalMessageInfo
+
+type Response struct {
+}
+
+func (m *Response) Reset()         { *m = Response{} }
+func (m *Response) String() string { return proto.CompactTextString(m) }
+func (*Response) ProtoMessage()    {}
+func (*Response) Descriptor() ([]byte, []int) {
+	return fileDescriptor_service_123b88c5897d6128, []int{2}
+}
+func (m *Response) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Response) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Response) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Response.Merge(dst, src)
+}
+func (m *Response) XXX_Size() int {
+	return m.Size()
+}
+func (m *Response) XXX_DiscardUnknown() {
+	xxx_messageInfo_Response.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Response proto.InternalMessageInfo
+
+func init() {
+	proto.RegisterType((*RangeUpdate)(nil), "cockroach.kv.kvserver.ctupdate.RangeUpdate")
+	proto.RegisterType((*ClosedTimestampUpdate)(nil), "cockroach.kv.kvserver.ctupdate.ClosedTimestampUpdate")
+	proto.RegisterType((*ClosedTimestampUpdateGroupUpdate)(nil), "cockroach.kv.kvserver.ctupdate.ClosedTimestampUpdate.groupUpdate")
+	proto.RegisterType((*Response)(nil), "cockroach.kv.kvserver.ctupdate.Response")
+}
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
@@ -127,25 +315,1013 @@ var _ClosedTimestamp_serviceDesc = grpc.ServiceDesc{
 	Metadata: "kv/kvserver/closedts/ctpb/service.proto",
 }
 
-func init() {
-	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_3096204571c3b264)
+// ClosedTimestampSideTransportClient is the client API for ClosedTimestampSideTransport service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type ClosedTimestampSideTransportClient interface {
+	PushUpdates(ctx context.Context, opts ...grpc.CallOption) (ClosedTimestampSideTransport_PushUpdatesClient, error)
 }
 
-var fileDescriptor_service_3096204571c3b264 = []byte{
-	// 230 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x8f, 0xb1, 0x4a, 0x04, 0x31,
-	0x10, 0x86, 0x13, 0x14, 0x8b, 0x6d, 0x84, 0xc5, 0x6a, 0x91, 0x29, 0x84, 0xd3, 0xab, 0x12, 0xd1,
-	0x37, 0x50, 0xc4, 0x5e, 0xac, 0xc4, 0x26, 0x37, 0x37, 0xac, 0xcb, 0xde, 0xed, 0x84, 0x64, 0x0c,
-	0xf8, 0x16, 0x3e, 0xd6, 0x95, 0x57, 0x5e, 0xa9, 0xd9, 0x17, 0x91, 0xec, 0x69, 0xa9, 0x76, 0x3f,
-	0xff, 0xcc, 0x7c, 0x7c, 0x53, 0x5d, 0xf4, 0xc9, 0xf6, 0x29, 0x52, 0x48, 0x14, 0x2c, 0xae, 0x38,
-	0xd2, 0x52, 0xa2, 0x45, 0xf1, 0x0b, 0x5b, 0xca, 0x0e, 0xc9, 0xf8, 0xc0, 0xc2, 0x35, 0x20, 0x63,
-	0x1f, 0xd8, 0xe1, 0x8b, 0xe9, 0x93, 0xf9, 0x39, 0x31, 0x28, 0xaf, 0x7e, 0xe9, 0x84, 0x9a, 0xd9,
-	0xef, 0x20, 0x1a, 0x24, 0xbc, 0xed, 0x31, 0xcd, 0x49, 0xcb, 0x2d, 0x4f, 0xd1, 0x96, 0xf4, 0xdd,
-	0x9e, 0xb6, 0xcc, 0xed, 0x8a, 0xac, 0xf3, 0x9d, 0x75, 0xc3, 0xc0, 0xe2, 0xa4, 0xe3, 0x21, 0xee,
-	0xa7, 0x57, 0x5c, 0x1d, 0xdf, 0x4e, 0xc0, 0xc7, 0x6e, 0x4d, 0x51, 0xdc, 0xda, 0xd7, 0xcf, 0xd5,
-	0xc1, 0x3d, 0x49, 0x3d, 0x37, 0x7f, 0x5b, 0x99, 0x07, 0x72, 0x58, 0x50, 0xcd, 0xec, 0xbf, 0xcd,
-	0xbb, 0x22, 0x79, 0xa6, 0xe6, 0xfa, 0x52, 0xdf, 0x9c, 0x6f, 0x3e, 0x41, 0x6d, 0x32, 0xe8, 0x6d,
-	0x06, 0xbd, 0xcb, 0xa0, 0x3f, 0x32, 0xe8, 0xf7, 0x11, 0xd4, 0x76, 0x04, 0xb5, 0x1b, 0x41, 0x3d,
-	0x1d, 0x96, 0xc7, 0x16, 0x47, 0x93, 0xdf, 0xf5, 0x57, 0x00, 0x00, 0x00, 0xff, 0xff, 0x7e, 0xcb,
-	0xa0, 0xcc, 0x45, 0x01, 0x00, 0x00,
+type closedTimestampSideTransportClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewClosedTimestampSideTransportClient(cc *grpc.ClientConn) ClosedTimestampSideTransportClient {
+	return &closedTimestampSideTransportClient{cc}
+}
+
+func (c *closedTimestampSideTransportClient) PushUpdates(ctx context.Context, opts ...grpc.CallOption) (ClosedTimestampSideTransport_PushUpdatesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_ClosedTimestampSideTransport_serviceDesc.Streams[0], "/cockroach.kv.kvserver.ctupdate.ClosedTimestampSideTransport/PushUpdates", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &closedTimestampSideTransportPushUpdatesClient{stream}
+	return x, nil
+}
+
+type ClosedTimestampSideTransport_PushUpdatesClient interface {
+	Send(*ClosedTimestampUpdate) error
+	Recv() (*Response, error)
+	grpc.ClientStream
+}
+
+type closedTimestampSideTransportPushUpdatesClient struct {
+	grpc.ClientStream
+}
+
+func (x *closedTimestampSideTransportPushUpdatesClient) Send(m *ClosedTimestampUpdate) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *closedTimestampSideTransportPushUpdatesClient) Recv() (*Response, error) {
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// ClosedTimestampSideTransportServer is the server API for ClosedTimestampSideTransport service.
+type ClosedTimestampSideTransportServer interface {
+	PushUpdates(ClosedTimestampSideTransport_PushUpdatesServer) error
+}
+
+func RegisterClosedTimestampSideTransportServer(s *grpc.Server, srv ClosedTimestampSideTransportServer) {
+	s.RegisterService(&_ClosedTimestampSideTransport_serviceDesc, srv)
+}
+
+func _ClosedTimestampSideTransport_PushUpdates_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ClosedTimestampSideTransportServer).PushUpdates(&closedTimestampSideTransportPushUpdatesServer{stream})
+}
+
+type ClosedTimestampSideTransport_PushUpdatesServer interface {
+	Send(*Response) error
+	Recv() (*ClosedTimestampUpdate, error)
+	grpc.ServerStream
+}
+
+type closedTimestampSideTransportPushUpdatesServer struct {
+	grpc.ServerStream
+}
+
+func (x *closedTimestampSideTransportPushUpdatesServer) Send(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *closedTimestampSideTransportPushUpdatesServer) Recv() (*ClosedTimestampUpdate, error) {
+	m := new(ClosedTimestampUpdate)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+var _ClosedTimestampSideTransport_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.kv.kvserver.ctupdate.ClosedTimestampSideTransport",
+	HandlerType: (*ClosedTimestampSideTransportServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "PushUpdates",
+			Handler:       _ClosedTimestampSideTransport_PushUpdates_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "kv/kvserver/closedts/ctpb/service.proto",
+}
+
+func (m *RangeUpdate) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RangeUpdate) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.RangeID != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.RangeID))
+	}
+	if m.LAI != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.LAI))
+	}
+	if m.Policy != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.Policy))
+	}
+	return i, nil
+}
+
+func (m *ClosedTimestampUpdate) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClosedTimestampUpdate) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.NodeID))
+	}
+	if m.SeqNum != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.SeqNum))
+	}
+	if m.Snapshot {
+		dAtA[i] = 0x18
+		i++
+		if m.Snapshot {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if len(m.Removed) > 0 {
+		dAtA2 := make([]byte, len(m.Removed)*10)
+		var j1 int
+		for _, num1 := range m.Removed {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j1++
+			}
+			dAtA2[j1] = uint8(num)
+			j1++
+		}
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintService(dAtA, i, uint64(j1))
+		i += copy(dAtA[i:], dAtA2[:j1])
+	}
+	if len(m.AddedOrUpdated) > 0 {
+		for _, msg := range m.AddedOrUpdated {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintService(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.ClosedTimestamp) > 0 {
+		for _, msg := range m.ClosedTimestamp {
+			dAtA[i] = 0x32
+			i++
+			i = encodeVarintService(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *ClosedTimestampUpdateGroupUpdate) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClosedTimestampUpdateGroupUpdate) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Policy != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintService(dAtA, i, uint64(m.Policy))
+	}
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintService(dAtA, i, uint64(m.ClosedTimestamp.Size()))
+	n3, err := m.ClosedTimestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
+func (m *Response) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Response) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func encodeVarintService(dAtA []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return offset + 1
+}
+func (m *RangeUpdate) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.RangeID != 0 {
+		n += 1 + sovService(uint64(m.RangeID))
+	}
+	if m.LAI != 0 {
+		n += 1 + sovService(uint64(m.LAI))
+	}
+	if m.Policy != 0 {
+		n += 1 + sovService(uint64(m.Policy))
+	}
+	return n
+}
+
+func (m *ClosedTimestampUpdate) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		n += 1 + sovService(uint64(m.NodeID))
+	}
+	if m.SeqNum != 0 {
+		n += 1 + sovService(uint64(m.SeqNum))
+	}
+	if m.Snapshot {
+		n += 2
+	}
+	if len(m.Removed) > 0 {
+		l = 0
+		for _, e := range m.Removed {
+			l += sovService(uint64(e))
+		}
+		n += 1 + sovService(uint64(l)) + l
+	}
+	if len(m.AddedOrUpdated) > 0 {
+		for _, e := range m.AddedOrUpdated {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	if len(m.ClosedTimestamp) > 0 {
+		for _, e := range m.ClosedTimestamp {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ClosedTimestampUpdateGroupUpdate) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Policy != 0 {
+		n += 1 + sovService(uint64(m.Policy))
+	}
+	l = m.ClosedTimestamp.Size()
+	n += 1 + l + sovService(uint64(l))
+	return n
+}
+
+func (m *Response) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func sovService(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozService(x uint64) (n int) {
+	return sovService(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *RangeUpdate) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RangeUpdate: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RangeUpdate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LAI", wireType)
+			}
+			m.LAI = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LAI |= (LAI(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Policy", wireType)
+			}
+			m.Policy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Policy |= (roachpb.RangeClosedTimestampPolicy(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClosedTimestampUpdate) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClosedTimestampUpdate: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClosedTimestampUpdate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			m.NodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeqNum", wireType)
+			}
+			m.SeqNum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeqNum |= (UpdateSequenceNumber(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Snapshot", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Snapshot = bool(v != 0)
+		case 4:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowService
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Removed = append(m.Removed, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowService
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthService
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Removed) == 0 {
+					m.Removed = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowService
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Removed = append(m.Removed, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Removed", wireType)
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddedOrUpdated", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.AddedOrUpdated = append(m.AddedOrUpdated, RangeUpdate{})
+			if err := m.AddedOrUpdated[len(m.AddedOrUpdated)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClosedTimestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClosedTimestamp = append(m.ClosedTimestamp, ClosedTimestampUpdateGroupUpdate{})
+			if err := m.ClosedTimestamp[len(m.ClosedTimestamp)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClosedTimestampUpdateGroupUpdate) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: groupUpdate: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: groupUpdate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Policy", wireType)
+			}
+			m.Policy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Policy |= (roachpb.RangeClosedTimestampPolicy(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClosedTimestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ClosedTimestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Response: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Response: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipService(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+			return iNdEx, nil
+		case 1:
+			iNdEx += 8
+			return iNdEx, nil
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthService
+			}
+			return iNdEx, nil
+		case 3:
+			for {
+				var innerWire uint64
+				var start int = iNdEx
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowService
+					}
+					if iNdEx >= l {
+						return 0, io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					innerWire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				innerWireType := int(innerWire & 0x7)
+				if innerWireType == 4 {
+					break
+				}
+				next, err := skipService(dAtA[start:])
+				if err != nil {
+					return 0, err
+				}
+				iNdEx = start + next
+			}
+			return iNdEx, nil
+		case 4:
+			return iNdEx, nil
+		case 5:
+			iNdEx += 4
+			return iNdEx, nil
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+	}
+	panic("unreachable")
+}
+
+var (
+	ErrInvalidLengthService = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowService   = fmt.Errorf("proto: integer overflow")
+)
+
+func init() {
+	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_123b88c5897d6128)
+}
+
+var fileDescriptor_service_123b88c5897d6128 = []byte{
+	// 643 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xdf, 0x6a, 0xdb, 0x3e,
+	0x14, 0xc7, 0xa3, 0x5f, 0xfe, 0xa2, 0x40, 0xfb, 0x43, 0x74, 0x60, 0x42, 0xe7, 0x84, 0x40, 0x37,
+	0xc3, 0x98, 0xb5, 0xa5, 0x1b, 0xec, 0xb6, 0xe9, 0xca, 0x08, 0x8c, 0xac, 0xb8, 0xdd, 0xc5, 0xca,
+	0x58, 0x51, 0x24, 0xe1, 0x98, 0xd8, 0x96, 0x2b, 0xc9, 0x81, 0xbe, 0xc3, 0x2e, 0x76, 0xb1, 0x47,
+	0xd8, 0xc3, 0xf4, 0xb2, 0x57, 0xa3, 0x57, 0x61, 0x73, 0xdf, 0xa2, 0x57, 0xc3, 0x7f, 0x9a, 0xa6,
+	0xa1, 0x5d, 0xb7, 0xf5, 0xca, 0xb2, 0x74, 0xce, 0xe7, 0x9c, 0xef, 0x39, 0x47, 0x82, 0x8f, 0x27,
+	0x53, 0x3c, 0x99, 0x2a, 0x2e, 0xa7, 0x5c, 0x62, 0xea, 0x0b, 0xc5, 0x99, 0x56, 0x98, 0xea, 0x68,
+	0x84, 0xd3, 0x4d, 0x8f, 0x72, 0x3b, 0x92, 0x42, 0x0b, 0x64, 0x52, 0x41, 0x27, 0x52, 0x10, 0x3a,
+	0xb6, 0x27, 0x53, 0xfb, 0xd2, 0xc5, 0xa6, 0x3a, 0x8e, 0x18, 0xd1, 0xbc, 0xb5, 0x71, 0x3b, 0x88,
+	0x87, 0x5a, 0x1e, 0xe7, 0x98, 0x16, 0xca, 0x10, 0xd1, 0x08, 0x33, 0xa2, 0x49, 0xb1, 0x67, 0xc4,
+	0xda, 0xf3, 0xf1, 0xd8, 0xa7, 0x58, 0x7b, 0x01, 0x57, 0x9a, 0x04, 0x51, 0x71, 0xb2, 0xe6, 0x0a,
+	0x57, 0x64, 0x4b, 0x9c, 0xae, 0x8a, 0xdd, 0x75, 0x57, 0x08, 0xd7, 0xe7, 0x98, 0x44, 0x1e, 0x26,
+	0x61, 0x28, 0x34, 0xd1, 0x9e, 0x08, 0x55, 0x7e, 0xda, 0xfd, 0x0e, 0x60, 0xd3, 0x21, 0xa1, 0xcb,
+	0xdf, 0x67, 0x89, 0xa1, 0x4f, 0xb0, 0x21, 0xd3, 0xdf, 0x43, 0x8f, 0x19, 0xa0, 0x03, 0xac, 0x4a,
+	0x7f, 0x3b, 0x99, 0xb5, 0xeb, 0x99, 0xc9, 0xe0, 0xf5, 0xc5, 0xac, 0xfd, 0xc2, 0xf5, 0xf4, 0x38,
+	0x1e, 0xd9, 0x54, 0x04, 0x78, 0x2e, 0x92, 0x8d, 0xae, 0xd6, 0x38, 0x9a, 0xb8, 0xb8, 0xc8, 0xdb,
+	0x2e, 0xfc, 0x9c, 0x7a, 0x06, 0x1d, 0x30, 0xd4, 0x81, 0x65, 0x9f, 0x78, 0xc6, 0x7f, 0x1d, 0x60,
+	0x95, 0xfb, 0x2b, 0xc9, 0xac, 0x5d, 0x7e, 0xbb, 0x35, 0xb8, 0xc8, 0x3f, 0x4e, 0x7a, 0x84, 0x76,
+	0x60, 0x2d, 0x12, 0xbe, 0x47, 0x8f, 0x8d, 0x72, 0x07, 0x58, 0x2b, 0xbd, 0xa7, 0xf6, 0x55, 0x2d,
+	0xaf, 0x61, 0xb7, 0xb3, 0xb2, 0xed, 0x5f, 0x16, 0x61, 0x37, 0x73, 0x72, 0x0a, 0xe7, 0xee, 0xe7,
+	0x2a, 0x7c, 0xb0, 0x64, 0x51, 0x48, 0x3c, 0x80, 0xf5, 0x50, 0xb0, 0xb9, 0xc2, 0x6a, 0x7f, 0x2b,
+	0x99, 0xb5, 0x6b, 0x43, 0xc1, 0x72, 0x81, 0x9b, 0x7f, 0x25, 0x30, 0x77, 0x73, 0x6a, 0x29, 0x71,
+	0xc0, 0xd0, 0x73, 0x58, 0x57, 0xfc, 0xe8, 0x30, 0x8c, 0x83, 0x42, 0xa2, 0x71, 0x31, 0x6b, 0xaf,
+	0xe5, 0x81, 0xf7, 0xf8, 0x51, 0xcc, 0x43, 0xca, 0x87, 0x71, 0x30, 0xe2, 0xd2, 0xa9, 0x29, 0x7e,
+	0x34, 0x8c, 0x03, 0xd4, 0x82, 0x0d, 0x15, 0x92, 0x48, 0x8d, 0x85, 0xce, 0x14, 0x37, 0x9c, 0xf9,
+	0x3f, 0x72, 0x60, 0x5d, 0xf2, 0x40, 0x4c, 0x39, 0x33, 0x2a, 0x9d, 0xb2, 0x55, 0xed, 0xbf, 0xba,
+	0x47, 0x07, 0x72, 0x10, 0xfa, 0x00, 0x57, 0x08, 0x63, 0x9c, 0xbd, 0x93, 0x79, 0x5a, 0xcc, 0xa8,
+	0x76, 0xca, 0x56, 0xb3, 0xf7, 0xc4, 0xfe, 0xfd, 0xcc, 0xda, 0x0b, 0x63, 0xd2, 0xaf, 0x9c, 0xcc,
+	0xda, 0x25, 0x67, 0x09, 0x84, 0x24, 0xfc, 0x3f, 0x9f, 0xe5, 0xc3, 0xf9, 0x68, 0x1a, 0xb5, 0x0c,
+	0xbe, 0x75, 0x17, 0xfc, 0xc6, 0x56, 0xd9, 0xae, 0x14, 0x71, 0x74, 0x2d, 0xe4, 0x2a, 0xbd, 0x6e,
+	0xd8, 0xfa, 0x06, 0x60, 0x73, 0xc1, 0x6c, 0x61, 0x7c, 0xc0, 0x3d, 0xc6, 0x07, 0x0d, 0x6f, 0x90,
+	0x92, 0x76, 0xb4, 0xd9, 0x7b, 0xb8, 0x00, 0x4c, 0xaf, 0xa2, 0x3d, 0xf6, 0xa9, 0x3d, 0xc7, 0xdc,
+	0x92, 0x66, 0x17, 0xc2, 0x86, 0xc3, 0x55, 0x24, 0x42, 0xc5, 0x7b, 0x02, 0xae, 0x2e, 0x05, 0x47,
+	0x1f, 0x61, 0xf9, 0x0d, 0xd7, 0xc8, 0xba, 0xb3, 0x07, 0x9c, 0xd0, 0xf4, 0xfa, 0xb6, 0x36, 0xee,
+	0xb2, 0xdc, 0x49, 0x9f, 0x91, 0x6e, 0xc9, 0x02, 0xcf, 0x40, 0xef, 0x2b, 0x80, 0xeb, 0x4b, 0x11,
+	0xf7, 0x3c, 0xc6, 0xf7, 0x25, 0x09, 0x55, 0x24, 0xa4, 0x46, 0x1a, 0x36, 0x77, 0x63, 0x35, 0xce,
+	0x4b, 0xa8, 0xd0, 0xcb, 0x7f, 0xea, 0x56, 0xeb, 0x0f, 0xb2, 0xcf, 0x2b, 0x90, 0xa7, 0xd5, 0x7f,
+	0x74, 0xf2, 0xd3, 0x2c, 0x9d, 0x24, 0x26, 0x38, 0x4d, 0x4c, 0x70, 0x96, 0x98, 0xe0, 0x47, 0x62,
+	0x82, 0x2f, 0xe7, 0x66, 0xe9, 0xf4, 0xdc, 0x2c, 0x9d, 0x9d, 0x9b, 0xa5, 0x83, 0x4a, 0xfa, 0x22,
+	0x8e, 0x6a, 0xd9, 0x53, 0xb5, 0xf9, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x62, 0xcc, 0xff, 0x9f, 0x7e,
+	0x05, 0x00, 0x00,
 }

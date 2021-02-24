@@ -402,6 +402,18 @@ type Replica struct {
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
+		// sideTransportClosedTimestamp stores the closed timestamp that was
+		// communicated by the side transport. The replica can use it if it has
+		// applied all the commands with indexes <= sideTransportCloseTimestampLAI.
+		// Note that there's also state.RaftClosedTimestamp, which might be higher
+		// than this closed timestamp. The maximum across the two can be used.
+		//
+		// TODO(andrei): actually implement and reference also the global storage
+		// for side-transport closed timestamps.
+		sideTransportClosedTimestamp hlc.Timestamp
+		// sideTransportCloseTimestampLAI is the LAI associated with
+		// sideTransportClosedTimestamp.
+		sideTransportCloseTimestampLAI uint64
 
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
