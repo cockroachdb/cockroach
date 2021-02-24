@@ -3574,6 +3574,611 @@ vectorized: true
                               columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r, upsert_s, upsert_j)
                               label: buffer 1
 
+# None of the upserted values have nulls.
+query T
+EXPLAIN UPSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial(k, a, b)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a) = (column2)
+│           │ pred: column1 != k
+│           │
+│           ├── • filter
+│           │   │ filter: b > 0
+│           │   │
+│           │   └── • scan
+│           │         missing stats
+│           │         table: uniq_partial@primary
+│           │         spans: FULL SCAN
+│           │
+│           └── • filter
+│               │ estimated row count: 1
+│               │ filter: column3 > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (column3)
+            │ pred: column1 != k
+            │
+            ├── • filter
+            │   │ filter: b > 0
+            │   │
+            │   └── • scan
+            │         missing stats
+            │         table: uniq_partial@primary
+            │         spans: FULL SCAN
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: column3 > 0
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
+# it. Therefore, we could avoid planning checks for (b) (see #58300).
+query T
+EXPLAIN UPSERT INTO uniq_partial (k, a) VALUES (1, 1), (2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial(k, a, b)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: uniq_partial@primary
+│               │ equality: (column1) = (k)
+│               │ equality cols are key
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │ estimated row count: 2
+│                   │
+│                   └── • values
+│                         size: 2 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a) = (column2)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • filter
+│           │   │ filter: b > 0
+│           │   │
+│           │   └── • scan
+│           │         missing stats
+│           │         table: uniq_partial@primary
+│           │         spans: FULL SCAN
+│           │
+│           └── • filter
+│               │ filter: upsert_b > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (upsert_b)
+            │ pred: upsert_k != k
+            │
+            ├── • filter
+            │   │ filter: b > 0
+            │   │
+            │   └── • scan
+            │         missing stats
+            │         table: uniq_partial@primary
+            │         spans: FULL SCAN
+            │
+            └── • filter
+                │ filter: upsert_b > 0
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# No need to plan checks for a since it's always NULL.
+query T
+EXPLAIN UPSERT INTO uniq_partial (k, a, b) VALUES (1, NULL, 1), (2, NULL, NULL)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial(k, a, b)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (column3)
+            │ pred: column1 != k
+            │
+            ├── • filter
+            │   │ filter: b > 0
+            │   │
+            │   └── • scan
+            │         missing stats
+            │         table: uniq_partial@primary
+            │         spans: FULL SCAN
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: column3 > 0
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# On conflict do update with constant input.
+# TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
+# it. Therefore, we could avoid planning checks for (b) (see #58300).
+query T
+EXPLAIN INSERT INTO uniq_partial (k, a) VALUES (100, 1), (200, 1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = excluded.a + 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial(k, a, b)
+│   │ arbiter constraints: unique_a
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • hash join (right outer)
+│               │ equality: (a) = (column2)
+│               │ pred: column8 > 0
+│               │
+│               ├── • filter
+│               │   │ filter: b > 0
+│               │   │
+│               │   └── • scan
+│               │         missing stats
+│               │         table: uniq_partial@primary
+│               │         spans: FULL SCAN
+│               │
+│               └── • distinct
+│                   │ estimated row count: 2
+│                   │ distinct on: arbiter_unique_a_distinct, column2
+│                   │ nulls are distinct
+│                   │ error on duplicate
+│                   │
+│                   └── • render
+│                       │ estimated row count: 2
+│                       │
+│                       └── • values
+│                             size: 2 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a) = (upsert_a)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • filter
+│           │   │ filter: b > 0
+│           │   │
+│           │   └── • scan
+│           │         missing stats
+│           │         table: uniq_partial@primary
+│           │         spans: FULL SCAN
+│           │
+│           └── • filter
+│               │ filter: upsert_b > 0
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b) = (upsert_b)
+            │ pred: upsert_k != k
+            │
+            ├── • filter
+            │   │ filter: b > 0
+            │   │
+            │   └── • scan
+            │         missing stats
+            │         table: uniq_partial@primary
+            │         spans: FULL SCAN
+            │
+            └── • filter
+                │ filter: upsert_b > 0
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# On conflict do update with non-constant input.
+# TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
+# it. Therefore, we could avoid planning checks for (b) (see #58300).
+query T
+EXPLAIN INSERT INTO uniq_partial SELECT k, v FROM other ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = uniq_partial.k + 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial(k, a, b)
+│   │ arbiter constraints: unique_a
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • hash join (left outer)
+│               │ equality: (v) = (a)
+│               │ pred: column15 > 0
+│               │
+│               ├── • distinct
+│               │   │ distinct on: arbiter_unique_a_distinct, v
+│               │   │ nulls are distinct
+│               │   │ error on duplicate
+│               │   │
+│               │   └── • render
+│               │       │
+│               │       └── • scan
+│               │             missing stats
+│               │             table: other@primary
+│               │             spans: FULL SCAN
+│               │
+│               └── • filter
+│                   │ filter: b > 0
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: uniq_partial@primary
+│                         spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (upsert_a) = (a)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • filter
+│           │   │ filter: upsert_b > 0
+│           │   │
+│           │   └── • scan buffer
+│           │         label: buffer 1
+│           │
+│           └── • filter
+│               │ filter: b > 0
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: uniq_partial@primary
+│                     spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (upsert_b) = (b)
+            │ pred: upsert_k != k
+            │
+            ├── • filter
+            │   │ filter: upsert_b > 0
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • filter
+                │ filter: b > 0
+                │
+                └── • scan
+                      missing stats
+                      table: uniq_partial@primary
+                      spans: FULL SCAN
+
+# No need to build uniqueness checks when the primary key columns are a subset
+# of the partial unique constraint columns.
+query T
+EXPLAIN UPSERT INTO uniq_partial_overlaps_pk VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: uniq_partial_overlaps_pk(k, a, b)
+│ auto commit
+│
+└── • values
+      size: 3 columns, 2 rows
+
+# Upsert with non-constant input.
+# Add inequality filters for the hidden primary key column.
+query T
+EXPLAIN UPSERT INTO uniq_partial_hidden_pk SELECT k, v, x FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_partial_hidden_pk(a, b, c, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (v) = (b)
+            │ pred: column16 != rowid
+            │
+            ├── • filter
+            │   │ filter: x > 0
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • filter
+                │ filter: c > 0
+                │
+                └── • scan
+                      missing stats
+                      table: uniq_partial_hidden_pk@primary
+                      spans: FULL SCAN
+
+# Test that we use the index when available for the upsert checks.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • upsert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: uniq_partial_enum(r, a, b, c)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+│       │ label: buffer 1
+│       │
+│       └── • project
+│           │ columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+│           │
+│           └── • render
+│               │ columns: (partial_index_put1, partial_index_del1, check1, column1, column2, column3, column4, r, a, b, c, upsert_r, upsert_a)
+│               │ estimated row count: 2
+│               │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
+│               │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
+│               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
+│               │ render column1: column1
+│               │ render column2: column2
+│               │ render column3: column3
+│               │ render column4: column4
+│               │ render r: r
+│               │ render a: a
+│               │ render b: b
+│               │ render c: c
+│               │ render upsert_r: upsert_r
+│               │ render upsert_a: upsert_a
+│               │
+│               └── • render
+│                   │ columns: (upsert_r, upsert_a, column1, column2, column3, column4, r, a, b, c)
+│                   │ estimated row count: 2
+│                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
+│                   │ render upsert_a: CASE WHEN r IS NULL THEN column2 ELSE a END
+│                   │ render column1: column1
+│                   │ render column2: column2
+│                   │ render column3: column3
+│                   │ render column4: column4
+│                   │ render r: r
+│                   │ render a: a
+│                   │ render b: b
+│                   │ render c: c
+│                   │
+│                   └── • lookup join (left outer)
+│                       │ columns: (column1, column2, column3, column4, r, a, b, c)
+│                       │ estimated row count: 2
+│                       │ table: uniq_partial_enum@primary
+│                       │ equality: (column1, column2) = (r,a)
+│                       │ equality cols are key
+│                       │
+│                       └── • values
+│                             columns: (column1, column2, column3, column4)
+│                             size: 4 columns, 2 rows
+│                             row 0, expr 0: 'us-west'
+│                             row 0, expr 1: 1
+│                             row 0, expr 2: 1
+│                             row 0, expr 3: 'foo'
+│                             row 1, expr 0: 'us-east'
+│                             row 1, expr 1: 2
+│                             row 1, expr 2: 2
+│                             row 1, expr 3: 'bar'
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • project
+            │ columns: (upsert_r, upsert_a, column3, column4)
+            │ estimated row count: 1
+            │
+            └── • lookup join (semi)
+                │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ equality: (lookup_join_const_col_@22, column3) = (r,b)
+                │ pred: (upsert_r != r) OR (upsert_a != a)
+                │
+                └── • cross join (inner)
+                    │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
+                    │ estimated row count: 6
+                    │
+                    ├── • values
+                    │     columns: ("lookup_join_const_col_@22")
+                    │     size: 1 column, 3 rows
+                    │     row 0, expr 0: 'us-east'
+                    │     row 1, expr 0: 'us-west'
+                    │     row 2, expr 0: 'eu-west'
+                    │
+                    └── • filter
+                        │ columns: (upsert_r, upsert_a, column3, column4)
+                        │ estimated row count: 2
+                        │ filter: column4 IN ('bar', 'baz', 'foo')
+                        │
+                        └── • project
+                            │ columns: (upsert_r, upsert_a, column3, column4)
+                            │ estimated row count: 2
+                            │
+                            └── • scan buffer
+                                  columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+                                  label: buffer 1
+
+# Test that we use the partial index when available for de-duplicating INSERT ON
+# CONFLICT DO UPDATE rows before inserting.
+query T
+EXPLAIN (VERBOSE) INSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
+ON CONFLICT (b) WHERE c IN ('foo', 'bar', 'baz') DO UPDATE SET a = 10
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: uniq_partial_enum(r, a, b, c)
+│ auto commit
+│ arbiter constraints: unique_b
+│
+└── • project
+    │ columns: (column1, column2, column3, column4, r, a, b, c, upsert_a, r, check1, partial_index_put1, partial_index_del1)
+    │
+    └── • render
+        │ columns: (partial_index_put1, partial_index_del1, check1, upsert_a, column1, column2, column3, column4, r, a, b, c)
+        │ estimated row count: 2
+        │ render partial_index_put1: CASE WHEN r IS NULL THEN column4 ELSE c END IN ('bar', 'baz', 'foo')
+        │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
+        │ render check1: CASE WHEN r IS NULL THEN column1 ELSE r END IN ('us-east', 'us-west', 'eu-west')
+        │ render upsert_a: CASE WHEN r IS NULL THEN column2 ELSE 10 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render column4: column4
+        │ render r: r
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • lookup join (left outer)
+            │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b, c)
+            │ estimated row count: 2
+            │ table: uniq_partial_enum@primary
+            │ equality: (r, a) = (r,a)
+            │ equality cols are key
+            │
+            └── • lookup join (left outer)
+                │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b)
+                │ estimated row count: 2
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: column4 IN ('bar', 'baz', 'foo')
+                │
+                └── • distinct
+                    │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
+                    │ estimated row count: 2
+                    │ distinct on: arbiter_unique_b_distinct, column3
+                    │ nulls are distinct
+                    │ error on duplicate
+                    │
+                    └── • render
+                        │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
+                        │ estimated row count: 2
+                        │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
+                        │ render column1: column1
+                        │ render column2: column2
+                        │ render column3: column3
+                        │ render column4: column4
+                        │
+                        └── • values
+                              columns: (column1, column2, column3, column4)
+                              size: 4 columns, 2 rows
+                              row 0, expr 0: 'us-west'
+                              row 0, expr 1: 1
+                              row 0, expr 2: 1
+                              row 0, expr 3: 'foo'
+                              row 1, expr 0: 'us-east'
+                              row 1, expr 1: 2
+                              row 1, expr 2: 2
+                              row 1, expr 3: 'bar'
+
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
 query T
