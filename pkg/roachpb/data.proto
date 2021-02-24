@@ -712,6 +712,9 @@ enum RangeClosedTimestampPolicy {
   // (which itself is a function of leaseholder -> follower network latency and
   // closed timestamp update periodicity).
   LEAD_FOR_GLOBAL_READS = 1;
+
+  // Keep this sentinel value higher than the rest.
+  MAX_CLOSED_TIMESTAMP_POLICY = 2;
 }
 
 // ClientRangeInfo represents the kvclient's knowledge about the state of the
