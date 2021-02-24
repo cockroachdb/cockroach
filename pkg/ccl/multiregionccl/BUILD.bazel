@@ -2,17 +2,23 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "multiregionccl",
-    srcs = ["multiregion.go"],
+    srcs = [
+        "multiregion.go",
+        "testutils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
     ],
 )
 
@@ -25,6 +31,7 @@ go_test(
         "show_test.go",
     ],
     deps = [
+        ":multiregionccl",
         "//pkg/base",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/utilccl",
