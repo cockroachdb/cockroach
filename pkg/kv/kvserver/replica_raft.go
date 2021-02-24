@@ -507,6 +507,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
 		return unquiesceAndWakeLeader, nil
 	})
+	r.mu.applyingEntries = len(rd.CommittedEntries) > 0
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -864,6 +865,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		return true, nil
 	})
+	r.mu.applyingEntries = false
 	r.mu.Unlock()
 	if err != nil {
 		return stats, expl, errors.Wrap(err, expl)

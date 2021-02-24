@@ -67,6 +67,7 @@ type ApplyFilterArgs struct {
 	CmdID   CmdIDKey
 	RangeID roachpb.RangeID
 	StoreID roachpb.StoreID
+	Req     *roachpb.BatchRequest // only set on the leaseholder
 }
 
 // InRaftCmd returns true if the filter is running in the context of a Raft
