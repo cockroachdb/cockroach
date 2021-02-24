@@ -1525,7 +1525,7 @@ func (r opResult) createBufferingUnlimitedMemAccount(
 func (r opResult) createDiskAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
-	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
 	r.OpMonitors = append(r.OpMonitors, opDiskMonitor)
 	opDiskAccount := opDiskMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &opDiskAccount)

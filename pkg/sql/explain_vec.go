@@ -124,12 +124,12 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, params runParams) *execi
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
 			Settings:       params.p.execCfg.Settings,
-			DiskMonitor:    &mon.BytesMonitor{},
 			VecFDSemaphore: params.p.execCfg.DistSQLSrv.VecFDSemaphore,
 		},
 		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
 			Descriptors: params.p.Descriptors(),
 		},
+		DiskMonitor: &mon.BytesMonitor{},
 	}
 }
 
