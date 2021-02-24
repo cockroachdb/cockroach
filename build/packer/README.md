@@ -32,3 +32,4 @@ the `gcloud` tool or provide your Google Cloud JSON credentials in a
 
 [Packer]: https://www.packer.io
 [gauth]: https://www.packer.io/docs/builders/googlecompute#running-locally-on-your-workstation
+
