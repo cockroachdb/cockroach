@@ -549,7 +549,7 @@ type cancellableImportResumer struct {
 }
 
 func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	r.jobID = *r.wrapped.job.ID()
+	r.jobID = r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
 	if err := r.wrapped.Resume(r.ctx, execCtx); err != nil {
 		return err

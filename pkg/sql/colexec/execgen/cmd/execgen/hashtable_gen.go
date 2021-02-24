@@ -17,7 +17,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -71,7 +71,7 @@ func (m hashTableMode) IsDeletingProbe() bool {
 var _ = hashTableMode.IsDistinctBuild
 var _ = hashTableMode.IsDeletingProbe
 
-const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
+const hashTableTmpl = "pkg/sql/colexec/colexechash/hashtable_tmpl.go"
 
 func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) error {
 	r := strings.NewReplacer(

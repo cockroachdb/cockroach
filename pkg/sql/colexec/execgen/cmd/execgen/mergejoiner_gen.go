@@ -42,7 +42,7 @@ type joinTypeInfo struct {
 	String string
 }
 
-const mergeJoinerTmpl = "pkg/sql/colexec/mergejoiner_tmpl.go"
+const mergeJoinerTmpl = "pkg/sql/colexec/colexecjoin/mergejoiner_tmpl.go"
 
 func genMergeJoinOps(inputFileContents string, wr io.Writer, jti joinTypeInfo) error {
 	r := strings.NewReplacer(

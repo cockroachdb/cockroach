@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const castTmpl = "pkg/sql/colexec/cast_tmpl.go"
+const castTmpl = "pkg/sql/colexec/colexecbase/cast_tmpl.go"
 
 func genCastOperators(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

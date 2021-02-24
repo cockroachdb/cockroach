@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -201,9 +201,9 @@ type AggregateFuncsAlloc struct {
 // NewAggregateFuncsAlloc returns a new AggregateFuncsAlloc.
 func NewAggregateFuncsAlloc(
 	args *NewAggregatorArgs, allocSize int64, isHashAgg bool,
-) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecbase.Closers, error) {
+) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecop.Closers, error) {
 	funcAllocs := make([]aggregateFuncAlloc, len(args.Spec.Aggregations))
-	var toClose colexecbase.Closers
+	var toClose colexecop.Closers
 	var vecIdxsToConvert []int
 	for _, aggFn := range args.Spec.Aggregations {
 		if !IsAggOptimized(aggFn.Func) {
@@ -306,7 +306,7 @@ func NewAggregateFuncsAlloc(
 					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
 			}
-			toClose = append(toClose, funcAllocs[i].(colexecbase.Closer))
+			toClose = append(toClose, funcAllocs[i].(colexecop.Closer))
 		}
 
 		if err != nil {

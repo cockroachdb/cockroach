@@ -543,7 +543,7 @@ func generateChangefeedSessionID() string {
 func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
-	jobID := *b.job.ID()
+	jobID := b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
@@ -679,7 +679,7 @@ func (b *changefeedResumer) OnPauseRequest(
 
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
 	pts := execCfg.ProtectedTimestampProvider
-	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, *b.job.ID(),
+	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
 		details.Targets, *resolved, cp)
 }
 

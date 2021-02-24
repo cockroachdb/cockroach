@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,7 +33,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input    = colexecbase.NewBatchBuffer()
+		input    = colexecop.NewBatchBuffer()
 		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
@@ -83,7 +83,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input = colexecbase.NewBatchBuffer()
+		input = colexecop.NewBatchBuffer()
 		typs  = []*types.T{types.Int}
 	)
 

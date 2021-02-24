@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -204,7 +204,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 	m, err := NewMaterializer(
 		flowCtx,
 		0, /* processorID */
-		&colexecbase.CallbackOperator{},
+		&colexecop.CallbackOperator{},
 		nil, /* typ */
 		nil, /* output */
 		[]execinfrapb.MetadataSource{metadataSource},
