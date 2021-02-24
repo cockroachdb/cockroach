@@ -337,7 +337,6 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
-// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
 	"default value for experimental_use_new_schema_changer session setting;"+

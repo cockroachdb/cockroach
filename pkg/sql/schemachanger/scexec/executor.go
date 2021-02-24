@@ -73,6 +73,7 @@ func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
 func (ex *Executor) ExecuteOps(ctx context.Context, toExecute scop.Ops) error {
+	log.Infof(ctx, "executing %d ops of type %s", len(toExecute.Slice()), toExecute.Type().String())
 	switch typ := toExecute.Type(); typ {
 	case scop.MutationType:
 		return ex.executeDescriptorMutationOps(ctx, toExecute.Slice())
