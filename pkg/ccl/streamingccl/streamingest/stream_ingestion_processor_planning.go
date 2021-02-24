@@ -43,6 +43,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
+				StartTime:          initialHighWater,
 				StreamAddress:      streamAddress,
 				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
 			}

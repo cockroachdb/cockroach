@@ -30,6 +30,7 @@ type streamIngestionResumer struct {
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	startTime hlc.Timestamp,
 	streamAddress streamingccl.StreamAddress,
 	progress jobspb.Progress,
 	jobID int64,
@@ -49,7 +50,7 @@ func ingest(
 	// KVs. We can skip to ingesting after this resolved ts. Plumb the
 	// initialHighwatermark to the ingestion processor spec based on what we read
 	// from the job progress.
-	var initialHighWater hlc.Timestamp
+	initialHighWater := startTime
 	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
 		initialHighWater = *h
 	}
@@ -64,7 +65,8 @@ func ingest(
 
 	// Construct stream ingestion processor specs.
 	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, nodes, initialHighWater)
+		streamAddress, topology, nodes, initialHighWater,
+	)
 	if err != nil {
 		return err
 	}
@@ -84,8 +86,7 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
-		*s.job.ID())
+	err := ingest(ctx, p, details.StartTime, details.StreamAddress, s.job.Progress(), *s.job.ID())
 	if err != nil {
 		return err
 	}

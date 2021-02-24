@@ -14,6 +14,7 @@ package tree
 type StreamIngestion struct {
 	Targets TargetList
 	From    StringOrPlaceholderOptList
+	AsOf    AsOfClause
 }
 
 var _ Statement = &StreamIngestion{}
@@ -25,4 +26,8 @@ func (node *StreamIngestion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString("FROM REPLICATION STREAM FROM ")
 	ctx.FormatNode(&node.From)
+	if node.AsOf.Expr != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.AsOf)
+	}
 }
