@@ -42,7 +42,7 @@ func KeyMatches(key roachpb.Key) FeedPredicate {
 	}
 }
 
-// KeyMatches makes a FeedPredicate that matches when a timestamp has been
+// ResolvedAtLeast makes a FeedPredicate that matches when a timestamp has been
 // reached.
 func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 	return func(msg streamingccl.Event) bool {
@@ -53,9 +53,10 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 	}
 }
 
-// feedSource is a source of events for a ReplicationFeed.
-type feedSource interface {
-	// Next returns the next event and if there are more events to consume
+// FeedSource is a source of events for a ReplicationFeed.
+type FeedSource interface {
+	// Next returns the next event, and a flag indicating if there are more events
+	// to consume.
 	Next() (streamingccl.Event, bool)
 	// Close shuts down the source.
 	Close()
@@ -64,12 +65,12 @@ type feedSource interface {
 // ReplicationFeed allows tests to search for events on a feed.
 type ReplciationFeed struct {
 	t   *testing.T
-	f   feedSource
+	f   FeedSource
 	msg streamingccl.Event
 }
 
-// MakeReplicationFeed creates a ReplicationFeed based on a given feedSource.
-func MakeReplicaitonFeed(t *testing.T, f feedSource) *ReplciationFeed {
+// MakeReplicationFeed creates a ReplicationFeed based on a given FeedSource.
+func MakeReplicaitonFeed(t *testing.T, f FeedSource) *ReplciationFeed {
 	return &ReplciationFeed{
 		t: t,
 		f: f,
@@ -141,20 +142,30 @@ func (rf *ReplciationFeed) consumeUntil(pred FeedPredicate) error {
 
 // TenantState maintains test state related to tenant.
 type TenantState struct {
-	ID    roachpb.TenantID
+	// ID is the ID of the tenant.
+	ID roachpb.TenantID
+	// Codec is the Codec of the tenant.
 	Codec keys.SQLCodec
-	SQL   *sqlutils.SQLRunner
+	// SQL is a sql connection to the tenant.
+	SQL *sqlutils.SQLRunner
 }
 
+// ReplicationHelper wraps a test server configured to be run in streaming
+// replication tests. It exposes easy access to a tenant in the server, as well
+// as a PGUrl to the underlying server.
 type ReplicationHelper struct {
+	// SysServer is the backing server.
 	SysServer serverutils.TestServerInterface
-	sysDB     *sqlutils.SQLRunner
-	PGUrl     url.URL
-	Tenant    TenantState
+	// SysDB is a sql connection to the system tenant.
+	SysDB *sqlutils.SQLRunner
+	// PGUrl is the pgurl of this server.
+	PGUrl url.URL
+	// Tenant is a tenant running on this server.
+	Tenant TenantState
 }
 
-// NewReplicationHelper starts test server and configures it to have
-// active tenant.
+// NewReplicationHelper starts test server and configures it to have active
+// tenant.
 func NewReplicationHelper(t *testing.T) (*ReplicationHelper, func()) {
 	ctx := context.Background()
 
@@ -168,7 +179,8 @@ func NewReplicationHelper(t *testing.T) (*ReplicationHelper, func()) {
 	_, err := db.Exec(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
+SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
+SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 `)
 	require.NoError(t, err)
 
@@ -181,7 +193,7 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 
 	h := &ReplicationHelper{
 		SysServer: s,
-		sysDB:     sqlutils.MakeSQLRunner(db),
+		SysDB:     sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
 		Tenant: TenantState{
 			ID:    tenantID,

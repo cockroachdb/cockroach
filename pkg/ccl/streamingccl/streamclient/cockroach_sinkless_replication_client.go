@@ -13,14 +13,12 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // sinklessReplicationClient creates and reads a stream from the source cluster.
@@ -41,81 +39,91 @@ func (m *sinklessReplicationClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (m *sinklessReplicationClient) ConsumePartition(
-	ctx context.Context, pa streamingccl.PartitionAddress, startTime time.Time,
-) (chan streamingccl.Event, error) {
-	eventCh := make(chan streamingccl.Event)
-
+	ctx context.Context, pa streamingccl.PartitionAddress, startTime hlc.Timestamp,
+) (chan streamingccl.Event, chan error, error) {
 	pgURL, err := pa.URL()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
 	q := pgURL.Query()
 	tenantToReplicate := q.Get(TenantID)
 	if len(tenantToReplicate) == 0 {
-		return nil, errors.New("no tenant specified")
+		return nil, nil, errors.New("no tenant specified")
 	}
 	tenantID, err := strconv.Atoi(tenantToReplicate)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing tenant")
+		return nil, nil, errors.Wrap(err, "parsing tenant")
 	}
 
 	streamTenantQuery := fmt.Sprintf(
-		`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%d'`, tenantID, startTime.UnixNano())
-
-	// Use pgx directly instead of database/sql so we can close the conn
-	// (instead of returning it to the pool).
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
-	if err != nil {
-		return nil, err
+		`CREATE REPLICATION STREAM FOR TENANT %d`, tenantID)
+	if startTime.WallTime != 0 {
+		streamTenantQuery = fmt.Sprintf(
+			`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%s'`, tenantID, startTime.AsOfSystemTime())
 	}
 
-	conn, err := pgx.Connect(pgxConfig)
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	rows, err := conn.QueryEx(ctx, streamTenantQuery, nil /* options */)
+
+	conn, err := db.Conn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	_, err = conn.QueryContext(ctx, `SET enable_experimental_stream_replication = true`)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := conn.QueryContext(ctx, streamTenantQuery)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "creating source replication stream")
+	}
+
+	eventCh := make(chan streamingccl.Event)
+	errCh := make(chan error, 1)
 
 	go func() {
 		defer close(eventCh)
-		defer conn.Close()
+		defer close(errCh)
+		defer db.Close()
 		defer rows.Close()
 		for rows.Next() {
 			var ignoreTopic gosql.NullString
 			var k, v []byte
 			if err := rows.Scan(&ignoreTopic, &k, &v); err != nil {
-				// Put it on error channel when rebased.
-				panic(err)
+				errCh <- err
+				return
 			}
 
 			var event streamingccl.Event
 			if len(k) == 0 {
 				var resolved hlc.Timestamp
 				if err := protoutil.Unmarshal(v, &resolved); err != nil {
-					// Put it on the error channel when rebased.
-					panic(err)
+					errCh <- err
+					return
 				}
 				event = streamingccl.MakeCheckpointEvent(resolved)
 			} else {
 				var kv roachpb.KeyValue
 				kv.Key = k
 				if err := protoutil.Unmarshal(v, &kv.Value); err != nil {
-					// Put it on the error channel when rebased.
-					panic(err)
+					errCh <- err
+					return
 				}
 				event = streamingccl.MakeKVEvent(kv)
 			}
+
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				// Put ctx.Err() on the err channel.
-				panic("context cancel")
+				errCh <- ctx.Err()
 				return
 			}
 		}
 	}()
 
-	return eventCh, nil
+	return eventCh, errCh, nil
 }

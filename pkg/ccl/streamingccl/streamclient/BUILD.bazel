@@ -4,8 +4,7 @@ go_library(
     name = "streamclient",
     srcs = [
         "client.go",
-        "core_changefeed_client.go",
-        "mock_stream_client.go",
+        "cockroach_sinkless_replication_client.go",
         "random_stream_client.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
@@ -25,8 +24,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "@com_github_jackc_pgx//:pgx",
-        "@com_github_pkg_errors//:errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -35,7 +33,7 @@ go_test(
     size = "small",
     srcs = [
         "client_test.go",
-        "core_changefeed_client_test.go",
+        "cockroach_sinkless_replication_client_test.go",
         "main_test.go",
     ],
     embed = [":streamclient"],
@@ -59,5 +57,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

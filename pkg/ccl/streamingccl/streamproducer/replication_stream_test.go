@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// pgConnReplicationFeed yields replicationMessages from the replication stream.
-type pgConnReplicationFeed struct {
+// pgConnReplicationFeedSource yields replicationMessages from the replication stream.
+type pgConnReplicationFeedSource struct {
 	t      *testing.T
 	conn   *pgx.Conn
 	rows   *pgx.Rows
@@ -38,16 +38,18 @@ type pgConnReplicationFeed struct {
 	cancel func()
 }
 
-// Close closes underlying sql connection.
-func (f *pgConnReplicationFeed) Close() {
+var _ streamingtest.FeedSource = (*pgConnReplicationFeedSource)(nil)
+
+// Close implements the streamingtest.FeedSource interface. It closes underlying
+// sql connection.
+func (f *pgConnReplicationFeedSource) Close() {
 	f.cancel()
 	f.rows.Close()
 	require.NoError(f.t, f.conn.Close())
 }
 
-// Next sets replicationMessage and returns true if there are more rows available.
-// Returns false otherwise.
-func (f *pgConnReplicationFeed) Next() (streamingccl.Event, bool) {
+// Next implements the streamingtest.FeedSource interface.
+func (f *pgConnReplicationFeedSource) Next() (streamingccl.Event, bool) {
 	haveMoreRows := f.rows.Next()
 	if !haveMoreRows {
 		// The event doesn't matter since we always expect more rows.
@@ -72,7 +74,7 @@ func (f *pgConnReplicationFeed) Next() (streamingccl.Event, bool) {
 	return event, haveMoreRows
 }
 
-func (f *pgConnReplicationFeed) GetMsg() streamingccl.Event {
+func (f *pgConnReplicationFeedSource) GetMsg() streamingccl.Event {
 	return f.msg
 }
 
@@ -92,21 +94,23 @@ func startReplication(
 	require.NoError(t, err)
 
 	queryCtx, cancel := context.WithCancel(context.Background())
-	rows, err := conn.QueryEx(queryCtx, create, nil, args...)
+	rows, err := conn.QueryEx(queryCtx, `SET enable_experimental_stream_replication = true`, nil, args...)
 	require.NoError(t, err)
-	feedProvider := &pgConnReplicationFeed{
+	rows.Close()
+	rows, err = conn.QueryEx(queryCtx, create, nil, args...)
+	require.NoError(t, err)
+	feedSource := &pgConnReplicationFeedSource{
 		t:      t,
 		conn:   conn,
 		rows:   rows,
 		cancel: cancel,
 	}
-	return streamingtest.MakeReplicaitonFeed(t, feedProvider)
+	return streamingtest.MakeReplicaitonFeed(t, feedSource)
 }
 
 func TestReplicationStreamTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// h, cleanup := newReplicationHelper(t)
 	h, cleanup := streamingtest.NewReplicationHelper(t)
 	defer cleanup()
 
@@ -122,9 +126,9 @@ INSERT INTO d.t2 VALUES (2);
 		`CREATE REPLICATION STREAM FOR TENANT %d`, h.Tenant.ID.ToUint64())
 
 	t.Run("cannot-stream-tenant-from-tenant", func(t *testing.T) {
-		// Cannot replicate stream from inside the tenant
 		_, err := h.Tenant.SQL.DB.ExecContext(context.Background(), `SET enable_experimental_stream_replication = true`)
 		require.NoError(t, err)
+		// Cannot replicate stream from inside the tenant
 		_, err = h.Tenant.SQL.DB.ExecContext(context.Background(), streamTenantQuery)
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})
