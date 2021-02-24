@@ -291,12 +291,22 @@ type TxStatus int
 
 //go:generate stringer -type TxStatus
 const (
-	TxStatusInFailure       TxStatus = pgx.TxStatusInFailure
-	TxStatusRollbackFailure TxStatus = pgx.TxStatusRollbackFailure
-	TxStatusCommitFailure   TxStatus = pgx.TxStatusCommitFailure
-	TxStatusInProgress      TxStatus = pgx.TxStatusInProgress
-	TxStatusCommitSuccess   TxStatus = pgx.TxStatusCommitSuccess
-	TxStatusRollbackSuccess TxStatus = pgx.TxStatusRollbackSuccess
+	TxStatusInFailure       TxStatus = -3
+	TxStatusRollbackFailure TxStatus = -2
+	TxStatusCommitFailure   TxStatus = -1
+	TxStatusInProgress      TxStatus = 0
+	TxStatusCommitSuccess   TxStatus = 1
+	TxStatusRollbackSuccess TxStatus = 2
+)
+
+// Workaround to do compile-time asserts that values are equal.
+const (
+	_ = uint((TxStatusInFailure - pgx.TxStatusInFailure) * (pgx.TxStatusInFailure - TxStatusInFailure))
+	_ = uint((TxStatusRollbackFailure - pgx.TxStatusRollbackFailure) * (pgx.TxStatusRollbackFailure - TxStatusRollbackFailure))
+	_ = uint((TxStatusCommitFailure - pgx.TxStatusCommitFailure) * (pgx.TxStatusCommitFailure - TxStatusCommitFailure))
+	_ = uint((TxStatusInProgress - pgx.TxStatusInProgress) * (pgx.TxStatusInProgress - TxStatusInProgress))
+	_ = uint((TxStatusCommitSuccess - pgx.TxStatusCommitSuccess) * (pgx.TxStatusCommitSuccess - TxStatusCommitSuccess))
+	_ = uint((TxStatusRollbackSuccess - pgx.TxStatusRollbackSuccess) * (pgx.TxStatusRollbackSuccess - TxStatusRollbackSuccess))
 )
 
 // MarshalJSON encodes a TxStatus to a string.
