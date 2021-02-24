@@ -60,10 +60,10 @@ func setupRouter(
 	ctx := context.Background()
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
-		EvalCtx: evalCtx,
+		EvalCtx:     evalCtx,
+		DiskMonitor: diskMonitor,
 	}
 	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
@@ -669,10 +669,10 @@ func TestRouterBlocks(t *testing.T) {
 			defer diskMonitor.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
-					Settings:    st,
-					DiskMonitor: diskMonitor,
+					Settings: st,
 				},
-				EvalCtx: &evalCtx,
+				EvalCtx:     &evalCtx,
+				DiskMonitor: diskMonitor,
 			}
 			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
@@ -786,8 +786,8 @@ func TestRouterDiskSpill(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
+		DiskMonitor: diskMonitor,
 	}
 	alloc := &rowenc.DatumAlloc{}
 

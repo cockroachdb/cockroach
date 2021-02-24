@@ -305,7 +305,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Create the FlowCtx for the flow.
-	flowCtx := ds.NewFlowContext(
+	flowCtx := ds.newFlowContext(
 		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
 	)
 
@@ -373,9 +373,9 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
-// NewFlowContext creates a new FlowCtx that can be used during execution of
+// newFlowContext creates a new FlowCtx that can be used during execution of
 // a flow.
-func (ds *ServerImpl) NewFlowContext(
+func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *tree.EvalContext,
@@ -395,6 +395,11 @@ func (ds *ServerImpl) NewFlowContext(
 		CollectStats:   collectStats,
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
+		// The flow disk monitor is a child of the server's and is closed on
+		// Cleanup.
+		DiskMonitor: execinfra.NewMonitor(
+			ctx, ds.ParentDiskMonitor, "flow-disk-monitor",
+		),
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

@@ -68,7 +68,7 @@ func (s *sorterBase) init(
 		return err
 	}
 
-	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, fmt.Sprintf("%s-disk", processorName))
+	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, fmt.Sprintf("%s-disk", processorName))
 	rc := rowcontainer.DiskBackedRowContainer{}
 	rc.Init(
 		ordering,

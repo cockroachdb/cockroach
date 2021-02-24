@@ -256,12 +256,12 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
-					Settings:    st,
-					DB:          kvDB,
-					DiskMonitor: testDiskMonitor,
-					Codec:       keys.SystemSQLCodec,
+					Settings: st,
+					DB:       kvDB,
+					Codec:    keys.SystemSQLCodec,
 				},
-				EvalCtx: &evalCtx,
+				EvalCtx:     &evalCtx,
+				DiskMonitor: testDiskMonitor,
 			}
 
 			colTypes := splitAndScatterOutputTypes

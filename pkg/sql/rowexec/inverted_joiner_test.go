@@ -634,9 +634,9 @@ func TestInvertedJoiner(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
-		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		DiskMonitor: diskMonitor,
 	}
 	for _, c := range testCases {
 		for _, outputGroupContinuation := range []bool{false, true} {
@@ -756,9 +756,9 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
-		Txn: leafTxn,
+		Txn:         leafTxn,
+		DiskMonitor: diskMonitor,
 	}
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
