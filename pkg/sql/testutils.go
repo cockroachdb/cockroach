@@ -12,14 +12,20 @@ package sql
 
 import (
 	"context"
+	gosql "database/sql"
+	"fmt"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -147,4 +153,40 @@ func (dsp *DistSQLPlanner) Exec(
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
 	return rw.Err()
+}
+
+// CreateTestMultiRegionCluster creates a test cluster with numServers number of
+// nodes with the provided testing knobs applied to each of the nodes. Every
+// node is placed in its own locality, named "us-east1", "us-east2", and so on.
+func CreateTestMultiRegionCluster(
+	t *testing.T, numServers int, knobs base.TestingKnobs,
+) (serverutils.TestClusterInterface, *gosql.DB, func()) {
+	serverArgs := make(map[int]base.TestServerArgs)
+	regionNames := make([]string, numServers)
+	for i := 0; i < numServers; i++ {
+		// "us-east1", "us-east2"...
+		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	}
+
+	for i := 0; i < numServers; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: knobs,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
+			},
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+
+	ctx := context.Background()
+	cleanup := func() {
+		tc.Stopper().Stop(ctx)
+	}
+
+	sqlDB := tc.ServerConn(0)
+
+	return tc, sqlDB, cleanup
 }
