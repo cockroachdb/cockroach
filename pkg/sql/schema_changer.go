@@ -821,13 +821,13 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 }
 
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
-	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
+	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
 		return errReverse
 	}
 
 	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
-		if err := fn(*sc.job.ID()); err != nil {
+		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -1537,7 +1537,7 @@ func (sc *SchemaChanger) refreshStats() {
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError error) error {
 	if fn := sc.testingKnobs.RunBeforeMutationReversal; fn != nil {
-		if err := fn(*sc.job.ID()); err != nil {
+		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2144,7 +2144,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		return nil
 	}
 	if fn := p.ExecCfg().SchemaChangerTestingKnobs.RunBeforeResume; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2338,7 +2338,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	}
 
 	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2399,7 +2399,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	}
 
 	if fn := sc.testingKnobs.RunAfterOnFailOrCancel; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}

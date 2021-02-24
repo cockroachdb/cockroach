@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -70,7 +71,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	noop := colexec.NewNoop(col)
+	noop := colexecop.NewNoop(col)
 	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */

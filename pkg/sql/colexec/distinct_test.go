@@ -17,8 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -130,7 +131,7 @@ var distinctTestCases = []distinctTestCase{
 		},
 	},
 	{
-		// This is to test hashTable deduplication with various batch size
+		// This is to test HashTable deduplication with various batch size
 		// boundaries and ensure it always emits the first tuple it encountered.
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Int, types.String},
@@ -190,7 +191,7 @@ func TestDistinct(t *testing.T) {
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return NewUnorderedDistinct(
 					testAllocator, input[0], tc.distinctCols, tc.typs,
 				), nil
@@ -203,7 +204,7 @@ func TestDistinct(t *testing.T) {
 					orderedCols[i] = tc.distinctCols[j]
 				}
 				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						return newPartiallyOrderedDistinct(
 							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
 						)
@@ -211,8 +212,8 @@ func TestDistinct(t *testing.T) {
 			}
 			log.Info(context.Background(), "ordered")
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
+					return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
 				})
 		}
 	}
@@ -242,7 +243,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs), nil
 		},
 	)
@@ -264,7 +265,7 @@ func getNewValueProbabilityForDistinct(newTupleProbability float64, nCols int) f
 func runDistinctBenchmarks(
 	ctx context.Context,
 	b *testing.B,
-	distinctConstructor func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error),
+	distinctConstructor func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error),
 	getNumOrderedCols func(nCols int) int,
 	namePrefix string,
 	isExternal bool,
@@ -343,15 +344,15 @@ func runDistinctBenchmarks(
 func BenchmarkDistinct(b *testing.B) {
 	ctx := context.Background()
 
-	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
+	distinctConstructors := []func(*colmem.Allocator, colexecop.Operator, []uint32, int, []*types.T) (colexecop.Operator, error){
+		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
 			return NewUnorderedDistinct(allocator, input, distinctCols, typs), nil
 		},
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewOrderedDistinct(input, distinctCols, typs)
+		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
+			return colexecbase.NewOrderedDistinct(input, distinctCols, typs)
 		},
 	}
 	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,7 +39,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
 		batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
-		source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+		source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 		source.ResetBatchesToReturn(numBatches)
 		inputIdx := i
 		inputs[i] = SynchronizerInput{

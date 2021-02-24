@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -42,7 +42,7 @@ type flowStreamClient interface {
 // be called with the necessary information to establish a connection to a
 // given remote endpoint.
 type Outbox struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 
 	typs []*types.T
 
@@ -53,7 +53,7 @@ type Outbox struct {
 	draining        uint32
 	metadataSources []execinfrapb.MetadataSource
 	// closers is a slice of Closers that need to be Closed on termination.
-	closers colexecbase.Closers
+	closers colexecop.Closers
 
 	scratch struct {
 		buf *bytes.Buffer
@@ -68,10 +68,10 @@ type Outbox struct {
 // NewOutbox creates a new Outbox.
 func NewOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -84,7 +84,7 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		OneInputNode:    colexecbase.NewOneInputNode(colexec.NewDeselectorOp(allocator, input, typs)),
+		OneInputNode:    colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(allocator, input, typs)),
 		typs:            typs,
 		converter:       c,
 		serializer:      s,

@@ -17,10 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -72,9 +73,9 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */)}
+				inputs := []colexecop.Operator{colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */))
+					inputs = append(inputs, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
@@ -85,7 +86,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
@@ -194,9 +195,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)}
+				inputs := []colexecop.Operator{colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs))
+					inputs = append(inputs, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
@@ -216,18 +217,18 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
-					FDSemaphore:         colexecbase.NewTestingSemaphore(256),
+					FDSemaphore:         colexecop.NewTestingSemaphore(256),
 				}
 				// The disk spilling infrastructure relies on different memory
 				// accounts, so if the spilling is supported, we do *not* want to use
 				// streaming memory account.
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				var (
-					result *colexec.NewColOperatorResult
+					result *colexecargs.NewColOperatorResult
 					err    error
 				)
 				// The memory error can occur either during planning or during

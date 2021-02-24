@@ -1086,7 +1086,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",
-			":!sql/colexecbase/colexecerror/error.go",
+			":!sql/colexecerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1634,9 +1634,9 @@ func TestLint(t *testing.T) {
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
-			// sql/colexecbase/colexecerror/error.go file.
+			// sql/colexecerror/error.go file.
 			"sql/col*",
-			":!sql/colexecbase/colexecerror/error.go",
+			":!sql/colexecerror/error.go",
 			// This exception is because execgen itself uses panics during code
 			// generation - not at execution time. The (glob,exclude) directive
 			// (see git help gitglossary) makes * behave like a normal, single dir
@@ -1683,7 +1683,7 @@ func TestLint(t *testing.T) {
 			// sql/col* packages.
 			"sql/colexec",
 			"sql/colflow",
-			":!sql/colexec/simple_project.go",
+			":!sql/colexec/colexecbase/simple_project.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1751,11 +1751,11 @@ func TestLint(t *testing.T) {
 			"grep",
 			"-nE",
 			// We prohibit usage of Allocator.MaybeAppendColumn outside of
-			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
+			// vectorTypeEnforcer and BatchSchemaPrefixEnforcer.
 			`(MaybeAppendColumn)\(`,
 			"--",
 			"sql/col*",
-			":!sql/colexec/operator.go",
+			":!sql/colexec/colexecutils/operator.go",
 			":!sql/colmem/allocator.go",
 			":!sql/colmem/allocator_test.go",
 		)
@@ -1768,8 +1768,8 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colexec.vectorTypeEnforcer "+
-				"or colexec.batchSchemaPrefixEnforcer", s)
+			t.Errorf("\n%s <- forbidden; use colexecutils.vectorTypeEnforcer "+
+				"or colexecutils.BatchSchemaPrefixEnforcer", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1789,11 +1789,11 @@ func TestLint(t *testing.T) {
 			"grep",
 			"-nE",
 			// We prohibit usage of Vec.Append outside of the
-			// appendOnlyBufferedBatch.
+			// colexecutils.AppendOnlyBufferedBatch.
 			`(Append)\(`,
 			"--",
 			"sql/col*",
-			":!sql/colexec/utils.go",
+			":!sql/colexec/colexecutils/utils.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1804,7 +1804,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use coldata.Vec.Copy or appendOnlyBufferedGroup", s)
+			t.Errorf("\n%s <- forbidden; use coldata.Vec.Copy or colexecutils.AppendOnlyBufferedGroup", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1978,7 +1978,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			// This exception is for hash.go, which re-implements runtime.noescape
 			// for efficient hashing.
-			stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
+			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 			stream.GrepNot(`^#`), // comment line
 			// Roachpb's own error package takes ownership of error unwraps
 			// (by enforcing that errors can never been wrapped under a

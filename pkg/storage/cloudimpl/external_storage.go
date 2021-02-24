@@ -408,7 +408,9 @@ var (
 	// operations.
 	GcsDefault = settings.RegisterStringSetting(
 		CloudstorageGSDefaultKey,
-		"if set, JSON key to use during Google Cloud Storage operations",
+		"[deprecated] if set, JSON key to use during Google Cloud Storage operations. "+
+			"This setting will be removed in "+
+			"21.2, as we will no longer support the `default` AUTH mode for GCS operations.",
 		"",
 	).WithPublic()
 	httpCustomCA = settings.RegisterStringSetting(

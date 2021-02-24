@@ -26,7 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -126,7 +127,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
 	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
-	columnarizers := make([]colexecbase.Operator, len(args.inputs))
+	columnarizers := make([]colexecop.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
 		if err != nil {
@@ -135,7 +136,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		columnarizers[i] = c
 	}
 
-	constructorArgs := &colexec.NewColOperatorArgs{
+	constructorArgs := &colexecargs.NewColOperatorArgs{
 		Spec:                args.pspec,
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,
@@ -143,7 +144,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 			FS:        tempFS,
 			GetPather: colcontainer.GetPatherFunc(func(context.Context) string { return "" }),
 		},
-		FDSemaphore: colexecbase.NewTestingSemaphore(256),
+		FDSemaphore: colexecop.NewTestingSemaphore(256),
 
 		// TODO(yuzefovich): adjust expression generator to not produce
 		// mixed-type timestamp-related expressions and then disallow the

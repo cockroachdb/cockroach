@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const constTmpl = "pkg/sql/colexec/const_tmpl.go"
+const constTmpl = "pkg/sql/colexec/colexecbase/const_tmpl.go"
 
 func genConstOps(inputFileContents string, wr io.Writer) error {
 

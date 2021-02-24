@@ -11,12 +11,12 @@
 package colexec_test
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 )
 
 func init() {
 	// Inject a testing helper for NewColOperator so colexec tests can
 	// use NewColOperator without an import cycle.
-	colexec.TestNewColOperator = colbuilder.NewColOperator
+	colexecargs.TestNewColOperator = colbuilder.NewColOperator
 }

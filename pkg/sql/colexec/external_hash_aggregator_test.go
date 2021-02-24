@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -92,8 +93,8 @@ func TestExternalHashAggregator(t *testing.T) {
 					[][]*types.T{tc.typs},
 					tc.expected,
 					colexectestutils.UnorderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						sem := colexecbase.NewTestingSemaphore(ehaNumRequiredFDs)
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
+						sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 						semsToCheck = append(semsToCheck, sem)
 						op, accs, mons, closers, err := createExternalHashAggregator(
 							ctx, flowCtx, &colexecagg.NewAggregatorArgs{
@@ -178,10 +179,10 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
 					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
+						new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 							op, accs, mons, _, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg,
-								&colexecbase.TestingSemaphore{}, 0, /* numForcedRepartitions */
+								&colexecop.TestingSemaphore{}, 0, /* numForcedRepartitions */
 							)
 							memAccounts = append(memAccounts, accs...)
 							memMonitors = append(memMonitors, mons...)
@@ -190,7 +191,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							// signatures of the aggregator constructors, we
 							// wrap it with a noop operator. It is ok for the
 							// purposes of this benchmark.
-							return NewNoop(op), err
+							return colexecop.NewNoop(op), err
 						},
 						name: fmt.Sprintf("spilled=%t", spillForced),
 					},
@@ -220,7 +221,7 @@ func createExternalHashAggregator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 	numForcedRepartitions int,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
+) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -229,14 +230,14 @@ func createExternalHashAggregator(
 		Post:        execinfrapb.PostProcessSpec{},
 		ResultTypes: newAggArgs.OutputTypes,
 	}
-	args := &NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{newAggArgs.Input},
+		Inputs:              []colexecop.Operator{newAggArgs.Input},
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

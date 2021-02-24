@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const defaultCmpSelOpsTmpl = "pkg/sql/colexec/default_cmp_sel_ops_tmpl.go"
+const defaultCmpSelOpsTmpl = "pkg/sql/colexec/colexecsel/default_cmp_sel_ops_tmpl.go"
 
 func genDefaultCmpSelOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_KIND", "{{.Kind}}")

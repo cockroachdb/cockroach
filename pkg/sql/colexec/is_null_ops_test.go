@@ -16,8 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,10 +123,10 @@ func TestIsNullProjOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return createTestProjectingOperator(
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
-				fmt.Sprintf("@1 %s", c.projExpr), false, /* canFallbackToRowexec */
+				fmt.Sprintf("@1 %s", c.projExpr), false /* canFallbackToRowexec */, testMemAcc,
 			)
 		}
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
@@ -228,7 +229,7 @@ func TestIsNullSelOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			typs := []*types.T{types.Int}
 			spec := &execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
@@ -239,12 +240,12 @@ func TestIsNullSelOp(t *testing.T) {
 				},
 				ResultTypes: typs,
 			}
-			args := &NewColOperatorArgs{
+			args := &colexecargs.NewColOperatorArgs{
 				Spec:                spec,
 				Inputs:              input,
 				StreamingMemAccount: testMemAcc,
 			}
-			result, err := TestNewColOperator(ctx, flowCtx, args)
+			result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 			if err != nil {
 				return nil, err
 			}

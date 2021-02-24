@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -83,11 +84,11 @@ func TestExternalSort(t *testing.T) {
 					[][]*types.T{tc.typs},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
 						// more than this number of file descriptors.
-						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+						sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 						// If a limit is satisfied before the sorter is drained of all its
 						// tuples, the sorter will not close its partitioner. During a
 						// flow this will happen in a downstream materializer/outbox,
@@ -170,7 +171,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need
 	// to add the cache sizes of the queues.
-	partitionSize := int64(memoryToSort/4) + int64(ExternalSorterMinPartitions*queueCfg.BufferSizeBytes)
+	partitionSize := int64(memoryToSort/4) + int64(colexecop.ExternalSorterMinPartitions*queueCfg.BufferSizeBytes)
 	for _, tk := range []execinfra.TestingKnobs{{ForceDiskSpill: true}, {MemoryLimitBytes: partitionSize}} {
 		flowCtx.Cfg.TestingKnobs = tk
 		for nCols := 1; nCols <= maxCols; nCols++ {
@@ -202,8 +203,8 @@ func TestExternalSortRandomized(t *testing.T) {
 					[]colexectestutils.Tuples{tups},
 					expected,
 					colexectestutils.OrderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
+						sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 							ctx, flowCtx, input, typs[:nCols], ordCols,
@@ -283,7 +284,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		batch.ColVec(0).Bytes().Set(i, singleTupleValue)
 	}
 	batch.SetLength(batchLength)
-	numFDs := ExternalSorterMinPartitions + rng.Intn(3)
+	numFDs := colexecop.ExternalSorterMinPartitions + rng.Intn(3)
 	// The memory limit in the external sorter is divided as follows:
 	// - BufferSizeBytes for each of the disk queues is subtracted right away
 	// - the remaining part is divided evenly between the sorter and the merger.
@@ -292,9 +293,9 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, numTotalBatches)
 
 	var spilled bool
-	sem := colexecbase.NewTestingSemaphore(numFDs)
+	sem := colexecop.NewTestingSemaphore(numFDs)
 	sorter, accounts, monitors, closers, err := createDiskBackedSorter(
-		ctx, flowCtx, []colexecbase.Operator{input}, typs, ordCols,
+		ctx, flowCtx, []colexecop.Operator{input}, typs, ordCols,
 		0 /* matchLen */, 0 /* k */, func() { spilled = true },
 		0 /* numForcedRepartitions */, false, /* delegateFDAcquisition */
 		queueCfg, sem,
@@ -418,9 +419,9 @@ func BenchmarkExternalSort(b *testing.B) {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var spilled bool
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
-							ctx, flowCtx, []colexecbase.Operator{source}, typs, ordCols,
+							ctx, flowCtx, []colexecop.Operator{source}, typs, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							0 /* numForcedRepartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecbase.TestingSemaphore{},
+							0 /* numForcedRepartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecop.TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -454,7 +455,7 @@ func BenchmarkExternalSort(b *testing.B) {
 func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecbase.Operator,
+	input []colexecop.Operator,
 	typs []*types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
@@ -464,7 +465,7 @@ func createDiskBackedSorter(
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
+) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),
@@ -479,7 +480,7 @@ func createDiskBackedSorter(
 		},
 		ResultTypes: typs,
 	}
-	args := &NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              input,
 		StreamingMemAccount: testMemAcc,
@@ -492,6 +493,6 @@ func createDiskBackedSorter(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

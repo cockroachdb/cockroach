@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -321,7 +321,7 @@ type RandomDataOp struct {
 	nulls            bool
 }
 
-var _ colexecbase.Operator = &RandomDataOp{}
+var _ colexecop.Operator = &RandomDataOp{}
 
 // NewRandomDataOp creates a new RandomDataOp.
 func NewRandomDataOp(

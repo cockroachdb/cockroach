@@ -52,6 +52,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.NamespaceTableWithSchemasMigration),
 		namespaceMigration,
 	),
+	migration.NewSQLMigration(
+		"upgrade old foreign key representation",
+		toCV(clusterversion.ForeignKeyRepresentationMigration),
+		foreignKeyRepresentationUpgrade,
+	),
 }
 
 func init() {

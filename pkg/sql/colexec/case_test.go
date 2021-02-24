@@ -15,8 +15,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,17 +67,17 @@ func TestCaseOp(t *testing.T) {
 			inputTypes: []*types.T{types.Int, types.Int},
 		},
 	} {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			caseOp, err := createTestProjectingOperator(
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+			caseOp, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr,
-				false, /* canFallbackToRowexec */
+				false /* canFallbackToRowexec */, testMemAcc,
 			)
 			if err != nil {
 				return nil, err
 			}
 			// We will project out the input columns in order to have test
 			// cases be less verbose.
-			return NewSimpleProjectOp(caseOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), nil
+			return colexecbase.NewSimpleProjectOp(caseOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), nil
 		})
 	}
 }

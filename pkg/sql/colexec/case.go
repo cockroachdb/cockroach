@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,8 +26,8 @@ type caseOp struct {
 	allocator *colmem.Allocator
 	buffer    *bufferOp
 
-	caseOps []colexecbase.Operator
-	elseOp  colexecbase.Operator
+	caseOps []colexecop.Operator
+	elseOp  colexecop.Operator
 
 	thenIdxs  []int
 	outputIdx int
@@ -46,7 +46,7 @@ type caseOp struct {
 	prevSel []int
 }
 
-var _ colexecbase.Operator = &caseOp{}
+var _ colexecop.Operator = &caseOp{}
 
 func (c *caseOp) ChildCount(verbose bool) int {
 	return 1 + len(c.caseOps) + 1
@@ -77,13 +77,13 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 // typ is the type of the CASE expression.
 func NewCaseOp(
 	allocator *colmem.Allocator,
-	buffer colexecbase.Operator,
-	caseOps []colexecbase.Operator,
-	elseOp colexecbase.Operator,
+	buffer colexecop.Operator,
+	caseOps []colexecop.Operator,
+	elseOp colexecop.Operator,
 	thenIdxs []int,
 	outputIdx int,
 	typ *types.T,
-) colexecbase.Operator {
+) colexecop.Operator {
 	// We internally use two selection vectors, origSel and prevSel.
 	allocator.AdjustMemoryUsage(int64(2 * colmem.SizeOfBatchSizeSelVector))
 	return &caseOp{

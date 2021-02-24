@@ -243,7 +243,7 @@ func TestTrace(t *testing.T) {
 				"flow",
 				"materializer",
 				"colbatchscan",
-				"*colexec.CancelChecker",
+				"*colexecutils.CancelChecker",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",

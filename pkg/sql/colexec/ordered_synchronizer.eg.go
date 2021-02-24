@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -78,8 +78,8 @@ type OrderedSynchronizer struct {
 }
 
 var (
-	_ colexecbase.Operator = &OrderedSynchronizer{}
-	_ colexecbase.Closer   = &OrderedSynchronizer{}
+	_ colexecop.Operator = &OrderedSynchronizer{}
+	_ colexecop.Closer   = &OrderedSynchronizer{}
 )
 
 // ChildCount implements the execinfrapb.OpNode interface.

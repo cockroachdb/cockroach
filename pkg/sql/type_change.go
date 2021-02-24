@@ -106,7 +106,7 @@ func (p *planner) writeTypeSchemaChange(
 		); err != nil {
 			return err
 		}
-		log.Infof(ctx, "job %d: updated with type change for type %d", *job.ID(), typeDesc.ID)
+		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
 	} else {
 		// Or, create a new job.
 		jobRecord := jobs.Record{
@@ -126,7 +126,7 @@ func (p *planner) writeTypeSchemaChange(
 			return err
 		}
 		p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID] = newJob
-		log.Infof(ctx, "queued new type change job %d for type %d", *newJob.ID(), typeDesc.ID)
+		log.Infof(ctx, "queued new type change job %d for type %d", newJob.ID(), typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)

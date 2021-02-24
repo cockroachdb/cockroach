@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -155,7 +156,7 @@ func (b *aggregatorHelperBase) restoreState() ([]coldata.Vec, int, []int) {
 // handling of a FILTER clause of a single aggregate function for the hash
 // aggregation.
 type filteringSingleFunctionHashHelper struct {
-	filter      colexecbase.Operator
+	filter      colexecop.Operator
 	filterInput *singleBatchOperator
 }
 
@@ -172,7 +173,7 @@ func newFilteringHashAggHelper(
 	}
 	filterInput := newSingleBatchOperator(args.Allocator, args.InputTypes, maxBatchSize)
 	h := &filteringSingleFunctionHashHelper{
-		filter:      newBoolVecToSelOp(filterInput, filterIdx),
+		filter:      colexecutils.NewBoolVecToSelOp(filterInput, filterIdx),
 		filterInput: filterInput,
 	}
 	return h
@@ -491,19 +492,19 @@ func (h *distinctOrderedAggregatorHelper) performAggregation(
 	}
 }
 
-// singleBatchOperator is a helper colexecbase.Operator that returns the
+// singleBatchOperator is a helper colexecop.Operator that returns the
 // provided vectors as a batch on the first call to Next() and zero batch on
 // all consequent calls (until it is reset). It must be reset before it can be
 // used for the first time.
 type singleBatchOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecop.ZeroInputNode
+	colexecop.NonExplainable
 
 	nexted bool
 	batch  coldata.Batch
 }
 
-var _ colexecbase.Operator = &singleBatchOperator{}
+var _ colexecop.Operator = &singleBatchOperator{}
 
 func newSingleBatchOperator(
 	allocator *colmem.Allocator, typs []*types.T, maxBatchSize int,

@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -152,7 +152,7 @@ func newPlanningCtxForExplainPurposes(
 }
 
 func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
-	_, nonExplainable := operator.(colexec.NonExplainable)
+	_, nonExplainable := operator.(colexecop.NonExplainable)
 	return !nonExplainable || verbose
 }
 

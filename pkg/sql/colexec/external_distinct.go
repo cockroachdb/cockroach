@@ -11,8 +11,10 @@
 package colexec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -27,16 +29,16 @@ import (
 func NewExternalDistinct(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
-	input colexecbase.Operator,
+	args *colexecargs.NewColOperatorArgs,
+	input colexecop.Operator,
 	inputTypes []*types.T,
 	createDiskBackedSorter DiskBackedSorterConstructor,
-	inMemUnorderedDistinct colexecbase.Operator,
+	inMemUnorderedDistinct colexecop.Operator,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) colexecop.Operator {
 	distinctSpec := args.Spec.Core.Distinct
 	distinctCols := distinctSpec.DistinctColumns
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to process using the in-memory unordered distinct fit under the
 		// limit, so we use an unlimited allocator.
@@ -49,14 +51,14 @@ func NewExternalDistinct(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		_ semaphore.Semaphore,
-	) colexecbase.ResettableOperator {
+	) colexecop.ResettableOperator {
 		// The distinct operator *must* keep the first tuple from the input
 		// among all that are identical on distinctCols. In order to guarantee
 		// such behavior in the fallback, we append an ordinality column to
 		// every tuple before the disk-backed sorter and include that column in
 		// the desired ordering. We then project out that temporary column
 		// before feeding the tuples into the ordered distinct.
-		ordinalityOp := NewOrdinalityOp(unlimitedAllocator, partitionedInputs[0], len(inputTypes))
+		ordinalityOp := colexecbase.NewOrdinalityOp(unlimitedAllocator, partitionedInputs[0], len(inputTypes))
 		orderingCols := make([]execinfrapb.Ordering_Column, len(distinctCols)+1)
 		for i := range distinctCols {
 			orderingCols[i].ColIdx = distinctCols[i]
@@ -70,8 +72,8 @@ func NewExternalDistinct(
 		for i := range projection {
 			projection[i] = uint32(i)
 		}
-		diskBackedWithoutOrdinality := NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
-		diskBackedFallbackOp, err := NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
+		diskBackedWithoutOrdinality := colexecbase.NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
+		diskBackedFallbackOp, err := colexecbase.NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -81,16 +83,16 @@ func NewExternalDistinct(
 	// in-memory operator tuples, so we plan a special filterer operator to
 	// remove all such tuples.
 	input = &unorderedDistinctFilterer{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
 	}
-	numRequiredActivePartitions := ExternalSorterMinPartitions
+	numRequiredActivePartitions := colexecop.ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(
 		unlimitedAllocator,
 		flowCtx,
 		args,
 		"external unordered distinct", /* name */
-		[]colexecbase.Operator{input},
+		[]colexecop.Operator{input},
 		[][]*types.T{inputTypes},
 		[][]uint32{distinctCols},
 		inMemMainOpConstructor,

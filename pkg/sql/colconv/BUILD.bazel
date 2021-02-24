@@ -19,7 +19,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",

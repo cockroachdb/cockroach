@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,9 +74,9 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(context.Background(), "%s", c.desc)
-		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			op := selectInOpInt64{
-				OneInputNode: colexecbase.NewOneInputNode(input[0]),
+				OneInputNode: colexecop.NewOneInputNode(input[0]),
 				colIdx:       0,
 				filterRow:    c.filterRow,
 				negate:       c.negate,
@@ -130,10 +130,10 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 		}
 	}
 
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 	inOp := &selectInOpInt64{
-		OneInputNode: colexecbase.NewOneInputNode(source),
+		OneInputNode: colexecop.NewOneInputNode(source),
 		colIdx:       0,
 		filterRow:    []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 	}
@@ -216,10 +216,10 @@ func TestProjectInInt64(t *testing.T) {
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					fmt.Sprintf("@1 %s", c.inClause), false, /* canFallbackToRowexec */
+					fmt.Sprintf("@1 %s", c.inClause), false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}

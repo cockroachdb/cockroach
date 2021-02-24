@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -96,7 +97,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := &colexec.NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
 			Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr},
 			ResultTypes: []*types.T{types.Int4},
@@ -106,14 +107,14 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 
-	args = &colexec.NewColOperatorArgs{
+	args = &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
 			Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int4}}},
 			Core:        execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			Post:        execinfrapb.PostProcessSpec{RenderExprs: []execinfrapb.Expression{{Expr: "@1 - 1"}}},
 			ResultTypes: []*types.T{types.Int},
 		},
-		Inputs:              []colexecbase.Operator{r.Op},
+		Inputs:              []colexecop.Operator{r.Op},
 		StreamingMemAccount: &streamingMemAcc,
 	}
 	r, err = NewColOperator(ctx, flowCtx, args)

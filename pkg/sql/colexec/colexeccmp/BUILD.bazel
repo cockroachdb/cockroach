@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexeccmp",
+    srcs = [
+        "default_cmp_expr.go",
+        "like_ops.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
+    deps = [
+        "//pkg/sql/sem/tree",  # keep
+        "@com_github_cockroachdb_errors//:errors",  # keep
+    ],
+)
+
+go_test(
+    name = "colexeccmp_test",
+    srcs = ["dep_test.go"],
+    embed = [":colexeccmp"],
+    deps = ["//pkg/testutils/buildutil"],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("default_cmp_expr.eg.go", "default_cmp_expr_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

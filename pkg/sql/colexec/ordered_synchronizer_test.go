@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -146,8 +146,8 @@ func TestOrderedSync(t *testing.T) {
 		for i := range typs {
 			typs[i] = types.Int
 		}
-		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
+		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+			return NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
 		})
 	}
 }
@@ -188,7 +188,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(t, err)
 	op.Init()
 	out := colexectestutils.NewOpTestOutput(op, expected)
@@ -214,11 +214,11 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 
 	inputs := make([]SynchronizerInput, len(batches))
 	for i := range batches {
-		inputs[i].Op = colexecbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
+		inputs[i].Op = colexecop.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, defaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
 	require.NoError(b, err)
 	op.Init()
 

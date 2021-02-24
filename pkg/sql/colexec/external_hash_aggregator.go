@@ -13,8 +13,9 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -24,7 +25,7 @@ import (
 const (
 	// This limit comes from the fallback strategy where we are using an
 	// external sort.
-	ehaNumRequiredActivePartitions = ExternalSorterMinPartitions
+	ehaNumRequiredActivePartitions = colexecop.ExternalSorterMinPartitions
 	// ehaNumRequiredFDs is the minimum number of file descriptors that are
 	// needed for the machinery of the external aggregator (plus 1 is needed for
 	// the in-memory hash aggregator in order to track tuples in a spilling
@@ -37,12 +38,12 @@ const (
 // partitioner and the external sort + ordered aggregator as the "fallback".
 func NewExternalHashAggregator(
 	flowCtx *execinfra.FlowCtx,
-	args *NewColOperatorArgs,
+	args *colexecargs.NewColOperatorArgs,
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
-	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecbase.ResettableOperator {
+) colexecop.Operator {
+	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
@@ -58,7 +59,7 @@ func NewExternalHashAggregator(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
 		_ semaphore.Semaphore,
-	) colexecbase.ResettableOperator {
+	) colexecop.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = createDiskBackedSorter(
 			partitionedInputs[0], newAggArgs.InputTypes,
@@ -75,7 +76,7 @@ func NewExternalHashAggregator(
 		flowCtx,
 		args,
 		"external hash aggregator", /* name */
-		[]colexecbase.Operator{newAggArgs.Input},
+		[]colexecop.Operator{newAggArgs.Input},
 		[][]*types.T{newAggArgs.InputTypes},
 		[][]uint32{spec.GroupCols},
 		inMemMainOpConstructor,

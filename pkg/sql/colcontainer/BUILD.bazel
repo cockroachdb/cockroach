@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/colserde",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/types",
         "//pkg/storage/fs",
         "//pkg/util/mon",
@@ -36,7 +36,7 @@ go_test(
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
-        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/pgwire/pgcode",

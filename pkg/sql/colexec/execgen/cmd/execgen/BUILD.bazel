@@ -58,7 +58,7 @@ go_library(
     deps = [
         "//pkg/col/typeconv",
         "//pkg/sql/colexec/execgen",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",

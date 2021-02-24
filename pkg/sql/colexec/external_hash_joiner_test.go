@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -78,8 +79,8 @@ func TestExternalHashJoiner(t *testing.T) {
 					// allNullsInjection test for now.
 					tc.skipAllNullsInjection = true
 				}
-				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-					sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
+				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+					sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
 					// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -157,12 +158,12 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
+	sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
 	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-		ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
+		ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg,
 		// Force a repartition so that the recursive repartitioning always
 		// occurs.
@@ -261,9 +262,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-							ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
+							ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 							func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
-							colexecbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
+							colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -293,14 +294,14 @@ func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
-	inputs []colexecbase.Operator,
+	inputs []colexecop.Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
-	args := &NewColOperatorArgs{
+) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,
 		StreamingMemAccount: testMemAcc,
@@ -313,6 +314,6 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

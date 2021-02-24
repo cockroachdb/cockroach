@@ -20,9 +20,8 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,7 +48,7 @@ type flowStreamServer interface {
 // RunWithStream (or more specifically, the RPC handler) will unblock Next by
 // closing the stream.
 type Inbox struct {
-	colexecbase.ZeroInputNode
+	colexecop.ZeroInputNode
 	typs []*types.T
 
 	allocator  *colmem.Allocator
@@ -123,8 +122,7 @@ type Inbox struct {
 	}
 }
 
-var _ colexecbase.Operator = &Inbox{}
-var _ colexec.NetworkReader = &Inbox{}
+var _ colexecop.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -340,22 +338,23 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// GetBytesRead is part of the colexec.NetworkReader interface.
+// GetBytesRead returns the number of bytes received by the Inbox.
 func (i *Inbox) GetBytesRead() int64 {
 	return i.bytesRead
 }
 
-// GetRowsRead is part of the colexec.NetworkReader interface.
+// GetRowsRead returns the number of rows received by the Inbox.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
 }
 
-// GetDeserializationTime is part of the colexec.NetworkReader interface.
+// GetDeserializationTime returns the amount of time the Inbox spent
+// deserializing batches.
 func (i *Inbox) GetDeserializationTime() time.Duration {
 	return i.deserializationStopWatch.Elapsed()
 }
 
-// GetNumMessages is part of the colexec.NetworkReader interface.
+// GetNumMessages returns the number of messages received by the Inbox.
 func (i *Inbox) GetNumMessages() int64 {
 	return i.numMessages
 }

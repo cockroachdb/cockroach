@@ -372,7 +372,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 // NewJob creates a new Job.
 func (r *Registry) NewJob(record Record, jobID int64) *Job {
 	job := &Job{
-		id:        &jobID,
+		id:        jobID,
 		registry:  r,
 		createdBy: record.CreatedBy,
 	}
@@ -493,10 +493,10 @@ func (r *Registry) CreateStartableJobWithTxn(
 ) error {
 	alreadyInitialized := *sj != nil
 	if alreadyInitialized {
-		if jobID != *(*sj).Job.ID() {
+		if jobID != (*sj).Job.ID() {
 			log.Fatalf(ctx,
 				"attempted to rewrite startable job for ID %d with unexpected ID %d",
-				*(*sj).Job.ID(), jobID,
+				(*sj).Job.ID(), jobID,
 			)
 		}
 	}
@@ -567,7 +567,7 @@ func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
 // in that a transaction will be automatically created.
 func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn) (*Job, error) {
 	j := &Job{
-		id:       &jobID,
+		id:       jobID,
 		registry: r,
 	}
 	if err := j.load(ctx, txn); err != nil {
@@ -583,7 +583,7 @@ func (r *Registry) UpdateJobWithTxn(
 	ctx context.Context, jobID int64, txn *kv.Txn, updateFunc UpdateFn,
 ) error {
 	j := &Job{
-		id:       &jobID,
+		id:       jobID,
 		registry: r,
 	}
 	return j.Update(ctx, txn, updateFunc)
@@ -1153,15 +1153,15 @@ func (r *Registry) stepThroughStateMachine(
 ) error {
 	payload := job.Payload()
 	jobType := payload.Type()
-	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, *job.ID(), status, jobErr)
+	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: resuming with non-nil error", *job.ID())
+				"job %d: resuming with non-nil error", job.ID())
 		}
-		resumeCtx := logtags.AddTag(ctx, "job", *job.ID())
+		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
 		if payload.StartedMicros == 0 {
 			if err := job.started(ctx, nil /* txn */); err != nil {
 				return err
@@ -1184,20 +1184,20 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(ajwerner): We'll also end up here if the job was canceled or
 			// paused. We should make this error clearer.
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
+			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
 		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
 		// mechanism (possibly combined with a retry limit).
 		if errors.Is(err, retryJobErrorSentinel) {
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
+			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
 		}
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-					"job %d: unexpected status %s provided for a running job", *job.ID(), sErr.status)
+					"job %d: unexpected status %s provided for a running job", job.ID(), sErr.status)
 			}
 			return sErr
 		}
@@ -1208,18 +1208,18 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.Errorf("job %s", status)
 	case StatusPaused:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-			"job %d: unexpected status %s provided to state machine", *job.ID(), status)
+			"job %d: unexpected status %s provided to state machine", job.ID(), status)
 	case StatusCanceled:
 		if err := job.canceled(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", *job.ID(), jobErr)
+			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", job.ID(), jobErr)
 		}
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
 	case StatusSucceeded:
 		if jobErr != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: successful bu unexpected error provided", *job.ID())
+				"job %d: successful bu unexpected error provided", job.ID())
 		}
 		if err := job.succeeded(ctx, nil /* txn */, nil /* fn */); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
@@ -1227,16 +1227,16 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
 			// execute them in resume so that the client can handle these errors
 			// better.
-			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", job.ID()))
 		}
 		return nil
 	case StatusReverting:
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
+			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", job.ID(), jobErr)
 		}
-		onFailOrCancelCtx := logtags.AddTag(ctx, "job", *job.ID())
+		onFailOrCancelCtx := logtags.AddTag(ctx, "job", job.ID())
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
@@ -1257,36 +1257,36 @@ func (r *Registry) stepThroughStateMachine(
 			jm.FailOrCancelRetryError.Inc(1)
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
-			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
+			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		if errors.Is(err, retryJobErrorSentinel) {
 			jm.FailOrCancelRetryError.Inc(1)
-			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
+			return errors.Errorf("job %d: %s: restarting in background", job.ID(), err)
 		}
 		jm.FailOrCancelFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusPauseRequested {
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-					"job %d: unexpected status %s provided for a reverting job", *job.ID(), sErr.status)
+					"job %d: unexpected status %s provided for a reverting job", job.ID(), sErr.status)
 			}
 			return sErr
 		}
 		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusFailed,
-			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
+			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: has StatusFailed but no error was provided", *job.ID())
+				"job %d: has StatusFailed but no error was provided", job.ID())
 		}
 		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)
+			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
 		}
 		return jobErr
 	default:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-			"job %d: has unsupported status %s", *job.ID(), status)
+			"job %d: has unsupported status %s", job.ID(), status)
 	}
 }
 

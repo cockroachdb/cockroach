@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -72,7 +72,7 @@ type aggregatorTestCase struct {
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new  func(*colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error)
+	new  func(*colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error)
 	name string
 }
 
@@ -80,7 +80,7 @@ var aggTypes = []aggType{
 	{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
-		new: func(args *colexecagg.NewAggregatorArgs) (colexecbase.ResettableOperator, error) {
+		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
 			return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
 		},
 		name: "hash",
@@ -726,7 +726,7 @@ func TestAggregators(t *testing.T) {
 				verifier = colexectestutils.UnorderedVerifier
 			}
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return agg.new(&colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
@@ -1022,7 +1022,7 @@ func benchmarkAggregateFunction(
 				// Exhaust aggregator until all batches have been read.
 				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 				}
-				if err = a.(colexecbase.Closer).Close(ctx); err != nil {
+				if err = a.(colexecop.Closer).Close(ctx); err != nil {
 					b.Fatal(err)
 				}
 				source.Reset(ctx)

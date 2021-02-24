@@ -17,8 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -368,16 +369,16 @@ func TestCrossJoiner(t *testing.T) {
 		for _, tc := range getCJTestCases() {
 			for _, tc := range tc.mutateTypes() {
 				log.Infof(ctx, "spillForced=%t", spillForced)
-				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
-					args := &NewColOperatorArgs{
+					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              sources,
 						StreamingMemAccount: testMemAcc,
 						DiskQueueCfg:        queueCfg,
-						FDSemaphore:         colexecbase.NewTestingSemaphore(externalHJMinPartitions),
+						FDSemaphore:         colexecop.NewTestingSemaphore(externalHJMinPartitions),
 					}
-					result, err := TestNewColOperator(ctx, flowCtx, args)
+					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
 						return nil, err
 					}
@@ -439,13 +440,13 @@ func BenchmarkCrossJoiner(b *testing.B) {
 				}
 				tc.init()
 				spec := createSpecForHashJoiner(tc)
-				args := &NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec: spec,
 					// Inputs will be set below.
-					Inputs:              []colexecbase.Operator{nil, nil},
+					Inputs:              []colexecop.Operator{nil, nil},
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         colexecbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
+					FDSemaphore:         colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
 				}
 				b.Run(fmt.Sprintf("spillForced=%t/type=%s/rows=%d", spillForced, joinType, nRows), func(b *testing.B) {
 					var nOutputRows int
@@ -459,7 +460,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						args.Inputs[0] = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						args.Inputs[1] = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
-						result, err := TestNewColOperator(ctx, flowCtx, args)
+						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						require.NoError(b, err)
 						accounts = append(accounts, result.OpAccounts...)
 						monitors = append(monitors, result.OpMonitors...)

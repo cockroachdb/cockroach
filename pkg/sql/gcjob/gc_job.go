@@ -184,7 +184,7 @@ func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}) erro
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &schemaChangeGCResumer{
-			jobID: *job.ID(),
+			jobID: job.ID(),
 		}
 	}
 	jobs.RegisterConstructor(jobspb.TypeSchemaChangeGC, createResumerFn)

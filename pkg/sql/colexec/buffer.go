@@ -14,27 +14,27 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 )
 
 // bufferOp is an operator that buffers a single batch at a time from an input,
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
-	colexecbase.OneInputNode
-	initStatus OperatorInitStatus
+	colexecop.OneInputNode
+	initStatus colexecop.OperatorInitStatus
 
 	// read is true if someone has read the current batch already.
 	read  bool
 	batch coldata.Batch
 }
 
-var _ colexecbase.Operator = &bufferOp{}
+var _ colexecop.Operator = &bufferOp{}
 
 // NewBufferOp returns a new bufferOp, initialized to buffer batches from the
 // supplied input.
-func NewBufferOp(input colexecbase.Operator) colexecbase.Operator {
+func NewBufferOp(input colexecop.Operator) colexecop.Operator {
 	return &bufferOp{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 	}
 }
 
@@ -43,9 +43,9 @@ func (b *bufferOp) Init() {
 	// called multiple times. However, we do not want to call Init many times on
 	// the input to bufferOp, so we do this check whether Init has already been
 	// performed.
-	if b.initStatus == OperatorNotInitialized {
+	if b.initStatus == colexecop.OperatorNotInitialized {
 		b.Input.Init()
-		b.initStatus = OperatorInitialized
+		b.initStatus = colexecop.OperatorInitialized
 	}
 }
 

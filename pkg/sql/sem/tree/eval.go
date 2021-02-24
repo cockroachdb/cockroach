@@ -3890,7 +3890,7 @@ func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 // Note: if you're modifying this function, please make sure to adjust
-// colexec.comparisonExprAdapter implementations accordingly.
+// colexeccmp.ComparisonExprAdapter implementations accordingly.
 func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {

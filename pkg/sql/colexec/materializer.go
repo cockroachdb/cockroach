@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -28,9 +28,9 @@ import (
 // Materializer converts an Operator input into a execinfra.RowSource.
 type Materializer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	colexecop.NonExplainable
 
-	input colexecbase.Operator
+	input colexecop.Operator
 	typs  []*types.T
 
 	drainHelper *drainHelper
@@ -62,7 +62,7 @@ type Materializer struct {
 	cancelFlow func() context.CancelFunc
 
 	// closers is a slice of Closers that should be Closed on termination.
-	closers colexecbase.Closers
+	closers colexecop.Closers
 }
 
 // drainHelper is a utility struct that wraps MetadataSources in a RowSource
@@ -163,11 +163,11 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	typs []*types.T,
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexecbase.Closer,
+	toClose []colexecop.Closer,
 	execStatsForTrace func() *execinfrapb.ComponentStats,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {

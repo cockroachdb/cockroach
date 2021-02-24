@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "colbuilder",
-    srcs = [
-        "execplan.go",
-        "window_functions_util.go",
-    ],
+    srcs = ["execplan.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder",
     visibility = ["//visibility:public"],
     deps = [
@@ -17,8 +14,15 @@ go_library(
         "//pkg/sql/colconv",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecagg",
-        "//pkg/sql/colexecbase",
-        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecsel",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/colexecwindow",  # keep
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
         "//pkg/sql/colfetcher",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
@@ -52,7 +56,8 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/colexec",
-        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/rowenc",

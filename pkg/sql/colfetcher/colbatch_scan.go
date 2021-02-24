@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -45,7 +45,7 @@ import (
 // ColBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type ColBatchScan struct {
-	colexecbase.ZeroInputNode
+	colexecop.ZeroInputNode
 	spans       roachpb.Spans
 	flowCtx     *execinfra.FlowCtx
 	rf          *cFetcher
@@ -68,8 +68,8 @@ type ColBatchScan struct {
 
 var _ execinfra.KVReader = &ColBatchScan{}
 var _ execinfra.Releasable = &ColBatchScan{}
-var _ colexecbase.Closer = &ColBatchScan{}
-var _ colexecbase.Operator = &ColBatchScan{}
+var _ colexecop.Closer = &ColBatchScan{}
+var _ colexecop.Operator = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
@@ -308,7 +308,7 @@ func (s *ColBatchScan) Release() {
 	colBatchScanPool.Put(s)
 }
 
-// Close implements the colexecbase.Closer interface.
+// Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close(context.Context) error {
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()

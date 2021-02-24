@@ -13,28 +13,25 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/stretchr/testify/require"
 )
 
 func createSpecForMergeJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
@@ -1658,22 +1655,22 @@ func TestMergeJoiner(t *testing.T) {
 			}
 			// We test all cases with the default memory limit (regular scenario) and a
 			// limit of 1 byte (to force the buffered groups to spill to disk).
-			for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
+			for _, memoryLimit := range []int64{1, colexecop.DefaultMemoryLimit} {
 				log.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
 				runner(t, testAllocator, []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
 					tc.expected, verifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
-						args := &NewColOperatorArgs{
+						args := &colexecargs.NewColOperatorArgs{
 							Spec:                spec,
 							Inputs:              input,
 							StreamingMemAccount: testMemAcc,
 							DiskQueueCfg:        queueCfg,
-							FDSemaphore:         colexecbase.NewTestingSemaphore(mjFDLimit),
+							FDSemaphore:         colexecop.NewTestingSemaphore(mjFDLimit),
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-						result, err := TestNewColOperator(ctx, flowCtx, args)
+						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
@@ -1719,9 +1716,9 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	}
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	a, err := NewMergeJoinOp(
-		testAllocator, defaultMemoryLimit, queueCfg,
-		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
+	a, err := colexecjoin.NewMergeJoinOp(
+		testAllocator, colexecop.DefaultMemoryLimit, queueCfg,
+		colexecop.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1769,106 +1766,6 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	}
 }
 
-// TestMergeJoinCrossProduct verifies that the merge joiner produces the same
-// output as the hash joiner. The test aims at stressing randomly the building
-// of cross product (from the buffered groups) in the merge joiner and does it
-// by creating input sources such that they contain very big groups (each group
-// is about coldata.BatchSize() in size) which will force the merge joiner to
-// mostly build from the buffered groups. Join of such input sources results in
-// an output quadratic in size, so the test is skipped unless coldata.BatchSize
-// is set to relatively small number, but it is ok since we randomize this
-// value.
-func TestMergeJoinCrossProduct(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	if coldata.BatchSize() > 200 {
-		skip.IgnoreLintf(t, "this test is too slow with relatively big batch size")
-	}
-	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(ctx)
-	nTuples := 2*coldata.BatchSize() + 1
-	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
-	defer cleanup()
-	rng, _ := randutil.NewPseudoRand()
-	typs := []*types.T{types.Int, types.Bytes, types.Decimal}
-	colsLeft := make([]coldata.Vec, len(typs))
-	colsRight := make([]coldata.Vec, len(typs))
-	for i, typ := range typs {
-		colsLeft[i] = testAllocator.NewMemColumn(typ, nTuples)
-		colsRight[i] = testAllocator.NewMemColumn(typ, nTuples)
-	}
-	groupsLeft := colsLeft[0].Int64()
-	groupsRight := colsRight[0].Int64()
-	leftGroupIdx, rightGroupIdx := 0, 0
-	for i := range groupsLeft {
-		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
-			leftGroupIdx++
-		}
-		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
-			rightGroupIdx++
-		}
-		groupsLeft[i] = int64(leftGroupIdx)
-		groupsRight[i] = int64(rightGroupIdx)
-	}
-	for i := range typs[1:] {
-		for _, vecs := range [][]coldata.Vec{colsLeft, colsRight} {
-			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-				Rand:            rng,
-				Vec:             vecs[i+1],
-				N:               nTuples,
-				NullProbability: nullProbability,
-			})
-		}
-	}
-	leftMJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
-	rightMJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
-	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	mj, err := NewMergeJoinOp(
-		testAllocator, defaultMemoryLimit, queueCfg,
-		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
-		leftMJSource, rightMJSource, typs, typs,
-		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc,
-	)
-	if err != nil {
-		t.Fatal("error in merge join op constructor", err)
-	}
-	mj.Init()
-	hj := NewHashJoiner(
-		testAllocator, testAllocator, HashJoinerSpec{
-			joinType: descpb.InnerJoin,
-			left: hashJoinerSourceSpec{
-				eqCols: []uint32{0}, sourceTypes: typs,
-			},
-			right: hashJoinerSourceSpec{
-				eqCols: []uint32{0}, sourceTypes: typs,
-			},
-		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets, defaultMemoryLimit,
-	)
-	hj.Init()
-
-	var mjOutputTuples, hjOutputTuples colexectestutils.Tuples
-	for b := mj.Next(ctx); b.Length() != 0; b = mj.Next(ctx) {
-		for i := 0; i < b.Length(); i++ {
-			mjOutputTuples = append(mjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
-		}
-	}
-	for b := hj.Next(ctx); b.Length() != 0; b = hj.Next(ctx) {
-		for i := 0; i < b.Length(); i++ {
-			hjOutputTuples = append(hjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
-		}
-	}
-	err = colexectestutils.AssertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
-	// Note that the error message can be extremely verbose (it
-	// might contain all output tuples), so we manually check that
-	// comparing err to nil returns true (if we were to use
-	// require.NoError, then the error message would be output).
-	require.True(t, err == nil)
-}
-
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps
 // track of the expected output to make sure the join output is batched
 // correctly.
@@ -1890,9 +1787,9 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				}
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-				a, err := NewMergeJoinOp(
-					testAllocator, defaultMemoryLimit,
-					queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+				a, err := colexecjoin.NewMergeJoinOp(
+					testAllocator, colexecop.DefaultMemoryLimit,
+					queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1966,9 +1863,9 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					}
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-					a, err := NewMergeJoinOp(
-						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+					a, err := colexecjoin.NewMergeJoinOp(
+						testAllocator, colexecop.DefaultMemoryLimit,
+						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2094,9 +1991,9 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, lCols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
-					a, err := NewMergeJoinOp(
-						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+					a, err := colexecjoin.NewMergeJoinOp(
+						testAllocator, colexecop.DefaultMemoryLimit,
+						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2129,141 +2026,6 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					}
 				}
 			}
-		}
-	}
-}
-
-func newBatchOfIntRows(nCols int, batch coldata.Batch, length int) coldata.Batch {
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < length; i++ {
-			col[i] = int64(i)
-		}
-	}
-
-	batch.SetLength(length)
-
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		vec := batch.ColVec(colIdx)
-		vec.Nulls().UnsetNulls()
-	}
-	return batch
-}
-
-func newBatchOfRepeatedIntRows(
-	nCols int, batch coldata.Batch, length int, numRepeats int,
-) coldata.Batch {
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < length; i++ {
-			col[i] = int64((i + 1) / numRepeats)
-		}
-	}
-
-	batch.SetLength(length)
-
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		vec := batch.ColVec(colIdx)
-		vec.Nulls().UnsetNulls()
-	}
-	return batch
-}
-
-func BenchmarkMergeJoiner(b *testing.B) {
-	ctx := context.Background()
-	const nCols = 1
-	sourceTypes := []*types.T{types.Int}
-
-	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
-	defer cleanup()
-	benchMemAccount := testMemMonitor.MakeBoundAccount()
-	defer benchMemAccount.Close(ctx)
-
-	getNewMergeJoiner := func(leftSource, rightSource colexecbase.Operator) colexecbase.Operator {
-		benchMemAccount.Clear(ctx)
-		base, err := newMergeJoinBase(
-			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
-			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-			testDiskAcc,
-		)
-		require.NoError(b, err)
-		return &mergeJoinInnerOp{mergeJoinBase: base}
-	}
-
-	regularBatchCreator := func(batchLength, _ int) coldata.Batch {
-		return newBatchOfIntRows(nCols, testAllocator.NewMemBatchWithMaxCapacity(sourceTypes), batchLength)
-	}
-	repeatedBatchCreator := func(batchLength, numRepeats int) coldata.Batch {
-		return newBatchOfRepeatedIntRows(nCols, testAllocator.NewMemBatchWithMaxCapacity(sourceTypes), batchLength, numRepeats)
-	}
-
-	for _, c := range []struct {
-		namePrefix        string
-		numRepeatsGetter  func(nRows int) int
-		leftBatchCreator  func(batchLength, numRepeats int) coldata.Batch
-		rightBatchCreator func(batchLength, numRepeats int) coldata.Batch
-	}{
-		// 1:1 join.
-		{
-			namePrefix: "",
-			numRepeatsGetter: func(nRows int) int {
-				// This value will be ignored.
-				return 0
-			},
-			leftBatchCreator:  regularBatchCreator,
-			rightBatchCreator: regularBatchCreator,
-		},
-		// Groups on the right side.
-		{
-			namePrefix: "oneSideRepeat-",
-			numRepeatsGetter: func(nRows int) int {
-				return nRows
-			},
-			leftBatchCreator:  regularBatchCreator,
-			rightBatchCreator: repeatedBatchCreator,
-		},
-		// Groups on both sides.
-		{
-			namePrefix: "bothSidesRepeat-",
-			numRepeatsGetter: func(nRows int) int {
-				return int(math.Sqrt(float64(nRows)))
-			},
-			leftBatchCreator:  repeatedBatchCreator,
-			rightBatchCreator: repeatedBatchCreator,
-		},
-	} {
-		rowsOptions := []int{32, 512, 4 * coldata.BatchSize(), 32 * coldata.BatchSize()}
-		if testing.Short() {
-			rowsOptions = []int{512, 4 * coldata.BatchSize()}
-		}
-		for _, nRows := range rowsOptions {
-			b.Run(fmt.Sprintf("%srows=%d", c.namePrefix, nRows), func(b *testing.B) {
-				batchLength := nRows
-				nBatches := 1
-				if nRows >= coldata.BatchSize() {
-					batchLength = coldata.BatchSize()
-					nBatches = nRows / coldata.BatchSize()
-				}
-				numRepeats := c.numRepeatsGetter(nRows)
-				leftBatch := c.leftBatchCreator(batchLength, numRepeats)
-				rightBatch := c.rightBatchCreator(batchLength, numRepeats)
-				// 8 (bytes / int64) * nRows * nCols (number of columns / row) * 2 (number of sources).
-				b.SetBytes(int64(8 * nRows * nCols * 2))
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					leftSource := colexectestutils.NewFiniteChunksSource(testAllocator, leftBatch, sourceTypes, nBatches, 1)
-					rightSource := colexectestutils.NewFiniteChunksSource(testAllocator, rightBatch, sourceTypes, nBatches, 1)
-					s := getNewMergeJoiner(leftSource, rightSource)
-					s.Init()
-
-					b.StartTimer()
-					for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
-					}
-					b.StopTimer()
-				}
-			})
 		}
 	}
 }

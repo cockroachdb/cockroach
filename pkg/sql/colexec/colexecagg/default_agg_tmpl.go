@@ -25,8 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -182,7 +182,7 @@ type default_AGGKINDAggAlloc struct {
 }
 
 var _ aggregateFuncAlloc = &default_AGGKINDAggAlloc{}
-var _ colexecbase.Closer = &default_AGGKINDAggAlloc{}
+var _ colexecop.Closer = &default_AGGKINDAggAlloc{}
 
 const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
 const default_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]default_AGGKINDAggAlloc{}))

@@ -23,7 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -192,14 +193,14 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := range toDrain {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
+				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
 					allocators,
 					hashRouterInput,
 					typs,
 					[]uint32{0},
 					64<<20,
 					queueCfg,
-					&colexecbase.TestingSemaphore{},
+					&colexecop.TestingSemaphore{},
 					diskAccounts,
 					toDrain,
 					nil, /* toClose */
@@ -218,7 +219,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					synchronizerInputs = append(
 						synchronizerInputs,
 						colexec.SynchronizerInput{
-							Op:              colexecbase.Operator(inbox),
+							Op:              colexecop.Operator(inbox),
 							MetadataSources: []execinfrapb.MetadataSource{inbox},
 						},
 					)
@@ -237,7 +238,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					ctx context.Context,
 					cancelFn context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
-					outboxInput colexecbase.Operator,
+					outboxInput colexecop.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
@@ -247,7 +248,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
-						[]colexecbase.Closer{callbackCloser{closeCb: func() error {
+						[]colexecop.Closer{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
 							idToClosed.Unlock()
@@ -303,7 +304,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							ctxRemote,
 							cancelRemote,
 							&outboxMemAccount,
-							colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs),
+							colexecop.NewRepeatableBatchSource(remoteAllocator, batch, typs),
 							inboxes[i],
 							streamID,
 							[]execinfrapb.MetadataSource{createMetadataSourceForID(streamID)},
@@ -312,7 +313,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					streamID++
 				}
 
-				var materializerInput colexecbase.Operator
+				var materializerInput colexecop.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
@@ -355,7 +356,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					typs,
 					nil, /* output */
 					[]execinfrapb.MetadataSource{materializerMetadataSource},
-					[]colexecbase.Closer{callbackCloser{closeCb: func() error {
+					[]colexecop.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */
