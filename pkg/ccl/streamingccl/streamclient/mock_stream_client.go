@@ -10,9 +10,9 @@ package streamclient
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // mockClient is a mock stream client.
@@ -29,7 +29,7 @@ func (m *mockClient) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Top
 
 // ConsumePartition implements the Client interface.
 func (m *mockClient) ConsumePartition(
-	ctx context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	ctx context.Context, _ streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)
 	go func() {

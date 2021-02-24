@@ -148,7 +148,7 @@ type TenantState struct {
 
 type ReplicationHelper struct {
 	SysServer serverutils.TestServerInterface
-	sysDB     *sqlutils.SQLRunner
+	SysDB     *sqlutils.SQLRunner
 	PGUrl     url.URL
 	Tenant    TenantState
 }
@@ -181,7 +181,7 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 
 	h := &ReplicationHelper{
 		SysServer: s,
-		sysDB:     sqlutils.MakeSQLRunner(db),
+		SysDB:     sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
 		Tenant: TenantState{
 			ID:    tenantID,

@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,7 +37,7 @@ func (sc testStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (sc testStreamClient) ConsumePartition(
-	_ context.Context, pa streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, pa streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -65,7 +64,7 @@ func ExampleClient() {
 		panic(err)
 	}
 
-	startTimestamp := timeutil.Now()
+	startTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
 	for _, partition := range topology.Partitions {
 		eventCh, err := client.ConsumePartition(context.Background(), partition, startTimestamp)
@@ -112,7 +111,8 @@ func TestImplementationsCloseChannel(t *testing.T) {
 
 	for _, impl := range impls {
 		ctx, cancel := context.WithCancel(context.Background())
-		eventCh, err := impl.ConsumePartition(ctx, "test://53/", timeutil.Now())
+		startTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		eventCh, err := impl.ConsumePartition(ctx, "test://53/", startTimestamp)
 		require.NoError(t, err)
 
 		// Ensure that the eventCh closes when the context is canceled.

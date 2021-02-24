@@ -259,11 +259,12 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 
 // ConsumePartition implements the Client interface.
 func (m *randomStreamClient) ConsumePartition(
-	ctx context.Context, partitionAddress streamingccl.PartitionAddress, startTime time.Time,
+	ctx context.Context, partitionAddress streamingccl.PartitionAddress, startTime hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)
 	now := timeutil.Now()
-	if startTime.After(now) {
+	startWalltime := timeutil.Unix(0 /* sec */, startTime.WallTime)
+	if startWalltime.After(now) {
 		panic("cannot start random stream client event stream in the future")
 	}
 

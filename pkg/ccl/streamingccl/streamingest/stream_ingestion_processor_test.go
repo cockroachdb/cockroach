@@ -60,7 +60,7 @@ func (m *mockStreamClient) GetTopology(
 
 // ConsumePartition implements the StreamClient interface.
 func (m *mockStreamClient) ConsumePartition(
-	_ context.Context, address streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, address streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -92,7 +92,7 @@ func (m *errorStreamClient) GetTopology(
 
 // ConsumePartition implements the StreamClient interface.
 func (m *errorStreamClient) ConsumePartition(
-	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, _ streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	return nil, errors.New("this client always returns an error")
 }

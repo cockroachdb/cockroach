@@ -11,7 +11,6 @@ package streamclient
 import (
 	"context"
 	"testing"
-	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"     // Ensure changefeed init hooks run.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
@@ -84,7 +83,8 @@ INSERT INTO d.t2 VALUES (2);
 	h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET a = 'привет' WHERE i = 42`)
 	h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'мир' WHERE i = 42`)
 
-	eventCh, err := client.ConsumePartition(ctx, pa, time.Unix(0, startTime.WallTime))
+	ctx, cancel := context.WithCancel(ctx)
+	eventCh, err := client.ConsumePartition(ctx, pa, startTime)
 	require.NoError(t, err)
 	feed := makeFeed(t, eventCh)
 
@@ -99,6 +99,7 @@ INSERT INTO d.t2 VALUES (2);
 	require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
 
 	feed.ObserveResolved(secondObserved.Value.Timestamp)
+	cancel()
 
 	// TODO: Stream a tenant that doesn't exist.
 }

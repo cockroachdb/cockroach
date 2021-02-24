@@ -10,9 +10,9 @@ package streamclient
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Client provides a way for the stream ingestion job to consume a
@@ -30,7 +30,7 @@ type Client interface {
 	// channel.
 	// TODO: Add an error channel so that the client can report any errors
 	// encountered while reading the stream.
-	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime time.Time) (chan streamingccl.Event, error)
+	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime hlc.Timestamp) (chan streamingccl.Event, error)
 }
 
 // NewStreamClient creates a new stream client based on the stream

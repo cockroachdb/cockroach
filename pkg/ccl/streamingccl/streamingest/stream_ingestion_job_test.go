@@ -10,19 +10,27 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -76,4 +84,73 @@ func TestStreamIngestionJobRollBack(t *testing.T) {
 	// did at the start.
 	sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 	sqlDB.CheckQueryResultsRetry(t, "SELECT count(*) FROM foo", [][]string{{"101"}})
+}
+
+// TestTenantStreaming tests that tenants can stream changes end-to-end.
+func TestTenantStreaming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Start server
+	source, sourceDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	// Make changefeeds run faster.
+	resetFreq := changefeedbase.TestingSetDefaultFlushFrequency(50 * time.Millisecond)
+
+	// Set required cluster settings.
+	_, err := sourceDB.Exec(`
+SET CLUSTER SETTING kv.rangefeed.enabled = true;
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
+SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
+`)
+	require.NoError(t, err)
+
+	defer func() {
+		resetFreq()
+		source.Stopper().Stop(ctx)
+	}()
+
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t)
+	defer cleanupDest()
+
+	// Prevent a logging assertion that the server ID is initialized multiple times.
+	log.TestingClearServerIdentifiers()
+
+	// Sink to read data from.
+	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupSink()
+
+	// Start tenant server
+	tenantID := roachpb.MakeTenantID(10)
+	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
+	defer tenantConn.Close()
+
+	var jobID int
+	hDest.SysDB.Exec(t, `SET enable_experimental_stream_replication = true`)
+	hDest.SysDB.QueryRow(t, fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`,
+		pgURL.String())).Scan(&jobID)
+	defer hDest.SysDB.Exec(t, fmt.Sprintf(`CANCEL JOB %d`, jobID))
+	// TODO: Get rid of these sleeps, after rebasing on the AOST branch.
+	time.Sleep(5 * time.Second)
+
+	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
+	sourceSQL.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.t1(i int primary key, a string, b string);
+CREATE TABLE d.t2(i int primary key);
+INSERT INTO d.t1 (i) VALUES (42);
+INSERT INTO d.t2 VALUES (2);
+`)
+
+	// TODO: Remove this time.Sleep when we can cutover in the future.
+	time.Sleep(5 * time.Second)
+	// TODO(pbardea): Cutover the job here and wait for it to succeed when
+	// rebased on cutover changes.
+
+	query := "SELECT * FROM d.t1"
+	sourceData := sourceSQL.QueryStr(t, query)
+	destData := hDest.Tenant.SQL.QueryStr(t, query)
+	require.Equal(t, sourceData, destData)
 }

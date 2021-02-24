@@ -92,7 +92,10 @@ func startReplication(
 	require.NoError(t, err)
 
 	queryCtx, cancel := context.WithCancel(context.Background())
-	rows, err := conn.QueryEx(queryCtx, create, nil, args...)
+	rows, err := conn.QueryEx(queryCtx, `SET enable_experimental_stream_replication = true`, nil, args...)
+	require.NoError(t, err)
+	rows.Close()
+	rows, err = conn.QueryEx(queryCtx, create, nil, args...)
 	require.NoError(t, err)
 	feedProvider := &pgConnReplicationFeed{
 		t:      t,
@@ -106,7 +109,6 @@ func startReplication(
 func TestReplicationStreamTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// h, cleanup := newReplicationHelper(t)
 	h, cleanup := streamingtest.NewReplicationHelper(t)
 	defer cleanup()
 
@@ -122,9 +124,9 @@ INSERT INTO d.t2 VALUES (2);
 		`CREATE REPLICATION STREAM FOR TENANT %d`, h.Tenant.ID.ToUint64())
 
 	t.Run("cannot-stream-tenant-from-tenant", func(t *testing.T) {
-		// Cannot replicate stream from inside the tenant
 		_, err := h.Tenant.SQL.DB.ExecContext(context.Background(), `SET enable_experimental_stream_replication = true`)
 		require.NoError(t, err)
+		// Cannot replicate stream from inside the tenant
 		_, err = h.Tenant.SQL.DB.ExecContext(context.Background(), streamTenantQuery)
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})

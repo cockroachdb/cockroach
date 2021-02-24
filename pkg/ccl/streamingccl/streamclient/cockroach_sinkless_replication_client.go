@@ -13,13 +13,11 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +39,7 @@ func (m *sinklessReplicationClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (m *sinklessReplicationClient) ConsumePartition(
-	ctx context.Context, pa streamingccl.PartitionAddress, startTime time.Time,
+	ctx context.Context, pa streamingccl.PartitionAddress, startTime hlc.Timestamp,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)
 
@@ -60,27 +58,34 @@ func (m *sinklessReplicationClient) ConsumePartition(
 	}
 
 	streamTenantQuery := fmt.Sprintf(
-		`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%d'`, tenantID, startTime.UnixNano())
+		`CREATE REPLICATION STREAM FOR TENANT %d`, tenantID)
+	if startTime.WallTime != 0 {
+		streamTenantQuery = fmt.Sprintf(
+			`CREATE REPLICATION STREAM FOR TENANT %d WITH cursor='%s'`, tenantID, startTime.AsOfSystemTime())
+	}
 
-	// Use pgx directly instead of database/sql so we can close the conn
-	// (instead of returning it to the pool).
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := pgx.Connect(pgxConfig)
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryEx(ctx, streamTenantQuery, nil /* options */)
+
+	_, err = conn.QueryContext(ctx, `SET enable_experimental_stream_replication = true`)
 	if err != nil {
 		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, streamTenantQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating source replication stream")
 	}
 
 	go func() {
 		defer close(eventCh)
-		defer conn.Close()
+		defer db.Close()
 		defer rows.Close()
 		for rows.Next() {
 			var ignoreTopic gosql.NullString
@@ -107,11 +112,16 @@ func (m *sinklessReplicationClient) ConsumePartition(
 				}
 				event = streamingccl.MakeKVEvent(kv)
 			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				// Put ctx.Err() on the err channel.
-				panic("context cancel")
 				return
 			}
 		}
