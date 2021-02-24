@@ -1132,7 +1132,7 @@ func TestLint(t *testing.T) {
 			":!bench/cmd",
 			":!sql/opt/optgen",
 			":!sql/colexec/execgen",
-			":!roachpb/gen_batch.go",
+			":!roachpb/gen/main.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1239,7 +1239,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
-			stream.GrepNot(`^util/timeutil/lowercase_timezones.go$`),
+			stream.GrepNot(`^util/timeutil/lowercase_timezones_generated.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
@@ -1448,6 +1448,9 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/(base|release|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lex/allkeywords: log$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/util/timeutil/gen: log$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/roachpb/gen: log$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/util/log/gen: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
