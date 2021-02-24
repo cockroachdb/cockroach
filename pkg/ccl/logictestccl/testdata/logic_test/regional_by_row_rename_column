@@ -83,48 +83,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_as]
 ----
 CREATE TABLE public.regional_by_row_table_as (
-  pk INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  cr public.crdb_internal_region NOT NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::public.crdb_internal_region ELSE 'ap-southeast-2':::public.crdb_internal_region END) STORED,
-  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-  INDEX regional_by_row_table_as_a_idx (a ASC),
-  UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
-  FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, cr)
-) LOCALITY REGIONAL BY ROW AS cr;
-ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ap-southeast-2: 2}',
-  lease_preferences = '[[+region=ap-southeast-2]]';
-ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ap-southeast-2: 2}',
-  lease_preferences = '[[+region=ap-southeast-2]]';
-ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ap-southeast-2: 2}',
-  lease_preferences = '[[+region=ap-southeast-2]]';
-ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ca-central-1: 2}',
-  lease_preferences = '[[+region=ca-central-1]]';
-ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ca-central-1: 2}',
-  lease_preferences = '[[+region=ca-central-1]]';
-ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=ca-central-1: 2}',
-  lease_preferences = '[[+region=ca-central-1]]';
-ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=us-east-1: 2}',
-  lease_preferences = '[[+region=us-east-1]]';
-ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=us-east-1: 2}',
-  lease_preferences = '[[+region=us-east-1]]';
-ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
-  num_voters = 5,
-  voter_constraints = '{+region=us-east-1: 2}',
-  lease_preferences = '[[+region=us-east-1]]'
+                                  pk INT8 NOT NULL,
+                                  a INT8 NULL,
+                                  b INT8 NULL,
+                                  cr public.crdb_internal_region NOT NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::public.crdb_internal_region ELSE 'ap-southeast-2':::public.crdb_internal_region END) STORED,
+                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                  INDEX regional_by_row_table_as_a_idx (a ASC),
+                                  UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
+                                  FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, cr)
+) LOCALITY REGIONAL BY ROW AS cr
