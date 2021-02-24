@@ -54,17 +54,18 @@ func TestRoundtripJob(t *testing.T) {
 	registry := s.JobRegistry().(*jobs.Registry)
 	defer s.Stopper().Stop(ctx)
 
+	jobID := registry.MakeJobID()
 	storedJob := registry.NewJob(jobs.Record{
 		Description:   "beep boop",
 		Username:      security.MakeSQLUsernameFromPreNormalizedString("robot"),
 		DescriptorIDs: descpb.IDs{42},
 		Details:       jobspb.RestoreDetails{},
 		Progress:      jobspb.RestoreProgress{},
-	})
+	}, jobID)
 	if err := storedJob.Created(ctx); err != nil {
 		t.Fatal(err)
 	}
-	retrievedJob, err := registry.LoadJob(ctx, *storedJob.ID())
+	retrievedJob, err := registry.LoadJob(ctx, jobID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 				case <-done:
 				}
 				lock.Lock()
-				resumeCounts[*job.ID()]++
+				resumeCounts[job.ID()]++
 				lock.Unlock()
 				select {
 				case <-ctx.Done():
@@ -177,14 +178,14 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 			Details:  jobspb.BackupDetails{},
 			Progress: jobspb.BackupProgress{},
 		}
-		job, err := newRegistry(nodeid).CreateAndStartJob(ctx, nil, rec)
+		job, err := jobs.TestingCreateAndStartJob(ctx, newRegistry(nodeid), db, rec)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// Wait until the job is running.
 		<-resumeCalled
 		lock.Lock()
-		jobMap[nodeid] = *job.ID()
+		jobMap[nodeid] = job.ID()
 		lock.Unlock()
 	}
 
@@ -271,7 +272,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case resumeCh <- *job.ID():
+				case resumeCh <- job.ID():
 					return nil
 				}
 			},

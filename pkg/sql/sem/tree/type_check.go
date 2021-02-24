@@ -590,7 +590,11 @@ func (expr *CollateExpr) TypeCheck(
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t.Family() == types.UnknownFamily {
+	if types.IsStringType(t) {
+		expr.Expr = subExpr
+		expr.typ = types.MakeCollatedString(t, expr.Locale)
+		return expr, nil
+	} else if t.Family() == types.UnknownFamily {
 		expr.Expr = subExpr
 		expr.typ = types.MakeCollatedString(types.String, expr.Locale)
 		return expr, nil

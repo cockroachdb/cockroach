@@ -25,7 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -133,7 +134,7 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 	sortCol       _GOTYPESLICE
 	nulls         *coldata.Nulls
 	order         []int
-	cancelChecker CancelChecker
+	cancelChecker colexecutils.CancelChecker
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {

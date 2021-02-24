@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -143,7 +143,7 @@ func TestSort(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, tc := range sortAllTestCases {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
 			})
 	}
@@ -170,7 +170,7 @@ func TestSortRandomized(t *testing.T) {
 				if topK {
 					expected = expected[:k]
 				}
-				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
 						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k)), nil
 					}
@@ -256,7 +256,7 @@ func TestAllSpooler(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, func(t *testing.T, input []colexecbase.Operator) {
+		colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, func(t *testing.T, input []colexecop.Operator) {
 			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
@@ -311,7 +311,7 @@ func BenchmarkSort(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
-						var sorter colexecbase.Operator
+						var sorter colexecop.Operator
 						if topK {
 							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
 						} else {

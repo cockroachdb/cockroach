@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -964,6 +965,14 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
 
+	// Read the prior read summary for this range, which was included in the
+	// snapshot. We may need to use it to bump our timestamp cache if we
+	// discover that we are the leaseholder as of the snapshot's log index.
+	prioReadSum, err := readsummary.Load(ctx, r.store.engine, r.RangeID)
+	if err != nil {
+		log.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
+	}
+
 	// Atomically swap the placeholder, if any, for the replica, and update the
 	// replica's state. Note that this is intentionally in one critical section.
 	// to avoid exposing an inconsistent in-memory state. We did however already
@@ -1011,7 +1020,16 @@ func (r *Replica) applySnapshot(
 	// replica according to whether it holds the lease. We allow jumps in the
 	// lease sequence because there may be multiple lease changes accounted for
 	// in the snapshot.
-	r.leasePostApplyLocked(ctx, lastKnownLease, s.Lease /* newLease */, allowLeaseJump)
+	r.leasePostApplyLocked(ctx, lastKnownLease, s.Lease /* newLease */, prioReadSum, allowLeaseJump)
+
+	// Similarly, if we subsumed any replicas through the snapshot (meaning that
+	// we missed the application of a merge) and we are the new leaseholder, we
+	// make sure to update the timestamp cache using the prior read summary to
+	// account for any reads that were served on the right-hand side range(s).
+	if len(subsumedRepls) > 0 && s.Lease.Replica.ReplicaID == r.mu.replicaID && prioReadSum != nil {
+		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), *prioReadSum)
+	}
+
 	// Inform the concurrency manager that this replica just applied a snapshot.
 	r.concMgr.OnReplicaSnapshotApplied()
 

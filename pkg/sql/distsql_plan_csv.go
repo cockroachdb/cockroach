@@ -125,7 +125,7 @@ func makeImportReaderSpecs(
 				Tables: tables,
 				Format: format,
 				Progress: execinfrapb.JobProgress{
-					JobID: *job.ID(),
+					JobID: job.ID(),
 					Slot:  int32(i),
 				},
 				WalltimeNanos: walltime,

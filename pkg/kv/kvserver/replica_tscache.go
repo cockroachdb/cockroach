@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -23,19 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
-
-// setTimestampCacheLowWaterMark updates the low water mark of the timestamp
-// cache to the provided timestamp for all key ranges owned by the provided
-// Range descriptor. This ensures that no future writes in either the local or
-// global keyspace are allowed at times equal to or earlier than this timestamp,
-// which could invalidate prior reads.
-func setTimestampCacheLowWaterMark(
-	tc tscache.Cache, desc *roachpb.RangeDescriptor, ts hlc.Timestamp,
-) {
-	for _, keyRange := range rditer.MakeReplicatedKeyRangesExceptLockTable(desc) {
-		tc.SetLowWater(keyRange.Start.Key, keyRange.End.Key, ts)
-	}
-}
 
 // addToTSCacheChecked adds the specified timestamp to the timestamp cache
 // covering the range of keys from start to end. Before doing so, the function
@@ -550,4 +537,50 @@ func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // in case the push happens before there's a transaction record.
 func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-push")...)
+}
+
+// GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
+// by the range to this point.
+func (r *Replica) GetCurrentReadSummary() rspb.ReadSummary {
+	sum := collectReadSummaryFromTimestampCache(r.store.tsCache, r.Desc())
+	// Forward the read summary by the range's closed timestamp, because any
+	// replica could have served reads below this time.
+	sum.Merge(rspb.FromTimestamp(r.GetFrozenClosedTimestamp()))
+	return sum
+}
+
+// collectReadSummaryFromTimestampCache constucts a read summary for the range
+// with the specified descriptor using the timestamp cache.
+func collectReadSummaryFromTimestampCache(
+	tc tscache.Cache, desc *roachpb.RangeDescriptor,
+) rspb.ReadSummary {
+	var s rspb.ReadSummary
+	s.Local.LowWater, _ = tc.GetMax(
+		keys.MakeRangeKeyPrefix(desc.StartKey),
+		keys.MakeRangeKeyPrefix(desc.EndKey),
+	)
+	s.Global.LowWater, _ = tc.GetMax(
+		desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(),
+	)
+	return s
+}
+
+// applyReadSummaryToTimestampCache updates the timestamp cache to reflect the
+// reads present in the provided read summary. This ensures that no future
+// writes in either the local or global keyspace are allowed to invalidate
+// ("write underneath") prior reads.
+func applyReadSummaryToTimestampCache(
+	tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
+) {
+	tc.SetLowWater(
+		keys.MakeRangeKeyPrefix(desc.StartKey),
+		keys.MakeRangeKeyPrefix(desc.EndKey),
+		s.Local.LowWater,
+	)
+	tc.SetLowWater(
+		desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(),
+		s.Global.LowWater,
+	)
 }

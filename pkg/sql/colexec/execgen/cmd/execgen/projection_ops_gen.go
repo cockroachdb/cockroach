@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const projConstOpsTmpl = "pkg/sql/colexec/proj_const_ops_tmpl.go"
+const projConstOpsTmpl = "pkg/sql/colexec/colexecproj/proj_const_ops_tmpl.go"
 
 // replaceProjTmplVariables replaces template variables used in the templates
 // for projection operators. It should only be used within this file.
@@ -79,7 +79,7 @@ func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 	return replaceProjTmplVariables(tmpl)
 }
 
-const projNonConstOpsTmpl = "pkg/sql/colexec/proj_non_const_ops_tmpl.go"
+const projNonConstOpsTmpl = "pkg/sql/colexec/colexecproj/proj_non_const_ops_tmpl.go"
 
 // genProjNonConstOps is the generator for projection operators on two vectors.
 func genProjNonConstOps(inputFileContents string, wr io.Writer) error {

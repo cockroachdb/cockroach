@@ -31,14 +31,16 @@ import (
 
 const minNumRegionsForSurviveRegionGoal = 3
 
-type liveClusterRegions map[descpb.RegionName]struct{}
+// LiveClusterRegions is a set representing regions that are live in
+// a given cluster.
+type LiveClusterRegions map[descpb.RegionName]struct{}
 
-func (s *liveClusterRegions) isActive(region descpb.RegionName) bool {
+func (s *LiveClusterRegions) isActive(region descpb.RegionName) bool {
 	_, ok := (*s)[region]
 	return ok
 }
 
-func (s *liveClusterRegions) toStrings() []string {
+func (s *LiveClusterRegions) toStrings() []string {
 	ret := make([]string, 0, len(*s))
 	for region := range *s {
 		ret = append(ret, string(region))
@@ -52,7 +54,7 @@ func (s *liveClusterRegions) toStrings() []string {
 // getLiveClusterRegions returns a set of live region names in the cluster.
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.
-func (p *planner) getLiveClusterRegions(ctx context.Context) (liveClusterRegions, error) {
+func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions, error) {
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx,
 		"get_live_cluster_regions",
@@ -66,16 +68,16 @@ func (p *planner) getLiveClusterRegions(ctx context.Context) (liveClusterRegions
 		return nil, err
 	}
 
-	var ret liveClusterRegions = make(map[descpb.RegionName]struct{}, len(rows))
+	var ret LiveClusterRegions = make(map[descpb.RegionName]struct{}, len(rows))
 	for _, row := range rows {
 		ret[descpb.RegionName(*row[0].(*tree.DString))] = struct{}{}
 	}
 	return ret, nil
 }
 
-// checkLiveClusterRegion checks whether a region can be added to a database
+// CheckLiveClusterRegion checks whether a region can be added to a database
 // based on whether the cluster regions are alive.
-func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb.RegionName) error {
+func CheckLiveClusterRegion(liveClusterRegions LiveClusterRegions, region descpb.RegionName) error {
 	if !liveClusterRegions.isActive(region) {
 		return errors.WithHintf(
 			pgerror.Newf(
@@ -323,15 +325,6 @@ func synthesizeVoterConstraints(
 	}
 }
 
-var multiRegionZoneConfigFields = []tree.Name{
-	"global_reads",
-	"num_replicas",
-	"num_voters",
-	"constraints",
-	"voter_constraints",
-	"lease_preferences",
-}
-
 // zoneConfigForMultiRegionTable generates a ZoneConfig stub for a
 // regional-by-table or global table in a multi-region database.
 //
@@ -344,7 +337,7 @@ var multiRegionZoneConfigFields = []tree.Name{
 // configuration is required.
 //
 // Relevant multi-region configured fields (as defined in
-// `multiRegionZoneConfigFields`) will be overwritten by the calling function
+// `zonepb.MultiRegionZoneConfigFields`) will be overwritten by the calling function
 // into an existing ZoneConfig.
 func zoneConfigForMultiRegionTable(
 	localityConfig descpb.TableDescriptor_LocalityConfig,
@@ -482,7 +475,7 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 		if err != nil {
 			return false, zonepb.ZoneConfig{}, err
 		}
-		zc.CopyFromZone(*localityZoneConfig, multiRegionZoneConfigFields)
+		zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 		return false, zc, nil
 	}
 }
@@ -503,7 +496,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	if err != nil {
 		return false, zonepb.ZoneConfig{}, err
 	}
-	zc.CopyFromZone(*localityZoneConfig, multiRegionZoneConfigFields)
+	zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
 	if hasNewSubzones {

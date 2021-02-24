@@ -133,6 +133,8 @@ go_library(
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/kv/kvserver/rditer",
+        "//pkg/kv/kvserver/readsummary",
+        "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/split",
         "//pkg/kv/kvserver/stateloader",

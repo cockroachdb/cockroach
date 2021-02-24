@@ -23,8 +23,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,11 +36,11 @@ import (
 
 func New_OPERATIONProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -82,12 +82,12 @@ func New_OPERATIONProjOp(
 
 type _OP_LOWERProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     colexecop.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -104,10 +104,10 @@ type _OP_LOWERProjOp struct {
 // outputIdx.
 func new_OP_TITLEProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &_OP_LOWERProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -170,7 +170,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
+	o.leftFeedOp.SetBatch(batch)
 	batch = o.leftProjOpChain.Next(ctx)
 
 	// Now we need to populate a selection vector on the batch in such a way that
@@ -243,7 +243,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
+		o.rightFeedOp.SetBatch(batch)
 		batch = o.rightProjOpChain.Next(ctx)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()

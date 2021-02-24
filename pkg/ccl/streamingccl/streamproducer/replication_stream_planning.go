@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // replicationStreamEval is a representation of tree.ReplicationStream, prepared
@@ -166,6 +167,19 @@ var replicationStreamHeader = colinfo.ResultColumns{
 func createReplicationStreamHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+	if !p.SessionData().EnableStreamReplication {
+		return nil, nil, nil, false, errors.WithTelemetry(
+			pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.Newf("stream replication is only supported experimentally"),
+					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
+				),
+				pgcode.FeatureNotSupported,
+			),
+			"replication.create.disabled",
+		)
+	}
+
 	stream, ok := stmt.(*tree.ReplicationStream)
 	if !ok {
 		return nil, nil, nil, false, nil

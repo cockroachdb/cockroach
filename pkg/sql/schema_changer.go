@@ -480,13 +480,14 @@ func startGCJob(
 	details jobspb.SchemaChangeGCDetails,
 ) error {
 	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
+	jobID := jobRegistry.MakeJobID()
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
+		_, err := jobRegistry.CreateJobWithTxn(ctx, jobRecord, jobID, txn)
 		return err
 	}); err != nil {
 		return err
 	}
-	// TODO (lucy): Add logging once we create the job ID outside the txn closure.
+	log.Infof(ctx, "starting GC job %d", jobID)
 	return jobRegistry.NotifyToAdoptJobs(ctx)
 }
 
@@ -820,13 +821,13 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 }
 
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
-	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
+	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
 		return errReverse
 	}
 
 	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
-		if err := fn(*sc.job.ID()); err != nil {
+		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -840,6 +841,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// Check if the target table needs to be cleaned up at all. If the target
 	// table was in the ADD state and the schema change failed, then we need to
 	// clean up the descriptor.
+	gcJobID := sc.jobRegistry.MakeJobID()
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
@@ -877,14 +879,14 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 				},
 			},
 		)
-		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn); err != nil {
+		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
 		}
 		return txn.Run(ctx, b)
 	}); err != nil {
 		return err
 	}
-	// TODO (lucy): Add logging once we create the job ID outside the txn closure.
+	log.Infof(ctx, "starting GC job %d", gcJobID)
 	return sc.jobRegistry.NotifyToAdoptJobs(ctx)
 }
 
@@ -981,11 +983,11 @@ func (sc *SchemaChanger) createIndexGCJob(
 	}
 
 	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
-	indexGCJob, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn)
-	if err != nil {
+	jobID := sc.jobRegistry.MakeJobID()
+	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
 		return err
 	}
-	log.Infof(ctx, "created index GC job %d", *indexGCJob.ID())
+	log.Infof(ctx, "created index GC job %d", jobID)
 	return nil
 }
 
@@ -1535,7 +1537,7 @@ func (sc *SchemaChanger) refreshStats() {
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError error) error {
 	if fn := sc.testingKnobs.RunBeforeMutationReversal; fn != nil {
-		if err := fn(*sc.job.ID()); err != nil {
+		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2142,7 +2144,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		return nil
 	}
 	if fn := p.ExecCfg().SchemaChangerTestingKnobs.RunBeforeResume; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2336,7 +2338,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	}
 
 	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2397,7 +2399,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	}
 
 	if fn := sc.testingKnobs.RunAfterOnFailOrCancel; fn != nil {
-		if err := fn(*r.job.ID()); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -2445,14 +2447,14 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		job, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
-		if err != nil {
+		jobID := sc.jobRegistry.MakeJobID()
+		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, jobID, txn); err != nil {
 			return err
 		}
-		log.Infof(ctx, "created job %d to drop previous columns and indexes", *job.ID())
+		log.Infof(ctx, "created job %d to drop previous columns and indexes", jobID)
 		scDesc.MutationJobs = append(scDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
-			JobID:      *job.ID(),
+			JobID:      jobID,
 		})
 	}
 	return nil

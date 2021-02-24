@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -33,7 +33,7 @@ type unorderedSynchronizerMsg struct {
 	meta     []execinfrapb.ProducerMetadata
 }
 
-var _ colexecbase.Operator = &ParallelUnorderedSynchronizer{}
+var _ colexecop.Operator = &ParallelUnorderedSynchronizer{}
 var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
 
 type parallelUnorderedSynchronizerState int
@@ -107,22 +107,22 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 	return s.inputs[nth].Op
 }
 
-// SynchronizerInput is a wrapper over a colexecbase.Operator that a
+// SynchronizerInput is a wrapper over a colexecop.Operator that a
 // synchronizer goroutine will be calling Next on. An accompanying
 // []execinfrapb.MetadataSource may also be specified, in which case
 // DrainMeta will be called from the same goroutine.
 type SynchronizerInput struct {
 	// Op is the input Operator.
-	Op colexecbase.Operator
+	Op colexecop.Operator
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
 	MetadataSources execinfrapb.MetadataSources
 	// ToClose are Closers in the input tree that should be closed in the same
 	// goroutine as Op.
-	ToClose colexecbase.Closers
+	ToClose colexecop.Closers
 }
 
-func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
+func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput {
 	result := make([]SynchronizerInput, len(ops))
 	for i := range result {
 		result[i].Op = ops[i]

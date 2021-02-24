@@ -2116,7 +2116,8 @@ func TestJobStatusResponse(t *testing.T) {
 	require.Nil(t, response)
 
 	ctx := context.Background()
-	job, err := ts.JobRegistry().(*jobs.Registry).CreateJobWithTxn(
+	jr := ts.JobRegistry().(*jobs.Registry)
+	job, err := jr.CreateJobWithTxn(
 		ctx,
 		jobs.Record{
 			Description: "testing",
@@ -2140,16 +2141,17 @@ func TestJobStatusResponse(t *testing.T) {
 			Progress:      jobspb.ImportProgress{},
 			DescriptorIDs: []descpb.ID{1, 2, 3},
 		},
+		jr.MakeJobID(),
 		nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.JobId = *job.ID()
+	request.JobId = job.ID()
 	response, err = client.JobStatus(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	require.Equal(t, *job.ID(), response.Job.Id)
+	require.Equal(t, job.ID(), response.Job.Id)
 	require.Equal(t, job.Payload(), *response.Job.Payload)
 	require.Equal(t, job.Progress(), *response.Job.Progress)
 }

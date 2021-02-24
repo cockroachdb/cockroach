@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -125,15 +125,15 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 // and returns the next batch from the input on every even-numbered (i.e. it
 // becomes a noop for those iterations). Used for tests only.
 type testVectorizedInternalPanicEmitter struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	emitBatch bool
 }
 
-var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colexecop.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestVectorizedInternalPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
+func newTestVectorizedInternalPanicEmitter(input colexecop.Operator) colexecop.Operator {
 	return &testVectorizedInternalPanicEmitter{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 	}
 }
 
@@ -158,15 +158,15 @@ func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.B
 // function. Used for tests only. It is the only colexec.Operator panics from
 // which are not caught.
 type testNonVectorizedPanicEmitter struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	emitBatch bool
 }
 
-var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colexecop.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestNonVectorizedPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
+func newTestNonVectorizedPanicEmitter(input colexecop.Operator) colexecop.Operator {
 	return &testNonVectorizedPanicEmitter{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 	}
 }
 

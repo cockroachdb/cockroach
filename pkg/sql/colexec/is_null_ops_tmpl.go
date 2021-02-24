@@ -24,14 +24,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type isNullProjBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -45,14 +46,14 @@ type isNullProjBase struct {
 // (we either have IS NULL or IS NOT NULL with tuple type as the input vector).
 func NewIsNullProjOp(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	colIdx, outputIdx int,
 	negate bool,
 	isTupleNull bool,
-) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
+) colexecop.Operator {
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
@@ -75,7 +76,7 @@ type is_KINDNullProjOp struct {
 	isNullProjBase
 }
 
-var _ colexecbase.Operator = &is_KINDNullProjOp{}
+var _ colexecop.Operator = &is_KINDNullProjOp{}
 
 func (o *is_KINDNullProjOp) Init() {
 	o.Input.Init()
@@ -158,7 +159,7 @@ func _COMPUTE_IS_NULL(
 } // */}}
 
 type isNullSelBase struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	colIdx int
 	negate bool
 }
@@ -169,10 +170,10 @@ type isNullSelBase struct {
 // - isTupleNull indicates whether special "is tuple null" version is needed
 // (we either have IS NULL or IS NOT NULL with tuple type as the input vector).
 func NewIsNullSelOp(
-	input colexecbase.Operator, colIdx int, negate bool, isTupleNull bool,
-) colexecbase.Operator {
+	input colexecop.Operator, colIdx int, negate bool, isTupleNull bool,
+) colexecop.Operator {
 	base := isNullSelBase{
-		OneInputNode: colexecbase.NewOneInputNode(input),
+		OneInputNode: colexecop.NewOneInputNode(input),
 		colIdx:       colIdx,
 		negate:       negate,
 	}
@@ -191,7 +192,7 @@ type is_KINDNullSelOp struct {
 	isNullSelBase
 }
 
-var _ colexecbase.Operator = &is_KINDNullSelOp{}
+var _ colexecop.Operator = &is_KINDNullSelOp{}
 
 func (o *is_KINDNullSelOp) Init() {
 	o.Input.Init()

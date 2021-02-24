@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -162,7 +163,24 @@ func Subsume(
 	// ts cache if LHS/RHS leases are not collocated. The case when the leases are
 	// collocated also works out because then the closed timestamp (according to
 	// the old mechanism) is the same for both ranges being merged.
-	reply.ClosedTimestamp = cArgs.EvalCtx.FrozenClosedTimestamp(ctx)
+	reply.ClosedTimestamp = cArgs.EvalCtx.GetFrozenClosedTimestamp()
+	// Collect a read summary from the RHS leaseholder to ship to the LHS
+	// leaseholder. This is used to instruct the LHS on how to update its
+	// timestamp cache to ensure that no future writes are allowed to invalidate
+	// prior reads performed to this point on the RHS range.
+	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary()
+	// For now, forward this summary to the freeze time. This may appear to
+	// undermine the benefit of the read summary, but it doesn't entirely. Until
+	// we ship higher-resolution read summaries, the read summary doesn't
+	// provide much value in avoiding transaction retries, but it is necessary
+	// for correctness if the RHS has served reads at future times above the
+	// freeze time.
+	//
+	// We can remove this in the future when we increase the resolution of read
+	// summaries and have a per-range closed timestamp system that is easier to
+	// think about.
+	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
+	reply.ReadSummary = &priorReadSum
 
 	return result.Result{
 		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},

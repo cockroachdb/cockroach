@@ -134,7 +134,7 @@ func (r *Buffer) RemoveLast() {
 	}
 }
 
-// Reserve reserves the provided number of elemnets in the Buffer. It is an
+// Reserve reserves the provided number of elements in the Buffer. It is an
 // error to reserve a size less than the Buffer's current length.
 func (r *Buffer) Reserve(n int) {
 	if n < r.Len() {

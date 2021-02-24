@@ -147,11 +147,11 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.distinctChainOps
+│     └ *colexecbase.distinctChainOps
 │       └ *colexec.ParallelUnorderedSynchronizer
 │         ├ *colexec.countOp
-│         │ └ *colexec.simpleProjectOp
-│         │   └ *colexec.CancelChecker
+│         │ └ *colexecbase.simpleProjectOp
+│         │   └ *colexecutils.CancelChecker
 │         │     └ *colfetcher.ColBatchScan
 │         ├ *colrpc.Inbox
 │         ├ *colrpc.Inbox
@@ -159,31 +159,31 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│       └ *colexecbase.simpleProjectOp
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│       └ *colexecbase.simpleProjectOp
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
-│         └ *colexec.CancelChecker
+│       └ *colexecbase.simpleProjectOp
+│         └ *colexecutils.CancelChecker
 │           └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colexec.deselectorOp
+    └ *colexecutils.deselectorOp
       └ *colexec.countOp
-        └ *colexec.simpleProjectOp
-          └ *colexec.CancelChecker
+        └ *colexecbase.simpleProjectOp
+          └ *colexecutils.CancelChecker
             └ *colfetcher.ColBatchScan
 
 query T
@@ -193,25 +193,25 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.distinctChainOps
+│     └ *colexecbase.distinctChainOps
 │       └ *colexec.ParallelUnorderedSynchronizer
 │         ├ *colexec.countOp
-│         │ └ *colexec.simpleProjectOp
+│         │ └ *colexecbase.simpleProjectOp
 │         │   └ *colexec.diskSpillerBase
-│         │     ├ *colexec.hashJoiner
+│         │     ├ *colexecjoin.hashJoiner
 │         │     │ ├ *colexec.ParallelUnorderedSynchronizer
-│         │     │ │ ├ *colexec.routerOutputOp
-│         │     │ │ │ └ *colexec.HashRouter
-│         │     │ │ │   └ *colexec.CancelChecker
+│         │     │ │ ├ *colflow.routerOutputOp
+│         │     │ │ │ └ *colflow.HashRouter
+│         │     │ │ │   └ *colexecutils.CancelChecker
 │         │     │ │ │     └ *colfetcher.ColBatchScan
 │         │     │ │ ├ *colrpc.Inbox
 │         │     │ │ ├ *colrpc.Inbox
 │         │     │ │ ├ *colrpc.Inbox
 │         │     │ │ └ *colrpc.Inbox
 │         │     │ └ *colexec.ParallelUnorderedSynchronizer
-│         │     │   ├ *colexec.routerOutputOp
-│         │     │   │ └ *colexec.HashRouter
-│         │     │   │   └ *colexec.CancelChecker
+│         │     │   ├ *colflow.routerOutputOp
+│         │     │   │ └ *colflow.HashRouter
+│         │     │   │   └ *colexecutils.CancelChecker
 │         │     │   │     └ *colfetcher.ColBatchScan
 │         │     │   ├ *colrpc.Inbox
 │         │     │   ├ *colrpc.Inbox
@@ -228,25 +228,25 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colexec.routerOutputOp
-│           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ ├ *colflow.routerOutputOp
+│           │ │ │ └ *colflow.HashRouter
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
 │           │ │ └ *colrpc.Inbox
 │           │ └ *colexec.ParallelUnorderedSynchronizer
 │           │   ├ *colrpc.Inbox
-│           │   ├ *colexec.routerOutputOp
-│           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   ├ *colflow.routerOutputOp
+│           │   │ └ *colflow.HashRouter
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colrpc.Inbox
@@ -258,26 +258,26 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colexec.routerOutputOp
-│           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ ├ *colflow.routerOutputOp
+│           │ │ │ └ *colflow.HashRouter
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ ├ *colrpc.Inbox
 │           │ │ └ *colrpc.Inbox
 │           │ └ *colexec.ParallelUnorderedSynchronizer
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colrpc.Inbox
-│           │   ├ *colexec.routerOutputOp
-│           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   ├ *colflow.routerOutputOp
+│           │   │ └ *colflow.HashRouter
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   ├ *colrpc.Inbox
 │           │   └ *colrpc.Inbox
@@ -288,27 +288,27 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colexec.deselectorOp
+│   └ *colexecutils.deselectorOp
 │     └ *colexec.countOp
-│       └ *colexec.simpleProjectOp
+│       └ *colexecbase.simpleProjectOp
 │         └ *colexec.diskSpillerBase
-│           ├ *colexec.hashJoiner
+│           ├ *colexecjoin.hashJoiner
 │           │ ├ *colexec.ParallelUnorderedSynchronizer
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
 │           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colexec.routerOutputOp
-│           │ │ │ └ *colexec.HashRouter
-│           │ │ │   └ *colexec.CancelChecker
+│           │ │ ├ *colflow.routerOutputOp
+│           │ │ │ └ *colflow.HashRouter
+│           │ │ │   └ *colexecutils.CancelChecker
 │           │ │ │     └ *colfetcher.ColBatchScan
 │           │ │ └ *colrpc.Inbox
 │           │ └ *colexec.ParallelUnorderedSynchronizer
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colrpc.Inbox
 │           │   ├ *colrpc.Inbox
-│           │   ├ *colexec.routerOutputOp
-│           │   │ └ *colexec.HashRouter
-│           │   │   └ *colexec.CancelChecker
+│           │   ├ *colflow.routerOutputOp
+│           │   │ └ *colflow.HashRouter
+│           │   │   └ *colexecutils.CancelChecker
 │           │   │     └ *colfetcher.ColBatchScan
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
@@ -318,28 +318,28 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             └ *colexec.bufferExportingOperator
 └ Node 5
   └ *colrpc.Outbox
-    └ *colexec.deselectorOp
+    └ *colexecutils.deselectorOp
       └ *colexec.countOp
-        └ *colexec.simpleProjectOp
+        └ *colexecbase.simpleProjectOp
           └ *colexec.diskSpillerBase
-            ├ *colexec.hashJoiner
+            ├ *colexecjoin.hashJoiner
             │ ├ *colexec.ParallelUnorderedSynchronizer
             │ │ ├ *colrpc.Inbox
             │ │ ├ *colrpc.Inbox
             │ │ ├ *colrpc.Inbox
             │ │ ├ *colrpc.Inbox
-            │ │ └ *colexec.routerOutputOp
-            │ │   └ *colexec.HashRouter
-            │ │     └ *colexec.CancelChecker
+            │ │ └ *colflow.routerOutputOp
+            │ │   └ *colflow.HashRouter
+            │ │     └ *colexecutils.CancelChecker
             │ │       └ *colfetcher.ColBatchScan
             │ └ *colexec.ParallelUnorderedSynchronizer
             │   ├ *colrpc.Inbox
             │   ├ *colrpc.Inbox
             │   ├ *colrpc.Inbox
             │   ├ *colrpc.Inbox
-            │   └ *colexec.routerOutputOp
-            │     └ *colexec.HashRouter
-            │       └ *colexec.CancelChecker
+            │   └ *colflow.routerOutputOp
+            │     └ *colflow.HashRouter
+            │       └ *colexecutils.CancelChecker
             │         └ *colfetcher.ColBatchScan
             ├ *colexec.ParallelUnorderedSynchronizer
             ├ *colexec.ParallelUnorderedSynchronizer

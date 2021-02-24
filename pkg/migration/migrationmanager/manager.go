@@ -265,6 +265,7 @@ func (m *Manager) runMigration(
 func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
 ) (alreadyCompleted bool, jobID int64, _ error) {
+	newJobID := m.jr.MakeJobID()
 	if err := m.c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		alreadyCompleted, err = migrationjob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
 		if alreadyCompleted || err != nil {
@@ -278,13 +279,9 @@ func (m *Manager) getOrCreateMigrationJob(
 		if found {
 			return nil
 		}
-		var j *jobs.Job
-		j, err = m.jr.CreateJobWithTxn(ctx, migrationjob.NewRecord(version, user), txn)
-		if err != nil {
-			return err
-		}
-		jobID = *j.ID()
-		return nil
+		jobID = newJobID
+		_, err = m.jr.CreateJobWithTxn(ctx, migrationjob.NewRecord(version, user), jobID, txn)
+		return err
 	}); err != nil {
 		return false, 0, err
 	}

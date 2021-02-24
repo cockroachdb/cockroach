@@ -2368,7 +2368,7 @@ func (s *statusServer) JobStatus(
 		Payload:  &jobspb.Payload{},
 		Progress: &jobspb.Progress{},
 	}
-	res.Id = *j.ID()
+	res.Id = j.ID()
 	// j is not escaping this function and hence is immutable so a shallow copy
 	// is fine. Also we can't really clone the field Payload as it may contain
 	// types that are not supported by Clone().

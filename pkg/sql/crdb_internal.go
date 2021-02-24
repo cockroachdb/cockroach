@@ -1839,6 +1839,7 @@ CREATE TABLE crdb_internal.create_statements (
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   has_partitions                BOOL NOT NULL,
+	is_multi_region               BOOL NOT NULL,
   INDEX(descriptor_id)
 )
 `, virtualOnce, false, /* includesIndexEntries */
@@ -1906,6 +1907,7 @@ CREATE TABLE crdb_internal.create_statements (
 			alterStmts,
 			validateStmts,
 			tree.MakeDBool(tree.DBool(hasPartitions)),
+			tree.MakeDBool(tree.DBool(db != nil && db.IsMultiRegion())),
 		)
 	})
 
@@ -2789,20 +2791,20 @@ var crdbInternalZonesTable = virtualSchemaTable{
 	comment: "decoded zone configurations from system.zones (KV scan)",
 	schema: `
 CREATE TABLE crdb_internal.zones (
-  zone_id          INT NOT NULL,
-  subzone_id       INT NOT NULL,
-  target           STRING,
-  range_name       STRING,
-  database_name    STRING,
-  table_name       STRING,
-  index_name       STRING,
-  partition_name   STRING,
+  zone_id              INT NOT NULL,
+  subzone_id           INT NOT NULL,
+  target               STRING,
+  range_name           STRING,
+  database_name        STRING,
+  table_name           STRING,
+  index_name           STRING,
+  partition_name       STRING,
   raw_config_yaml      STRING NOT NULL,
   raw_config_sql       STRING, -- this column can be NULL if there is no specifier syntax
-                           -- possible (e.g. the object was deleted).
+                               -- possible (e.g. the object was deleted).
 	raw_config_protobuf  BYTES NOT NULL,
-	full_config_yaml STRING NOT NULL,
-	full_config_sql STRING
+	full_config_yaml     STRING NOT NULL,
+	full_config_sql      STRING
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {

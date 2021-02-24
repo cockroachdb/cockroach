@@ -18,6 +18,7 @@ import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "kv/kvserver/kvserverpb/state.proto";
+import "kv/kvserver/readsummary/rspb/summary.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
@@ -157,6 +158,34 @@ message ReplicatedEvalResult {
   // It will be used to make sure we know if a lease was extended after we sent out the request
   // but before we tried to apply it.
   util.hlc.Timestamp prev_lease_proposal = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // PriorReadSummary is a summary of the reads that have been served on the
+  // range prior to this proposal, which must be a lease change (request or
+  // transfer) if the field is set. The read summary is used to update the new
+  // leaseholder's timestamp cache to prevent them from serving writes that
+  // violate previously served reads.
+  //
+  // The summary, when available, can be used in place of bumping the new
+  // leaseholder's timestamp cache to the new lease's start time. It has two
+  // distinct advantages:
+  // 1. it can transfer a higher-resolution snapshot of the reads on the range
+  //    through a lease transfer, to make the lease transfers less disruptive to
+  //    writes because the timestamp cache won't be bumped as high.
+  // 2. it can transfer information about reads with synthetic timestamps, which
+  //    are not otherwise captured by the new lease's start time.
+  //
+  // When a ReadSummary is set in a ReplicatedEvalResult, there is always also a
+  // write to the RangePriorReadSummaryKey in the RaftCommand.WriteBatch. The
+  // persisted summary may be identical to the summary in this field, but it
+  // does not have to be. Notably, we intended for the summary included in the
+  // ReplicatedEvalResult to eventually be a much higher-resolution version of
+  // the ReadSummmary than the version persisted. This scheme of persisting a
+  // compressed ReadSummary indefinitely and including a higher-resolution
+  // ReadSummary on the RaftCommand allows us to optimize for the common case
+  // where the lease transfer is applied on the new leaseholder through Raft log
+  // application while ensuring correctness in the case where the lease transfer
+  // is applied on the new leaseholder through a Raft snapshot.
+  kv.kvserver.readsummary.ReadSummary prior_read_summary = 22;
 
   reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
 }

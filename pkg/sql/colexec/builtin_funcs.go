@@ -15,15 +15,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type defaultBuiltinFuncOperator struct {
-	colexecbase.OneInputNode
+	colexecop.OneInputNode
 	allocator           *colmem.Allocator
 	evalCtx             *tree.EvalContext
 	funcExpr            *tree.FuncExpr
@@ -37,7 +38,7 @@ type defaultBuiltinFuncOperator struct {
 	row tree.Datums
 }
 
-var _ colexecbase.Operator = &defaultBuiltinFuncOperator{}
+var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Init() {
 	b.Input.Init()
@@ -114,19 +115,19 @@ func NewBuiltinFunctionOperator(
 	columnTypes []*types.T,
 	argumentCols []int,
 	outputIdx int,
-	input colexecbase.Operator,
-) (colexecbase.Operator, error) {
+	input colexecop.Operator,
+) (colexecop.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = newVectorTypeEnforcer(allocator, input, types.String, outputIdx)
+		input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
+		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
-			OneInputNode:        colexecbase.NewOneInputNode(input),
+			OneInputNode:        colexecop.NewOneInputNode(input),
 			allocator:           allocator,
 			evalCtx:             evalCtx,
 			funcExpr:            funcExpr,

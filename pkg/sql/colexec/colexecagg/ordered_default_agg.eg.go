@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -216,7 +216,7 @@ type defaultOrderedAggAlloc struct {
 }
 
 var _ aggregateFuncAlloc = &defaultOrderedAggAlloc{}
-var _ colexecbase.Closer = &defaultOrderedAggAlloc{}
+var _ colexecop.Closer = &defaultOrderedAggAlloc{}
 
 const sizeOfDefaultOrderedAgg = int64(unsafe.Sizeof(defaultOrderedAgg{}))
 const defaultOrderedAggSliceOverhead = int64(unsafe.Sizeof([]defaultOrderedAggAlloc{}))

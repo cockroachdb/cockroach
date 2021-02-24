@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -76,11 +77,11 @@ func TestExternalDistinct(t *testing.T) {
 				// unordered distinct is free to change the order of the tuples
 				// when exporting them into an external distinct.
 				colexectestutils.UnorderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					// A sorter should never exceed ExternalSorterMinPartitions, even
 					// during repartitioning. A panic will happen if a sorter requests
 					// more than this number of file descriptors.
-					sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+					sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					var outputOrdering execinfrapb.Ordering
 					if tc.isOrderedOnDistinctCols {
@@ -199,11 +200,11 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// tups and expected are in an arbitrary order, so we use an unordered
 		// verifier.
 		colexectestutils.UnorderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			// Since we're giving very low memory limit to the operator, in
 			// order to make the test run faster, we'll use an unlimited number
 			// of file descriptors.
-			sem := colexecbase.NewTestingSemaphore(0 /* limit */)
+			sem := colexecop.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
@@ -317,14 +318,14 @@ func BenchmarkExternalDistinct(b *testing.B) {
 			runDistinctBenchmarks(
 				ctx,
 				b,
-				func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
+				func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
 					var outputOrdering execinfrapb.Ordering
 					if maintainOrdering {
 						outputOrdering = convertDistinctColsToOrdering(distinctCols)
 					}
 					op, accs, mons, _, err := createExternalDistinct(
-						ctx, flowCtx, []colexecbase.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg, &colexecbase.TestingSemaphore{},
+						ctx, flowCtx, []colexecop.Operator{input}, typs,
+						distinctCols, outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
 					)
 					memAccounts = append(memAccounts, accs...)
@@ -354,7 +355,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 func createExternalDistinct(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecbase.Operator,
+	input []colexecop.Operator,
 	typs []*types.T,
 	distinctCols []uint32,
 	outputOrdering execinfrapb.Ordering,
@@ -362,7 +363,7 @@ func createExternalDistinct(
 	testingSemaphore semaphore.Semaphore,
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
+) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns: distinctCols,
 		OutputOrdering:  outputOrdering,
@@ -375,7 +376,7 @@ func createExternalDistinct(
 		Post:        execinfrapb.PostProcessSpec{},
 		ResultTypes: typs,
 	}
-	args := &NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              input,
 		StreamingMemAccount: testMemAcc,
@@ -387,6 +388,6 @@ func createExternalDistinct(
 	// External sorter relies on different memory accounts to
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

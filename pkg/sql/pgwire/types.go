@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -63,17 +62,6 @@ func pgTypeForParserType(t *types.T) pgType {
 		oid:  t.Oid(),
 		size: size,
 	}
-}
-
-// resolveBlankPaddedChar pads the given string with spaces if blank padding is
-// required or returns the string unmodified otherwise.
-func resolveBlankPaddedChar(s string, t *types.T) string {
-	if t.Oid() == oid.T_bpchar {
-		// Pad spaces on the right of the string to make it of length specified in
-		// the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
-	}
-	return s
 }
 
 // writeTextDatum writes d to the buffer. Type t must be specified for types
@@ -135,10 +123,10 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -422,10 +410,10 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DTimestamp:
 		b.putInt32(8)
@@ -459,10 +447,11 @@ func (b *writeBuffer) writeBinaryDatum(
 		subWriter := newWriteBuffer(nil /* bytecount */)
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
-		for _, elem := range v.D {
-			oid := elem.ResolvedType().Oid()
+		tupleTypes := t.TupleContents()
+		for i, elem := range v.D {
+			oid := tupleTypes[i].Oid()
 			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 

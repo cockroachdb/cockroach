@@ -13,17 +13,17 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"testing"
-	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -978,7 +978,7 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
-	hjOpConstructor func(sources []colexecbase.Operator) (colexecbase.Operator, error),
+	hjOpConstructor func(sources []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	tc.init()
 	inputs := []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples}
@@ -1011,16 +1011,16 @@ func TestHashJoiner(t *testing.T) {
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 		for _, tc := range tcs {
 			for _, tc := range tc.mutateTypes() {
-				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
-					args := &NewColOperatorArgs{
+					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              sources,
 						StreamingMemAccount: testMemAcc,
 					}
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 					args.TestingKnobs.DiskSpillingDisabled = true
-					result, err := TestNewColOperator(ctx, flowCtx, args)
+					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
 						return nil, err
 					}
@@ -1077,22 +1077,22 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
+										leftSource := colexecop.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := colexectestutils.NewFiniteBatchSource(testAllocator, batch, sourceTypes, nBatches)
 										joinType := descpb.InnerJoin
 										if fullOuter {
 											joinType = descpb.FullOuterJoin
 										}
-										hjSpec := MakeHashJoinerSpec(
+										hjSpec := colexecjoin.MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
-										hj := NewHashJoiner(
+										hj := colexecjoin.NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
-											HashJoinerInitialNumBuckets, defaultMemoryLimit,
+											colexecjoin.HashJoinerInitialNumBuckets, colexecop.DefaultMemoryLimit,
 										)
 										hj.Init()
 
@@ -1110,38 +1110,6 @@ func BenchmarkHashJoiner(b *testing.B) {
 			}
 		})
 	}
-}
-
-// TestHashingDoesNotAllocate ensures that our use of the noescape hack to make
-// sure hashing with unsafe.Pointer doesn't allocate still works correctly.
-func TestHashingDoesNotAllocate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var sum uintptr
-	foundAllocations := 0
-	for i := 0; i < 10; i++ {
-		// Sometimes, Go allocates somewhere else. To make this test not flaky,
-		// let's just make sure that at least one of the rounds of this loop doesn't
-		// allocate at all.
-		s := &runtime.MemStats{}
-		runtime.ReadMemStats(s)
-		numAlloc := s.TotalAlloc
-		i := 10
-		x := memhash64(noescape(unsafe.Pointer(&i)), 0)
-		runtime.ReadMemStats(s)
-
-		if numAlloc != s.TotalAlloc {
-			foundAllocations++
-		}
-		sum += x
-	}
-	if foundAllocations == 10 {
-		// Uhoh, we allocated every single time. This probably means we regressed,
-		// and our hash function allocates.
-		t.Fatalf("memhash64(noescape(&i)) allocated at least once")
-	}
-	t.Log(sum)
 }
 
 // TestHashJoinerProjection tests that planning of hash joiner correctly
@@ -1193,14 +1161,14 @@ func TestHashJoinerProjection(t *testing.T) {
 
 	leftSource := colexectestutils.NewOpTestInput(testAllocator, 1, leftTuples, leftTypes)
 	rightSource := colexectestutils.NewOpTestInput(testAllocator, 1, rightTuples, rightTypes)
-	args := &NewColOperatorArgs{
+	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{leftSource, rightSource},
+		Inputs:              []colexecop.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	args.TestingKnobs.DiskSpillingDisabled = true
-	hjOp, err := TestNewColOperator(ctx, flowCtx, args)
+	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {

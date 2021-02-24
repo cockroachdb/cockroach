@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -198,14 +197,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				Details:       details,
 			}
 
-			resultsCh := make(chan tree.Datums)
-			job, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
+			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Check that the job started.
-			jobIDStr := strconv.Itoa(int(*job.ID()))
+			jobIDStr := strconv.Itoa(int(job.ID()))
 			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
@@ -349,7 +347,7 @@ func TestGCResumer(t *testing.T) {
 	gcjob.SetSmallMaxGCIntervalForTest()
 
 	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
 	defer srv.Stopper().Stop(ctx)
@@ -366,11 +364,10 @@ func TestGCResumer(t *testing.T) {
 			Progress: jobspb.SchemaChangeGCProgress{},
 		}
 
-		resultsCh := make(chan tree.Datums)
-		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
-		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
@@ -393,15 +390,14 @@ func TestGCResumer(t *testing.T) {
 			Progress: jobspb.SchemaChangeGCProgress{},
 		}
 
-		resultsCh := make(chan tree.Datums)
-		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
 
-		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		st, err := job.CurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
@@ -428,8 +424,7 @@ func TestGCResumer(t *testing.T) {
 			Progress: jobspb.SchemaChangeGCProgress{},
 		}
 
-		resultsCh := make(chan tree.Datums)
-		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
 		require.Error(t, sj.AwaitCompletion(ctx))
 	})
