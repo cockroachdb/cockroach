@@ -681,7 +681,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					continue
 				}
 				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q does not exist", t.Constraint)
+					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
 			}
 			if err := n.tableDesc.DropConstraint(
 				params.ctx,
@@ -707,7 +707,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			constraint, ok := info[name]
 			if !ok {
 				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q does not exist", t.Constraint)
+					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
 			}
 			if !constraint.Unvalidated {
 				continue
@@ -896,7 +896,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			details, ok := info[string(t.Constraint)]
 			if !ok {
 				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q does not exist", tree.ErrString(&t.Constraint))
+					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
 			}
 			if t.Constraint == t.NewName {
 				// Nothing to do.
