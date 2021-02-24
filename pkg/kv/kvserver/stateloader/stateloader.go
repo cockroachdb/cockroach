@@ -299,9 +299,9 @@ func (rsl StateLoader) LoadMVCCStats(
 // by the range applied state key.
 //
 // TODO(andrei): raftClosedTimestamp is a pointer to avoid an allocation when
-// putting it in RangeAppliedState. RangeAppliedState.RaftClosedTimestamp is
-// made non-nullable (see comments on the field), this argument should be taken
-// by value.
+// putting it in RangeAppliedState. Once RangeAppliedState.RaftClosedTimestamp
+// is made non-nullable (see comments on the field), this argument should be
+// taken by value.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
