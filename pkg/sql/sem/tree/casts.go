@@ -1062,11 +1062,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return oid, nil
 			}
 		case *DInt:
+			// OIDs are always unsigned 32-bit integers. Some languages, like Java,
+			// store OIDs as signed 32-bit integers, so we implement the cast
+			// by converting to a uint32 first. This matches Postgres behavior.
+			i := DInt(uint32(*v))
 			switch t.Oid() {
 			case oid.T_oid:
-				return &DOid{semanticType: t, DInt: *v}, nil
+				return &DOid{semanticType: t, DInt: i}, nil
 			default:
-				tmpOid := NewDOid(*v)
+				tmpOid := NewDOid(i)
 				oid, err := queryOid(ctx, t, tmpOid)
 				if err != nil {
 					oid = tmpOid
