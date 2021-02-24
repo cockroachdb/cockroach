@@ -209,15 +209,8 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 }
 
 func registerLargeRange(r *testRegistry) {
-	const size = 10 << 30 // 10 GB
-	// TODO(nvanbenschoten): Snapshots currently hold the entirety of a range in
-	// memory on the receiving side. This is dangerous when we grow a range to
-	// such large sizes because it means that a snapshot could trigger an OOM.
-	// Because of this, we stick to 3 nodes to avoid rebalancing-related
-	// snapshots. Once #16954 is addressed, we can increase this count so that
-	// splitting the single large range also triggers rebalancing.
-	const numNodes = 3
-
+	const size = 32 << 30 // 32 GB
+	const numNodes = 6
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Owner:   OwnerKV,
@@ -267,20 +260,18 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 			return err
 		}
 
+		t.Status("increasing snapshot_rebalance rate")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='512MiB'`); err != nil {
+			return err
+		}
+
 		t.Status("increasing range_max_bytes")
 		minBytes := 16 << 20 // 16 MB
 		setRangeMaxBytes := func(maxBytes int) {
 			stmtZone := fmt.Sprintf(
 				"ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d, range_min_bytes = %d",
 				maxBytes, minBytes)
-			_, err := db.Exec(stmtZone)
-			if err != nil && strings.Contains(err.Error(), "syntax error") {
-				// Pre-2.1 was EXPERIMENTAL.
-				// TODO(knz): Remove this in 2.2.
-				stmtZone = fmt.Sprintf("ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '\nrange_max_bytes: %d\n'", maxBytes)
-				_, err = db.Exec(stmtZone)
-			}
-			if err != nil {
+			if _, err := db.Exec(stmtZone); err != nil {
 				t.Fatalf("failed to set range_max_bytes: %v", err)
 			}
 		}
@@ -301,15 +292,9 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 			var ranges int
 			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
-				// TODO(rafi): Remove experimental_ranges query once we stop testing
-				// 19.1 or earlier.
-				if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
-					err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]").Scan(&ranges)
-				}
-				if err != nil {
-					t.Fatalf("failed to get range count: %v", err)
-				}
+				t.Fatalf("failed to get range count: %v", err)
 			}
+			t.l.Printf("%d ranges in bank table", ranges)
 			return ranges
 		}
 		if rc := rangeCount(); rc != 1 {
@@ -317,17 +302,46 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		}
 
 		t.Status("decreasing range_max_bytes")
-		rangeSize := 64 << 20 // 64MB
+		rangeSize := 64 << 20 // 64 MB
 		setRangeMaxBytes(rangeSize)
 
-		expRC := size / rangeSize
+		expRC := size/rangeSize - 3 // -3 to tolerate a small inaccuracy in rowEstimate
 		expSplits := expRC - 1
 		t.Status(fmt.Sprintf("waiting for %d splits", expSplits))
 		waitDuration := time.Duration(expSplits) * time.Second // 1 second per split
-		return retry.ForDuration(waitDuration, func() error {
-			if rc := rangeCount(); rc > expRC {
+		if err := retry.ForDuration(waitDuration, func() error {
+			if rc := rangeCount(); rc < expRC {
 				return errors.Errorf("bank table split over %d ranges, expected at least %d",
 					rc, expRC)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		t.Status("waiting for rebalancing")
+		return retry.ForDuration(1*time.Hour, func() error {
+			// Wait for the store with the smallest number of ranges to contain
+			// at least 80% as many ranges of the store with the largest number
+			// of ranges.
+			const q = `
+			WITH ranges AS (
+				SELECT replicas FROM crdb_internal.ranges_no_leases
+			), store_ids AS (
+				SELECT unnest(replicas) AS store_id FROM ranges
+			), store_id_count AS (
+				SELECT store_id, count(1) AS num_replicas FROM store_ids GROUP BY store_id
+			)
+			SELECT min(num_replicas), max(num_replicas) FROM store_id_count;
+			`
+			var minRangeCount, maxRangeCount int
+			if err := db.QueryRow(q).Scan(&minRangeCount, &maxRangeCount); err != nil {
+				t.Fatalf("failed to get per-store range count: %v", err)
+			}
+			t.l.Printf("min_range_count=%d, max_range_count=%d", minRangeCount, maxRangeCount)
+			if float64(minRangeCount) < 0.8*float64(maxRangeCount) {
+				return errors.Errorf("rebalancing incomplete: min_range_count=%d, max_range_count=%d",
+					minRangeCount, minRangeCount)
 			}
 			return nil
 		})
