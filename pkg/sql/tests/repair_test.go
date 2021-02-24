@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,8 +41,6 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = false`)
-		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -74,9 +73,10 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	// descriptor and namespace entry. This would normally be unsafe because
 	// it would leave table data around.
 	t.Run("orphaned view - 51782", func(t *testing.T) {
-		_, db, cleanup := setup(t)
+		s, db, cleanup := setup(t)
 		defer cleanup()
 
+		descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, false)
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
 			if _, err := tx.Exec(
 				"SELECT crdb_internal.unsafe_upsert_descriptor($1, decode($2, 'hex'));",
@@ -87,15 +87,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 				parentID, schemaID, tableName, descID)
 			return err
 		}))
-
-		// Now that we've finished setting up the test, we can restore validations.
-		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
-		require.NoError(t, err)
+		descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, true)
 
 		// Ideally we should be able to query `crdb_internal.invalid_object` but it
 		// does not do enough validation. Instead we'll just observe the issue that
 		// the parent descriptor cannot be found.
-		_, err = db.Exec(
+		_, err := db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
 		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
@@ -127,9 +124,10 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	// will then repair it by injecting a new database descriptor and namespace
 	// entry and then demonstrate the problem is resolved.
 	t.Run("orphaned table with data - 51782", func(t *testing.T) {
-		_, db, cleanup := setup(t)
+		s, db, cleanup := setup(t)
 		defer cleanup()
 
+		descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, false)
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
 			if _, err := tx.Exec(
 				"SELECT crdb_internal.unsafe_upsert_descriptor($1, decode($2, 'hex'));",
@@ -140,15 +138,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 				parentID, schemaID, tableName, descID)
 			return err
 		}))
-
-		// Now that we've finished setting up the test, we can restore validations.
-		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
-		require.NoError(t, err)
+		descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, true)
 
 		// Ideally we should be able to query `crdb_internal.invalid_objects` but it
 		// does not do enough validation. Instead we'll just observe the issue that
 		// the parent descriptor cannot be found.
-		_, err = db.Exec(
+		_, err := db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
 		require.Regexp(t, "internal error: desc 53: parentID 52 does not exist", err)
@@ -252,8 +247,6 @@ func TestDescriptorRepair(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = false`)
-		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -440,12 +433,12 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			now := s.Clock().Now().GoTime()
 			defer cleanup()
 			tdb := sqlutils.MakeSQLRunner(db)
+			descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, false)
 			for _, op := range tc.before {
 				tdb.Exec(t, op)
 			}
-			_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled = true`)
-			require.NoError(t, err)
-			_, err = db.Exec(tc.op)
+			descs.ValidateOnWriteEnabled.Override(&s.ClusterSettings().SV, true)
+			_, err := db.Exec(tc.op)
 			if tc.expErrRE == "" {
 				require.NoError(t, err)
 			} else {

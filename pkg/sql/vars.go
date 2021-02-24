@@ -1244,7 +1244,7 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.NewSchemaChangerModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_user_new_schema_changer`, s,
+				return newVarValueError(`experimental_use_new_schema_changer`, s,
 					"off", "on", "unsafe_always")
 			}
 			m.SetUseNewSchemaChanger(mode)
@@ -1255,6 +1255,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.NewSchemaChangerMode(experimentalUseNewSchemaChanger.Get(sv)).String()
+		},
+	},
+
+	`enable_experimental_stream_replication`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_stream_replication`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`enable_experimental_stream_replication`, s)
+			if err != nil {
+				return err
+			}
+			m.SetStreamReplicationEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableStreamReplication)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalStreamReplicationEnabled.Get(sv))
 		},
 	},
 }

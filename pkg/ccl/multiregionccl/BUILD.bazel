@@ -5,12 +5,22 @@ go_library(
     srcs = ["multiregion.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+    ],
 )
 
 go_test(
     name = "multiregionccl_test",
     srcs = [
         "main_test.go",
+        "region_test.go",
         "regional_by_row_test.go",
         "show_test.go",
     ],
