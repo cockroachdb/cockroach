@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Note that there's also lease_internal_test.go, in package sql.
+// Note that there's also lease_internal_test.go, in package lease.
 
 package lease_test
 
