@@ -1,0 +1,62 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.readsummary;
+option go_package = "rspb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// ReadSummary contains a summary of all read requests served on a range, along
+// with the timestamps that those reads were served at. The structure is a
+// summary in that it may not represent these reads with perfect precision.
+// Instead, it is allowed to lose resolution in exchange for reduced space, as
+// long as the resulting timestamp for each key does not regress. During such
+// compression, the timestamp of a given key is only allowed to advance as
+// precision drops. This parallels a similar ratcheting policy in the timestamp
+// cache (tscache.Cache).
+//
+// For example, a high-resolution version of the summary may look like:
+//
+//                         #
+//    ^       ##     ##    #
+// ts |    #  ##     ##    #    #######
+//    |    #  ##     ####  #    #######   ##
+//       ###  ##     #######    #######   ##  ###
+//       ----------- ----------------------------
+//          local               global
+//
+// While a low-resolution (compressed) version of the summary may look like:
+//
+//                   ############################
+//    ^  ########### ############################
+// ts |  ########### ############################
+//    |  ########### ############################
+//       ########### ############################
+//       ----------- ----------------------------
+//          local               global
+//
+message ReadSummary {
+  option (gogoproto.equal) = true;
+
+  Segment local  = 1 [(gogoproto.nullable) = false];
+  Segment global = 2 [(gogoproto.nullable) = false];
+}
+  
+// Segment is a segement of a Range's complete ReadSummary. A ReadSummary has a
+// segment for each of the Range's replicated, addressable contiguous keyspaces
+// (i.e. range-local and global).
+message Segment {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp low_water = 1 [(gogoproto.nullable) = false];
+  // TODO(nvanbenschoten): add higher resolution portion.
+}

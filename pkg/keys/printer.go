@@ -169,6 +169,7 @@ var (
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
+		{name: "RangePriorReadSummary", suffix: LocalRangePriorReadSummarySuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
 		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},

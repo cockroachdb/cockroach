@@ -94,7 +94,7 @@ func declareAllKeys(latchSpans *spanset.SpanSet) {
 	// extend beyond the Range, but this is ok for the purpose of
 	// acquiring latches.
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.LocalPrefix, EndKey: keys.LocalMax})
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey})
 }
 
 // CommandArgs contains all the arguments to a command.

@@ -93,6 +93,9 @@ var (
 	// LocalLeaseAppliedIndexLegacySuffix is the suffix for the applied lease
 	// index.
 	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
+	// LocalRangePriorReadSummarySuffix is the suffix for a range's prior read
+	// summary.
+	LocalRangePriorReadSummarySuffix = []byte("rprs")
 	// LocalRangeVersionSuffix is the suffix for the range version.
 	LocalRangeVersionSuffix = []byte("rver")
 	// LocalRangeStatsLegacySuffix is the suffix for range statistics.

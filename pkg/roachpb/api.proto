@@ -13,6 +13,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "kv/kvserver/concurrency/lock/locking.proto";
+import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
@@ -1662,7 +1663,8 @@ message SubsumeResponse {
   // timestamps at which any requests were serviced by the responding replica
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
-  // mark for the keys previously owned by the subsumed range.
+  // mark for the keys previously owned by the subsumed range though this role
+  // is largely being... subsumed by the RightReadSummary.
   util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
@@ -1680,6 +1682,21 @@ message SubsumeResponse {
   // the two sides are collocated at merge time, we don't need to use the
   // read_summary and simply use this field.
   util.hlc.Timestamp closed_timestamp = 6 [(gogoproto.nullable) = false];
+
+  // ReadSummary is a summary of the reads that have been performed on the range
+  // up to the point of the Subsume request, which serializes with past reads
+  // and begins blocking future reads. It is suitable for use to update the
+  // timestamp cache for the keys previously owned by the subsumed range.
+  //
+  // ReadSummary can be used in place of FreezeStart, when available. It has two
+  // distinct advantages:
+  // 1. it can transfer a higher-resolution snapshot of the reads on the range
+  //    through a range merge, to make the merge less disruptive to writes on
+  //    the post-merge range because the timestamp cache won't be bumped as
+  //    high.
+  // 2. it can transfer information about reads with synthetic timestamps, which
+  //    are not otherwise captured by the FreezeStart clock timestamp.
+  kv.kvserver.readsummary.ReadSummary read_summary = 7;
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
