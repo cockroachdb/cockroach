@@ -3003,9 +3003,20 @@ func (e *MultipleResultsError) Error() string {
 	return fmt.Sprintf("%s: unexpected multiple results", e.SQL)
 }
 
+// DatabaseRegionConfig is a wrapper around DatabaseDescriptor_RegionConfig
+// related methods which avoids a circular dependency between descpb and tree.
+type DatabaseRegionConfig interface {
+	IsValidRegionNameString(r string) bool
+	PrimaryRegionString() string
+}
+
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
+	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
+	// session database.
+	CurrentDatabaseRegionConfig() (DatabaseRegionConfig, error)
+
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
 	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
