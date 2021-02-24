@@ -65,6 +65,11 @@ func SetVModule(value string) error {
 	return logging.vmoduleConfig.mu.vmodule.Set(value)
 }
 
+// GetVModule returns the current vmodule configuration.
+func GetVModule() string {
+	return logging.vmoduleConfig.mu.vmodule.String()
+}
+
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(l Level, depth int) bool {
