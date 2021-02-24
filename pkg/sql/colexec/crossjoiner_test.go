@@ -353,9 +353,9 @@ func TestCrossJoiner(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: testDiskMonitor,
 	}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -406,9 +406,9 @@ func BenchmarkCrossJoiner(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: testDiskMonitor,
 	}
 	nCols := 4
 	sourceTypes := make([]*types.T, nCols)

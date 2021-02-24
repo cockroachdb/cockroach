@@ -261,12 +261,13 @@ func startConnExecutor(
 			ctx, execinfra.Version, st, roachpb.NodeID(1),
 			nil, /* rpcCtx */
 			distsql.NewServer(ctx, execinfra.ServerConfig{
-				AmbientContext: testutils.MakeAmbientCtx(),
-				Settings:       st,
-				Stopper:        stopper,
-				Metrics:        &distSQLMetrics,
-				NodeID:         nodeID,
-				TempFS:         tempFS,
+				AmbientContext:    testutils.MakeAmbientCtx(),
+				Settings:          st,
+				Stopper:           stopper,
+				Metrics:           &distSQLMetrics,
+				NodeID:            nodeID,
+				TempFS:            tempFS,
+				ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
 			}),
 			nil, /* distSender */
 			nil, /* nodeDescs */

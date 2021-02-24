@@ -401,7 +401,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// one time. This limit is implemented as a weighted semaphore acquired
 		// before opening files.
 		VecFDSemaphore:    semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
-		DiskMonitor:       cfg.TempStorageConfig.Mon,
+		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
