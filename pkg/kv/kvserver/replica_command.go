@@ -2925,6 +2925,10 @@ func (s *Store) relocateOne(
 			existingNonVoters,
 			s.allocator.scorerOptions(),
 			args.targetType)
+		if targetStore == nil {
+			return nil, nil, fmt.Errorf("none of the remaining %ss %v are legal additions to %v",
+				args.targetType, args.targetsToAdd, desc.Replicas())
+		}
 
 		target := roachpb.ReplicationTarget{
 			NodeID:  targetStore.Node.NodeID,
