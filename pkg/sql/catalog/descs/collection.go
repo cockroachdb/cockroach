@@ -309,7 +309,8 @@ func (tc *Collection) getDescriptorFromStore(
 ) (found bool, desc catalog.Descriptor, err error) {
 	// Bypass the namespace lookup from the store for system tables.
 	descID := bootstrap.LookupSystemTableDescriptorID(ctx, tc.settings, tc.codec(), parentID, name)
-	if descID == descpb.InvalidID {
+	isSystemDescriptor := descID != descpb.InvalidID
+	if !isSystemDescriptor {
 		var found bool
 		var err error
 		found, descID, err = catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
@@ -321,6 +322,10 @@ func (tc *Collection) getDescriptorFromStore(
 	desc, err = catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutable)
 	if err != nil {
 		return false, nil, err
+	} else if desc == nil && isSystemDescriptor {
+		// This can happen during startup because we're not actually looking up the
+		// system descriptor IDs in KV.
+		return false, nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "descriptor %d not found", descID)
 	} else if desc == nil {
 		// Having done the namespace lookup, the descriptor must exist.
 		return false, nil, errors.AssertionFailedf("descriptor %d not found", descID)

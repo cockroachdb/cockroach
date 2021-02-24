@@ -304,6 +304,9 @@ func MakeExternalStorage(
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
+	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_FileTable {
+		return nil, errors.New("external network access is disabled")
+	}
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
