@@ -24,3 +24,24 @@ func (regions RegionNames) ToStrings() []string {
 	}
 	return ret
 }
+
+// IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
+func (cfg *DatabaseDescriptor_RegionConfig) IsValidRegionNameString(r string) bool {
+	if cfg == nil {
+		return false
+	}
+	for _, region := range cfg.Regions {
+		if string(region.Name) == r {
+			return true
+		}
+	}
+	return false
+}
+
+// PrimaryRegionString implements the tree.DatabaseRegionConfig interface.
+func (cfg *DatabaseDescriptor_RegionConfig) PrimaryRegionString() string {
+	if cfg == nil {
+		return ""
+	}
+	return string(cfg.PrimaryRegion)
+}
