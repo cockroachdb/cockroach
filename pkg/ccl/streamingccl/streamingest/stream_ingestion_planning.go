@@ -129,10 +129,11 @@ func ingestionPlanHook(
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
-		return sj.AwaitCompletion(ctx)
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+		return nil
 	}
 
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 }
 
 func init() {
