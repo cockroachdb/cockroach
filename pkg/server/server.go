@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -132,19 +133,20 @@ type Server struct {
 	rpcContext      *rpc.Context
 	engines         Engines
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc         *grpcServer
-	gossip       *gossip.Gossip
-	nodeDialer   *nodedialer.Dialer
-	nodeLiveness *liveness.NodeLiveness
-	storePool    *kvserver.StorePool
-	tcsFactory   *kvcoord.TxnCoordSenderFactory
-	distSender   *kvcoord.DistSender
-	db           *kv.DB
-	node         *Node
-	registry     *metric.Registry
-	recorder     *status.MetricsRecorder
-	runtime      *status.RuntimeStatSampler
-	updates      *diagnostics.UpdateChecker
+	grpc                               *grpcServer
+	gossip                             *gossip.Gossip
+	nodeDialer                         *nodedialer.Dialer
+	nodeLiveness                       *liveness.NodeLiveness
+	storePool                          *kvserver.StorePool
+	tcsFactory                         *kvcoord.TxnCoordSenderFactory
+	distSender                         *kvcoord.DistSender
+	db                                 *kv.DB
+	node                               *Node
+	registry                           *metric.Registry
+	recorder                           *status.MetricsRecorder
+	runtime                            *status.RuntimeStatSampler
+	updates                            *diagnostics.UpdateChecker
+	closedTimestampSideTransportSender *sidetransport.ClosedTimestampSender
 
 	admin           *adminServer
 	status          *statusServer
@@ -510,27 +512,31 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// ClosedTimestamp), but the Node needs a StoreConfig to be made.
 	var lateBoundNode *Node
 
+	closedTimestampSideTransportSender := sidetransport.NewSideTransportSender(
+		stopper, nodeDialer, clock, st)
+
 	storeCfg := kvserver.StoreConfig{
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
-		Settings:                st,
-		AmbientCtx:              cfg.AmbientCtx,
-		RaftConfig:              cfg.RaftConfig,
-		Clock:                   clock,
-		DB:                      db,
-		Gossip:                  g,
-		NodeLiveness:            nodeLiveness,
-		Transport:               raftTransport,
-		NodeDialer:              nodeDialer,
-		RPCContext:              rpcContext,
-		ScanInterval:            cfg.ScanInterval,
-		ScanMinIdleTime:         cfg.ScanMinIdleTime,
-		ScanMaxIdleTime:         cfg.ScanMaxIdleTime,
-		HistogramWindowInterval: cfg.HistogramWindowInterval(),
-		StorePool:               storePool,
-		SQLExecutor:             internalExecutor,
-		LogRangeEvents:          cfg.EventLogEnabled,
-		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
-		TimeSeriesDataStore:     tsDB,
+		DefaultZoneConfig:            &cfg.DefaultZoneConfig,
+		Settings:                     st,
+		AmbientCtx:                   cfg.AmbientCtx,
+		RaftConfig:                   cfg.RaftConfig,
+		Clock:                        clock,
+		DB:                           db,
+		Gossip:                       g,
+		NodeLiveness:                 nodeLiveness,
+		Transport:                    raftTransport,
+		NodeDialer:                   nodeDialer,
+		RPCContext:                   rpcContext,
+		ScanInterval:                 cfg.ScanInterval,
+		ScanMinIdleTime:              cfg.ScanMinIdleTime,
+		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
+		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
+		StorePool:                    storePool,
+		SQLExecutor:                  internalExecutor,
+		LogRangeEvents:               cfg.EventLogEnabled,
+		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
+		TimeSeriesDataStore:          tsDB,
+		ClosedTimestampSideTransport: closedTimestampSideTransportSender,
 
 		// Initialize the closed timestamp subsystem. Note that it won't
 		// be ready until it is .Start()ed, but the grpc server can be
@@ -688,39 +694,40 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
-		nodeIDContainer:        nodeIDContainer,
-		cfg:                    cfg,
-		st:                     st,
-		clock:                  clock,
-		rpcContext:             rpcContext,
-		engines:                engines,
-		grpc:                   grpcServer,
-		gossip:                 g,
-		nodeDialer:             nodeDialer,
-		nodeLiveness:           nodeLiveness,
-		storePool:              storePool,
-		tcsFactory:             tcsFactory,
-		distSender:             distSender,
-		db:                     db,
-		node:                   node,
-		registry:               registry,
-		recorder:               recorder,
-		updates:                updates,
-		runtime:                runtimeSampler,
-		admin:                  sAdmin,
-		status:                 sStatus,
-		authentication:         sAuth,
-		tsDB:                   tsDB,
-		tsServer:               &sTS,
-		raftTransport:          raftTransport,
-		stopper:                stopper,
-		debug:                  debugServer,
-		kvProber:               kvProber,
-		replicationReporter:    replicationReporter,
-		protectedtsProvider:    protectedtsProvider,
-		protectedtsReconciler:  protectedtsReconciler,
-		sqlServer:              sqlServer,
-		externalStorageBuilder: externalStorageBuilder,
+		nodeIDContainer:                    nodeIDContainer,
+		cfg:                                cfg,
+		st:                                 st,
+		clock:                              clock,
+		rpcContext:                         rpcContext,
+		engines:                            engines,
+		grpc:                               grpcServer,
+		gossip:                             g,
+		nodeDialer:                         nodeDialer,
+		nodeLiveness:                       nodeLiveness,
+		storePool:                          storePool,
+		tcsFactory:                         tcsFactory,
+		distSender:                         distSender,
+		db:                                 db,
+		node:                               node,
+		registry:                           registry,
+		recorder:                           recorder,
+		updates:                            updates,
+		closedTimestampSideTransportSender: closedTimestampSideTransportSender,
+		runtime:                            runtimeSampler,
+		admin:                              sAdmin,
+		status:                             sStatus,
+		authentication:                     sAuth,
+		tsDB:                               tsDB,
+		tsServer:                           &sTS,
+		raftTransport:                      raftTransport,
+		stopper:                            stopper,
+		debug:                              debugServer,
+		kvProber:                           kvProber,
+		replicationReporter:                replicationReporter,
+		protectedtsProvider:                protectedtsProvider,
+		protectedtsReconciler:              protectedtsReconciler,
+		sqlServer:                          sqlServer,
+		externalStorageBuilder:             externalStorageBuilder,
 	}
 	return lateBoundServer, err
 }
@@ -1816,6 +1823,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
+
+	s.closedTimestampSideTransportSender.Run(ctx, state.nodeID)
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all sqlmigrations have successfully

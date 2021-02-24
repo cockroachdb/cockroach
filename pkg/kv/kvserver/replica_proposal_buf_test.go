@@ -125,7 +125,7 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 	if t.clock == nil {
 		return hlc.Timestamp{}
 	}
-	return closedTimestampTargetByPolicy(t.clock.NowAsClockTimestamp(), t.rangePolicy, time.Second)
+	return ClosedTimestampTargetByPolicy(t.clock.NowAsClockTimestamp(), t.rangePolicy, time.Second)
 }
 
 func (t *testProposer) raftTransportClosedTimestampEnabled() bool {
