@@ -352,7 +352,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 
 		case externalSorterRepeatedMerging:
-			// TODO(barryhe2000): update later comment
+			// TODO(barryhe2000): update comment
 			// We will merge all partitions in range [s.firstPartitionIdx,
 			// s.firstPartitionIdx+s.numPartitions) and will spill all the
 			// resulting batches into a new partition with the next available
