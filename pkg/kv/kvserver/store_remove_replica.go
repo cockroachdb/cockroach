@@ -160,7 +160,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
+	s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
 	if it := s.mu.replicasByKey.DeleteReplica(ctx, rep); it.repl != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
@@ -239,7 +239,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	if s.removePlaceholderLocked(ctx, rep.RangeID) {
 		atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
 	}
-	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
+	s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
 }
 
 // unlinkReplicaByRangeIDLocked removes all of the store's references to the
@@ -247,7 +247,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 // to be removed from the replicasByKey map.
 //
 // store.mu must be held.
-func (s *Store) unlinkReplicaByRangeIDLocked(rangeID roachpb.RangeID) {
+func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachpb.RangeID) {
 	s.mu.AssertHeld()
 	s.unquiescedReplicas.Lock()
 	delete(s.unquiescedReplicas.m, rangeID)
