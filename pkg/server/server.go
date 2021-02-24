@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -145,6 +146,7 @@ type Server struct {
 	recorder     *status.MetricsRecorder
 	runtime      *status.RuntimeStatSampler
 	updates      *diagnostics.UpdateChecker
+	ctSender     *sidetransport.Sender
 
 	admin           *adminServer
 	status          *statusServer
@@ -478,6 +480,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
 
+	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
+
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
 	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
@@ -531,6 +535,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LogRangeEvents:          cfg.EventLogEnabled,
 		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:     tsDB,
+		ClosedTimestampSender:   ctSender,
 
 		// Initialize the closed timestamp subsystem. Note that it won't
 		// be ready until it is .Start()ed, but the grpc server can be
@@ -706,6 +711,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:               registry,
 		recorder:               recorder,
 		updates:                updates,
+		ctSender:               ctSender,
 		runtime:                runtimeSampler,
 		admin:                  sAdmin,
 		status:                 sStatus,
@@ -1816,6 +1822,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
+
+	s.ctSender.Run(ctx, state.nodeID)
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all sqlmigrations have successfully

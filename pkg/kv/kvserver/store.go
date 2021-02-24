@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -421,6 +422,7 @@ type Store struct {
 	txnWaitMetrics     *txnwait.Metrics
 	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsCache   protectedts.Cache
+	ctSender           *sidetransport.Sender
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -648,7 +650,8 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp *container.Container
+	ClosedTimestamp       *container.Container
+	ClosedTimestampSender *sidetransport.Sender
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
@@ -801,6 +804,7 @@ func NewStore(
 		engine:   eng,
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -2770,6 +2774,31 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	})
 
 	return g.Wait()
+}
+
+// registerLeaseholder registers the provided replica as a leaseholder in the
+// node's closed timestamp side transport.
+func (s *Store) registerLeaseholder(
+	ctx context.Context, r *Replica, leaseSeq roachpb.LeaseSequence,
+) {
+	if s.ctSender != nil {
+		s.ctSender.RegisterLeaseholder(ctx, r, leaseSeq)
+	}
+}
+
+// unregisterLeaseholder unregisters the provided replica from node's closed
+// timestamp side transport if it had been previously registered as a
+// leaseholder.
+func (s *Store) unregisterLeaseholder(ctx context.Context, r *Replica) {
+	s.unregisterLeaseholderByID(ctx, r.RangeID)
+}
+
+// unregisterLeaseholderByID is like unregisterLeaseholder, but it accepts a
+// range ID instead of a replica.
+func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.RangeID) {
+	if s.ctSender != nil {
+		s.ctSender.UnregisterLeaseholder(ctx, s.StoreID(), rangeID)
+	}
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local

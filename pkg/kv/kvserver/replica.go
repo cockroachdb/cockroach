@@ -387,13 +387,41 @@ type Replica struct {
 		//
 		// TODO(ajwerner): move the proposal map and ProposalData entirely under
 		// the raftMu.
-		proposals         map[kvserverbase.CmdIDKey]*ProposalData
+		proposals map[kvserverbase.CmdIDKey]*ProposalData
+		// Indicates that the replica is in the process of applying log entries.
+		// Updated to true in handleRaftReady before entries are removed from
+		// the proposals map and set to false after they are applied. Useful in
+		// conjunction with len(proposals) to check for any in-flight proposals
+		// whose effects have not yet taken hold without synchronizing with
+		// raftMu and the entire handleRaftReady loop. Not needed if raftMu is
+		// already held.
+		applyingEntries bool
+		// The replica's Raft group "node".
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
+		// sideTransportClosedTimestamp stores the closed timestamp that was
+		// communicated by the side transport. The replica can use it if it has
+		// applied all the commands with indexes <= sideTransportCloseTimestampLAI.
+		// Note that there's also state.RaftClosedTimestamp, which might be higher
+		// than this closed timestamp. The maximum across the two can be used.
+		//
+		// TODO(andrei): actually implement and reference also the global storage
+		// for side-transport closed timestamps.
+		//
+		// TODO(andrei): document here and probably elsewhere the relationship
+		// between the sideTransportClosedTimestamp and the raftClosedTimestamp.
+		// Specifically that for a given LAI, the side transport closed timestamp
+		// will always lead the raft closed timestamp, but that across LAIs, the
+		// larger LAI will always include the larger closed timestamp, independent
+		// of the source.
+		sideTransportClosedTimestamp hlc.Timestamp
+		// sideTransportCloseTimestampLAI is the lease-applied index associated
+		// with sideTransportClosedTimestamp.
+		sideTransportCloseTimestampLAI ctpb.LAI
 
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.

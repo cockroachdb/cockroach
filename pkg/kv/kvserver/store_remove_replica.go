@@ -255,6 +255,7 @@ func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachp
 	delete(s.mu.uninitReplicas, rangeID)
 	s.replicaQueues.Delete(int64(rangeID))
 	s.mu.replicas.Delete(int64(rangeID))
+	s.unregisterLeaseholderByID(ctx, rangeID)
 }
 
 // removePlaceholder removes a placeholder for the specified range if it

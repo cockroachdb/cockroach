@@ -134,13 +134,17 @@ func (r *Replica) shouldApplyCommand(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
-		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(kvserverbase.ApplyFilterArgs{
+		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-		})
+		}
+		if cmd.IsLocal() {
+			args.Req = cmd.proposal.Request
+		}
+		var newPropRetry int
+		newPropRetry, cmd.forcedErr = filter(args)
 		if cmd.proposalRetry == 0 {
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
 		}

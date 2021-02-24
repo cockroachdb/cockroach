@@ -39,6 +39,7 @@ import (
 // testProposer is a testing implementation of proposer.
 type testProposer struct {
 	syncutil.RWMutex
+	clock      *hlc.Clock
 	ds         destroyStatus
 	lai        uint64
 	enqueued   int
@@ -60,7 +61,6 @@ type testProposer struct {
 	// is. Some types of replicas are not eligible to get a lease.
 	leaderReplicaType roachpb.ReplicaType
 	rangePolicy       roachpb.RangeClosedTimestampPolicy
-	clock             *hlc.Clock
 }
 
 var _ proposer = &testProposer{}
@@ -125,7 +125,9 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 	if t.clock == nil {
 		return hlc.Timestamp{}
 	}
-	return closedTimestampTargetByPolicy(t.clock.NowAsClockTimestamp(), t.rangePolicy, time.Second)
+	return closedts.TargetForPolicy(
+		t.clock.NowAsClockTimestamp(), t.clock.MaxOffset(), time.Second, t.rangePolicy,
+	)
 }
 
 func (t *testProposer) raftTransportClosedTimestampEnabled() bool {
@@ -825,10 +827,10 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
 			p := testProposer{
+				clock:       clock,
 				lai:         10,
 				raftGroup:   r,
 				rangePolicy: tc.rangePolicy,
-				clock:       clock,
 			}
 			tracker := mockTracker{
 				lowerBound: tc.trackerLowerBound,

@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sidetransport",
+    srcs = ["sender.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "sidetransport_test",
+    srcs = ["sender_test.go"],
+    embed = [":sidetransport"],
+    deps = [
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
