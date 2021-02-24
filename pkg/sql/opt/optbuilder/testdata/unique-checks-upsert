@@ -183,7 +183,7 @@ upsert uniq
                      ├── y:42 = uniq.y:36
                      └── k:38 != uniq.k:32
 
-# TODO(rytaft): No need to plan checks for w since it's aways NULL.
+# TODO(rytaft): No need to plan checks for w since it's always NULL.
 # We currently can't determine that w is always NULL since the function
 # OutputColumnIsAlwaysNull doesn't recurse into joins or group bys (see #58300).
 build
@@ -1532,6 +1532,349 @@ upsert t
                 └── filters
                      ├── i:17 = t.i:14
                      └── rowid:18 != t.rowid:15
+
+exec-ddl
+CREATE TABLE uniq_partial (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+----
+
+# None of the upserted values have nulls.
+build
+UPSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2)
+----
+upsert uniq_partial
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:5 => uniq_partial.k:1
+ │    ├── column2:6 => uniq_partial.a:2
+ │    └── column3:7 => uniq_partial.b:3
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    ├── (1, 1, 1)
+ │    └── (2, 2, 2)
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(a)
+           └── semi-join (hash)
+                ├── columns: k:12!null a:13!null b:14!null
+                ├── with-scan &1
+                │    ├── columns: k:12!null a:13!null b:14!null
+                │    └── mapping:
+                │         ├──  column1:5 => k:12
+                │         ├──  column2:6 => a:13
+                │         └──  column3:7 => b:14
+                ├── scan uniq_partial
+                │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
+                └── filters
+                     ├── a:13 = uniq_partial.a:9
+                     ├── b:14 > 0
+                     ├── uniq_partial.b:10 > 0
+                     └── k:12 != uniq_partial.k:8
+
+# No need to plan checks for a since it's always null.
+build
+UPSERT INTO uniq_partial VALUES (1, NULL, 1), (2, NULL, NULL)
+----
+upsert uniq_partial
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:5 => k:1
+ │    ├── column2:6 => a:2
+ │    └── column3:7 => b:3
+ └── values
+      ├── columns: column1:5!null column2:6 column3:7
+      ├── (1, NULL::INT8, 1)
+      └── (2, NULL::INT8, NULL::INT8)
+
+# Upsert with non-constant input.
+build
+UPSERT INTO uniq_partial SELECT k, v, w FROM other
+----
+upsert uniq_partial
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── other.k:5 => uniq_partial.k:1
+ │    ├── v:6 => uniq_partial.a:2
+ │    └── w:7 => uniq_partial.b:3
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: other.k:5 v:6 w:7!null
+ │    └── scan other
+ │         └── columns: other.k:5 v:6 w:7!null x:8 y:9 rowid:10!null other.crdb_internal_mvcc_timestamp:11
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(a)
+           └── semi-join (hash)
+                ├── columns: k:16 a:17 b:18!null
+                ├── with-scan &1
+                │    ├── columns: k:16 a:17 b:18!null
+                │    └── mapping:
+                │         ├──  other.k:5 => k:16
+                │         ├──  v:6 => a:17
+                │         └──  w:7 => b:18
+                ├── scan uniq_partial
+                │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
+                └── filters
+                     ├── a:17 = uniq_partial.a:13
+                     ├── b:18 > 0
+                     ├── uniq_partial.b:14 > 0
+                     └── k:16 != uniq_partial.k:12
+
+# On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
+# column and predicate.
+build
+INSERT INTO uniq_partial VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 10
+----
+upsert uniq_partial
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a
+ ├── canary column: uniq_partial.k:9
+ ├── fetch columns: uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial.k:1
+ │    ├── column2:6 => uniq_partial.a:2
+ │    └── column3:7 => uniq_partial.b:3
+ ├── update-mapping:
+ │    └── upsert_a:15 => uniq_partial.a:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_k:14 upsert_a:15!null upsert_b:16 column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12 a_new:13!null
+ │    ├── project
+ │    │    ├── columns: a_new:13!null column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    │    └── ensure-upsert-distinct-on
+ │    │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null arbiter_unique_a_distinct:8
+ │    │    │    │         ├── grouping columns: column2:6!null arbiter_unique_a_distinct:8
+ │    │    │    │         ├── project
+ │    │    │    │         │    ├── columns: arbiter_unique_a_distinct:8 column1:5!null column2:6!null column3:7!null
+ │    │    │    │         │    ├── values
+ │    │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    │         │    │    ├── (100, 10, 1)
+ │    │    │    │         │    │    └── (200, 20, 2)
+ │    │    │    │         │    └── projections
+ │    │    │    │         │         └── (column3:7 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:8]
+ │    │    │    │         └── aggregations
+ │    │    │    │              ├── first-agg [as=column1:5]
+ │    │    │    │              │    └── column1:5
+ │    │    │    │              └── first-agg [as=column3:7]
+ │    │    │    │                   └── column3:7
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11!null crdb_internal_mvcc_timestamp:12
+ │    │    │    │    ├── scan uniq_partial
+ │    │    │    │    │    └── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
+ │    │    │    │    └── filters
+ │    │    │    │         └── uniq_partial.b:11 > 0
+ │    │    │    └── filters
+ │    │    │         ├── column2:6 = uniq_partial.a:10
+ │    │    │         └── column3:7 > 0
+ │    │    └── projections
+ │    │         └── 10 [as=a_new:13]
+ │    └── projections
+ │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column1:5 ELSE uniq_partial.k:9 END [as=upsert_k:14]
+ │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column2:6 ELSE a_new:13 END [as=upsert_a:15]
+ │         └── CASE WHEN uniq_partial.k:9 IS NULL THEN column3:7 ELSE uniq_partial.b:11 END [as=upsert_b:16]
+ └── unique-checks
+      └── unique-checks-item: uniq_partial(a)
+           └── semi-join (hash)
+                ├── columns: k:21 a:22!null b:23
+                ├── with-scan &1
+                │    ├── columns: k:21 a:22!null b:23
+                │    └── mapping:
+                │         ├──  upsert_k:14 => k:21
+                │         ├──  upsert_a:15 => a:22
+                │         └──  upsert_b:16 => b:23
+                ├── scan uniq_partial
+                │    └── columns: uniq_partial.k:17!null uniq_partial.a:18 uniq_partial.b:19
+                └── filters
+                     ├── a:22 = uniq_partial.a:18
+                     ├── b:23 > 0
+                     ├── uniq_partial.b:19 > 0
+                     └── k:21 != uniq_partial.k:17
+
+# Error when there is no arbiter predicate to match the partial unique
+# constraint predicate.
+build
+INSERT INTO uniq_partial VALUES (1, 1, 1) ON CONFLICT (a) DO UPDATE SET a = 2
+----
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+exec-ddl
+CREATE TABLE uniq_partial_constraint_and_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE true,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 10
+)
+----
+
+# Use a pseudo-partial index as the only arbiter. Note that we use the "norm"
+# directive instead of "build" to ensure that partial index predicates are fully
+# normalized when choosing arbiter indexes.
+norm
+INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 10 DO UPDATE SET a = 10
+----
+upsert uniq_partial_constraint_and_index
+ ├── columns: <none>
+ ├── arbiter indexes: secondary
+ ├── canary column: uniq_partial_constraint_and_index.k:9
+ ├── fetch columns: uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_partial_constraint_and_index.k:1
+ │    ├── column2:6 => uniq_partial_constraint_and_index.a:2
+ │    └── column3:7 => uniq_partial_constraint_and_index.b:3
+ ├── update-mapping:
+ │    └── upsert_a:15 => uniq_partial_constraint_and_index.a:2
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_put1:17
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:17!null upsert_k:14 upsert_a:15!null upsert_b:16 column1:5!null column2:6!null column3:7!null uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
+ │    ├── left-join (cross)
+ │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
+ │    │    ├── values
+ │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    └── (1, 1, 1)
+ │    │    ├── select
+ │    │    │    ├── columns: uniq_partial_constraint_and_index.k:9!null uniq_partial_constraint_and_index.a:10!null uniq_partial_constraint_and_index.b:11
+ │    │    │    ├── scan uniq_partial_constraint_and_index
+ │    │    │    │    ├── columns: uniq_partial_constraint_and_index.k:9!null uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
+ │    │    │    │    └── partial index predicates
+ │    │    │    │         └── secondary: filters (true)
+ │    │    │    └── filters
+ │    │    │         └── uniq_partial_constraint_and_index.a:10 = 1
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── true [as=partial_index_put1:17]
+ │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column1:5 ELSE uniq_partial_constraint_and_index.k:9 END [as=upsert_k:14]
+ │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=upsert_a:15]
+ │         └── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column3:7 ELSE uniq_partial_constraint_and_index.b:11 END [as=upsert_b:16]
+ └── unique-checks
+      └── unique-checks-item: uniq_partial_constraint_and_index(a)
+           └── semi-join (hash)
+                ├── columns: k:22 a:23!null b:24!null
+                ├── select
+                │    ├── columns: k:22 a:23!null b:24!null
+                │    ├── with-scan &1
+                │    │    ├── columns: k:22 a:23!null b:24
+                │    │    └── mapping:
+                │    │         ├──  upsert_k:14 => k:22
+                │    │         ├──  upsert_a:15 => a:23
+                │    │         └──  upsert_b:16 => b:24
+                │    └── filters
+                │         └── b:24 > 10
+                ├── select
+                │    ├── columns: uniq_partial_constraint_and_index.k:18!null uniq_partial_constraint_and_index.a:19 uniq_partial_constraint_and_index.b:20!null
+                │    ├── scan uniq_partial_constraint_and_index
+                │    │    ├── columns: uniq_partial_constraint_and_index.k:18!null uniq_partial_constraint_and_index.a:19 uniq_partial_constraint_and_index.b:20
+                │    │    └── partial index predicates
+                │    │         └── secondary: filters (true)
+                │    └── filters
+                │         └── uniq_partial_constraint_and_index.b:20 > 10
+                └── filters
+                     ├── a:23 = uniq_partial_constraint_and_index.a:19
+                     └── k:22 != uniq_partial_constraint_and_index.k:18
+
+exec-ddl
+CREATE TABLE uniq_constraint_and_partial_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (a) WHERE true
+)
+----
+
+# Use a pseudo-partial constraint as the only arbiter. Note that we use the
+# "norm" directive instead of "build" to ensure that partial index predicates
+# are fully normalized when choosing arbiter indexes.
+norm
+INSERT INTO uniq_constraint_and_partial_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 10
+----
+upsert uniq_constraint_and_partial_index
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a
+ ├── canary column: uniq_constraint_and_partial_index.k:9
+ ├── fetch columns: uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_constraint_and_partial_index.k:1
+ │    ├── column2:6 => uniq_constraint_and_partial_index.a:2
+ │    └── column3:7 => uniq_constraint_and_partial_index.b:3
+ ├── update-mapping:
+ │    └── upsert_a:15 => uniq_constraint_and_partial_index.a:2
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:17 partial_index_del1:18 column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11 upsert_k:14 upsert_a:15!null upsert_b:16
+ │    ├── project
+ │    │    ├── columns: upsert_k:14 upsert_a:15!null upsert_b:16 column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │    │    │    │    └── (1, 1, 1)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: uniq_constraint_and_partial_index.k:9!null uniq_constraint_and_partial_index.a:10!null uniq_constraint_and_partial_index.b:11
+ │    │    │    │    ├── scan uniq_constraint_and_partial_index
+ │    │    │    │    │    ├── columns: uniq_constraint_and_partial_index.k:9!null uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
+ │    │    │    │    │    └── partial index predicates
+ │    │    │    │    │         └── secondary: filters
+ │    │    │    │    │              └── uniq_constraint_and_partial_index.b:11 > 0
+ │    │    │    │    └── filters
+ │    │    │    │         └── uniq_constraint_and_partial_index.a:10 = 1
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column1:5 ELSE uniq_constraint_and_partial_index.k:9 END [as=upsert_k:14]
+ │    │         ├── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=upsert_a:15]
+ │    │         └── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column3:7 ELSE uniq_constraint_and_partial_index.b:11 END [as=upsert_b:16]
+ │    └── projections
+ │         ├── upsert_b:16 > 0 [as=partial_index_put1:17]
+ │         └── uniq_constraint_and_partial_index.b:11 > 0 [as=partial_index_del1:18]
+ └── unique-checks
+      └── unique-checks-item: uniq_constraint_and_partial_index(a)
+           └── semi-join (hash)
+                ├── columns: k:23 a:24!null b:25
+                ├── with-scan &1
+                │    ├── columns: k:23 a:24!null b:25
+                │    └── mapping:
+                │         ├──  upsert_k:14 => k:23
+                │         ├──  upsert_a:15 => a:24
+                │         └──  upsert_b:16 => b:25
+                ├── scan uniq_constraint_and_partial_index
+                │    ├── columns: uniq_constraint_and_partial_index.k:19!null uniq_constraint_and_partial_index.a:20
+                │    └── partial index predicates
+                │         └── secondary: filters
+                │              └── uniq_constraint_and_partial_index.b:21 > 0
+                └── filters
+                     ├── a:24 = uniq_constraint_and_partial_index.a:20
+                     └── k:23 != uniq_constraint_and_partial_index.k:19
+
+exec-ddl
+CREATE TABLE uniq_partial_constraint_and_partial_index (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 10
+)
+----
+
+# Error when both a partial index and partial constraint match the conflict
+# columns and arbiter predicate.
+build
+INSERT INTO uniq_partial_constraint_and_partial_index VALUES (1, 1, 1)
+ON CONFLICT (a) WHERE b > 10 DO UPDATE SET a = 10
+----
+error (0A000): unimplemented: there are multiple unique or exclusion constraints matching the ON CONFLICT specification
 
 exec-ddl
 CREATE TABLE uniq_computed_pk (
