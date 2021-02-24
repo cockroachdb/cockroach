@@ -27,3 +27,58 @@ eval
 1:::OID >= 3:::INT
 ----
 false
+
+eval
+4294967295:::OID = -1:::INT4
+----
+true
+
+eval
+4294967293:::OID = -3:::INT2
+----
+true
+
+eval
+4294967196:::OID = -100:::INT8
+----
+true
+
+eval
+-1:::INT4 = 4294967295:::OID
+----
+true
+
+eval
+-3:::INT2 = 4294967293:::OID
+----
+true
+
+eval
+-100:::INT8 = 4294967196:::OID
+----
+true
+
+eval
+-429496719:::INT4 = 3865470577:::OID
+----
+true
+
+eval
+1:::OID < -2:::INT2
+----
+true
+
+eval
+1:::OID >= -3:::INT
+----
+false
+
+eval
+1:::OID > -2:::INT2
+----
+false
+
+eval
+1:::OID <= -3:::INT
+----
+true

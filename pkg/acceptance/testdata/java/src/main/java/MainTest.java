@@ -321,4 +321,20 @@ public class MainTest extends CockroachDBTest {
         exception.expectMessage("ERROR: could not parse \"\" as type decimal");
         stmt.execute();
     }
+
+    // Regression test for #60533: virtual table OIDs should work even they
+    // use a 32-bit int greater than MaxInt32.
+    @Test
+    public void testVirtualTableMetadata() throws Exception {
+      PreparedStatement p = con.prepareStatement("select oid, proname from pg_proc limit 100");
+      p.execute();
+      ResultSet r = p.getResultSet();
+      while (r.next()) {
+        ResultSetMetaData m = r.getMetaData();
+        for (int i = 1; i <= colCount; i++) {
+          String tableName = m.getTableName(i);
+          Assert.assertEquals("pg_proc", tableName);
+        }
+      }
+    }
 }
