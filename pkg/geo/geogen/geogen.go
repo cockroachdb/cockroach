@@ -33,6 +33,74 @@ var validShapeTypes = []geopb.ShapeType{
 	geopb.ShapeType_GeometryCollection,
 }
 
+// RandomShapeType returns a random geometry type.
+func RandomShapeType(rng *rand.Rand) geopb.ShapeType {
+	return validShapeTypes[rng.Intn(len(validShapeTypes))]
+}
+
+var validLayouts = []geom.Layout{
+	geom.XY,
+	geom.XYM,
+	geom.XYZ,
+	geom.XYZM,
+}
+
+// RandomLayout randomly chooses a layout if no layout is provided.
+func RandomLayout(rng *rand.Rand, layout geom.Layout) geom.Layout {
+	if layout != geom.NoLayout {
+		return layout
+	}
+	return validLayouts[rng.Intn(len(validLayouts))]
+}
+
+// RandomGeomBounds is a struct for storing the random bounds for each dimension.
+type RandomGeomBounds struct {
+	minX, maxX float64
+	minY, maxY float64
+	minZ, maxZ float64
+	minM, maxM float64
+}
+
+// MakeRandomGeomBoundsForGeography creates a RandomGeomBounds struct with
+// bounds corresponding to a geography.
+func MakeRandomGeomBoundsForGeography() RandomGeomBounds {
+	randomBounds := MakeRandomGeomBounds()
+	randomBounds.minX, randomBounds.maxX = -180.0, 180.0
+	randomBounds.minY, randomBounds.maxY = -90.0, 90.0
+	return randomBounds
+}
+
+// MakeRandomGeomBounds creates a RandomGeomBounds struct with
+// bounds corresponding to a geometry.
+func MakeRandomGeomBounds() RandomGeomBounds {
+	return RandomGeomBounds{
+		minX: -10e9, maxX: 10e9,
+		minY: -10e9, maxY: 10e9,
+		minZ: -10e9, maxZ: 10e9,
+		minM: -10e9, maxM: 10e9,
+	}
+}
+
+// RandomCoordSlice generates a slice of random coords of length corresponding
+// to the given layout.
+func RandomCoordSlice(rng *rand.Rand, randomBounds RandomGeomBounds, layout geom.Layout) []float64 {
+	if layout == geom.NoLayout {
+		panic(errors.Newf("must specify a layout for RandomCoordSlice"))
+	}
+	var coords []float64
+	coords = append(coords, RandomCoord(rng, randomBounds.minX, randomBounds.maxX))
+	coords = append(coords, RandomCoord(rng, randomBounds.minY, randomBounds.maxY))
+
+	if layout.ZIndex() != -1 {
+		coords = append(coords, RandomCoord(rng, randomBounds.minZ, randomBounds.maxZ))
+	}
+	if layout.MIndex() != -1 {
+		coords = append(coords, RandomCoord(rng, randomBounds.minM, randomBounds.maxM))
+	}
+
+	return coords
+}
+
 // RandomCoord generates a random coord in the given bounds.
 func RandomCoord(rng *rand.Rand, min float64, max float64) float64 {
 	return rng.Float64()*(max-min) + min
@@ -43,8 +111,9 @@ func RandomCoord(rng *rand.Rand, min float64, max float64) float64 {
 // A LinearRing must have at least 3 points. A point is added at the end to close the ring.
 // Implements the algorithm in https://observablehq.com/@tarte0/generate-random-simple-polygon.
 func RandomValidLinearRingCoords(
-	rng *rand.Rand, numPoints int, minX float64, maxX float64, minY float64, maxY float64,
+	rng *rand.Rand, numPoints int, randomBounds RandomGeomBounds, layout geom.Layout,
 ) []geom.Coord {
+	layout = RandomLayout(rng, layout)
 	if numPoints < 3 {
 		panic(errors.Newf("need at least 3 points, got %d", numPoints))
 	}
@@ -52,10 +121,7 @@ func RandomValidLinearRingCoords(
 	coords := make([]geom.Coord, numPoints+1)
 	var centerX, centerY float64
 	for i := 0; i < numPoints; i++ {
-		coords[i] = geom.Coord{
-			RandomCoord(rng, minX, maxX),
-			RandomCoord(rng, minY, maxY),
-		}
+		coords[i] = RandomCoordSlice(rng, randomBounds, layout)
 		centerX += coords[i].X()
 		centerY += coords[i].Y()
 	}
@@ -78,20 +144,27 @@ func RandomValidLinearRingCoords(
 
 // RandomPoint generates a random Point.
 func RandomPoint(
-	rng *rand.Rand, minX float64, maxX float64, minY float64, maxY float64, srid geopb.SRID,
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
 ) *geom.Point {
-	return geom.NewPointFlat(geom.XY, []float64{
-		RandomCoord(rng, minX, maxX),
-		RandomCoord(rng, minY, maxY),
-	}).SetSRID(int(srid))
+	layout = RandomLayout(rng, layout)
+	// 10% chance to generate an empty point.
+	if rng.Intn(10) == 0 {
+		return geom.NewPointEmpty(layout).SetSRID(int(srid))
+	}
+	return geom.NewPointFlat(layout, RandomCoordSlice(rng, randomBounds, layout)).SetSRID(int(srid))
 }
 
 // RandomLineString generates a random LineString.
 func RandomLineString(
-	rng *rand.Rand, minX float64, maxX float64, minY float64, maxY float64, srid geopb.SRID,
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
 ) *geom.LineString {
+	layout = RandomLayout(rng, layout)
+	// 10% chance to generate an empty linestring.
+	if rng.Intn(10) == 0 {
+		return geom.NewLineString(layout).SetSRID(int(srid))
+	}
 	numCoords := 3 + rand.Intn(10)
-	randCoords := RandomValidLinearRingCoords(rng, numCoords, minX, maxX, minY, maxY)
+	randCoords := RandomValidLinearRingCoords(rng, numCoords, randomBounds, layout)
 
 	// Extract a random substring from the LineString by truncating at the ends.
 	var minTrunc, maxTrunc int
@@ -103,96 +176,144 @@ func RandomLineString(
 			minTrunc, maxTrunc = maxTrunc, minTrunc
 		}
 	}
-	return geom.NewLineString(geom.XY).MustSetCoords(randCoords[minTrunc:maxTrunc]).SetSRID(int(srid))
+	return geom.NewLineString(layout).MustSetCoords(randCoords[minTrunc:maxTrunc]).SetSRID(int(srid))
 }
 
 // RandomPolygon generates a random Polygon.
 func RandomPolygon(
-	rng *rand.Rand, minX float64, maxX float64, minY float64, maxY float64, srid geopb.SRID,
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
 ) *geom.Polygon {
+	layout = RandomLayout(rng, layout)
+	// 10% chance to generate an empty polygon.
+	if rng.Intn(10) == 0 {
+		return geom.NewPolygon(layout).SetSRID(int(srid))
+	}
 	// TODO(otan): generate random holes inside the Polygon.
 	// Ideas:
 	// * We can do something like use 4 arbitrary points in the LinearRing to generate a BoundingBox,
 	//   and re-use "PointInLinearRing" to generate N random points inside the 4 points to form
 	//   a "sub" linear ring inside.
 	// * Generate a random set of polygons, see which ones they fully cover and use that.
-	return geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
-		RandomValidLinearRingCoords(rng, 3+rng.Intn(10), minX, maxX, minY, maxY),
+	return geom.NewPolygon(layout).MustSetCoords([][]geom.Coord{
+		RandomValidLinearRingCoords(rng, 3+rng.Intn(10), randomBounds, layout),
 	}).SetSRID(int(srid))
 }
 
-// RandomGeomT generates a random geom.T object within the given bounds and SRID.
+// RandomMultiPoint generates a random MultiPoint.
+func RandomMultiPoint(
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
+) *geom.MultiPoint {
+	layout = RandomLayout(rng, layout)
+	ret := geom.NewMultiPoint(layout).SetSRID(int(srid))
+	// 10% chance to generate an empty multipoint (when num is 0).
+	num := rng.Intn(10)
+	for i := 0; i < num; i++ {
+		if err := ret.Push(RandomPoint(rng, randomBounds, srid, layout)); err != nil {
+			panic(err)
+		}
+	}
+	return ret
+}
+
+// RandomMultiLineString generates a random MultiLineString.
+func RandomMultiLineString(
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
+) *geom.MultiLineString {
+	layout = RandomLayout(rng, layout)
+	ret := geom.NewMultiLineString(layout).SetSRID(int(srid))
+	// 10% chance to generate an empty multilinestring (when num is 0).
+	num := rng.Intn(10)
+	for i := 0; i < num; i++ {
+		if err := ret.Push(RandomLineString(rng, randomBounds, srid, layout)); err != nil {
+			panic(err)
+		}
+	}
+	return ret
+}
+
+// RandomMultiPolygon generates a random MultiPolygon.
+func RandomMultiPolygon(
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
+) *geom.MultiPolygon {
+	layout = RandomLayout(rng, layout)
+	ret := geom.NewMultiPolygon(layout).SetSRID(int(srid))
+	// 10% chance to generate an empty multipolygon (when num is 0).
+	num := rng.Intn(10)
+	for i := 0; i < num; i++ {
+		if err := ret.Push(RandomPolygon(rng, randomBounds, srid, layout)); err != nil {
+			panic(err)
+		}
+	}
+	return ret
+}
+
+// RandomGeometryCollection generates a random GeometryCollection.
+func RandomGeometryCollection(
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
+) *geom.GeometryCollection {
+	layout = RandomLayout(rng, layout)
+	ret := geom.NewGeometryCollection().SetSRID(int(srid))
+	if err := ret.SetLayout(layout); err != nil {
+		panic(err)
+	}
+	// 10% chance to generate an empty geometrycollection (when num is 0).
+	num := rng.Intn(10)
+	for i := 0; i < num; i++ {
+		var shape geom.T
+		needShape := true
+		// Keep searching for a non GeometryCollection.
+		for needShape {
+			shape = RandomGeomT(rng, randomBounds, srid, layout)
+			_, needShape = shape.(*geom.GeometryCollection)
+		}
+		if err := ret.Push(shape); err != nil {
+			panic(err)
+		}
+	}
+	return ret
+}
+
+// RandomGeomT generates a random geom.T object with the given layout within the
+// given bounds and SRID.
 func RandomGeomT(
-	rng *rand.Rand, minX float64, maxX float64, minY float64, maxY float64, srid geopb.SRID,
+	rng *rand.Rand, randomBounds RandomGeomBounds, srid geopb.SRID, layout geom.Layout,
 ) geom.T {
-	shapeType := validShapeTypes[rng.Intn(len(validShapeTypes))]
+	layout = RandomLayout(rng, layout)
+	shapeType := RandomShapeType(rng)
 	switch shapeType {
 	case geopb.ShapeType_Point:
-		return RandomPoint(rng, minX, maxX, minY, maxY, srid)
+		return RandomPoint(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_LineString:
-		return RandomLineString(rng, minX, maxX, minY, maxY, srid)
+		return RandomLineString(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_Polygon:
-		return RandomPolygon(rng, minX, maxX, minY, maxY, srid)
+		return RandomPolygon(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_MultiPoint:
-		// TODO(otan): add empty points.
-		ret := geom.NewMultiPoint(geom.XY).SetSRID(int(srid))
-		num := 1 + rng.Intn(10)
-		for i := 0; i < num; i++ {
-			if err := ret.Push(RandomPoint(rng, minX, maxX, minY, maxY, srid)); err != nil {
-				panic(err)
-			}
-		}
-		return ret
+		return RandomMultiPoint(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_MultiLineString:
-		// TODO(otan): add empty LineStrings.
-		ret := geom.NewMultiLineString(geom.XY).SetSRID(int(srid))
-		num := 1 + rng.Intn(10)
-		for i := 0; i < num; i++ {
-			if err := ret.Push(RandomLineString(rng, minX, maxX, minY, maxY, srid)); err != nil {
-				panic(err)
-			}
-		}
-		return ret
+		return RandomMultiLineString(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_MultiPolygon:
-		// TODO(otan): add empty Polygons.
-		ret := geom.NewMultiPolygon(geom.XY).SetSRID(int(srid))
-		num := 1 + rng.Intn(10)
-		for i := 0; i < num; i++ {
-			if err := ret.Push(RandomPolygon(rng, minX, maxX, minY, maxY, srid)); err != nil {
-				panic(err)
-			}
-		}
-		return ret
+		return RandomMultiPolygon(rng, randomBounds, srid, layout)
 	case geopb.ShapeType_GeometryCollection:
-		ret := geom.NewGeometryCollection().SetSRID(int(srid))
-		num := 1 + rng.Intn(10)
-		for i := 0; i < num; i++ {
-			var shape geom.T
-			needShape := true
-			// Keep searching for a non GeometryCollection.
-			for needShape {
-				shape = RandomGeomT(rng, minX, maxX, minY, maxY, srid)
-				_, needShape = shape.(*geom.GeometryCollection)
-			}
-			if err := ret.Push(shape); err != nil {
-				panic(err)
-			}
-		}
-		return ret
+		return RandomGeometryCollection(rng, randomBounds, srid, layout)
 	}
 	panic(errors.Newf("unknown shape type: %v", shapeType))
 }
 
 // RandomGeometry generates a random Geometry with the given SRID.
 func RandomGeometry(rng *rand.Rand, srid geopb.SRID) geo.Geometry {
-	minX, maxX := -10e9, 10e9
-	minY, maxY := -10e9, 10e9
+	return RandomGeometryWithLayout(rng, srid, geom.NoLayout)
+}
+
+// RandomGeometryWithLayout generates a random Geometry of a given layout with
+// the given SRID.
+func RandomGeometryWithLayout(rng *rand.Rand, srid geopb.SRID, layout geom.Layout) geo.Geometry {
+	randomBounds := MakeRandomGeomBounds()
 	proj, ok := geoprojbase.Projections[srid]
 	if ok {
-		minX, maxX = proj.Bounds.MinX, proj.Bounds.MaxX
-		minY, maxY = proj.Bounds.MinY, proj.Bounds.MaxY
+		randomBounds.minX, randomBounds.maxX = proj.Bounds.MinX, proj.Bounds.MaxX
+		randomBounds.minY, randomBounds.maxY = proj.Bounds.MinY, proj.Bounds.MaxY
 	}
-	ret, err := geo.MakeGeometryFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
+	ret, err := geo.MakeGeometryFromGeomT(RandomGeomT(rng, randomBounds, srid, layout))
 	if err != nil {
 		panic(err)
 	}
@@ -201,10 +322,15 @@ func RandomGeometry(rng *rand.Rand, srid geopb.SRID) geo.Geometry {
 
 // RandomGeography generates a random Geometry with the given SRID.
 func RandomGeography(rng *rand.Rand, srid geopb.SRID) geo.Geography {
+	return RandomGeographyWithLayout(rng, srid, geom.NoLayout)
+}
+
+// RandomGeographyWithLayout generates a random Geometry of a given layout with
+// the given SRID.
+func RandomGeographyWithLayout(rng *rand.Rand, srid geopb.SRID, layout geom.Layout) geo.Geography {
 	// TODO(otan): generate geographies that traverse latitude/longitude boundaries.
-	minX, maxX := -180.0, 180.0
-	minY, maxY := -90.0, 90.0
-	ret, err := geo.MakeGeographyFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
+	randomBoundsGeography := MakeRandomGeomBoundsForGeography()
+	ret, err := geo.MakeGeographyFromGeomT(RandomGeomT(rng, randomBoundsGeography, srid, layout))
 	if err != nil {
 		panic(err)
 	}
