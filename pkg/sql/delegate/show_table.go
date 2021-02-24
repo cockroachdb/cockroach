@@ -24,7 +24,18 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 
 	const showCreateQuery = `
 WITH zone_configs AS (
-    SELECT string_agg(raw_config_sql, e';\n' ORDER BY partition_name, index_name) FROM crdb_internal.zones
+		SELECT
+			string_agg(
+				raw_config_sql,
+				e';\n'
+				ORDER BY partition_name, index_name
+			) AS raw,
+			string_agg(
+				crdb_internal.filter_multiregion_fields_from_zone_config_sql(raw_config_sql),
+				e';\n'
+				ORDER BY partition_name, index_name
+			) AS mr
+		FROM crdb_internal.zones
     WHERE database_name = %[1]s
     AND table_name = %[2]s
     AND raw_config_yaml IS NOT NULL
@@ -36,9 +47,14 @@ SELECT
         CASE
         WHEN NOT has_partitions
             THEN NULL
-        WHEN (SELECT * FROM zone_configs) IS NULL
-            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
-        ELSE concat(e';\n', (SELECT * FROM zone_configs))
+				WHEN is_multi_region THEN
+					CASE
+						WHEN (SELECT mr FROM zone_configs) IS NULL THEN NULL
+						ELSE concat(e';\n', (SELECT mr FROM zone_configs))
+					END
+        WHEN (SELECT raw FROM zone_configs) IS NULL THEN
+					e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e';\n', (SELECT raw FROM zone_configs))
         END
     ) AS create_statement
 FROM

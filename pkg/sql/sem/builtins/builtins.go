@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -4966,6 +4967,41 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			`Returns the given region if the region has been added to the current database.
 	Otherwise, this will return the primary region of the current database.
 	This will error if the current database is not a multi-region database.`,
+			tree.VolatilityStable,
+		),
+	),
+	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
+		tree.FunctionProperties{},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				stmt, err := parser.ParseOne(s)
+				if err != nil {
+					// Return the same statement if it does not parse.
+					// This can happen for invalid zone config state, in which case
+					// it is better not to error as opposed to blocking SHOW CREATE TABLE.
+					return tree.NewDString(s), nil //nolint:returnerrcheck
+				}
+				zs, ok := stmt.AST.(*tree.SetZoneConfig)
+				if !ok {
+					return nil, errors.Newf("invalid CONFIGURE ZONE statement (type %T): %s", stmt.AST, stmt)
+				}
+				newKVOptions := zs.Options[:0]
+				for _, opt := range zs.Options {
+					if _, ok := zonepb.MultiRegionZoneConfigFieldsSet[opt.Key]; !ok {
+						newKVOptions = append(newKVOptions, opt)
+					}
+				}
+				if len(newKVOptions) == 0 {
+					return tree.DNull, nil
+				}
+				zs.Options = newKVOptions
+				return tree.NewDString(zs.String()), nil
+			},
+			types.String,
+			`Takes in a CONFIGURE ZONE SQL statement and returns a modified
+SQL statement omitting multi-region related zone configuration fields.
+If the CONFIGURE ZONE statement can be inferred by the database's or
+table's zone configuration this will return NULL.`,
 			tree.VolatilityStable,
 		),
 	),
