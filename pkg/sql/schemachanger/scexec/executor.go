@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -54,6 +55,21 @@ func NewExecutor(
 		jobTracker:      tracker,
 	}
 }
+
+// NewSchemaChangerTestingKnobs are testing knobs for the executor.
+// TODO !!! this doesn't quite work as is because we need error injection in
+// the executor itself, so we may have to pass the entire Stage into the
+// executor (and annotate it with the phase)
+type NewSchemaChangerTestingKnobs struct {
+	// BeforeStage is called before ops passed to the executor are executed.
+	BeforeStage func(phase scplan.Phase, stage *scplan.Stage)
+	// AfterStage is called after ops passed to the executor are successfully
+	// executed.
+	AfterStage func(phase scplan.Phase, stage *scplan.Stage)
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
 func (ex *Executor) ExecuteOps(ctx context.Context, toExecute scop.Ops) error {

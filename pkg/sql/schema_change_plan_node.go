@@ -58,6 +58,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		nil /* backfiller */, nil /* jobTracker */)
 	after, err := runNewSchemaChanger(
 		params.ctx, scplan.StatementPhase, s.plannedState, executor,
+		params.ExecCfg().NewSchemaChangerTestingKnobs,
 	)
 	if err != nil {
 		return err

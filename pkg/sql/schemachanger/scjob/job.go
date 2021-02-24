@@ -111,8 +111,15 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
+			knobs := execCtx.ExecCfg().NewSchemaChangerTestingKnobs
+			if knobs != nil && knobs.BeforeStage != nil {
+				knobs.BeforeStage(scplan.PostCommitPhase, &s)
+			}
 			if err := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
 				return err
+			}
+			if knobs != nil && knobs.AfterStage != nil {
+				knobs.AfterStage(scplan.PostCommitPhase, &s)
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {

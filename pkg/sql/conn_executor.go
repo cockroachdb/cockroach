@@ -2561,6 +2561,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ctx, scplan.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.nodes,
 		executor,
+		ex.server.cfg.NewSchemaChangerTestingKnobs,
 	)
 	if err != nil {
 		return err
@@ -2587,7 +2588,11 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 }
 
 func runNewSchemaChanger(
-	ctx context.Context, phase scplan.Phase, nodes []*scpb.Node, executor *scexec.Executor,
+	ctx context.Context,
+	phase scplan.Phase,
+	nodes []*scpb.Node,
+	executor *scexec.Executor,
+	knobs *scexec.NewSchemaChangerTestingKnobs,
 ) (after []*scpb.Node, _ error) {
 	sc, err := scplan.MakePlan(nodes, scplan.Params{
 		ExecutionPhase: phase,
@@ -2598,8 +2603,14 @@ func runNewSchemaChanger(
 	}
 	after = nodes
 	for _, s := range sc.Stages {
+		if knobs != nil && knobs.BeforeStage != nil {
+			knobs.BeforeStage(phase, &s)
+		}
 		if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
 			return nil, err
+		}
+		if knobs != nil && knobs.AfterStage != nil {
+			knobs.AfterStage(phase, &s)
 		}
 		after = s.After
 	}
