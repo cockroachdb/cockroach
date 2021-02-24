@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+# gen, as written, depends on symbols defined within //pkg/roachpb. gen is used
+# to generated a file[1] that in turn is depended on to compile //pkg/roachpb.
+# To break this circular structure, we define a separate target[2] within
+# pkg/roachpb that enlists the pre-generated file in the source tree[3] in
+# order to generate newer revisions within the sandbox. For another example of
+# this pattern, see what we do in langgen[4].
+#
+# All dependants of //pkg/roachpb will need to depend on the file generated
+# within the Bazel sandbox, which is achieved by [5]. Conversely, to instruct
+# gazelle/Bazel to resolve gen's import of //pkg/roachpb appropriately, we add
+# the resolve directive below.
+#
+# TODO(irfansharif): We'll eventually want to be able to implant the sandbox
+# generated files back into the source tree. This will be necessary for IDEs,
+# but also for a sane workflow for the engineers working on roachpb. If they
+# were only using Bazel today, roachpb dependent builds would misbehave as we
+# wouldn't be updating the checked-in batch_generated.go file used to build
+# roachpb itself (assuming any diffs there would result in different
+# code/compilation behavior). See #58018.
+#
+# [1]: //pkg/roachpb/gen-batch-generated
+# [2]: //pkg/roachpb:bootstrap
+# [3]: //pkg/roachpb:batch_generated.go
+# [4]: //pkg/sql/opt/optgen/lang:bootstrap
+# [5]: See the "gazelle:resolve" directive in the top-level BUILD.bazel.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:bootstrap
+
+go_library(
+    name = "gen_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/gen",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/roachpb:bootstrap"],
+)
+
+go_binary(
+    name = "gen",
+    embed = [":gen_lib"],
+    visibility = ["//visibility:public"],
+)
