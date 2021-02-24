@@ -457,7 +457,7 @@ func (cl CertsLocator) RPCServiceCACertPath() string {
 // RPCServiceCACertFilename returns the expected file name for the RPC service
 // certificate
 func RPCServiceCACertFilename() string {
-	return "service.rpc" + certExtension
+	return "service.ca.rpc" + certExtension
 }
 
 // RPCServiceCAKeyPath returns the expected file path for the RPC service key
@@ -468,7 +468,7 @@ func (cl CertsLocator) RPCServiceCAKeyPath() string {
 // RPCServiceCAKeyFilename returns the expected file name for the RPC service
 // certificate
 func RPCServiceCAKeyFilename() string {
-	return "service.rpc" + keyExtension
+	return "service.ca.rpc" + keyExtension
 }
 
 // CACert returns the CA cert. May be nil.
