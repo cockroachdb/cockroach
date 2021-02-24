@@ -33,16 +33,26 @@ apt-get update --yes
 apt-get install --yes sudo
 
 # Install the necessary dependencies. Keep this list small!
+GO_VERSION=1.15
+
 apt-get install --yes \
   docker-ce \
   docker-compose \
   gnome-keyring \
   gnupg2 \
   git \
-  golang-go \
+  golang-${GO_VERSION}-go \
   openjdk-11-jre-headless \
   pass \
   unzip
+
+# golang-X.Y-go does not install system wide symlinks, it's only done by the
+# golang-go package which points to the latest version. Explicitly symlink the
+# pinned version to /usr/bin.
+for f in go gofm; do
+    ln -s /usr/lib/go-${GO_VERSION}/bin/$f /usr/bin
+done
+
 # Installing gnome-keyring prevents the error described in
 # https://github.com/moby/moby/issues/34048
 
