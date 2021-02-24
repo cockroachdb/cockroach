@@ -157,7 +157,7 @@ with &1
  │         │    │    │    │    │         │    │         └── a:5::FLOAT8 [type=float]
  │         │    │    │    │    │         │    ├── stats: [rows=2000, distinct(5)=2000, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=200, null(7)=20, distinct(8)=2000, null(8)=0]
  │         │    │    │    │    │         │    ├── key: (8)
- │         │    │    │    │    │         │    └── fd: (8)-->(5-7,9)
+ │         │    │    │    │    │         │    └── fd: (8)-->(5-7,9), (5)-->(7)
  │         │    │    │    │    │         └── filters
  │         │    │    │    │    │              └── c:7 = 1.0 [type=bool, outer=(7), constraints=(/7: [/1.0 - /1.0]; tight), fd=()-->(7)]
  │         │    │    │    │    └── projections
@@ -223,7 +223,7 @@ upsert xyz
       │         ├── cardinality: [0 - 0]
       │         ├── stats: [rows=0]
       │         ├── key: (8)
-      │         ├── fd: (8)-->(5-7,9)
+      │         ├── fd: (8)-->(5-7,9), (5)-->(7)
       │         ├── scan abc
       │         │    ├── columns: a:5(int!null) b:6(string) c:7(float) rowid:8(int!null) abc.crdb_internal_mvcc_timestamp:9(decimal)
       │         │    ├── computed column expressions
@@ -231,7 +231,7 @@ upsert xyz
       │         │    │         └── a:5::FLOAT8 [type=float]
       │         │    ├── stats: [rows=2000]
       │         │    ├── key: (8)
-      │         │    └── fd: (8)-->(5-7,9)
+      │         │    └── fd: (8)-->(5-7,9), (5)-->(7)
       │         └── filters
       │              └── false [type=bool, constraints=(contradiction; tight)]
       └── projections
