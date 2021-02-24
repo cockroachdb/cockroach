@@ -1045,7 +1045,7 @@ func purgeOldVersions(
 	}
 
 	if takenOffline {
-		removeInactives(takenOffline)
+		removeInactives(true /* takenOffline */)
 		return nil
 	}
 
@@ -1056,22 +1056,20 @@ func purgeOldVersions(
 	// Acquire a refcount on the descriptor on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
-	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
-		removeInactives(isInactive)
-		if desc != nil {
-			s, err := t.release(desc.Descriptor, m.removeOnceDereferenced())
-			if err != nil {
-				return err
-			}
-			if s != nil {
-				releaseLease(s, m)
-			}
-			return nil
-		}
-		return nil
+	newest := m.findNewest(id)
+	if newest == nil || newest.hasExpired(m.storage.clock.Now()) {
+		return errRenewLease
 	}
-	return err
+	newest.incRefcount()
+	removeInactives(false /* takenOffline */)
+	s, err := t.release(newest.Descriptor, m.removeOnceDereferenced())
+	if err != nil {
+		return err
+	}
+	if s != nil {
+		releaseLease(s, m)
+	}
+	return nil
 }
 
 // maybeQueueLeaseRenewal queues a lease renewal if there is not already a lease
