@@ -608,6 +608,16 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// estimate turns out to be smaller than the actual row count.
 	if scan.IsUnfiltered(c.mem.Metadata()) {
 		baseCost += cpuCostFactor
+
+		// For tables with multiple partitions, add the cost of visiting each
+		// partition.
+		// TODO(rytaft): In the future we should take latency into account here.
+		index := c.mem.Metadata().Table(scan.Table).Index(scan.Index)
+		if partitionCount := index.PartitionCount(); partitionCount > 1 {
+			// Subtract 1 since we already accounted for the first partition when
+			// counting spans.
+			baseCost += memo.Cost(partitionCount-1) * randIOCostFactor
+		}
 	}
 	return baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
 }
