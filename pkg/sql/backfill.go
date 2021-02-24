@@ -903,6 +903,9 @@ const (
 func getJobIDForMutationWithDescriptor(
 	ctx context.Context, tableDesc catalog.TableDescriptor, mutationID descpb.MutationID,
 ) (int64, error) {
+	// TODO !!! this doesn't work because some mutations (from the new sc job)
+	// aren't associated with an old-style schema change job. we probably have to
+	// store the mutation id for the new style job somewhere.
 	for _, job := range tableDesc.GetMutationJobs() {
 		if job.MutationID == mutationID {
 			return job.JobID, nil

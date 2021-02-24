@@ -55,6 +55,8 @@ type Builder struct {
 	// nodes contains the internal state when building targets for an individual
 	// statement.
 	nodes []*scpb.Node
+
+	lockedDescriptors map[descpb.ID]struct{}
 }
 
 type notImplementedError struct {

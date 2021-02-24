@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -103,7 +104,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		return err
 	}
 
-	for _, s := range sc.Stages {
+	for i, s := range sc.Stages {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			jt := badJobTracker{
@@ -120,6 +121,14 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			}
 			if knobs != nil && knobs.AfterStage != nil {
 				knobs.AfterStage(scplan.PostCommitPhase, &s)
+			}
+			// If this is the last stage, also update all the table descriptors to
+			// remove the job ID.
+			if i == len(sc.Stages)-1 {
+				if err := clearDescriptorJobIDs(
+					ctx, txn, descriptors, n.job.Payload().DescriptorIDs, *n.job.ID()); err != nil {
+					return err
+				}
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -167,6 +176,26 @@ func makeTargetStates(
 		}
 	}
 	return ts
+}
+
+func clearDescriptorJobIDs(
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, descIDs []descpb.ID, jobID int64,
+) error {
+	for _, id := range descIDs {
+		table, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		if table.NewSchemaChangeJobID != jobID {
+			return errors.AssertionFailedf(
+				"unexpected schema change job ID %d on table %d", jobID, table.GetID())
+		}
+		table.NewSchemaChangeJobID = 0
+		if err := descriptors.WriteDesc(ctx, true /* kvTrace */, table, txn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {

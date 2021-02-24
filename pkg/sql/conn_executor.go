@@ -2570,21 +2570,44 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs.nodes = after
 	targetSlice := make([]*scpb.Target, len(scs.nodes))
 	states := make([]scpb.State, len(scs.nodes))
+	// TODO(ajwerner): It may be better in the future to have the builder be
+	// responsible for determining this set of descriptors. As of the time of
+	// writing, the descriptors to be "locked," descriptors that need schema
+	// change jobs, and descriptors with schema change mutations all coincide. But
+	// there are future schema changes to be implemented in the new schema changer
+	// (e.g., RENAME TABLE) for which this may no longer be true.
+	descIDMap := make(map[descpb.ID]struct{})
+	var descIDs []descpb.ID
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
+
+		descID := scs.nodes[i].Element().DescriptorID()
+		if _, ok := descIDMap[descID]; !ok {
+			descIDs = append(descIDs, descID)
+			descIDMap[descID] = struct{}{}
+		}
 	}
-	_, err = ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
+	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   "Schema change job", // TODO(ajwerner): use const
 		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
 		Username:      ex.planner.User(),
-		DescriptorIDs: nil, // TODO(ajwerner): populate
+		DescriptorIDs: descIDs, // TODO(ajwerner): populate
 		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
 		Progress:      jobspb.NewSchemaChangeProgress{States: states},
 		RunningStatus: "",
 		NonCancelable: false,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Write the job ID to the affected descriptors.
+	if err := setDescriptorJobIDs(
+		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, *job.ID()); err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new schema change job %d using the new schema changer", *job.ID())
+	return nil
 }
 
 func runNewSchemaChanger(
@@ -2615,6 +2638,28 @@ func runNewSchemaChanger(
 		after = s.After
 	}
 	return after, nil
+}
+
+func setDescriptorJobIDs(
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, descIDs []descpb.ID, jobID int64,
+) error {
+	for _, descID := range descIDs {
+		// Currently all "locking" schema changes are on tables. This will probably
+		// need to be expanded at least to types.
+		table, err := descriptors.GetMutableTableByID(ctx, txn, descID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		if table.NewSchemaChangeJobID != 0 {
+			return errors.AssertionFailedf("unexpected schema change job ID %d on table %d",
+				table.NewSchemaChangeJobID, table.GetID())
+		}
+		table.NewSchemaChangeJobID = jobID
+		if err := descriptors.WriteDesc(ctx, true /* kvTrace */, table, txn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // StatementCounters groups metrics for counting different types of

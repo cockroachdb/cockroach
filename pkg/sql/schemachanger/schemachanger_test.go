@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -193,7 +194,6 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					if stage.Ops.Type() != scop.BackfillType {
 						return
 					}
-
 					for _, op := range stage.Ops.Slice() {
 						// Only block the first schema change.
 						if backfillOp, ok := op.(scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
@@ -257,4 +257,115 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			},
 		)
 	})
+}
+
+func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	ctx := context.Background()
+
+	var doOnce sync.Once
+	// Closed when we enter the RunBeforeBackfill knob.
+	beforeBackfillNotification := make(chan struct{})
+	// Closed when we're ready to continue with the schema change.
+	continueNotification := make(chan struct{})
+
+	var kvDB *kv.DB
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID int64) error {
+				// Assert that old schema change jobs never run in this test.
+				t.Errorf("unexpected old schema change job %d", jobID)
+				return nil
+			},
+		},
+		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
+			BeforeStage: func(phase scplan.Phase, stage *scplan.Stage) {
+				// Verify that we never get a mutation ID not associated with the schema
+				// change that is running.
+				if phase != scplan.PostCommitPhase {
+					return
+				}
+				table := catalogkv.TestingGetTableDescriptorFromSchema(
+					kvDB, keys.SystemSQLCodec, "db", "public", "t")
+				mutations := table.GetMutations()
+				for i := range mutations {
+					assert.LessOrEqual(t, int(mutations[i].MutationID), 2)
+				}
+
+				if stage.Ops.Type() != scop.BackfillType {
+					return
+				}
+				for _, op := range stage.Ops.Slice() {
+					if _, ok := op.(scop.BackfillIndex); ok {
+						doOnce.Do(func() {
+							close(beforeBackfillNotification)
+							<-continueNotification
+						})
+					}
+				}
+			},
+		},
+	}
+
+	var s serverutils.TestServerInterface
+	var sqlDB *gosql.DB
+	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+
+	g := ctxgroup.WithContext(ctx)
+
+	g.GoCtx(func(ctx context.Context) error {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		assert.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
+		assert.NoError(t, err)
+		return nil
+	})
+
+	<-beforeBackfillNotification
+
+	g.GoCtx(func(ctx context.Context) error {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'off'`)
+		assert.NoError(t, err)
+		for _, stmt := range []string{
+			`ALTER TABLE db.t ADD COLUMN c INT DEFAULT 2`,
+			`CREATE INDEX ON db.t(a)`,
+			`ALTER TABLE db.t RENAME COLUMN a TO c`,
+			`CREATE TABLE db.t2 (i INT PRIMARY KEY, a INT REFERENCES db.t)`,
+			// The error for this statement refers to the table as "new" because the
+			// descriptor has already been updated. TODO !!! maybe use the cluster version.
+			`ALTER TABLE db.t RENAME TO db.new`,
+			`TRUNCATE TABLE db.t`,
+			// `DROP TABLE db.t`,
+		} {
+			_, err = conn.ExecContext(ctx, stmt)
+			assert.Truef(t,
+				testutils.IsError(
+					err,
+					`cannot perform a schema change on table`,
+				),
+				"error: %s, statement: %s",
+				err, stmt,
+			)
+		}
+		return nil
+	})
+
+	close(continueNotification)
+	require.NoError(t, g.Wait())
 }
