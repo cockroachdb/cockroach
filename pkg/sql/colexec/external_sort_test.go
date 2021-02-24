@@ -314,7 +314,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
 
 	externalSorter := sorter.(*diskSpillerBase).diskBackedOp.(*externalSorter)
-	numPartitionsCreated := externalSorter.firstPartitionIdx + externalSorter.numPartitions
+	numPartitionsCreated := externalSorter.currentPartitionIdx
 	// This maximum can be achieved when we have minimum required number of FDs
 	// as follows: we expect that each newly created partition contains about
 	// numInMemoryBufferedBatches number of batches with only the partition that
