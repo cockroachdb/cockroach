@@ -13,10 +13,89 @@ package cockroach.kv.kvserver.ctupdate;
 option go_package = "ctpb";
 
 import "kv/kvserver/closedts/ctpb/entry.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 
 service ClosedTimestamp {
     rpc Get(stream Reaction) returns (stream Entry) { }
+}
+
+// Update contains information about (the advancement of) closed timestamps for
+// ranges with leases on the sender node. Updates are of two types: snapshots
+// and incrementals. Snapshots are stand-alone messages, explicitly containing
+// state about a bunch of ranges. Incrementals are deltas since the previous
+// message (the previous message can be a snapshot or another incremental); they
+// contain info about which new ranges are included in the info provided, which
+// ranges are removed, and how the closed timestamps for different categories of
+// ranges advanced. Ranges communicated by a previous message and not touched by
+// an incremental are "implicitly" referenced by the incremental. In order to
+// properly handle incrementals, the recipient maintains a "stream's state": the
+// group of ranges that can be implicitly referenced by the next message.
+message Update {
+  // node_id identifies the sending node.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // seq_num identifies this update across all updates produced by a node. The
+  // sequence is reset when the node restarts, so a recipient can only count on
+  // it increasing within a single PushUpdates stream.
+  //
+  // All messages have sequence numbers, including snapshots. A snapshot can be
+  // applied on top of any state (i.e. it can be applied after having skipped
+  // messages); its sequence number tells the recipient what incremental message
+  // it should expect afterwards.
+  int64 seq_num = 2 [(gogoproto.casttype) = "SeqNum"];
+
+  // snapshot indicates whether this message is standalone, or whether it's just
+  // a delta since the messages with the previous seq_num. A snapshot
+  // re-initializes all of the recipient's state. The first message on a stream
+  // is always a snapshot. Afterwards, there could be others if the sender is
+  // temporarily slowed down or if the stream experience network problems and
+  // some incremental messages are dropped  (although generally we expect that
+  // to result in a stream failing and a new one being established).
+  bool snapshot = 3;
+
+  // closed_timestamps represents the timestamps that are being closed for each
+  // group of ranges, with a group being represented by its policy.
+  //
+  // The recipient is supposed to forward the closed timestamps of the affected
+  // ranges to these values. Upon receiving one of these updates, the recipient
+  // should generally not assume that it hasn't been informed of a higher closed
+  // timestamp for any range in particular - races between this side-transport
+  // and the regular Raft transport are possible, as are races between two
+  // side-transport streams for an outgoing and incoming leaseholder.
+  message GroupUpdate {
+    roachpb.RangeClosedTimestampPolicy policy = 1;
+    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
+
+  // removed contains the set of ranges that are no longer registered on the
+  // stream and who future updates are no longer applicable to.
+  //
+  // The field will be empty if snapshot is true, as a snapshot message implies
+  // that all ranges not present in the snapshot's added_or_updated list are no
+  // longer tracked.
+  repeated int32 removed = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // added_or_updated contains the set of ranges that are either being added to
+  // the tracked ranges set with a given (lai, policy) or updated within the
+  // tracked range set with a new (lai, policy). All future updates on the
+  // stream are applicable to these ranges until they are removed, either
+  // explicitly by being included in a future removed set or implicitly by not
+  // being included in the added_or_updated field of a future snapshot.
+  message RangeUpdate {
+    uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+    int64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "LAI"];
+    roachpb.RangeClosedTimestampPolicy policy = 3;
+  }
+  repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
+}
+
+message Response {}
+
+service SideTransport {
+  rpc PushUpdates(stream Update) returns (stream Response) { }
 }

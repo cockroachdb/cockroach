@@ -71,6 +71,7 @@ go_library(
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/container",
+        "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness",
