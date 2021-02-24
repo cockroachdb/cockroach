@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -112,15 +113,28 @@ type externalSorter struct {
 	NonExplainable
 	closerHelper
 
-	unlimitedAllocator *colmem.Allocator
-	totalMemoryLimit   int64
-	state              externalSorterState
-	inputTypes         []*types.T
-	ordering           execinfrapb.Ordering
+	// mergeUnlimitedAllocator is used to track the memory under the batches
+	// dequeued from partitions during the merge operation.
+	mergeUnlimitedAllocator *colmem.Allocator
+	// outputUnlimitedAllocator is used to track the memory under the output
+	// batch in the merge operation.
+	outputUnlimitedAllocator *colmem.Allocator
+
+	totalMemoryLimit int64
+	state            externalSorterState
+	inputTypes       []*types.T
+	ordering         execinfrapb.Ordering
+	// columnOrdering is the same as ordering used when creating mergers.
+	columnOrdering     colinfo.ColumnOrdering
 	inMemSorter        ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
 	partitioner        colcontainer.PartitionedQueue
 	partitionerCreator func() colcontainer.PartitionedQueue
+	// partitionerToOperators stores all partitionerToOperator instances that we
+	// have created when merging partitions. This allows for reusing them in
+	// case we need to perform repeated merging (namely, we'll be able to reuse
+	// their internal batches from dequeueing from disk).
+	partitionerToOperators []*partitionerToOperator
 	// numPartitions is the current number of partitions.
 	numPartitions int
 	// firstPartitionIdx is the index of the first partition to merge next.
@@ -148,26 +162,19 @@ var _ ResettableOperator = &externalSorter{}
 var _ closableOperator = &externalSorter{}
 
 // NewExternalSorter returns a disk-backed general sort operator.
-// - ctx is the same context that standaloneMemAccount was created with.
-// - unlimitedAllocator must have been created with a memory account derived
-// from an unlimited memory monitor. It will be used by several internal
+// - unlimitedAllocators must have been created with a memory account derived
+// from an unlimited memory monitor. They will be used by several internal
 // components of the external sort which is responsible for making sure that
 // the components stay within the memory limit.
-// - standaloneMemAccount must be a memory account derived from an unlimited
-// memory monitor with a standalone budget. It will be used by
-// inputPartitioningOperator to "partition" the input according to memory
-// limit. The budget *must* be standalone because we don't want to double
-// count the memory (the memory under the batches will be accounted for with
-// the unlimitedAllocator).
 // - maxNumberPartitions (when non-zero) overrides the semi-dynamically
 // computed maximum number of partitions to have at once.
 // - delegateFDAcquisitions specifies whether the external sorter should let
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
 func NewExternalSorter(
-	ctx context.Context,
-	unlimitedAllocator *colmem.Allocator,
-	standaloneMemAccount *mon.BoundAccount,
+	sortUnlimitedAllocator *colmem.Allocator,
+	mergeUnlimitedAllocator *colmem.Allocator,
+	outputUnlimitedAllocator *colmem.Allocator,
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
@@ -202,9 +209,9 @@ func NewExternalSorter(
 		// a zero-length batch, so make it at least 1.
 		singlePartitionSize = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, singlePartitionSize)
+	inputPartitioner := newInputPartitioningOperator(input, singlePartitionSize)
 	inMemSorter, err := newSorter(
-		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
+		sortUnlimitedAllocator, newAllSpooler(sortUnlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
 	)
 	if err != nil {
@@ -218,16 +225,18 @@ func NewExternalSorter(
 		partitionedDiskQueueSemaphore = nil
 	}
 	es := &externalSorter{
-		OneInputNode:       NewOneInputNode(inMemSorter),
-		unlimitedAllocator: unlimitedAllocator,
-		totalMemoryLimit:   memoryLimit,
-		inMemSorter:        inMemSorter,
-		inMemSorterInput:   inputPartitioner.(*inputPartitioningOperator),
+		OneInputNode:             NewOneInputNode(inMemSorter),
+		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
+		outputUnlimitedAllocator: outputUnlimitedAllocator,
+		totalMemoryLimit:         memoryLimit,
+		inMemSorter:              inMemSorter,
+		inMemSorterInput:         inputPartitioner.(*inputPartitioningOperator),
 		partitionerCreator: func() colcontainer.PartitionedQueue {
 			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
-		inputTypes: inputTypes,
-		ordering:   ordering,
+		inputTypes:     inputTypes,
+		ordering:       ordering,
+		columnOrdering: execinfrapb.ConvertToColumnOrdering(ordering),
 		// TODO(yuzefovich): maxNumberPartitions should also be semi-dynamically
 		// limited based on the sizes of batches. Consider a scenario when each
 		// input batch is 1 GB in size - if we don't put any limiting in place,
@@ -305,11 +314,15 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			// resulting batches into a new partition with the next available
 			// index.
 			//
-			// The merger will be using some amount of RAM, will register it
-			// with the unlimited allocator and will *not* release that memory
-			// from the allocator, so we have to do it ourselves.
-			before := s.unlimitedAllocator.Used()
-			merger, err := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+			// The merger will be using some amount of RAM for the output batch,
+			// will register it with the output unlimited allocator and will
+			// *not* release that memory from the allocator, so we have to do it
+			// ourselves.
+			//
+			// Note that the memory used for dequeueing batches from the
+			// partitions is retained and is registered with the merge unlimited
+			// allocator.
+			merger, err := s.createMergerForPartitions(ctx)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -320,11 +333,13 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					colexecerror.InternalError(err)
 				}
 			}
-			after := s.unlimitedAllocator.Used()
-			s.unlimitedAllocator.ReleaseMemory(after - before)
-			// Reclaim disk space by closing the inactive read partitions. Since the
-			// merger must have exhausted all inputs, this is all the partitions just
-			// read from.
+			// We are now done with the merger, so we can release the memory
+			// used for the output batches (all of which have been enqueued into
+			// the new partition).
+			s.outputUnlimitedAllocator.ReleaseMemory(s.outputUnlimitedAllocator.Used())
+			// Reclaim disk space by closing the inactive read partitions. Since
+			// the merger must have exhausted all inputs, this is all the
+			// partitions just read from.
 			if err := s.partitioner.CloseInactiveReadPartitions(ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -337,12 +352,11 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterFinished
 				continue
 			} else if s.numPartitions == 1 {
-				s.emitter = newPartitionerToOperator(
-					s.unlimitedAllocator, s.inputTypes, s.partitioner, s.firstPartitionIdx,
-				)
+				s.createPartitionerToOperators()
+				s.emitter = s.partitionerToOperators[0]
 			} else {
 				var err error
-				s.emitter, err = s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+				s.emitter, err = s.createMergerForPartitions(ctx)
 				if err != nil {
 					colexecerror.InternalError(err)
 				}
@@ -401,48 +415,66 @@ func (s *externalSorter) Close(ctx context.Context) error {
 	return lastErr
 }
 
+// createPartitionerToOperators updates s.partitionerToOperators to correspond
+// to all current partitions.
+func (s *externalSorter) createPartitionerToOperators() {
+	oldPartitioners := s.partitionerToOperators
+	if len(oldPartitioners) < s.numPartitions {
+		s.partitionerToOperators = make([]*partitionerToOperator, s.numPartitions)
+		copy(s.partitionerToOperators, oldPartitioners)
+		for i := len(oldPartitioners); i < s.numPartitions; i++ {
+			s.partitionerToOperators[i] = newPartitionerToOperator(
+				s.mergeUnlimitedAllocator, s.inputTypes, s.partitioner,
+			)
+		}
+	}
+	for i := 0; i < s.numPartitions; i++ {
+		// We only need to set the partitioner and partitionIdx fields because
+		// all others will not change when these operators are reused.
+		s.partitionerToOperators[i].partitioner = s.partitioner
+		s.partitionerToOperators[i].partitionIdx = s.firstPartitionIdx + i
+	}
+}
+
 // createMergerForPartitions creates an ordered synchronizer that will merge
-// partitions in [firstIdx, firstIdx+numPartitions) range.
+// partitions in [firstPartitionIdx, firstPartitionIdx+numPartitions) range.
 func (s *externalSorter) createMergerForPartitions(
-	firstIdx, numPartitions int,
+	ctx context.Context,
 ) (colexecbase.Operator, error) {
-	syncInputs := make([]SynchronizerInput, numPartitions)
+	s.createPartitionerToOperators()
+	syncInputs := make([]SynchronizerInput, s.numPartitions)
 	for i := range syncInputs {
-		syncInputs[i].Op = newPartitionerToOperator(
-			s.unlimitedAllocator, s.inputTypes, s.partitioner, firstIdx+i,
-		)
+		syncInputs[i].Op = s.partitionerToOperators[i]
 	}
 	// TODO(yuzefovich): we should calculate a more precise memory limit taking
 	// into account how many partitions are currently being merged and the
 	// average batch size in each one of them.
 	return NewOrderedSynchronizer(
-		s.unlimitedAllocator,
-		s.totalMemoryLimit,
-		syncInputs,
-		s.inputTypes,
-		execinfrapb.ConvertToColumnOrdering(s.ordering),
+		s.outputUnlimitedAllocator, s.totalMemoryLimit, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }
 
 func newInputPartitioningOperator(
-	input colexecbase.Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
+	input colexecbase.Operator, memoryLimit int64,
 ) ResettableOperator {
 	return &inputPartitioningOperator{
-		OneInputNode:         NewOneInputNode(input),
-		standaloneMemAccount: standaloneMemAccount,
-		memoryLimit:          memoryLimit,
+		OneInputNode: NewOneInputNode(input),
+		memoryLimit:  memoryLimit,
 	}
 }
 
 // inputPartitioningOperator is an operator that returns the batches from its
-// input until the standalone allocator reaches the memory limit. From that
-// point, the operator returns a zero-length batch (until it is reset).
+// input until the memory footprint of all emitted batches reaches the memory
+// limit. From that point, the operator returns a zero-length batch (until it is
+// reset).
 type inputPartitioningOperator struct {
 	OneInputNode
 	NonExplainable
 
-	standaloneMemAccount *mon.BoundAccount
-	memoryLimit          int64
+	// memoryLimit determines the size of each partition.
+	memoryLimit int64
+	// alreadyUsedMemory tracks the size of the current partition so far.
+	alreadyUsedMemory int64
 	// interceptReset determines whether the reset method will be called on
 	// the input to this operator when the latter is being reset. This field is
 	// managed by externalSorter.
@@ -451,7 +483,7 @@ type inputPartitioningOperator struct {
 	//
 	// The reason for having this knob is that we need two kinds of behaviors
 	// when resetting the inputPartitioningOperator:
-	// 1. ("shallow" reset) we need to clear the memory account because the
+	// 1. ("shallow" reset) we need to reset alreadyUsedMemory because the
 	// external sorter is moving on spilling the data into a new partition.
 	// However, we *cannot* propagate the reset further up because it might
 	// delete the data that the external sorter has not yet spilled. This
@@ -470,25 +502,20 @@ func (o *inputPartitioningOperator) Init() {
 }
 
 func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
-	if o.standaloneMemAccount.Used() >= o.memoryLimit {
+	if o.alreadyUsedMemory >= o.memoryLimit {
 		return coldata.ZeroBatch
 	}
 	b := o.input.Next(ctx)
 	if b.Length() == 0 {
 		return b
 	}
-	// We cannot use Allocator.RetainBatch here because that method looks at the
-	// capacities of the vectors. However, this operator is an input to sortOp
-	// which will spool all the tuples and buffer them (by appending into the
-	// buffered batch), so we need to account for memory proportionally to the
-	// length of the batch. (Note: this is not exactly true for Bytes type, but
-	// it's ok if we have some deviation. This numbers matter only to understand
-	// when to start a new partition, and the memory will be actually accounted
-	// for correctly.)
-	batchMemSize := colmem.GetProportionalBatchMemSize(b, int64(b.Length()))
-	if err := o.standaloneMemAccount.Grow(ctx, batchMemSize); err != nil {
-		colexecerror.InternalError(err)
-	}
+	// This operator is an input to sortOp which will spool all the tuples and
+	// buffer them (by appending into the buffered batch), so we need to account
+	// for memory proportionally to the length of the batch. (Note: this is not
+	// exactly true for Bytes type, but it's ok if we have some deviation. This
+	// numbers matter only to understand when to start a new partition, and the
+	// memory will be actually accounted for correctly.)
+	o.alreadyUsedMemory += colmem.GetProportionalBatchMemSize(b, int64(b.Length()))
 	return b
 }
 
@@ -499,10 +526,10 @@ func (o *inputPartitioningOperator) reset(ctx context.Context) {
 		}
 	}
 	o.interceptReset = false
-	o.standaloneMemAccount.Shrink(ctx, o.standaloneMemAccount.Used())
+	o.alreadyUsedMemory = 0
 }
 
 func (o *inputPartitioningOperator) Close(ctx context.Context) error {
-	o.standaloneMemAccount.Clear(ctx)
+	o.alreadyUsedMemory = 0
 	return nil
 }

@@ -13,7 +13,6 @@ package colbuilder
 import (
 	"context"
 	"fmt"
-	"math"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -363,16 +362,21 @@ func (r opResult) createDiskBackedSort(
 		sorterMemMonitorName,
 		func(input colexecbase.Operator) colexecbase.Operator {
 			monitorNamePrefix := fmt.Sprintf("%sexternal-sorter", memMonitorNamePrefix)
-			// We are using an unlimited memory monitor here because external
+			// We are using unlimited memory monitors here because external
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
-			unlimitedAllocator := colmem.NewAllocator(
+			sortUnlimitedAllocator := colmem.NewAllocator(
 				ctx, r.createBufferingUnlimitedMemAccount(
-					ctx, flowCtx, monitorNamePrefix,
+					ctx, flowCtx, monitorNamePrefix+"-sort",
 				), factory)
-			standaloneMemAccount := r.createStandaloneMemAccount(
-				ctx, flowCtx, monitorNamePrefix,
-			)
+			mergeUnlimitedAllocator := colmem.NewAllocator(
+				ctx, r.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, monitorNamePrefix+"-merge",
+				), factory)
+			outputUnlimitedAllocator := colmem.NewAllocator(
+				ctx, r.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, monitorNamePrefix+"-output",
+				), factory)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
 			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
 			// The cache mode is chosen to reuse the cache to have a smaller
@@ -384,9 +388,9 @@ func (r opResult) createDiskBackedSort(
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
 			es := colexec.NewExternalSorter(
-				ctx,
-				unlimitedAllocator,
-				standaloneMemAccount,
+				sortUnlimitedAllocator,
+				mergeUnlimitedAllocator,
+				outputUnlimitedAllocator,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
@@ -1295,31 +1299,6 @@ func (r opResult) createBufferingUnlimitedMemAccount(
 	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
-}
-
-// createStandaloneMemAccount instantiates an unlimited memory monitor and a
-// memory account that have a standalone budget. This means that the memory
-// registered with these objects is *not* reported to the root monitor (i.e.
-// it will not count towards max-sql-memory). Use it only when the memory in
-// use is accounted for with a different memory monitor. The receiver is
-// updated to have references to both objects.
-func (r opResult) createStandaloneMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
-	standaloneMemMonitor := mon.NewMonitor(
-		name+"-standalone",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		flowCtx.Cfg.Settings,
-	)
-	r.OpMonitors = append(r.OpMonitors, standaloneMemMonitor)
-	standaloneMemMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &standaloneMemAccount)
-	return &standaloneMemAccount
 }
 
 // createDiskAccount instantiates an unlimited disk monitor and a disk account

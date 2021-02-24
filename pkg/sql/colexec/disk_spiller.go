@@ -207,8 +207,13 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 			if d.spillingCallbackFn != nil {
 				d.spillingCallbackFn()
 			}
-			d.diskBackedOp.Init()
-			d.distBackedOpInitStatus = OperatorInitialized
+			if d.distBackedOpInitStatus == OperatorNotInitialized {
+				// The disk spiller might be reset for reuse in which case the
+				// the disk-backed operator has already been initialized and we
+				// don't want to perform the initialization again.
+				d.diskBackedOp.Init()
+				d.distBackedOpInitStatus = OperatorInitialized
+			}
 			return d.diskBackedOp.Next(ctx)
 		}
 		// Either not an out of memory error or an OOM error coming from a

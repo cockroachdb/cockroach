@@ -286,13 +286,13 @@ func NewExternalHashJoiner(
 		spec.left.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
 	)
 	leftJoinerInput := newPartitionerToOperator(
-		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
+		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner,
 	)
 	rightPartitioner := colcontainer.NewPartitionedDiskQueue(
 		spec.right.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
 	)
 	rightJoinerInput := newPartitionerToOperator(
-		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
+		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner,
 	)
 	// With the default limit of 256 file descriptors, this results in 16
 	// partitions. This is a hard maximum of partitions that will be used by the
@@ -549,9 +549,11 @@ StateChanged:
 						memSize = parentPartitionInfo.rightMemSize
 					}
 					for {
-						if err := partitioner.Dequeue(ctx, parentPartitionIdx, batch); err != nil {
-							colexecerror.InternalError(err)
-						}
+						hj.unlimitedAllocator.PerformOperation(batch.ColVecs(), func() {
+							if err := partitioner.Dequeue(ctx, parentPartitionIdx, batch); err != nil {
+								colexecerror.InternalError(err)
+							}
+						})
 						if batch.Length() == 0 {
 							break
 						}
