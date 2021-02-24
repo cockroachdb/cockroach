@@ -3006,6 +3006,15 @@ func (e *MultipleResultsError) Error() string {
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
+	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
+	// session database.
+	// Note this returns an interface to avoid a circular dependency with
+	// descpb.DatabaseDescriptor_RegionConfig. Currently, descpb relies on tree
+	// (this package).
+	// Pulling RegionConfig out as a dependency is not an option as the region
+	// enum ID field would depend on descpb.ID, not alleviating the problem.
+	CurrentDatabaseRegionConfig(ctx context.Context) (interface{}, error)
+
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
 	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.

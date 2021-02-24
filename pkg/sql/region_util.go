@@ -772,3 +772,17 @@ func partitionByForRegionalByRow(
 		List:   listPartition,
 	}
 }
+
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (p *planner) CurrentDatabaseRegionConfig(ctx context.Context) (interface{}, error) {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		ctx,
+		p.txn,
+		p.CurrentDatabase(),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return dbDesc.GetRegionConfig(), nil
+}
