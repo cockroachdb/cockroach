@@ -146,7 +146,7 @@ t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
 t  foo             UNIQUE       UNIQUE (b ASC)                       true
 t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
-statement error constraint "typo" does not exist
+statement error constraint "typo" of relation "t" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
 
 # TODO(erik): re-enable test when unvalidated checks can be added
@@ -180,7 +180,7 @@ ALTER TABLE t DROP IF EXISTS d
 statement error column "a" is referenced by the primary key
 ALTER TABLE t DROP a
 
-statement error constraint "bar" does not exist
+statement error constraint "bar" of relation "t" does not exist
 ALTER TABLE t DROP CONSTRAINT bar
 
 statement ok
@@ -1534,7 +1534,7 @@ unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
 
-statement error pgcode 42704 constraint \"unique_b_2\" does not exist
+statement error pgcode 42704 constraint \"unique_b_2\" of relation \"unique_without_index\" does not exist
 ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b_2 TO unique_b_3
 
 statement error pgcode 42710 duplicate constraint name: \"unique_b_1\"
@@ -1561,7 +1561,7 @@ unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)        
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
 
-statement error pgcode 42704 constraint \"unique_b\" does not exist
+statement error pgcode 42704 constraint \"unique_b\" of relation \"unique_without_index\" does not exist
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_b
 
 # Drop a valid constraint.
