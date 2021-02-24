@@ -17,7 +17,7 @@ import (
 	_ "time/tzdata"
 )
 
-//go:generate go run generate_lowercase_timezones.go
+//go:generate go run gen/main.go
 
 // LoadLocation returns the time.Location with the given name.
 // The name is taken to be a location name corresponding to a file
