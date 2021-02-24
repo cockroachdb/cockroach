@@ -507,6 +507,7 @@ function makeExecStats(): Required<ExecStats> {
     max_mem_usage: makeStat(),
     contention_time: makeStat(),
     network_messages: makeStat(),
+    max_disk_usage: makeStat(),
   };
 }
 
