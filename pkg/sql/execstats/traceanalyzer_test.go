@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -69,6 +70,9 @@ func TestTraceAnalyzer(t *testing.T) {
 							return nil
 						}
 					},
+				},
+				DistSQL: &execinfra.TestingKnobs{
+					ForceDiskSpill: true,
 				},
 			},
 		}})
@@ -139,19 +143,16 @@ func TestTraceAnalyzer(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name                string
-		analyzer            *execstats.TraceAnalyzer
-		expectedMaxMemUsage int64
+		name     string
+		analyzer *execstats.TraceAnalyzer
 	}{
 		{
-			name:                "RowExec",
-			analyzer:            rowexecTraceAnalyzer,
-			expectedMaxMemUsage: int64(20480),
+			name:     "RowExec",
+			analyzer: rowexecTraceAnalyzer,
 		},
 		{
-			name:                "ColExec",
-			analyzer:            colexecTraceAnalyzer,
-			expectedMaxMemUsage: int64(51200),
+			name:     "ColExec",
+			analyzer: colexecTraceAnalyzer,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -162,6 +163,9 @@ func TestTraceAnalyzer(t *testing.T) {
 			require.Equal(
 				t, numNodes, len(nodeLevelStats.MaxMemoryUsageGroupedByNode), "expected all nodes to have specified maximum memory usage",
 			)
+			require.Equal(
+				t, numNodes, len(nodeLevelStats.MaxDiskUsageGroupedByNode), "expected all nodes to have specified maximum disk usage",
+			)
 
 			queryLevelStats := tc.analyzer.GetQueryLevelStats()
 
@@ -170,7 +174,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			// network.
 			require.Equal(t, int64(21*8), queryLevelStats.NetworkBytesSent)
 
-			require.Equal(t, tc.expectedMaxMemUsage, queryLevelStats.MaxMemUsage)
+			// Soft check that MaxMemUsage is set to a non-zero value. The actual
+			// value differs between test runs due to metamorphic randomization.
+			require.Greater(t, queryLevelStats.MaxMemUsage, int64(0))
+
+			require.Equal(t, int64(1048576), queryLevelStats.MaxDiskUsage)
 
 			require.Equal(t, int64(30), queryLevelStats.KVRowsRead)
 			// For tests, the bytes read is based on the number of rows read, rather
@@ -244,6 +252,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:           5 * time.Second,
 		NetworkMessages:  6,
 		ContentionTime:   7 * time.Second,
+		MaxDiskUsage:     8,
 	}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent: 8,
@@ -253,6 +262,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:           12 * time.Second,
 		NetworkMessages:  13,
 		ContentionTime:   14 * time.Second,
+		MaxDiskUsage:     15,
 	}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent: 9,
@@ -262,6 +272,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:           17 * time.Second,
 		NetworkMessages:  19,
 		ContentionTime:   21 * time.Second,
+		MaxDiskUsage:     15,
 	}
 
 	aCopy := a
