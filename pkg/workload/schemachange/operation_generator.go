@@ -501,7 +501,11 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
 
 		if def.Inverted {
-			if !colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ) {
+			// We can have an inverted index on a set of columns if the last column
+			// is an inverted indexable type and the preceding columns are not.
+			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
+			if (invertedIndexableType && i < len(def.Columns)-1) ||
+				(!invertedIndexableType && i == len(def.Columns)-1) {
 				nonIndexableType = true
 			}
 		} else {
@@ -552,8 +556,6 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
 			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
-			// Inverted indexes do not support indexing more than one column.
-			{code: pgcode.InvalidSQLStatementName, condition: len(def.Columns) > 1 && def.Inverted},
 			// Inverted indexes cannot be unique.
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
 			// If there is data in the table such that a unique index cannot be created,
