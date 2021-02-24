@@ -44,6 +44,11 @@ func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, error) {
+	return nil, errors.WithStack(errSequenceOperators)
+}
+
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
@@ -164,6 +169,11 @@ var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate scalar expressions using table lookups in this context")
+
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (ep *DummyEvalPlanner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
