@@ -772,3 +772,42 @@ func partitionByForRegionalByRow(
 		List:   listPartition,
 	}
 }
+
+// databaseRegionConfigImpl implements tree.DatabaseRegionConfig.
+type databaseRegionConfigImpl struct {
+	cfg *descpb.DatabaseDescriptor_RegionConfig
+}
+
+// Exists implements the tree.DatabaseRegionConfig interface.
+func (impl *databaseRegionConfigImpl) Null() bool {
+	return impl.cfg == nil
+}
+
+// RegionNames implements the tree.DatabaseRegionConfig interface.
+func (impl *databaseRegionConfigImpl) IsValidRegion(r string) bool {
+	for _, region := range impl.cfg.Regions {
+		if string(region.Name) == r {
+			return true
+		}
+	}
+	return false
+}
+
+// PrimaryRegion implements the tree.DatabaseRegionConfig interface.
+func (impl *databaseRegionConfigImpl) PrimaryRegion() string {
+	return string(impl.cfg.PrimaryRegion)
+}
+
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (p *planner) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, error) {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		p.EvalContext().Ctx(),
+		p.txn,
+		p.CurrentDatabase(),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &databaseRegionConfigImpl{cfg: dbDesc.GetRegionConfig()}, nil
+}
