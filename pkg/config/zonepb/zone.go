@@ -57,6 +57,27 @@ var NamedZonesByID = func() map[uint32]string {
 	return out
 }()
 
+// MultiRegionZoneConfigFields are the fields on a zone configuration which
+// may be set by the system for multi-region objects".
+var MultiRegionZoneConfigFields = []tree.Name{
+	"global_reads",
+	"num_replicas",
+	"num_voters",
+	"constraints",
+	"voter_constraints",
+	"lease_preferences",
+}
+
+// MultiRegionZoneConfigFieldsSet contain the items in
+// MultiRegionZoneConfigFields but in a set form for fast lookup.
+var MultiRegionZoneConfigFieldsSet = func() map[tree.Name]struct{} {
+	ret := make(map[tree.Name]struct{}, len(MultiRegionZoneConfigFields))
+	for _, f := range MultiRegionZoneConfigFields {
+		ret[f] = struct{}{}
+	}
+	return ret
+}()
+
 // ZoneSpecifierFromID creates a tree.ZoneSpecifier for the zone with the
 // given ID.
 func ZoneSpecifierFromID(

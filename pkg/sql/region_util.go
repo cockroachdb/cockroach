@@ -325,15 +325,6 @@ func synthesizeVoterConstraints(
 	}
 }
 
-var multiRegionZoneConfigFields = []tree.Name{
-	"global_reads",
-	"num_replicas",
-	"num_voters",
-	"constraints",
-	"voter_constraints",
-	"lease_preferences",
-}
-
 // zoneConfigForMultiRegionTable generates a ZoneConfig stub for a
 // regional-by-table or global table in a multi-region database.
 //
@@ -346,7 +337,7 @@ var multiRegionZoneConfigFields = []tree.Name{
 // configuration is required.
 //
 // Relevant multi-region configured fields (as defined in
-// `multiRegionZoneConfigFields`) will be overwritten by the calling function
+// `zonepb.MultiRegionZoneConfigFields`) will be overwritten by the calling function
 // into an existing ZoneConfig.
 func zoneConfigForMultiRegionTable(
 	localityConfig descpb.TableDescriptor_LocalityConfig,
@@ -484,7 +475,7 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 		if err != nil {
 			return false, zonepb.ZoneConfig{}, err
 		}
-		zc.CopyFromZone(*localityZoneConfig, multiRegionZoneConfigFields)
+		zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 		return false, zc, nil
 	}
 }
@@ -505,7 +496,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	if err != nil {
 		return false, zonepb.ZoneConfig{}, err
 	}
-	zc.CopyFromZone(*localityZoneConfig, multiRegionZoneConfigFields)
+	zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
 	if hasNewSubzones {
