@@ -4928,40 +4928,22 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-				r, err := evalCtx.InternalExecutor.QueryRow(
-					evalCtx.Ctx(),
-					DefaultToDatabasePrimaryRegionBuiltinName,
-					evalCtx.Txn,
-					`SELECT regions @> array[$1::string], primary_region
-				FROM crdb_internal.databases WHERE name = $2`,
-					s,
-					evalCtx.SessionData.Database,
-				)
+				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig()
 				if err != nil {
 					return nil, err
 				}
-				if len(r) == 0 {
+				if regionConfig.IsValidRegionNameString(s) {
+					return tree.NewDString(s), nil
+				}
+				primaryRegion := regionConfig.PrimaryRegionString()
+				if primaryRegion == "" {
 					return nil, pgerror.Newf(
 						pgcode.InvalidDatabaseDefinition,
-						"current database %s does not exist",
+						"current database %s is not multi-region enabled",
 						evalCtx.SessionData.Database,
 					)
 				}
-				// If region has been added to the database.
-				if *(r[0].(*tree.DBool)) {
-					return tree.NewDString(s), nil
-				}
-				// Otherwise, return the primary region if it exists.
-				if r[1] != tree.DNull {
-					return r[1], nil
-				}
-
-				// Not seeing any rows means the database is not multi-region enabled.
-				return nil, pgerror.Newf(
-					pgcode.InvalidDatabaseDefinition,
-					"current database %s is not multi-region enabled",
-					evalCtx.SessionData.Database,
-				)
+				return tree.NewDString(primaryRegion), nil
 			},
 			types.String,
 			`Returns the given region if the region has been added to the current database.

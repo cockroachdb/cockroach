@@ -208,6 +208,14 @@ func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
+// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) CurrentDatabaseRegionConfig() (
+	tree.DatabaseRegionConfig,
+	error,
+) {
+	return nil, errors.WithStack(errSequenceOperators)
+}
+
 // Implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)
