@@ -266,6 +266,10 @@ const (
 	// ForeignKeyRepresentationMigration is used to ensure that all no table
 	// descriptors use the pre-19.2 foreign key migration.
 	ForeignKeyRepresentationMigration
+	// PriorReadSummaries introduces support for the use of read summary objects
+	// to ship information about reads on a range through lease changes and
+	// range merges.
+	PriorReadSummaries
 
 	// Step (1): Add new versions here.
 )
@@ -452,10 +456,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     NamespaceTableWithSchemasMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 40},
 	},
-
 	{
 		Key:     ForeignKeyRepresentationMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 42},
+	},
+	{
+		Key:     PriorReadSummaries,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 44},
 	},
 	// Step (2): Add new versions here.
 })

@@ -36,9 +36,9 @@ const (
 	// a large purgatory interval.
 	mergeQueuePurgatoryCheckInterval = 1 * time.Minute
 
-	// The current implementation of merges requires rewriting the right-hand data
-	// onto the left-hand range, even when the ranges are collocated. This is
-	// expensive, so limit to one merge at a time.
+	// The current implementation of merges requires rebalancing replicas on the
+	// right-hand range so that they are collocated with those on the left-hand
+	// range. This is expensive, so limit to one merge at a time.
 	mergeQueueConcurrency = 1
 )
 

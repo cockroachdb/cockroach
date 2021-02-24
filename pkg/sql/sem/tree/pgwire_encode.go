@@ -12,10 +12,23 @@ package tree
 
 import (
 	"bytes"
+	"fmt"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
+
+// ResolveBlankPaddedChar pads the given string with spaces if blank padding is
+// required or returns the string unmodified otherwise.
+func ResolveBlankPaddedChar(s string, t *types.T) string {
+	if t.Oid() == oid.T_bpchar {
+		// Pad spaces on the right of the string to make it of length specified in
+		// the type t.
+		return fmt.Sprintf("%-*v", t.Width(), s)
+	}
+	return s
+}
 
 func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 	// When converting a tuple to text in "postgres mode" there is
@@ -31,14 +44,17 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 	// string printer called pgwireFormatStringInTuple().
 	ctx.WriteByte('(')
 	comma := ""
-	for _, v := range d.D {
+	for i, v := range d.D {
 		ctx.WriteString(comma)
+		t := d.ResolvedType().TupleContents()[i]
 		switch dv := UnwrapDatum(nil, v).(type) {
 		case dNull:
 		case *DString:
-			pgwireFormatStringInTuple(&ctx.Buffer, string(*dv))
+			s := ResolveBlankPaddedChar(string(*dv), t)
+			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		case *DCollatedString:
-			pgwireFormatStringInTuple(&ctx.Buffer, dv.Contents)
+			s := ResolveBlankPaddedChar(dv.Contents, t)
+			pgwireFormatStringInTuple(&ctx.Buffer, s)
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:

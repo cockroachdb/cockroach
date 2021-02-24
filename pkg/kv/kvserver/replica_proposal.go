@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -327,14 +328,24 @@ const (
 // found out about newLease through a snapshot; in this case the replica might
 // not be aware of other lease changes that happened before the snapshot was
 // generated. This method thus tolerates prevLease being "stale" when
-// allowLeaseJump is passed. prevLease can also be the same as newLease; see below.
+// allowLeaseJump is passed. prevLease can also be the same as newLease; see
+// below.
 //
 // newLease represents the lease being applied. Can be the same as prevLease.
 // This allows leasePostApplyLocked to be called for some of its side-effects
 // even if the lease in question has otherwise already been applied to the
 // range.
+//
+// In addition to the leases, the method accepts a summary of the reads served
+// on the range by prior leaseholders. This can be used by the new leaseholder
+// to ensure that no future writes are allowed to invalidate prior reads. If a
+// summary is not provided, the method pessimistically assumes that prior
+// leaseholders served reads all the way up to the start of the new lease.
 func (r *Replica) leasePostApplyLocked(
-	ctx context.Context, prevLease *roachpb.Lease, newLease *roachpb.Lease, jumpOpt leaseJumpOption,
+	ctx context.Context,
+	prevLease, newLease *roachpb.Lease,
+	priorReadSum *rspb.ReadSummary,
+	jumpOpt leaseJumpOption,
 ) {
 	// Note that we actually install the lease further down in this method.
 	// Everything we do before then doesn't need to worry about requests being
@@ -398,18 +409,28 @@ func (r *Replica) leasePostApplyLocked(
 				newLease, err)
 		}
 
-		// If this replica is a new holder of the lease, update the low water
-		// mark of the timestamp cache. Note that clock offset scenarios are
-		// handled via a stasis period inherent in the lease which is documented
-		// in the Lease struct.
+		// If this replica is a new holder of the lease, update the timestamp
+		// cache. Note that clock offset scenarios are handled via a stasis
+		// period inherent in the lease which is documented in the Lease struct.
+		//
+		// If the Raft entry included a prior read summary then we can use that
+		// directly to update the timestamp cache. Otherwise, we pessimistically
+		// assume that prior leaseholders served reads all the way up to the
+		// start of the new lease.
 		//
 		// The introduction of lease transfers implies that the previous lease
-		// may have been shortened and we are now applying a formally overlapping
-		// lease (since the old lease holder has promised not to serve any more
-		// requests, this is kosher). This means that we don't use the old
-		// lease's expiration but instead use the new lease's start to initialize
-		// the timestamp cache low water.
-		setTimestampCacheLowWaterMark(r.store.tsCache, r.descRLocked(), newLease.Start.ToTimestamp())
+		// may have been shortened and we are now applying a formally
+		// overlapping lease (since the old lease holder has promised not to
+		// serve any more requests, this is kosher). This means that we don't
+		// use the old lease's expiration but instead use the new lease's start
+		// to initialize the timestamp cache low water.
+		var sum rspb.ReadSummary
+		if priorReadSum != nil {
+			sum = *priorReadSum
+		} else {
+			sum = rspb.FromTimestamp(newLease.Start.ToTimestamp())
+		}
+		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), sum)
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.

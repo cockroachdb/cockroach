@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "readsummary",
+    srcs = ["persist.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+    ],
+)
