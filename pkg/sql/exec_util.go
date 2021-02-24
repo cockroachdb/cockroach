@@ -349,6 +349,13 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	},
 )
 
+var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_stream_replication.enabled",
+	"default value for experimental_stream_replication session setting;"+
+		"enables the ability to setup a replication stream",
+	false,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2333,6 +2340,10 @@ func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 
 func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondata.NewSchemaChangerMode) {
 	m.data.NewSchemaChangerMode = val
+}
+
+func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
+	m.data.EnableStreamReplication = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

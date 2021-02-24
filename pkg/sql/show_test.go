@@ -299,7 +299,7 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 	}
-	sqltestutils.ShowCreateTableTest(t, testCases)
+	sqltestutils.ShowCreateTableTest(t, "" /* extraQuerySetup */, testCases)
 }
 
 func TestShowCreateView(t *testing.T) {

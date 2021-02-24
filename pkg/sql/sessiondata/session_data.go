@@ -237,6 +237,10 @@ type LocalOnlySessionData struct {
 	// NewSchemaChangerMode indicates whether to use the new schema changer.
 	NewSchemaChangerMode NewSchemaChangerMode
 
+	// EnableStreamReplication indicates whether to allow setting up a replication
+	// stream.
+	EnableStreamReplication bool
+
 	// SequenceCache stores sequence values which have been cached using the
 	// CACHE sequence option.
 	SequenceCache SequenceCache
