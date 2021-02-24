@@ -41,8 +41,8 @@ func EncodeKV(
 	const includeEmpty = true
 	indexEntries, err := rowenc.EncodePrimaryIndex(codec, descr, primary,
 		colMap, datums, includeEmpty)
-	require.Equal(t, 1, len(indexEntries))
 	require.NoError(t, err)
+	require.Equal(t, 1, len(indexEntries))
 	indexEntries[0].Value.InitChecksum(indexEntries[0].Key)
 	return roachpb.KeyValue{Key: indexEntries[0].Key, Value: indexEntries[0].Value}
 }

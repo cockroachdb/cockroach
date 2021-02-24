@@ -169,11 +169,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	}
 
 	// Initialize the event streams.
-	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	errChs := make(map[streamingccl.PartitionAddress]chan error)
 	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
+		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, sip.spec.StartTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
 			return
