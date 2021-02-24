@@ -70,6 +70,14 @@ CREATE TABLE uniq_partial (
 )
 
 statement ok
+CREATE TABLE uniq_partial_pk (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+
+statement ok
 CREATE TYPE region AS ENUM ('us-east', 'us-west', 'eu-west')
 
 # TODO(rytaft): When more of the multi-region syntax is supported,
@@ -713,7 +721,7 @@ a  b  c  d  e
 2  2  2  2  2
 
 
-# Upsert  into a table in which the unique constraints are the suffix of an
+# Upsert into a table in which the unique constraints are the suffix of an
 # index, and the prefix of the index is an enum. This case uses the default
 # value for columns r and j.
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_i"\nDETAIL: Key \(i\)=\(2\) already exists\.
@@ -725,6 +733,75 @@ SELECT * FROM uniq_enum
 r        s    i  j
 us-west  foo  1  1
 eu-west  bar  2  2
+
+# Upsert into a table with a partial unique constraint.
+
+# Upsert non-conflicting rows.
+statement ok
+UPSERT INTO uniq_partial_pk VALUES (1, 1, 1), (2, 2, 2), (3, 1, -1)
+
+# Duplicate of a on insert path.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+UPSERT INTO uniq_partial_pk VALUES (4, 1, 1)
+
+# Duplicate of a on update path.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+UPSERT INTO uniq_partial_pk VALUES (3, 1, 1)
+
+# No duplicate on insert path.
+statement ok
+UPSERT INTO uniq_partial_pk VALUES (4, 1, -1)
+
+# No duplicate on update path.
+statement ok
+UPSERT INTO uniq_partial_pk VALUES (2, 1, -1)
+
+query III colnames,rowsort
+SELECT * FROM uniq_partial_pk
+----
+k  a  b
+1  1  1
+2  1  -1
+3  1  -1
+4  1  -1
+
+# On conflict do update with a partial unique constraint.
+
+# Clear the table and insert new rows.
+statement ok
+DELETE FROM uniq_partial;
+INSERT INTO uniq_partial VALUES (1, 1), (2, 2), (1, -1)
+
+# Insert non-conflicting rows.
+statement ok
+INSERT INTO uniq_partial VALUES (3, 3), (1, -2) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -10
+
+# Insert one conflicting row.
+statement ok
+INSERT INTO uniq_partial VALUES (4, 4), (3, 30) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 33
+
+# Insert two rows that conflict with each other.
+statement error pgcode 21000 UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO uniq_partial VALUES (5, 5), (5, 50) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 33
+
+# Insert a conflicting row that conflicts after update.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO uniq_partial VALUES (4, 40) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 1
+
+# Insert a conflicting row that does not conflict after update.
+statement ok
+INSERT INTO uniq_partial VALUES (4, 40) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 1, b = -40
+
+query II colnames,rowsort
+SELECT * FROM uniq_partial
+----
+a  b
+1  1
+1  -1
+1  -2
+1  -40
+2  2
+3  33
 
 # Ensure that we do not choose a partial index as the arbiter when there is a
 # UNIQUE WITHOUT INDEX constraint.
