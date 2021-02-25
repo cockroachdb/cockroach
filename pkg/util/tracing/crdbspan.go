@@ -142,7 +142,7 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
-func (s *crdbSpan) getRecording(everyoneIsV211 bool) Recording {
+func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -168,12 +168,12 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool) Recording {
 	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
 	children := s.mu.recording.children
-	result = append(result, s.getRecordingLocked())
+	result = append(result, s.getRecordingLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
 	for _, child := range children {
-		result = append(result, child.getRecording(everyoneIsV211)...)
+		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
 	}
 
 	// Sort the spans by StartTime, except the first Span (the root of this
@@ -257,7 +257,10 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 
 // getRecordingLocked returns the Span's recording. This does not include
 // children.
-func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
+//
+// When wantTags is false, no tags will be added. This is a performance
+// optimization as stringifying the tag values can be expensive.
+func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:      s.traceID,
 		SpanID:       s.spanID,
@@ -285,13 +288,13 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Tags[k] = v
 	}
 
-	// When nobody is configured to see our spans, skip some allocations
-	// related to Span UX improvements.
-	if s.mu.duration == -1 {
-		addTag("_unfinished", "1")
-	}
-	if s.mu.recording.recordingType.load() == RecordingVerbose {
-		addTag("_verbose", "1")
+	if wantTags {
+		if s.mu.duration == -1 {
+			addTag("_unfinished", "1")
+		}
+		if s.mu.recording.recordingType.load() == RecordingVerbose {
+			addTag("_verbose", "1")
+		}
 	}
 
 	if s.mu.stats != nil {
@@ -322,17 +325,20 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 			rs.Baggage[k] = v
 		}
 	}
-	if s.logTags != nil {
-		setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
-			addTag(remappedKey, tag.ValueStr())
-		})
-	}
-	if len(s.mu.tags) > 0 {
-		for k, v := range s.mu.tags {
-			// We encode the tag values as strings.
-			addTag(k, fmt.Sprint(v))
+	if wantTags {
+		if s.logTags != nil {
+			setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
+				addTag(remappedKey, tag.ValueStr())
+			})
+		}
+		if len(s.mu.tags) > 0 {
+			for k, v := range s.mu.tags {
+				// We encode the tag values as strings.
+				addTag(k, fmt.Sprint(v))
+			}
 		}
 	}
+
 	rs.Logs = make([]tracingpb.LogRecord, len(s.mu.recording.recordedLogs))
 	for i, r := range s.mu.recording.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp

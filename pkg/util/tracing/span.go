@@ -90,6 +90,10 @@ func (sp *Span) Finish() {
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
+//
+// As a performance optimization, GetRecording does not return tags when the
+// underlying Span is not verbose. Returning tags requires expensive
+// stringification.
 func (sp *Span) GetRecording() Recording {
 	// It's always valid to get the recording, even for a finished span.
 	return sp.i.GetRecording()
@@ -291,7 +295,10 @@ func (s *spanInner) ResetRecording() {
 }
 
 func (s *spanInner) GetRecording() Recording {
-	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive())
+	// If the span is not verbose, optimize by avoiding the tags.
+	// This span is likely only used to carry payloads around.
+	wantTags := s.crdb.recordingType() == RecordingVerbose
+	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
