@@ -543,7 +543,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// before this is ever called.
 			Refresh: func(rangeIDs ...roachpb.RangeID) {
 				for _, rangeID := range rangeIDs {
-					repl, _, err := lateBoundNode.stores.GetReplicaForRangeID(rangeID)
+					repl, _, err := lateBoundNode.stores.GetReplicaForRangeID(ctx, rangeID)
 					if err != nil || repl == nil {
 						continue
 					}

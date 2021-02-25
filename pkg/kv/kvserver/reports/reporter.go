@@ -258,7 +258,7 @@ func (stats *Reporter) update(
 // range or nil if none of the node's stores are holding the Meta1 lease.
 func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Store {
 	const meta1RangeID = roachpb.RangeID(1)
-	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
+	repl, store, err := stats.localStores.GetReplicaForRangeID(ctx, meta1RangeID)
 	if roachpb.IsRangeNotFoundError(err) {
 		return nil
 	}

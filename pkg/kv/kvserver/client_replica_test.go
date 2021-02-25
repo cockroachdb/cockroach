@@ -2810,7 +2810,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	// completed.
 
 	// Code above verified r1 is the leaseholder, so use it to ChangeReplicas.
-	r1, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(rangeInfo.Desc.RangeID)
+	r1, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeInfo.Desc.RangeID)
 	assert.Nil(t, err)
 	expDescAfterAdd := rangeInfo.Desc // for use with ChangeReplicas
 	expDescAfterAdd.NextReplicaID++
@@ -3658,7 +3658,7 @@ func TestTenantID(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(repl.RangeID)
+		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, repl.RangeID)
 		require.NoError(t, err)
 		ri := uninitializedRepl.State()
 		require.Equal(t, uint64(0), ri.TenantID)
