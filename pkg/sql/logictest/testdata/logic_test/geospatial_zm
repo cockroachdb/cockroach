@@ -83,3 +83,24 @@ INSERT INTO geom_4d VALUES ('point(1 2)')
 
 statement error pq: object type PointZ does not match column dimensionality GeometryZM
 INSERT INTO geom_4d VALUES ('pointz(1 2 3)')
+
+# Builtins for creating Points
+query T
+select st_astext(st_makepoint(1, 2))
+----
+POINT (1 2)
+
+query T
+select st_astext(st_makepoint(1, 2, 3))
+----
+POINT Z (1 2 3)
+
+query T
+select st_astext(st_makepoint(1, 2, 3, 4))
+----
+POINT ZM (1 2 3 4)
+
+query T
+select st_astext(st_makepointm(1, 2, 3))
+----
+POINT M (1 2 3)
