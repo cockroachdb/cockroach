@@ -224,7 +224,17 @@ CREATE TABLE uniq_computed_pk (
 )
 
 statement ok
-CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
+CREATE TABLE uniq_uuid (
+  id1 UUID DEFAULT gen_random_uuid(),
+  id2 UUID DEFAULT '00000000-0000-0000-0000-000000000000',
+  UNIQUE WITHOUT INDEX (id1),
+  UNIQUE WITHOUT INDEX (id2),
+  FAMILY (id1),
+  FAMILY (id2)
+)
+
+statement ok
+CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT, u UUID)
 
 # -- Tests with INSERT --
 subtest Insert
@@ -578,7 +588,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (v, x) = (b, c)
-│           │ pred: column16 != rowid
+│           │ pred: column17 != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -594,7 +604,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (k, v, y) = (a, b, d)
-│           │ pred: column16 != rowid
+│           │ pred: column17 != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -610,7 +620,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (k) = (a)
-            │ pred: column16 != rowid
+            │ pred: column17 != rowid
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -1453,7 +1463,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (v) = (b)
-            │ pred: column15 != rowid
+            │ pred: column16 != rowid
             │
             ├── • filter
             │   │ filter: x > 0
@@ -1699,6 +1709,175 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
+
+# By default, we do not require checks on UUID columns set to gen_random_uuid(),
+# but we do for UUID columns set to other values.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id2) = (column2)
+            │ right cols are key
+            │ pred: column8 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# The default value of id1 is gen_random_uuid(), so we don't need to plan checks
+# for it. But the default value of id2 is '00000000-0000-0000-0000-000000000000',
+# so we do need checks.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (DEFAULT, DEFAULT)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id2) = (column2)
+            │ right cols are key
+            │ pred: column8 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# We can also detect gen_random_uuid() when it is a projection.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id1, id2) SELECT gen_random_uuid(), u FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (u) = (id2)
+            │ pred: column16 != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_uuid@primary
+                  spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
+
+# After changing the cluster setting, checks are required for both columns.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id1) = (column1)
+│           │ right cols are key
+│           │ pred: column8 != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id2) = (column2)
+            │ right cols are key
+            │ pred: column8 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
 
 
 # -- Tests with UPDATE --
@@ -2588,6 +2767,109 @@ vectorized: true
                                   columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
                                   label: buffer 1
 
+# By default, we do not require checks on UUID columns set to gen_random_uuid(),
+# but we do for UUID columns set to other values.
+query T
+EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid()
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_uuid
+│   │ set: id1, id2
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (id1_new) = (id1)
+            │ pred: rowid != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_uuid@primary
+                  spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
+
+# After changing the cluster setting, checks are required for both columns.
+query T
+EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid()
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_uuid
+│   │ set: id1, id2
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id1_new) = (id1)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (id2_new) = (id2)
+            │ pred: rowid != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_uuid@primary
+                  spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
+
 
 # -- Tests with UPSERT --
 subtest Upsert
@@ -3060,7 +3342,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (v, x) = (b, c)
-│           │ pred: column16 != rowid
+│           │ pred: column17 != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -3076,7 +3358,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (k, v, y) = (a, b, d)
-│           │ pred: column16 != rowid
+│           │ pred: column17 != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -3092,7 +3374,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (k) = (a)
-            │ pred: column16 != rowid
+            │ pred: column17 != rowid
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -3545,3 +3827,97 @@ vectorized: true
                         └── • scan buffer
                               columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r, upsert_s, upsert_j)
                               label: buffer 1
+
+# By default, we do not require checks on UUID columns set to gen_random_uuid(),
+# but we do for UUID columns set to other values.
+query T
+EXPLAIN UPSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id2) = (column2)
+            │ right cols are key
+            │ pred: column8 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
+
+# After changing the cluster setting, checks are required for both columns.
+query T
+EXPLAIN UPSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_uuid(id1, id2, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id1) = (column1)
+│           │ right cols are key
+│           │ pred: column8 != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id2) = (column2)
+            │ right cols are key
+            │ pred: column8 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
