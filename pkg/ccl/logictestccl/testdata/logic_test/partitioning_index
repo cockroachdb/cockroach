@@ -178,3 +178,14 @@ CREATE TABLE public.t60019 (
   FAMILY fam_0_pk_a_b (pk, a, b)
 )
 -- Warning: Partitioned table with no zone configurations.
+
+# Regression test for #60699. Do not allow creation of interleaved partitioned
+# indexes.
+statement ok
+CREATE TABLE t60699_a (a INT PRIMARY KEY);
+CREATE TABLE t60699_b (b INT PRIMARY KEY, a INT REFERENCES t60699_a (a));
+
+statement error interleaved indexes cannot be partitioned
+CREATE INDEX i ON t60699_b (a) INTERLEAVE IN PARENT t60699_a (a) PARTITION BY LIST (a) (
+  partition part1 VALUES IN (1)
+)
