@@ -523,6 +523,9 @@ func AsDBitArray(e Expr) (*DBitArray, bool) {
 var errCannotCastNegativeIntToBitArray = pgerror.Newf(pgcode.CannotCoerce,
 	"cannot cast negative integer to bit varying with unbounded width")
 
+var errCannotCompareNegativeIntToOid = pgerror.Newf(pgcode.CannotCoerce,
+	"cannot compare negative integer to oid")
+
 // NewDBitArrayFromInt creates a bit array from the specified integer
 // at the specified width.
 // If the width is zero, only positive integers can be converted.

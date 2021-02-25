@@ -2129,14 +2129,37 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Float, types.Int, VolatilityLeakProof),
 		makeEqFn(types.Int, types.Decimal, VolatilityLeakProof),
 		makeEqFn(types.Int, types.Float, VolatilityLeakProof),
-		makeEqFn(types.Int, types.Oid, VolatilityLeakProof),
-		makeEqFn(types.Oid, types.Int, VolatilityLeakProof),
 		makeEqFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeEqFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeEqFn(types.TimestampTZ, types.Date, VolatilityStable),
 		makeEqFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
 		makeEqFn(types.Time, types.TimeTZ, VolatilityStable),
 		makeEqFn(types.TimeTZ, types.Time, VolatilityStable),
+
+		&CmpOp{
+			LeftType:  types.Int,
+			RightType: types.Oid,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(left)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarEQFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
+		&CmpOp{
+			LeftType:  types.Oid,
+			RightType: types.Int,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(right)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarEQFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
 
 		// Tuple comparison.
 		&CmpOp{
@@ -2185,14 +2208,37 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Float, types.Int, VolatilityLeakProof),
 		makeLtFn(types.Int, types.Decimal, VolatilityLeakProof),
 		makeLtFn(types.Int, types.Float, VolatilityLeakProof),
-		makeLtFn(types.Int, types.Oid, VolatilityLeakProof),
-		makeLtFn(types.Oid, types.Int, VolatilityLeakProof),
 		makeLtFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeLtFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeLtFn(types.TimestampTZ, types.Date, VolatilityStable),
 		makeLtFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
 		makeLtFn(types.Time, types.TimeTZ, VolatilityStable),
 		makeLtFn(types.TimeTZ, types.Time, VolatilityStable),
+
+		&CmpOp{
+			LeftType:  types.Int,
+			RightType: types.Oid,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(left)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarLTFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
+		&CmpOp{
+			LeftType:  types.Oid,
+			RightType: types.Int,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(right)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarLTFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
 
 		// Tuple comparison.
 		&CmpOp{
@@ -2241,14 +2287,37 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Float, types.Int, VolatilityLeakProof),
 		makeLeFn(types.Int, types.Decimal, VolatilityLeakProof),
 		makeLeFn(types.Int, types.Float, VolatilityLeakProof),
-		makeLeFn(types.Int, types.Oid, VolatilityLeakProof),
-		makeLeFn(types.Oid, types.Int, VolatilityLeakProof),
 		makeLeFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeLeFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeLeFn(types.TimestampTZ, types.Date, VolatilityStable),
 		makeLeFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
 		makeLeFn(types.Time, types.TimeTZ, VolatilityStable),
 		makeLeFn(types.TimeTZ, types.Time, VolatilityStable),
+
+		&CmpOp{
+			LeftType:  types.Int,
+			RightType: types.Oid,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(left)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarLEFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
+		&CmpOp{
+			LeftType:  types.Oid,
+			RightType: types.Int,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(right)
+				if i < 0 {
+					return nil, errCannotCompareNegativeIntToOid
+				}
+				return cmpOpScalarLEFn(ctx, left, right)
+			},
+			Volatility: VolatilityLeakProof,
+		},
 
 		// Tuple comparison.
 		&CmpOp{

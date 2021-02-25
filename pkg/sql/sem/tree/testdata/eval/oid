@@ -27,3 +27,33 @@ eval
 1:::OID >= 3:::INT
 ----
 false
+
+eval
+1:::OID = -3:::INT
+----
+cannot compare negative integer to oid
+
+eval
+-1:::INT4 = -1:::OID
+----
+cannot compare negative integer to oid
+
+eval
+1:::OID < -3:::INT
+----
+cannot compare negative integer to oid
+
+eval
+-1:::INT4 < -1:::OID
+----
+cannot compare negative integer to oid
+
+eval
+1:::OID <= -3:::INT
+----
+cannot compare negative integer to oid
+
+eval
+-1:::INT4 <= -1:::OID
+----
+cannot compare negative integer to oid
