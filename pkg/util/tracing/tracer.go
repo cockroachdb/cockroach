@@ -66,42 +66,6 @@ const (
 	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
-type mode int32
-
-const (
-	modeLegacy mode = iota
-	modeBackground
-)
-
-// tracingMode informs the creation of noop spans and the default recording mode
-// of created spans.
-//
-// If set to 'background', trace spans will be created for all operations, but
-// these will record sparse structured information, unless an operation
-// explicitly requests the verbose from. It's optimized for low overhead, and
-// powers fine-grained statistics and alerts.
-//
-// If set to 'legacy', trace spans will not be created by default. This is
-// unless an internal code path explicitly requests for it, or if an auxiliary
-// tracer (such as lightstep or zipkin) is configured. This tracing mode always
-// records in the verbose form. Using this mode has two effects: the
-// observability of the cluster may be degraded (as most trace spans are elided)
-// and where trace spans are created, they may consume large amounts of memory.
-//
-// Note that regardless of this setting, configuring an auxiliary trace sink
-// will cause verbose traces to be created for all operations, which may lead to
-// high memory consumption. It is not currently possible to send non-verbose
-// traces to auxiliary sinks.
-var tracingMode = settings.RegisterEnumSetting(
-	"trace.mode",
-	"if set to 'background', traces will be created for all operations (in"+
-		"'legacy' mode it's created when explicitly requested or when auxiliary tracers are configured)",
-	"legacy",
-	map[int64]string{
-		int64(modeLegacy):     "legacy",
-		int64(modeBackground): "background",
-	})
-
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
@@ -142,8 +106,6 @@ type Tracer struct {
 	// Preallocated noopSpan, used to avoid creating spans when we are not using
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
-
-	_mode int32 // modeLegacy or modeBackground, accessed atomically
 
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
@@ -198,7 +160,6 @@ func NewTracer() *Tracer {
 // it updated if they change).
 func (t *Tracer) Configure(sv *settings.Values) {
 	reconfigure := func() {
-		atomic.StoreInt32(&t._mode, int32(tracingMode.Get(sv)))
 		if lsToken := lightstepToken.Get(sv); lsToken != "" {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := zipkinCollector.Get(sv); zipkinAddr != "" {
@@ -272,10 +233,6 @@ func (t *Tracer) StartSpanCtx(
 	return t.startSpanGeneric(ctx, operationName, opts)
 }
 
-func (t *Tracer) mode() mode {
-	return mode(atomic.LoadInt32(&t._mode))
-}
-
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
@@ -299,9 +256,6 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	if t.mode() == modeBackground {
-		opts.ForceRealSpan = true
-	}
 	if opts.LogTags == nil {
 		opts.LogTags = logtags.FromContext(ctx)
 	}
