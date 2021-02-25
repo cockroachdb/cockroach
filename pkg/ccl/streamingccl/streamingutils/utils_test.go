@@ -66,7 +66,7 @@ func TestCutoverBuiltin(t *testing.T) {
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
 		job.ID(), cutoverTime).Scan(&jobID)
 	require.NoError(t, err)
-	require.Equal(t, job.ID(), int64(jobID))
+	require.Equal(t, job.ID(), jobspb.JobID(jobID))
 
 	// Check that sentinel is set on the job progress.
 	sj, err := registry.LoadJob(ctx, job.ID())

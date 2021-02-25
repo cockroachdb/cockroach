@@ -991,6 +991,7 @@ message TableDescriptor {
 
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
+    // This is not a jobspb.JobID to avoid a dependency cycle.
     optional int64 job_id = 2 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "JobID"];
   }

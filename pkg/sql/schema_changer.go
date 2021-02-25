@@ -1931,8 +1931,8 @@ func CreateGCJobRecord(
 // Note that this is defined here for testing purposes to avoid cyclic
 // dependencies.
 type GCJobTestingKnobs struct {
-	RunBeforeResume    func(jobID int64) error
-	RunBeforePerformGC func(jobID int64) error
+	RunBeforeResume    func(jobID jobspb.JobID) error
+	RunBeforePerformGC func(jobID jobspb.JobID) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1952,7 +1952,7 @@ type SchemaChangerTestingKnobs struct {
 	RunBeforeBackfill func() error
 
 	// RunAfterBackfill is called after completing a backfill.
-	RunAfterBackfill func(jobID int64) error
+	RunAfterBackfill func(jobID jobspb.JobID) error
 
 	// RunBeforeQueryBackfill is called before a query based backfill.
 	RunBeforeQueryBackfill func() error
@@ -1980,20 +1980,20 @@ type SchemaChangerTestingKnobs struct {
 	RunBeforeConstraintValidation func() error
 
 	// RunBeforeMutationReversal runs at the beginning of maybeReverseMutations.
-	RunBeforeMutationReversal func(jobID int64) error
+	RunBeforeMutationReversal func(jobID jobspb.JobID) error
 
 	// RunAfterMutationReversal runs in OnFailOrCancel after the mutations have
 	// been reversed.
-	RunAfterMutationReversal func(jobID int64) error
+	RunAfterMutationReversal func(jobID jobspb.JobID) error
 
 	// RunAtStartOfOnFailOrCancel runs at the start of the OnFailOrCancel hook.
-	RunBeforeOnFailOrCancel func(jobID int64) error
+	RunBeforeOnFailOrCancel func(jobID jobspb.JobID) error
 
 	// RunAfterOnFailOrCancel runs after the OnFailOrCancel hook.
-	RunAfterOnFailOrCancel func(jobID int64) error
+	RunAfterOnFailOrCancel func(jobID jobspb.JobID) error
 
 	// RunBeforeResume runs at the start of the Resume hook.
-	RunBeforeResume func(jobID int64) error
+	RunBeforeResume func(jobID jobspb.JobID) error
 
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
@@ -2454,7 +2454,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 		log.Infof(ctx, "created job %d to drop previous columns and indexes", jobID)
 		scDesc.MutationJobs = append(scDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
-			JobID:      jobID,
+			JobID:      int64(jobID),
 		})
 	}
 	return nil

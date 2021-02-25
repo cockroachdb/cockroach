@@ -54,6 +54,7 @@ go_test(
         "//pkg/internal/rsg",
         "//pkg/internal/sqlsmith",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/concurrency",

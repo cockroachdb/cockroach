@@ -51,7 +51,7 @@ func createProtectedTimestampRecord(
 	codec keys.SQLCodec,
 	pts protectedts.Storage,
 	txn *kv.Txn,
-	jobID int64,
+	jobID jobspb.JobID,
 	targets jobspb.ChangefeedTargets,
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,

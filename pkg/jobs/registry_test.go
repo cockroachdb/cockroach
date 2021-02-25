@@ -106,7 +106,7 @@ func TestRegistryCancelation(t *testing.T) {
 
 	cancelCount := 0
 	didRegister := false
-	jobID := int64(1)
+	jobID := jobspb.JobID(1)
 	const nodeID = roachpb.NodeID(1)
 
 	register := func() {
@@ -317,7 +317,7 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 			t.Fatal(err)
 		}
 
-		var id int64
+		var id jobspb.JobID
 		db.QueryRow(t,
 			`INSERT INTO system.jobs (status, payload, progress, created) VALUES ($1, $2, $3, $4) RETURNING id`,
 			status, payload, progress, created).Scan(&id)

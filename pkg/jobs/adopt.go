@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -81,13 +82,13 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	}
 
 	// This map will eventually contain the job ids that must be resumed.
-	claimedToResume := make(map[int64]struct{})
+	claimedToResume := make(map[jobspb.JobID]struct{})
 	// Initially all claimed jobs are supposed to be resumed but some may be
 	// running on this registry already so we will filter them out later.
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		id := int64(*row[0].(*tree.DInt))
+		id := jobspb.JobID(*row[0].(*tree.DInt))
 		claimedToResume[id] = struct{}{}
 	}
 	if err != nil {
@@ -102,7 +103,7 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 // resumeClaimedJobs invokes r.resumeJob for each job in claimedToResume. It
 // does so concurrently.
 func (r *Registry) resumeClaimedJobs(
-	ctx context.Context, s sqlliveness.Session, claimedToResume map[int64]struct{},
+	ctx context.Context, s sqlliveness.Session, claimedToResume map[jobspb.JobID]struct{},
 ) {
 	const resumeConcurrency = 64
 	sem := make(chan struct{}, resumeConcurrency)
@@ -111,7 +112,7 @@ func (r *Registry) resumeClaimedJobs(
 	done := func() { <-sem; wg.Done() }
 	for id := range claimedToResume {
 		add()
-		go func(id int64) {
+		go func(id jobspb.JobID) {
 			defer done()
 			if err := r.resumeJob(ctx, id, s); err != nil && ctx.Err() == nil {
 				log.Errorf(ctx, "could not run claimed job %d: %v", id, err)
@@ -126,7 +127,7 @@ func (r *Registry) resumeClaimedJobs(
 // claimedToResume. Additionally it verifies that the session associated with the
 // running job matches the current session, canceling the job if not.
 func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
-	ctx context.Context, s sqlliveness.Session, claimedToResume map[int64]struct{},
+	ctx context.Context, s sqlliveness.Session, claimedToResume map[jobspb.JobID]struct{},
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -147,7 +148,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 }
 
 // resumeJob resumes a claimed job.
-func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Session) error {
+func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
@@ -214,13 +215,13 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	return nil
 }
 
-func (r *Registry) removeAdoptedJob(jobID int64) {
+func (r *Registry) removeAdoptedJob(jobID jobspb.JobID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.mu.adoptedJobs, jobID)
 }
 
-func (r *Registry) addAdoptedJob(jobID int64, aj *adoptedJob) {
+func (r *Registry) addAdoptedJob(jobID jobspb.JobID, aj *adoptedJob) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.adoptedJobs[jobID] = aj
@@ -293,7 +294,7 @@ RETURNING id, status`,
 			return errors.Wrap(err, "could not query jobs table")
 		}
 		for _, row := range rows {
-			id := int64(*row[0].(*tree.DInt))
+			id := jobspb.JobID(*row[0].(*tree.DInt))
 			job := &Job{id: id, registry: r}
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {

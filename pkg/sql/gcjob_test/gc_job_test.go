@@ -66,7 +66,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			params := base.TestServerArgs{}
 			blockGC := make(chan struct{}, 1)
 			params.Knobs.GCJob = &sql.GCJobTestingKnobs{
-				RunBeforePerformGC: func(_ int64) error {
+				RunBeforePerformGC: func(_ jobspb.JobID) error {
 					<-blockGC
 					return nil
 				},
@@ -300,7 +300,7 @@ SELECT parent_id, table_id
 	sqlDB.Exec(t, "DROP TABLE db.foo")
 
 	// Now we should be able to find our GC job
-	var jobID int64
+	var jobID jobspb.JobID
 	var status jobs.Status
 	var runningStatus jobs.RunningStatus
 	sqlDB.QueryRow(t, `

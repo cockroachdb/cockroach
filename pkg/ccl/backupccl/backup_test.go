@@ -1278,8 +1278,8 @@ type inProgressState struct {
 	dir, name     string
 }
 
-func (ip inProgressState) latestJobID() (int64, error) {
-	var id int64
+func (ip inProgressState) latestJobID() (jobspb.JobID, error) {
+	var id jobspb.JobID
 	if err := ip.QueryRow(
 		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&id); err != nil {
@@ -1514,7 +1514,7 @@ func createAndWaitForJob(
 		t.Fatal(err)
 	}
 
-	var jobID int64
+	var jobID jobspb.JobID
 	db.QueryRow(
 		t, `INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
 		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
@@ -1642,7 +1642,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	})
 }
 
-func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
+func getHighWaterMark(jobID jobspb.JobID, sqlDB *gosql.DB) (roachpb.Key, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
 		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
@@ -1897,7 +1897,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// stress test, it is here for safety.
 	blockGC := make(chan struct{})
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
-		RunBeforeResume: func(_ int64) error {
+		RunBeforeResume: func(_ jobspb.JobID) error {
 			<-blockGC
 			return nil
 		},
@@ -5043,7 +5043,7 @@ func TestFileIOLimits(t *testing.T) {
 	)
 }
 
-func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
+func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id jobspb.JobID) {
 	// Force newly created job to be adopted and verify it succeeds.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 	testutils.SucceedsSoon(t, func() error {
@@ -5065,7 +5065,7 @@ func TestDetachedBackup(t *testing.T) {
 	db := sqlDB.DB.(*gosql.DB)
 
 	// running backup under transaction requires DETACHED.
-	var jobID int64
+	var jobID jobspb.JobID
 	err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 		return tx.QueryRow(`BACKUP DATABASE data TO $1`, LocalFoo).Scan(&jobID)
 	})
@@ -5118,7 +5118,7 @@ func TestDetachedRestore(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 
 	// Running RESTORE under transaction requires DETACHED.
-	var jobID int64
+	var jobID jobspb.JobID
 	err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 		return tx.QueryRow(`RESTORE TABLE t FROM $1 WITH INTO_DB=test`, LocalFoo).Scan(&jobID)
 	})
@@ -5703,7 +5703,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
 				backupWithDetachedOption := query + ` WITH DETACHED`
 				db := sqlDB.DB.(*gosql.DB)
-				var jobID int64
+				var jobID jobspb.JobID
 				err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 					return tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
 				})

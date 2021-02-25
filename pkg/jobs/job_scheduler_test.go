@@ -246,7 +246,7 @@ func (n *recordScheduleExecutor) ExecuteJob(
 
 func (n *recordScheduleExecutor) NotifyJobTermination(
 	ctx context.Context,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
 	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
@@ -460,7 +460,7 @@ func (e *returnErrorExecutor) ExecuteJob(
 
 func (e *returnErrorExecutor) NotifyJobTermination(
 	_ context.Context,
-	_ int64,
+	_ jobspb.JobID,
 	_ Status,
 	_ jobspb.Details,
 	_ scheduledjobs.JobSchedulerEnv,

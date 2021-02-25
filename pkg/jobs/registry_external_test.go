@@ -137,10 +137,10 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	}
 
 	// jobMap maps node IDs to job IDs.
-	jobMap := make(map[roachpb.NodeID]int64)
+	jobMap := make(map[roachpb.NodeID]jobspb.JobID)
 	hookCallCount := 0
 	// resumeCounts maps jobs IDs to number of start/resumes.
-	resumeCounts := make(map[int64]int)
+	resumeCounts := make(map[jobspb.JobID]int)
 	// done prevents jobs from finishing.
 	done := make(chan struct{})
 	// resumeCalled does a locked, blocking send when a job is started/resumed. A
@@ -264,7 +264,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 
 	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
-	resumeCh := make(chan int64)
+	resumeCh := make(chan jobspb.JobID)
 	defer jobs.ResetConstructors()()
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
@@ -298,7 +298,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var id int64
+	var id jobspb.JobID
 	sqlutils.MakeSQLRunner(sqlDB).QueryRow(t,
 		`INSERT INTO system.jobs (status, payload, progress) VALUES ($1, $2, $3) RETURNING id`,
 		jobs.StatusRunning, payload, progress).Scan(&id)
@@ -350,18 +350,18 @@ func TestExpiringSessionsAndClaimJobsDoesNotTouchTerminalJobs(t *testing.T) {
 RETURNING id;
 `
 	terminalStatuses := []jobs.Status{jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed}
-	terminalIDs := make([]int64, len(terminalStatuses))
+	terminalIDs := make([]jobspb.JobID, len(terminalStatuses))
 	terminalClaims := make([][]byte, len(terminalStatuses))
 	for i, s := range terminalStatuses {
 		terminalClaims[i] = uuid.MakeV4().GetBytes() // bogus claim
 		tdb.QueryRow(t, insertQuery, s, payload, progress, terminalClaims[i], 42).
 			Scan(&terminalIDs[i])
 	}
-	var nonTerminalID int64
+	var nonTerminalID jobspb.JobID
 	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, payload, progress, uuid.MakeV4().GetBytes(), 42).
 		Scan(&nonTerminalID)
 
-	checkClaimEqual := func(id int64, exp []byte) error {
+	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`
 		var claim []byte
 		tdb.QueryRow(t, getClaimQuery, id).Scan(&claim)

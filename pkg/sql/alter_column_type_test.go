@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -47,7 +48,7 @@ func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	var doOnce sync.Once
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeResume: func(jobID int64) error {
+			RunBeforeResume: func(jobID jobspb.JobID) error {
 				// Block in the job to drop old indexes, which has mutation ID 2.
 				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
@@ -122,7 +123,7 @@ func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	var doOnce sync.Once
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeResume: func(jobID int64) error {
+			RunBeforeResume: func(jobID jobspb.JobID) error {
 				// Block in the job to drop old indexes, which has mutation ID 2.
 				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
