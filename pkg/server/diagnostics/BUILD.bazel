@@ -33,6 +33,7 @@ go_library(
         "//pkg/util/log/logcrash",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
