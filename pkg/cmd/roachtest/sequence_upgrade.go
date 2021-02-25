@@ -1,0 +1,127 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func registerSequenceUpgrade(r *testRegistry) {
+	r.Add(testSpec{
+		Name:       "version/sequence-upgrade",
+		Owner:      OwnerSQLSchema,
+		MinVersion: "v21.1.0",
+		Cluster:    makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSequenceUpgradeMigration(ctx, t, c)
+		},
+	})
+}
+
+func createSequenceStep(node int, name string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE SEQUENCE %s`, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func setSerialNormalizationStep(node int) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET serial_normalization = 'sql_sequence'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func createSeqTableStep(node int, tblName string, seqName string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx,
+			fmt.Sprintf(`CREATE TABLE %s (i SERIAL PRIMARY KEY, j INT NOT NULL DEFAULT nextval('%s'))`,
+				tblName, seqName))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func insertSeqTableStep(node int, name string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx,
+			fmt.Sprintf(`INSERT INTO %s VALUES (default, default)`, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func verifySequences(node int) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+
+		// Verify that sequences created in older versions cannot be renamed, nor can any
+		// databases that they are referencing.
+		_, err := db.ExecContext(ctx, `ALTER SEQUENCE test.public.s RENAME TO test.public.s_new`)
+		if err == nil {
+			t.Fatal("expected: cannot rename relation \"test.public.s\" because view \"t1\" depends on it")
+		}
+		_, err = db.ExecContext(ctx, `ALTER SEQUENCE t1_i_seq RENAME TO t1_i_seq_new`)
+		if err == nil {
+			t.Fatal("expected: cannot rename relation \"t1_i_seq\" because view \"test.public.t1\" depends on it")
+		}
+		_, err = db.ExecContext(ctx, `ALTER DATABASE test RENAME TO test_new`)
+		if err == nil {
+			t.Fatal("expected: cannot rename database because relation \"test.public.t1\" depends on relation \"test.public.s\"")
+		}
+	}
+}
+
+func runSequenceUpgradeMigration(ctx context.Context, t *test, c *cluster) {
+	const (
+		v20_2 = "20.2.4"
+		// An empty string means that the cockroach binary specified by flag
+		// `cockroach` will be used.
+		mainVersion = ""
+	)
+
+	roachNodes := c.All()
+	u := newVersionUpgradeTest(c,
+		// Set up descriptors in 20.2, when sequence renaming and other
+		// renaming involving sequence dependencies was unsupported.
+		uploadAndStart(roachNodes, v20_2),
+		waitForUpgradeStep(roachNodes),
+		preventAutoUpgradeStep(1),
+
+		createDBStep(1, "test"),
+		createSequenceStep(1, "test.public.s"),
+		setSerialNormalizationStep(1),
+		createSeqTableStep(1, "t1", "test.public.s"),
+
+		// Upgrade cluster to latest version, where renaming
+		// is supported.
+		allowAutoUpgradeStep(1),
+		binaryUpgradeStep(c.All(), mainVersion),
+		waitForUpgradeStep(roachNodes),
+
+		// Verify that the sequences created in older versions
+		// still behave as old sequences (i.e. cannot be renamed).
+		verifySequences(1),
+		insertSeqTableStep(1, "t1"),
+	)
+	u.run(ctx, t)
+}

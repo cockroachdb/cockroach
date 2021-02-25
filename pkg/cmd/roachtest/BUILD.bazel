@@ -91,6 +91,7 @@ go_library(
         "schemachange_random_load.go",
         "scrub.go",
         "secondary_indexes.go",
+        "sequence_upgrade.go",
         "slack.go",
         "split.go",
         "sqlalchemy.go",
