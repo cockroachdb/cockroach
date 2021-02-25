@@ -849,14 +849,16 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	if !sj.txn.IsCommitted() {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
-	if err := sj.started(ctx, nil /* txn */); err != nil {
-		return err
-	}
 
 	finishSpan := func() {
 		if sj.span != nil {
 			sj.span.Finish()
 		}
+	}
+
+	if err := sj.started(ctx, nil /* txn */); err != nil {
+		finishSpan()
+		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
