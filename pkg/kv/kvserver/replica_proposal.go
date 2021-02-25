@@ -442,7 +442,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.ClosedTimestamp)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
