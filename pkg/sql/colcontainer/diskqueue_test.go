@@ -19,6 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -166,6 +169,35 @@ func TestDiskQueue(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestDiskQueueCloseOnErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	serverCfg := &execinfra.ServerConfig{}
+	serverCfg.TestingKnobs.MemoryLimitBytes = 1
+	diskMon := execinfra.NewLimitedMonitor(ctx, testDiskMonitor, serverCfg, t.Name())
+	defer diskMon.Stop(ctx)
+	diskAcc := diskMon.MakeBoundAccount()
+	defer diskAcc.Close(ctx)
+
+	typs := []*types.T{types.Int}
+	q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, &diskAcc)
+	require.NoError(t, err)
+
+	b := coldata.NewMemBatch(typs, coldata.StandardColumnFactory)
+	b.SetLength(0)
+
+	err = q.Enqueue(ctx, b)
+	require.Error(t, err, "expected Enqueue to produce an error given a disk limit of one byte")
+	require.Equal(t, pgerror.GetPGCode(err), pgcode.DiskFull, "unexpected pg code")
+
+	// Now Close the queue, this should be successful.
+	require.NoError(t, q.Close(ctx))
 }
 
 // Flags for BenchmarkQueue.
