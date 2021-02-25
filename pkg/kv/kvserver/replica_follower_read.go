@@ -141,7 +141,7 @@ func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok boo
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
-	replicaStateClosed := r.mu.state.ClosedTimestamp
+	replicaStateClosed := r.mu.state.RaftClosedTimestamp
 
 	if lease.Expiration != nil {
 		return hlc.Timestamp{}, false
@@ -170,5 +170,5 @@ func (r *Replica) GetFrozenClosedTimestamp() hlc.Timestamp {
 	defer r.mu.RUnlock()
 	// TODO(andrei): Make sure that this synchronizes with the closed timestamps
 	// side-transport once the side-transport is written.
-	return r.mu.state.ClosedTimestamp
+	return r.mu.state.RaftClosedTimestamp
 }
