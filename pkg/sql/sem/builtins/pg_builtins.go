@@ -1102,6 +1102,41 @@ SELECT description
 		},
 	),
 
+	"pg_total_relation_size": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				descID := tree.MustBeDOid(args[0])
+
+				name, err := ctx.Planner.LookupTableNameByID(ctx.Context, tree.ID(descID.DInt))
+				if err != nil {
+					return nil, err
+				}
+
+				dbname := name.CatalogName
+
+				name.CatalogName = name.SchemaName
+				name.SchemaName = ""
+				name.ExplicitSchema = false
+
+				// AdminTableApproximateSize is a little bit weird: we don't have a dedicated field
+				// to set the schema name in - instead, we send a "qualified table name",
+				// meaning a table name that contains a dot and a schema prefix if
+				// necessary.
+				bytes, err := ctx.Planner.AdminTableApproximateSize(ctx.Context,
+					dbname.String(), name.String())
+				if err != nil {
+					return tree.DNull, err
+				}
+
+				return tree.NewDInt(tree.DInt(bytes)), nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	// pg_type_is_visible returns true if the input oid corresponds to a type
 	// that is part of the databases on the search path, or NULL if no such type
 	// exists. CockroachDB doesn't support the notion of type visibility, so we

@@ -2098,6 +2098,14 @@ func (s *statusServer) CancelQuery(
 	return output, nil
 }
 
+// TableStats is an endpoint that returns disk usage and replication statistics
+// for the specified table.
+func (s *statusServer) TableStats(
+	ctx context.Context, req *serverpb.TableStatsRequest,
+) (*serverpb.TableStatsResponse, error) {
+	return s.admin.TableStats(ctx, req)
+}
+
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
 func (s *statusServer) SpanStats(

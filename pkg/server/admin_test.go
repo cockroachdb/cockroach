@@ -531,7 +531,7 @@ func TestRangeCount(t *testing.T) {
 
 	getRangeCountFromFullSpan := func() int64 {
 		adminServer := s.(*TestServer).Server.admin
-		stats, err := adminServer.statsForSpan(context.Background(), roachpb.Span{
+		stats, err := adminServer.StatsForSpan(context.Background(), roachpb.Span{
 			Key:    keys.LocalMax,
 			EndKey: keys.MaxKey,
 		})
@@ -1978,7 +1978,7 @@ func TestStatsforSpanOnLocalMax(t *testing.T) {
 		EndKey: keys.SystemPrefix,
 	}
 
-	_, err := adminServer.statsForSpan(context.Background(), underTest)
+	_, err := adminServer.StatsForSpan(context.Background(), underTest)
 	if err != nil {
 		t.Fatal(err)
 	}

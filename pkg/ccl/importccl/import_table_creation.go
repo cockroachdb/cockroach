@@ -201,6 +201,8 @@ var (
 type importSequenceOperators struct {
 }
 
+var _ tree.SequenceOperators = &importSequenceOperators{}
+
 // GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
 func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
@@ -266,6 +268,12 @@ func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	return 0, errSequenceOperators
+}
+
+func (so *importSequenceOperators) LookupTableNameByID(
+	ctx context.Context, tableID tree.ID,
+) (*tree.TableName, error) {
+	return nil, errSequenceOperators
 }
 
 // Implements the tree.SequenceOperators interface.

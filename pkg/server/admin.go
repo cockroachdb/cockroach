@@ -415,34 +415,6 @@ WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
 	return &resp, nil
 }
 
-// getFullyQualifiedTableName, given a database name and a tableName that either
-// is a unqualified name or a schema-qualified name, returns a maximally
-// qualified name: either database.table if the input wasn't schema qualified,
-// or database.schema.table if it was.
-func getFullyQualifiedTableName(dbName string, tableName string) (string, error) {
-	name, err := parser.ParseQualifiedTableName(tableName)
-	if err != nil {
-		// If we got a parse error, it could be that the user passed us an unescaped
-		// table name. Quote the whole thing and try again.
-		name, err = parser.ParseQualifiedTableName(tree.NameStringP(&tableName))
-		if err != nil {
-			return "", err
-		}
-	}
-	if !name.ExplicitSchema {
-		// If the schema wasn't explicitly set, craft the qualified table name to be
-		// database.table.
-		name.SchemaName = tree.Name(dbName)
-		name.ExplicitSchema = true
-	} else {
-		// Otherwise, add the database to the beginning of the name:
-		// database.schema.table.
-		name.CatalogName = tree.Name(dbName)
-		name.ExplicitCatalog = true
-	}
-	return name.String(), nil
-}
-
 // TableDetails is an endpoint that returns columns, indices, and other
 // relevant details for the specified table.
 func (s *adminServer) TableDetails(
@@ -454,7 +426,7 @@ func (s *adminServer) TableDetails(
 		return nil, err
 	}
 
-	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
+	escQualTable, err := parser.GetFullyQualifiedTableName(req.Database, req.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -775,7 +747,7 @@ func (s *adminServer) TableStats(
 	if err != nil {
 		return nil, err
 	}
-	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
+	escQualTable, err := parser.GetFullyQualifiedTableName(req.Database, req.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -786,7 +758,7 @@ func (s *adminServer) TableStats(
 	}
 	tableSpan := generateTableSpan(tableID)
 
-	return s.statsForSpan(ctx, tableSpan)
+	return s.server.sqlServer.pgServer.SQLServer.StatsForSpan(ctx, tableSpan)
 }
 
 // NonTableStats is an endpoint that returns disk usage and replication
@@ -799,7 +771,7 @@ func (s *adminServer) NonTableStats(
 		return nil, err
 	}
 
-	timeSeriesStats, err := s.statsForSpan(ctx, roachpb.Span{
+	timeSeriesStats, err := s.server.sqlServer.pgServer.SQLServer.StatsForSpan(ctx, roachpb.Span{
 		Key:    keys.TimeseriesPrefix,
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
 	})
@@ -821,7 +793,7 @@ func (s *adminServer) NonTableStats(
 		},
 	}
 	for _, span := range spansForInternalUse {
-		nonTableStats, err := s.statsForSpan(ctx, span)
+		nonTableStats, err := s.server.sqlServer.pgServer.SQLServer.StatsForSpan(ctx, span)
 		if err != nil {
 			return nil, err
 		}
@@ -842,135 +814,6 @@ func (s *adminServer) NonTableStats(
 	response.InternalUseStats.RangeCount += nonTableDescriptorRangeCount()
 
 	return &response, nil
-}
-
-func (s *adminServer) statsForSpan(
-	ctx context.Context, span roachpb.Span,
-) (*serverpb.TableStatsResponse, error) {
-	startKey, err := keys.Addr(span.Key)
-	if err != nil {
-		return nil, s.serverError(err)
-	}
-	endKey, err := keys.Addr(span.EndKey)
-	if err != nil {
-		return nil, s.serverError(err)
-	}
-
-	// Get current range descriptors for table. This is done by scanning over
-	// meta2 keys for the range. A special case occurs if we wish to include
-	// the meta1 key range itself, in which case we'll get KeyMin back and that
-	// cannot be scanned (due to range-local addressing confusion). This is
-	// handled appropriately by adjusting the bounds to grab the descriptors
-	// for all ranges (including range1, which is not only gossiped but also
-	// persisted in meta1).
-	startMetaKey := keys.RangeMetaKey(startKey)
-	if bytes.Equal(startMetaKey, roachpb.RKeyMin) {
-		// This is the special case described above. The following key instructs
-		// the code below to scan all of the addressing, i.e. grab all of the
-		// descriptors including that for r1.
-		startMetaKey = keys.RangeMetaKey(keys.MustAddr(keys.Meta2Prefix))
-	}
-
-	rangeDescKVs, err := s.server.db.Scan(ctx, startMetaKey, keys.RangeMetaKey(endKey), 0)
-	if err != nil {
-		return nil, s.serverError(err)
-	}
-
-	// This map will store the nodes we need to fan out to.
-	nodeIDs := make(map[roachpb.NodeID]struct{})
-	for _, kv := range rangeDescKVs {
-		var rng roachpb.RangeDescriptor
-		if err := kv.Value.GetProto(&rng); err != nil {
-			return nil, s.serverError(err)
-		}
-		for _, repl := range rng.Replicas().Descriptors() {
-			nodeIDs[repl.NodeID] = struct{}{}
-		}
-	}
-
-	// Construct TableStatsResponse by sending an RPC to every node involved.
-	tableStatResponse := serverpb.TableStatsResponse{
-		NodeCount: int64(len(nodeIDs)),
-		// TODO(mrtracy): The "RangeCount" returned by TableStats is more
-		// accurate than the "RangeCount" returned by TableDetails, because this
-		// method always consistently queries the meta2 key range for the table;
-		// in contrast, TableDetails uses a method on the DistSender, which
-		// queries using a range metadata cache and thus may return stale data
-		// for tables that are rapidly splitting. However, one potential
-		// *advantage* of using the DistSender is that it will populate the
-		// DistSender's range metadata cache in the case where meta2 information
-		// for this table is not already present; the query used by TableStats
-		// does not populate the DistSender cache. We should consider plumbing
-		// TableStats' meta2 query through the DistSender so that it will share
-		// the advantage of populating the cache (without the disadvantage of
-		// potentially returning stale data).
-		// See Github #5435 for some discussion.
-		RangeCount: int64(len(rangeDescKVs)),
-	}
-	type nodeResponse struct {
-		nodeID roachpb.NodeID
-		resp   *serverpb.SpanStatsResponse
-		err    error
-	}
-
-	// Send a SpanStats query to each node.
-	responses := make(chan nodeResponse, len(nodeIDs))
-	for nodeID := range nodeIDs {
-		nodeID := nodeID // avoid data race
-		if err := s.server.stopper.RunAsyncTask(
-			ctx, "server.adminServer: requesting remote stats",
-			func(ctx context.Context) {
-				// Set a generous timeout on the context for each individual query.
-				var spanResponse *serverpb.SpanStatsResponse
-				err := contextutil.RunWithTimeout(ctx, "request remote stats", 5*base.NetworkTimeout,
-					func(ctx context.Context) error {
-						client, err := s.server.status.dialNode(ctx, nodeID)
-						if err == nil {
-							req := serverpb.SpanStatsRequest{
-								StartKey: startKey,
-								EndKey:   endKey,
-								NodeID:   nodeID.String(),
-							}
-							spanResponse, err = client.SpanStats(ctx, &req)
-						}
-						return err
-					})
-
-				// Channel is buffered, can always write.
-				responses <- nodeResponse{
-					nodeID: nodeID,
-					resp:   spanResponse,
-					err:    err,
-				}
-			}); err != nil {
-			return nil, err
-		}
-	}
-	for remainingResponses := len(nodeIDs); remainingResponses > 0; remainingResponses-- {
-		select {
-		case resp := <-responses:
-			// For nodes which returned an error, note that the node's data
-			// is missing. For successful calls, aggregate statistics.
-			if resp.err != nil {
-				tableStatResponse.MissingNodes = append(
-					tableStatResponse.MissingNodes,
-					serverpb.TableStatsResponse_MissingNode{
-						NodeID:       resp.nodeID.String(),
-						ErrorMessage: resp.err.Error(),
-					},
-				)
-			} else {
-				tableStatResponse.Stats.Add(resp.resp.TotalStats)
-				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
-				tableStatResponse.ApproximateDiskBytes += resp.resp.ApproximateDiskBytes
-			}
-		case <-ctx.Done():
-			// Caller gave up, stop doing work.
-			return nil, ctx.Err()
-		}
-	}
-
-	return &tableStatResponse, nil
 }
 
 // Users returns a list of users, stripped of any passwords.

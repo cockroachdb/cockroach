@@ -566,6 +566,51 @@ func (p *planner) LookupTableByID(
 	return table, nil
 }
 
+// LookupTableNameByID is the inverse of ResolveTableName: given an ID, it
+// looks up the table, schema, and database name of the table descriptor with
+// that ID.
+func (p *planner) LookupTableNameByID(
+	ctx context.Context, tableID tree.ID,
+) (*tree.TableName, error) {
+	table, err := p.LookupTableByID(ctx, descpb.ID(tableID))
+	if err != nil {
+		return nil, err
+	}
+
+	schemaID := table.GetParentSchemaID()
+	flags := tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}
+	schema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, flags)
+	if err != nil {
+		return nil, err
+	}
+
+	database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, table.GetParentID(), flags)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := tree.MakeTableNameWithSchema(
+		tree.Name(database.GetName()),
+		tree.Name(schema.Name),
+		tree.Name(table.GetName()))
+	return &ret, nil
+}
+
+// LookupSchemaByID looks up a database, by the given descriptor ID. Based on the
+// CommonLookupFlags, it could use or skip the Collection cache. See
+// Collection.getTableVersionByID for how it's used.
+func (p *planner) LookupDatabaseByID(
+	ctx context.Context, databaseID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+
+	flags := tree.SchemaLookupFlags{AvoidCached: p.avoidCachedDescriptors}
+	database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, databaseID, flags)
+	if err != nil {
+		return nil, err
+	}
+	return database, nil
+}
+
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.

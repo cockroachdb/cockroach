@@ -119,9 +119,27 @@ func (so *DummySequenceOperators) SetSequenceValueByID(
 	return errors.WithStack(errSequenceOperators)
 }
 
+func (so *DummySequenceOperators) LookupTableNameByID(
+	ctx context.Context, tableID tree.ID,
+) (*tree.TableName, error) {
+	return nil, errors.WithStack(errSequenceOperators)
+}
+
 // DummyEvalPlanner implements the tree.EvalPlanner interface by returning
 // errors.
 type DummyEvalPlanner struct{}
+
+func (ep *DummyEvalPlanner) LookupTableNameByID(
+	ctx context.Context, tableID tree.ID,
+) (*tree.TableName, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (ep *DummyEvalPlanner) AdminTableApproximateSize(
+	ctx context.Context, databaseName string, schemaQualifiedTable string,
+) (uint64, error) {
+	return 0, errors.WithStack(errEvalPlanner)
+}
 
 // UnsafeUpsertDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
