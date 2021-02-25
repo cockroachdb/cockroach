@@ -55,14 +55,7 @@ func splitPreApply(
 	// The right hand side of the split was already created (and its raftMu
 	// acquired) in Replica.acquireSplitLock. It must be present here if it hasn't
 	// been removed in the meantime (handled below).
-	rightRepl, err := r.store.GetReplica(split.RightDesc.RangeID)
-	if roachpb.IsRangeNotFoundError(err) {
-		// The right hand side we were planning to populate has already been removed.
-		// We handle this below.
-		rightRepl = nil
-	} else if err != nil {
-		log.Fatalf(ctx, "failed to get RHS replica: %v", err)
-	}
+	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
 	if rightRepl == nil || rightRepl.isNewerThanSplit(&split) {
@@ -95,6 +88,7 @@ func splitPreApply(
 			if rightRepl.IsInitialized() {
 				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
+			var err error
 			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
 			if err != nil {
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
@@ -233,16 +227,13 @@ func prepareRightReplicaForSplit(
 
 	// The right hand side of the split was already created (and its raftMu
 	// acquired) in Replica.acquireSplitLock. It must be present here.
-	rightRepl, err := r.store.GetReplica(split.RightDesc.RangeID)
+	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	// If the RHS replica at the point of the split was known to be removed
 	// during the application of the split then we may not find it here. That's
 	// fine, carry on. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
-	if roachpb.IsRangeNotFoundError(err) {
+	if rightRepl == nil {
 		return nil
-	}
-	if err != nil {
-		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
 
 	// Already holding raftMu, see above.
@@ -257,7 +248,7 @@ func prepareRightReplicaForSplit(
 	}
 
 	// Finish initialization of the RHS.
-	err = rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
+	err := rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
