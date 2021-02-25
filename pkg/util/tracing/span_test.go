@@ -215,7 +215,6 @@ func TestSpanRecordStructured(t *testing.T) {
 
 func TestSpanRecordStructuredLimit(t *testing.T) {
 	tr := NewTracer()
-	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
@@ -243,10 +242,9 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 
 func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	tr := NewTracer()
-	tr._mode = int32(modeBackground)
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
-	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
 	require.Len(t, sp.i.crdb.mu.recording.children, 1)
 	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children[0])

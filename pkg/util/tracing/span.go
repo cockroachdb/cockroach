@@ -291,7 +291,7 @@ func (s *spanInner) ResetRecording() {
 }
 
 func (s *spanInner) GetRecording() Recording {
-	return s.crdb.getRecording(s.tracer.mode(), s.tracer.TracingVerbosityIndependentSemanticsIsActive())
+	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive())
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
