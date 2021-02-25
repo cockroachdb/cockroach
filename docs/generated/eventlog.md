@@ -212,6 +212,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ### `sensitive_table_access`
 
