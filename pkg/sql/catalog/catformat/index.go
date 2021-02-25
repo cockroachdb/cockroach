@@ -41,6 +41,8 @@ func IndexForDisplay(
 	table catalog.TableDescriptor,
 	tableName *tree.TableName,
 	index *descpb.IndexDescriptor,
+	partition string,
+	interleave string,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
@@ -75,6 +77,9 @@ func IndexForDisplay(
 		}
 		f.WriteByte(')')
 	}
+
+	f.WriteString(interleave)
+	f.WriteString(partition)
 
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
 		var s2Config *geoindex.S2Config
