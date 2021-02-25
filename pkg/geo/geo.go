@@ -133,7 +133,23 @@ func MakeGeometryUnsafe(spatialObject geopb.SpatialObject) Geometry {
 
 // MakeGeometryFromPointCoords makes a point from x, y coordinates.
 func MakeGeometryFromPointCoords(x, y float64) (Geometry, error) {
-	s, err := spatialObjectFromGeomT(geom.NewPointFlat(geom.XY, []float64{x, y}), geopb.SpatialObjectType_GeometryType)
+	return MakeGeometryFromLayoutAndPointCoords(geom.XY, []float64{x, y})
+}
+
+// MakeGeometryFromLayoutAndPointCoords makes a point with a given layout and ordered slice of coordinates.
+func MakeGeometryFromLayoutAndPointCoords(
+	layout geom.Layout, flatCoords []float64,
+) (Geometry, error) {
+	// Validate that the stride matches what is expected for the layout.
+	switch {
+	case layout == geom.XY && len(flatCoords) == 2:
+	case layout == geom.XYM && len(flatCoords) == 3:
+	case layout == geom.XYZ && len(flatCoords) == 3:
+	case layout == geom.XYZM && len(flatCoords) == 4:
+	default:
+		return Geometry{}, errors.Newf("mismatch between layout %d and stride %d", layout, len(flatCoords))
+	}
+	s, err := spatialObjectFromGeomT(geom.NewPointFlat(layout, flatCoords), geopb.SpatialObjectType_GeometryType)
 	if err != nil {
 		return Geometry{}, err
 	}

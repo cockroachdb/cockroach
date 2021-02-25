@@ -688,11 +688,11 @@ Initial expression
 ================================================================================
   project
    ├── columns: k:1(int!null) c:2(bool)
-   ├── fd: ()-->(1)
+   ├── fd: ()-->(1,2)
    └── select
         ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
         ├── key: (3)
-        ├── fd: ()-->(1), (3)-->(2,4)
+        ├── fd: ()-->(1,2), (3)-->(4)
         ├── scan comp
         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
         │    ├── computed column expressions
@@ -704,7 +704,7 @@ Initial expression
         │    │                   ├── const: 3 [type=int]
         │    │                   └── const: 2 [type=int]
         │    ├── key: (3)
-        │    └── fd: (3)-->(1,2,4)
+        │    └── fd: (3)-->(1,2,4), (1)-->(2)
         └── filters
              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                   ├── variable: k:1 [type=int]
@@ -715,11 +715,11 @@ NormalizeInConst
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
-    ├── fd: ()-->(1)
+    ├── fd: ()-->(1,2)
     └── select
          ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
          ├── key: (3)
-         ├── fd: ()-->(1), (3)-->(2,4)
+         ├── fd: ()-->(1,2), (3)-->(4)
          ├── scan comp
          │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
          │    ├── computed column expressions
@@ -733,7 +733,7 @@ NormalizeInConst
   +      │    │                   ├── const: 2 [type=int]
   +      │    │                   └── const: 3 [type=int]
          │    ├── key: (3)
-         │    └── fd: (3)-->(1,2,4)
+         │    └── fd: (3)-->(1,2,4), (1)-->(2)
          └── filters
               └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                    ├── variable: k:1 [type=int]
@@ -744,34 +744,27 @@ PruneSelectCols
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
-    ├── fd: ()-->(1)
+    ├── fd: ()-->(1,2)
     └── select
   -      ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
   -      ├── key: (3)
-  -      ├── fd: ()-->(1), (3)-->(2,4)
+  -      ├── fd: ()-->(1,2), (3)-->(4)
   +      ├── columns: k:1(int!null) c:2(bool)
-  +      ├── fd: ()-->(1)
+  +      ├── fd: ()-->(1,2)
          ├── scan comp
   -      │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
-  -      │    ├── computed column expressions
-  -      │    │    └── c:2
-  -      │    │         └── in [type=bool]
-  -      │    │              ├── variable: k:1 [type=int]
-  -      │    │              └── tuple [type=tuple{int, int, int}]
-  -      │    │                   ├── const: 1 [type=int]
-  -      │    │                   ├── const: 2 [type=int]
-  -      │    │                   └── const: 3 [type=int]
-  -      │    ├── key: (3)
-  -      │    └── fd: (3)-->(1,2,4)
   +      │    ├── columns: k:1(int) c:2(bool)
-  +      │    └── computed column expressions
-  +      │         └── c:2
-  +      │              └── in [type=bool]
-  +      │                   ├── variable: k:1 [type=int]
-  +      │                   └── tuple [type=tuple{int, int, int}]
-  +      │                        ├── const: 1 [type=int]
-  +      │                        ├── const: 2 [type=int]
-  +      │                        └── const: 3 [type=int]
+         │    ├── computed column expressions
+         │    │    └── c:2
+         │    │         └── in [type=bool]
+         │    │              ├── variable: k:1 [type=int]
+         │    │              └── tuple [type=tuple{int, int, int}]
+         │    │                   ├── const: 1 [type=int]
+         │    │                   ├── const: 2 [type=int]
+         │    │                   └── const: 3 [type=int]
+  -      │    ├── key: (3)
+  -      │    └── fd: (3)-->(1,2,4), (1)-->(2)
+  +      │    └── fd: (1)-->(2)
          └── filters
               └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                    ├── variable: k:1 [type=int]
@@ -783,34 +776,36 @@ EliminateProject
   -project
   +select
     ├── columns: k:1(int!null) c:2(bool)
-    ├── fd: ()-->(1)
+    ├── fd: ()-->(1,2)
   - └── select
   -      ├── columns: k:1(int!null) c:2(bool)
-  -      ├── fd: ()-->(1)
+  -      ├── fd: ()-->(1,2)
   -      ├── scan comp
   -      │    ├── columns: k:1(int) c:2(bool)
-  -      │    └── computed column expressions
-  -      │         └── c:2
-  -      │              └── in [type=bool]
-  -      │                   ├── variable: k:1 [type=int]
-  -      │                   └── tuple [type=tuple{int, int, int}]
-  -      │                        ├── const: 1 [type=int]
-  -      │                        ├── const: 2 [type=int]
-  -      │                        └── const: 3 [type=int]
+  -      │    ├── computed column expressions
+  -      │    │    └── c:2
+  -      │    │         └── in [type=bool]
+  -      │    │              ├── variable: k:1 [type=int]
+  -      │    │              └── tuple [type=tuple{int, int, int}]
+  -      │    │                   ├── const: 1 [type=int]
+  -      │    │                   ├── const: 2 [type=int]
+  -      │    │                   └── const: 3 [type=int]
+  -      │    └── fd: (1)-->(2)
   -      └── filters
   -           └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   -                ├── variable: k:1 [type=int]
   -                └── const: 1 [type=int]
   + ├── scan comp
   + │    ├── columns: k:1(int) c:2(bool)
-  + │    └── computed column expressions
-  + │         └── c:2
-  + │              └── in [type=bool]
-  + │                   ├── variable: k:1 [type=int]
-  + │                   └── tuple [type=tuple{int, int, int}]
-  + │                        ├── const: 1 [type=int]
-  + │                        ├── const: 2 [type=int]
-  + │                        └── const: 3 [type=int]
+  + │    ├── computed column expressions
+  + │    │    └── c:2
+  + │    │         └── in [type=bool]
+  + │    │              ├── variable: k:1 [type=int]
+  + │    │              └── tuple [type=tuple{int, int, int}]
+  + │    │                   ├── const: 1 [type=int]
+  + │    │                   ├── const: 2 [type=int]
+  + │    │                   └── const: 3 [type=int]
+  + │    └── fd: (1)-->(2)
   + └── filters
   +      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   +           ├── variable: k:1 [type=int]
@@ -820,19 +815,19 @@ GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    select
     ├── columns: k:1(int!null) c:2(bool)
-    ├── fd: ()-->(1)
+    ├── fd: ()-->(1,2)
   - ├── scan comp
-  - │    ├── columns: k:1(int) c:2(bool)
-  - │    └── computed column expressions
-  - │         └── c:2
-  - │              └── in [type=bool]
-  - │                   ├── variable: k:1 [type=int]
-  - │                   └── tuple [type=tuple{int, int, int}]
-  - │                        ├── const: 1 [type=int]
-  - │                        ├── const: 2 [type=int]
-  - │                        └── const: 3 [type=int]
   + ├── scan comp@secondary
-  + │    └── columns: k:1(int) c:2(bool)
+    │    ├── columns: k:1(int) c:2(bool)
+  - │    ├── computed column expressions
+  - │    │    └── c:2
+  - │    │         └── in [type=bool]
+  - │    │              ├── variable: k:1 [type=int]
+  - │    │              └── tuple [type=tuple{int, int, int}]
+  - │    │                   ├── const: 1 [type=int]
+  - │    │                   ├── const: 2 [type=int]
+  - │    │                   └── const: 3 [type=int]
+    │    └── fd: (1)-->(2)
     └── filters
          └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
               ├── variable: k:1 [type=int]
@@ -850,23 +845,24 @@ FoldComparison
   -select
   +scan comp@secondary
     ├── columns: k:1(int!null) c:2(bool)
-  - ├── fd: ()-->(1)
+  - ├── fd: ()-->(1,2)
   - ├── scan comp
   - │    ├── columns: k:1(int) c:2(bool)
-  - │    └── computed column expressions
-  - │         └── c:2
-  - │              └── in [type=bool]
-  - │                   ├── variable: k:1 [type=int]
-  - │                   └── tuple [type=tuple{int, int, int}]
-  - │                        ├── const: 1 [type=int]
-  - │                        ├── const: 2 [type=int]
-  - │                        └── const: 3 [type=int]
+  - │    ├── computed column expressions
+  - │    │    └── c:2
+  - │    │         └── in [type=bool]
+  - │    │              ├── variable: k:1 [type=int]
+  - │    │              └── tuple [type=tuple{int, int, int}]
+  - │    │                   ├── const: 1 [type=int]
+  - │    │                   ├── const: 2 [type=int]
+  - │    │                   └── const: 3 [type=int]
+  - │    └── fd: (1)-->(2)
   - └── filters
   -      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   -           ├── variable: k:1 [type=int]
   -           └── const: 1 [type=int]
   + ├── constraint: /2/1/3: [/true/1 - /true/1]
-  + └── fd: ()-->(1)
+  + └── fd: ()-->(1,2)
 --------------------------------------------------------------------------------
 GenerateZigzagJoins (no changes)
 --------------------------------------------------------------------------------
@@ -877,7 +873,7 @@ Final best expression
   scan comp@secondary
    ├── columns: k:1(int!null) c:2(bool)
    ├── constraint: /2/1/3: [/true/1 - /true/1]
-   └── fd: ()-->(1)
+   └── fd: ()-->(1,2)
 
 exec-ddl
 CREATE TABLE t (i INT)

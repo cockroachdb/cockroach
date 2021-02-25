@@ -110,8 +110,6 @@ CREATE TABLE uniq_partial_hidden_pk (
 statement ok
 CREATE TYPE region AS ENUM ('us-east', 'us-west', 'eu-west')
 
-# TODO(rytaft): When more of the multi-region syntax is supported,
-# add it here.
 statement ok
 CREATE TABLE uniq_enum (
   r region DEFAULT CASE (random()*3)::int WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END,
@@ -201,6 +199,29 @@ ALTER TABLE uniq_partial_enum INJECT STATISTICS '[
     ]
   }
 ]'
+
+statement ok
+CREATE TABLE uniq_computed_pk (
+  i INT,
+  s STRING,
+  d DECIMAL,
+  c_i_expr STRING AS (CASE WHEN i < 0 THEN 'foo' ELSE 'bar' END) STORED,
+  c_s STRING AS (s) VIRTUAL,
+  c_d DECIMAL AS (d) STORED,
+  c_d_expr STRING AS (d::string) STORED,
+  PRIMARY KEY (c_i_expr, i),
+  UNIQUE (c_s, s),
+  UNIQUE (c_d_expr, d),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s),
+  UNIQUE WITHOUT INDEX (d),
+  FAMILY (i),
+  FAMILY (s),
+  FAMILY (d),
+  FAMILY (c_i_expr),
+  FAMILY (c_d),
+  FAMILY (c_d_expr)
+)
 
 statement ok
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
@@ -1640,6 +1661,45 @@ vectorized: true
                             └── • scan buffer
                                   columns: (column1, column2, column3, column4, check1, partial_index_put1)
                                   label: buffer 1
+
+# We can eliminate uniqueness checks for i and s due to functional dependencies.
+# We cannot eliminate checks for d, since functional dependencies could not be
+# inferred due to composite sensitivity of d::string.
+query T
+EXPLAIN INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_computed_pk(i, s, d, c_i_expr, c_s, c_d, c_d_expr)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 3 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (d) = (column3)
+            │ pred: (column1 != i) OR (column13 != c_i_expr)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_computed_pk@uniq_computed_pk_c_d_expr_d_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
 
 # -- Tests with UPDATE --
 subtest Update

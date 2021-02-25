@@ -1660,6 +1660,8 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	}
 
 	fd = &props.FuncDepSet{}
+
+	// Add keys from indexes.
 	for i := 0; i < tab.IndexCount(); i++ {
 		var keyCols opt.ColSet
 		index := tab.Index(i)
@@ -1696,6 +1698,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		}
 	}
 
+	// Add keys from unique constraints.
 	if !md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys {
 		for i := 0; i < tab.UniqueCount(); i++ {
 			unique := tab.Unique(i)
@@ -1737,6 +1740,36 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 				fd.AddLaxKey(keyCols, allCols)
 			} else {
 				fd.AddStrictKey(keyCols, allCols)
+			}
+		}
+	}
+
+	// Add computed columns.
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		if tab.Column(i).IsComputed() {
+			tabMeta := md.TableMeta(tabID)
+			colID := tabMeta.MetaID.ColumnID(i)
+			expr := tabMeta.ComputedCols[colID]
+			if expr == nil {
+				// The computed columns haven't been added to the metadata.
+				continue
+			}
+			if v, ok := expr.(*VariableExpr); ok {
+				// This computed column is exactly equal to another column in the table,
+				// so add an equivalency.
+				fd.AddEquivalency(v.Col, colID)
+				continue
+			}
+			// Else, this computed column is an immutable expression over zero or more
+			// other columns in the table.
+
+			from := getOuterCols(expr)
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			if !CanBeCompositeSensitive(md, expr) {
+				fd.AddSynthesizedCol(from, colID)
 			}
 		}
 	}

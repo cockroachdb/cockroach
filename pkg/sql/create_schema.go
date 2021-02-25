@@ -16,8 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -35,6 +38,90 @@ type createSchemaNode struct {
 
 func (n *createSchemaNode) startExec(params runParams) error {
 	return params.p.createUserDefinedSchema(params, n.n)
+}
+
+// CreateUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
+func CreateUserDefinedSchemaDescriptor(
+	ctx context.Context,
+	user security.SQLUsername,
+	n *tree.CreateSchema,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	db *dbdesc.Immutable,
+	allocateID bool,
+) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
+	var schemaName string
+	if !n.Schema.ExplicitSchema {
+		schemaName = n.AuthRole.Normalized()
+	} else {
+		schemaName = n.Schema.Schema()
+	}
+
+	// Ensure there aren't any name collisions.
+	exists, err := schemaExists(ctx, txn, execCfg.Codec, db.ID, schemaName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if exists {
+		if n.IfNotExists {
+			return nil, nil, nil
+		}
+		return nil, nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
+	}
+
+	// Check validity of the schema name.
+	if err := schemadesc.IsSchemaNameValid(schemaName); err != nil {
+		return nil, nil, err
+	}
+
+	// Ensure that the cluster version is high enough to create the schema.
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.UserDefinedSchemas) {
+		return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			`creating schemas requires all nodes to be upgraded to %s`,
+			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
+	}
+
+	// Create the ID.
+	var id descpb.ID
+	if allocateID {
+		id, err = catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Inherit the parent privileges and filter out those which are not valid for
+	// schemas.
+	privs := protoutil.Clone(db.GetPrivileges()).(*descpb.PrivilegeDescriptor)
+	for i := range privs.Users {
+		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
+	}
+
+	if !n.AuthRole.Undefined() {
+		exists, err := RoleExists(ctx, execCfg, txn, n.AuthRole)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !exists {
+			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
+				n.AuthRole)
+		}
+		privs.SetOwner(n.AuthRole)
+	} else {
+		privs.SetOwner(user)
+	}
+
+	// Create the SchemaDescriptor.
+	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+		ParentID:   db.ID,
+		Name:       schemaName,
+		ID:         id,
+		Privileges: privs,
+		Version:    1,
+	})
+
+	return desc, privs, nil
 }
 
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
@@ -73,72 +160,17 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	var schemaName string
-	if !n.Schema.ExplicitSchema {
-		schemaName = n.AuthRole.Normalized()
-	} else {
-		schemaName = n.Schema.Schema()
-	}
-
-	// Ensure there aren't any name collisions.
-	exists, err := p.schemaExists(params.ctx, db.ID, schemaName)
+	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData().User(), n,
+		p.Txn(), p.ExecCfg(), &db.Immutable, true /* allocateID */)
 	if err != nil {
 		return err
 	}
 
-	if exists {
-		if n.IfNotExists {
-			return nil
-		}
-		return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
+	// This is true when the schema exists and we are processing a
+	// CREATE SCHEMA IF NOT EXISTS statement.
+	if desc == nil {
+		return nil
 	}
-
-	// Check validity of the schema name.
-	if err := schemadesc.IsSchemaNameValid(schemaName); err != nil {
-		return err
-	}
-
-	// Ensure that the cluster version is high enough to create the schema.
-	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.UserDefinedSchemas) {
-		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
-	}
-
-	// Create the ID.
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-	if err != nil {
-		return err
-	}
-
-	// Inherit the parent privileges and filter out those which are not valid for
-	// schemas.
-	privs := protoutil.Clone(db.GetPrivileges()).(*descpb.PrivilegeDescriptor)
-	for i := range privs.Users {
-		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
-	}
-
-	if !n.AuthRole.Undefined() {
-		exists, err := p.RoleExists(params.ctx, n.AuthRole)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", n.AuthRole)
-		}
-		privs.SetOwner(n.AuthRole)
-	} else {
-		privs.SetOwner(params.SessionData().User())
-	}
-
-	// Create the SchemaDescriptor.
-	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
-		ParentID:   db.ID,
-		Name:       schemaName,
-		ID:         id,
-		Privileges: privs,
-		Version:    1,
-	})
 
 	// Update the parent database with this schema information.
 	if db.Schemas == nil {
@@ -159,8 +191,8 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Finally create the schema on disk.
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.NewSchemaKey(db.ID, schemaName).Key(p.ExecCfg().Codec),
-		id,
+		catalogkeys.NewSchemaKey(db.ID, desc.Name).Key(p.ExecCfg().Codec),
+		desc.ID,
 		desc,
 		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),

@@ -32,7 +32,7 @@ import (
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.  If the supplied SQL generates a different string
-// from the sytnax tree, use TestParse2 below.
+// from the syntax tree, use TestParse2 below.
 func TestParse(t *testing.T) {
 	testData := []struct {
 		sql string

@@ -87,6 +87,23 @@ CREATE TABLE uniq_enum (
 )
 
 statement ok
+CREATE TABLE uniq_computed_pk (
+  i INT,
+  s STRING,
+  d DECIMAL,
+  c_i_expr STRING AS (CASE WHEN i < 0 THEN 'foo' ELSE 'bar' END) STORED,
+  c_s STRING AS (s) VIRTUAL,
+  c_d DECIMAL AS (d) STORED,
+  c_d_expr STRING AS (d::string) STORED,
+  PRIMARY KEY (c_i_expr, i),
+  UNIQUE (c_s, s),
+  UNIQUE (c_d_expr, d),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s),
+  UNIQUE WITHOUT INDEX (d)
+)
+
+statement ok
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 
 # Insert some data into the other table.
@@ -322,6 +339,28 @@ a     b
 NULL  5
 NULL  5
 
+# Check that uniqueness violations are detected in a table with UNIQUE indexes
+# containing computed columns that are dependent on UNIQUE WITHOUT INDEX
+# columns.
+statement ok
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(c_i_expr,i\)=\('bar',1\) already exists\.
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'c', 3.0)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('b','b'\) already exists\.
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'b', 3.0)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(1\.00\) already exists\.
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'c', 1.00)
+
+query ITFTTFT colnames,rowsort
+SELECT * FROM uniq_computed_pk
+----
+i  s  d    c_i_expr  c_s  c_d  c_d_expr
+1  a  1.0  bar       a    1.0  1.0
+2  b  2.0  bar       b    2.0  2.0
+
 
 # -- Tests with UPDATE --
 subtest Update
@@ -474,6 +513,25 @@ a     b
 NULL  5
 NULL  5
 NULL  10
+
+# Check that uniqueness violations are detected in a table with UNIQUE indexes
+# containing computed columns that are dependent on UNIQUE WITHOUT INDEX
+# columns.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(c_i_expr,i\)=\('bar',1\) already exists\.
+UPDATE uniq_computed_pk SET i = 1 WHERE i = 2
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('a','a'\) already exists\.
+UPDATE uniq_computed_pk SET s = 'a' WHERE i = 2
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(1\.00\) already exists\.
+UPDATE uniq_computed_pk SET d = 1.00 WHERE i = 2
+
+query ITFTTFT colnames,rowsort
+SELECT * FROM uniq_computed_pk
+----
+i  s  d    c_i_expr  c_s  c_d  c_d_expr
+1  a  1.0  bar       a    1.0  1.0
+2  b  2.0  bar       b    2.0  2.0
 
 
 # -- Tests with UPSERT --
@@ -669,6 +727,26 @@ SELECT * FROM uniq_partial_index_and_constraint
 ----
 i
 2
+
+# Check that uniqueness violations are detected in a table with UNIQUE indexes
+# containing computed columns that are dependent on UNIQUE WITHOUT INDEX
+# columns.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(c_i_expr,i\)=\('bar',2\) already exists\.
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0) ON CONFLICT (s) DO UPDATE SET i = 2
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('b','b'\) already exists\.
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'b', 1.0)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(2\.00\) already exists\.
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 2.00)
+
+query ITFTTFT colnames,rowsort
+SELECT * FROM uniq_computed_pk
+----
+i  s  d    c_i_expr  c_s  c_d  c_d_expr
+1  a  1.0  bar       a    1.0  1.0
+2  b  2.0  bar       b    2.0  2.0
+
 
 # -- Tests with DELETE --
 subtest Delete
