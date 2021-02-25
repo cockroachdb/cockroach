@@ -26,8 +26,6 @@ func TestClosedTimestampTargetByPolicy(t *testing.T) {
 
 	const nowNanos = 100
 	const maxOffsetNanos = 20
-	manualClock := hlc.NewManualClock(nowNanos)
-	clock := hlc.NewClock(manualClock.UnixNano, maxOffsetNanos)
 	const lagTargetNanos = 10
 
 	for _, tc := range []struct {
@@ -47,7 +45,9 @@ func TestClosedTimestampTargetByPolicy(t *testing.T) {
 		},
 	} {
 		t.Run(tc.rangePolicy.String(), func(t *testing.T) {
-			require.Equal(t, tc.expClosedTSTarget, ClosedTimestampTargetByPolicy(clock.NowAsClockTimestamp(), tc.rangePolicy, lagTargetNanos))
+			now := hlc.ClockTimestamp{WallTime: nowNanos}
+			target := ClosedTimestampTargetByPolicy(now, maxOffsetNanos, tc.rangePolicy, lagTargetNanos)
+			require.Equal(t, tc.expClosedTSTarget, target)
 		})
 	}
 }

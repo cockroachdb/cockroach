@@ -473,7 +473,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// lease applied index advances outside of this proposer's control (i.e.
 	// other leaseholders commit some stuff and then we get the lease back),
 	// future proposals will be given sufficiently high max lease indexes.
-	defer b.forwardLeaseIndexBase(b.p.leaseAppliedIndex())
+	defer b.forwardLeaseIndexBaseLocked(b.p.leaseAppliedIndex())
 
 	// We hold the write lock while reading from and flushing the proposal
 	// buffer. This ensures that we synchronize with all producers and other
@@ -495,7 +495,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 	// Update the maximum lease index base value, based on the maximum lease
 	// index assigned since the last flush.
-	b.forwardLeaseIndexBase(b.liBase + res.leaseIndexOffset())
+	b.forwardLeaseIndexBaseLocked(b.liBase + res.leaseIndexOffset())
 
 	// Iterate through the proposals in the buffer and propose them to Raft.
 	// While doing so, build up batches of entries and submit them to Raft all
@@ -769,10 +769,15 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 	return err
 }
 
-func (b *propBuf) forwardLeaseIndexBase(v uint64) {
+func (b *propBuf) forwardLeaseIndexBaseLocked(v uint64) {
 	if b.liBase < v {
 		b.liBase = v
 	}
+}
+
+// forwardClosedTimestamp forwards the closed timestamp tracked by the propBuf.
+func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
+	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
 func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
@@ -819,11 +824,6 @@ func (b *propBuf) OnLeaseChangeLocked(leaseOwned bool, closedTS hlc.Timestamp) {
 		// Zero out to avoid any confusion.
 		b.assignedClosedTimestamp = hlc.Timestamp{}
 	}
-}
-
-// forwardClosedTimestamp forwards the closed timestamp tracked by the propBuf.
-func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
-	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
 // EvaluatingRequestsCount returns the count of requests currently tracked by

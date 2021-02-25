@@ -132,30 +132,32 @@ func (r *Replica) BumpSideTransportClosed(
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 	now := r.Clock().NowAsClockTimestamp()
+	maxClockOffset := r.Clock().MaxOffset()
 	policy := r.closedTimestampPolicyRLocked()
 	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
-	return ClosedTimestampTargetByPolicy(now, policy, lagTargetDuration)
+	return ClosedTimestampTargetByPolicy(now, maxClockOffset, policy, lagTargetDuration)
 }
 
 // ClosedTimestampTargetByPolicy returns the target closed timestamp for a range
 // with the given policy.
 func ClosedTimestampTargetByPolicy(
 	now hlc.ClockTimestamp,
+	maxClockOffset time.Duration,
 	policy roachpb.RangeClosedTimestampPolicy,
 	lagTargetDuration time.Duration,
 ) hlc.Timestamp {
-	var closedTSTarget hlc.Timestamp
 	switch policy {
 	case roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS:
-		closedTSTarget = hlc.Timestamp{WallTime: now.WallTime - lagTargetDuration.Nanoseconds()}
+		return hlc.Timestamp{WallTime: now.WallTime - lagTargetDuration.Nanoseconds()}
 		// TODO(andrei,nvanbenschoten): Resolve all the issues preventing us from closing
 		// timestamps in the future (which, in turn, forces future-time writes on
 		// global ranges), and enable the proper logic below.
 		//case roachpb.LEAD_FOR_GLOBAL_READS:
 		//	closedTSTarget = hlc.Timestamp{
-		//		WallTime:  now + 2*b.clock.MaxOffset().Nanoseconds(),
+		//		WallTime:  now + 2*maxClockOffset.Nanoseconds(),
 		//		Synthetic: true,
 		//	}
+	default:
+		panic("unexpected RangeClosedTimestampPolicy")
 	}
-	return closedTSTarget
 }

@@ -207,11 +207,12 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 	// included in message.
 	var targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 	now := s.clock.NowAsClockTimestamp()
+	maxClockOffset := s.clock.MaxOffset()
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	targetByPolicy[roachpb.LAG_BY_CLUSTER_SETTING] =
-		kvserver.ClosedTimestampTargetByPolicy(now, roachpb.LAG_BY_CLUSTER_SETTING, lagTargetDuration)
+		kvserver.ClosedTimestampTargetByPolicy(now, maxClockOffset, roachpb.LAG_BY_CLUSTER_SETTING, lagTargetDuration)
 	targetByPolicy[roachpb.LEAD_FOR_GLOBAL_READS] =
-		kvserver.ClosedTimestampTargetByPolicy(now, roachpb.LEAD_FOR_GLOBAL_READS, lagTargetDuration)
+		kvserver.ClosedTimestampTargetByPolicy(now, maxClockOffset, roachpb.LEAD_FOR_GLOBAL_READS, lagTargetDuration)
 	s.trackedMu.lastTimestamps = targetByPolicy
 
 	s.trackedMu.lastSeqNum++
