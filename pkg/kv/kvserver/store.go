@@ -2163,11 +2163,21 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 }
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
+//
+// See also GetReplicaIfExists for a more perfomant version.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
-	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
-		return (*Replica)(value), nil
+	if r := s.GetReplicaIfExists(rangeID); r != nil {
+		return r, nil
 	}
 	return nil, roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
+}
+
+// GetReplicaIfExists returns the replica with the given RangeID or nil.
+func (s *Store) GetReplicaIfExists(rangeID roachpb.RangeID) *Replica {
+	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
+		return (*Replica)(value)
+	}
+	return nil
 }
 
 // LookupReplica looks up the replica that contains the specified key. It
