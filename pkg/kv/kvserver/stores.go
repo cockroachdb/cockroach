@@ -141,15 +141,11 @@ func (ls *Stores) GetReplicaForRangeID(
 	rangeID roachpb.RangeID,
 ) (replica *Replica, store *Store, err error) {
 	err = ls.VisitStores(func(s *Store) error {
-		r, err := s.GetReplica(rangeID)
-		if err == nil {
+		r := s.GetReplicaIfExists(rangeID)
+		if r != nil {
 			replica, store = r, s
-			return nil
 		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
+		return nil
 	})
 	if err != nil {
 		return nil, nil, err
