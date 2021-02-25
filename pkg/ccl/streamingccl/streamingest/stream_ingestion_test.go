@@ -254,7 +254,6 @@ func TestStreamIngestionJobCancelWithRandomClient(t *testing.T) {
 
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(tenantID)))
 	store := tc.GetFirstStoreFromServer(t, 0)
-	require.False(t, isKeyspaceIsEmpty(t, store, tenantPrefix, tenantPrefix.PrefixEnd()))
 
 	_, err = conn.Exec(`CANCEL JOB $1`, jobID)
 	require.NoError(t, err)
