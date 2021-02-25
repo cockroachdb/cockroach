@@ -51,21 +51,21 @@ type mockStreamClient struct {
 
 var _ streamclient.Client = &mockStreamClient{}
 
-// GetTopology implements the StreamClient interface.
+// GetTopology implements the Client interface.
 func (m *mockStreamClient) GetTopology(
 	_ streamingccl.StreamAddress,
 ) (streamingccl.Topology, error) {
 	panic("unimplemented mock method")
 }
 
-// ConsumePartition implements the StreamClient interface.
+// ConsumePartition implements the Client interface.
 func (m *mockStreamClient) ConsumePartition(
 	_ context.Context, address streamingccl.PartitionAddress, _ time.Time,
-) (chan streamingccl.Event, error) {
+) (chan streamingccl.Event, chan error, error) {
 	var events []streamingccl.Event
 	var ok bool
 	if events, ok = m.partitionEvents[address]; !ok {
-		return nil, errors.Newf("no events found for paritition %s", address)
+		return nil, nil, errors.Newf("no events found for paritition %s", address)
 	}
 
 	eventCh := make(chan streamingccl.Event, len(events))
@@ -75,7 +75,7 @@ func (m *mockStreamClient) ConsumePartition(
 	}
 	close(eventCh)
 
-	return eventCh, nil
+	return eventCh, nil, nil
 }
 
 // errorStreamClient always returns an error when consuming a partition.
@@ -83,18 +83,18 @@ type errorStreamClient struct{}
 
 var _ streamclient.Client = &errorStreamClient{}
 
-// GetTopology implements the StreamClient interface.
+// GetTopology implements the streamclient.Client interface.
 func (m *errorStreamClient) GetTopology(
 	_ streamingccl.StreamAddress,
 ) (streamingccl.Topology, error) {
 	panic("unimplemented mock method")
 }
 
-// ConsumePartition implements the StreamClient interface.
+// ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) ConsumePartition(
 	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
-) (chan streamingccl.Event, error) {
-	return nil, errors.New("this client always returns an error")
+) (chan streamingccl.Event, chan error, error) {
+	return nil, nil, errors.New("this client always returns an error")
 }
 
 func TestStreamIngestionProcessor(t *testing.T) {
