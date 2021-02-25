@@ -20,6 +20,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
+import "sql/contentionpb/contention.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -644,6 +645,29 @@ message CancelSessionResponse {
   string error = 2;
 }
 
+// Request object for ListContentionEvents and ListLocalContentionEvents.
+message ListContentionEventsRequest {}
+
+// An error wrapper object for ListContentionEventsResponse.
+message ListContentionEventsError {
+  // ID of node that was being contacted when this error occurred.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // Error message.
+  string message = 2;
+}
+
+// Response object for ListContentionEvents and ListLocalContentionEvents.
+message ListContentionEventsResponse {
+  // A list of contention events on this node or cluster.
+  repeated cockroach.sql.contentionpb.IndexContentionEvents events = 1 [ (gogoproto.nullable) = false ];
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListContentionEventsError errors = 2 [ (gogoproto.nullable) = false ];
+}
+
 message SpanStatsRequest {
   string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
   bytes start_key = 2
@@ -1086,6 +1110,39 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_query/{node_id}"
 			body: "*"
+    };
+  }
+
+  // ListContentionEvents retrieves the contention events across the entire
+  // cluster.
+  //
+  // On the highest level, all IndexContentionEvents objects are ordered
+  // according to their importance (as defined by the number of contention
+  // events within each object).
+  // On the middle level, all SingleKeyContention objects are ordered by their
+  // keys lexicographically.
+  // On the lowest level, all SingleTxnContention objects are ordered by the
+  // number of times that transaction was observed to contend with other
+  // transactions.
+  rpc ListContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
+    option (google.api.http) = {
+      get : "/_status/contention_events"
+    };
+  }
+
+  // ListLocalContentionEvents retrieves the contention events on this node.
+  //
+  // On the highest level, all IndexContentionEvents objects are ordered
+  // according to their importance (as defined by the number of contention
+  // events within each object).
+  // On the middle level, all SingleKeyContention objects are ordered by their
+  // keys lexicographically.
+  // On the lowest level, all SingleTxnContention objects are ordered by the
+  // number of times that transaction was observed to contend with other
+  // transactions.
+  rpc ListLocalContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
+    option (google.api.http) = {
+      get : "/_status/local_contention_events"
     };
   }
 

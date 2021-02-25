@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -136,9 +138,10 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 // and the full statusServer.
 type baseStatusServer struct {
 	log.AmbientContext
-	privilegeChecker *adminPrivilegeChecker
-	sessionRegistry  *sql.SessionRegistry
-	st               *cluster.Settings
+	privilegeChecker   *adminPrivilegeChecker
+	sessionRegistry    *sql.SessionRegistry
+	contentionRegistry *contention.Registry
+	st                 *cluster.Settings
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -295,6 +298,42 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	return nil
 }
 
+// hasContentionEventsPermissions checks whether the session user is allowed to
+// query contention events (which is the case when it is a superuser or has
+// VIEWACTIVITY permission) and returns an error if not.
+func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) error {
+	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return err
+	}
+	hasViewActivity, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return err
+	}
+	if !isAdmin && !hasViewActivity {
+		// Only superusers and users with VIEWACTIVITY permission are allowed
+		// to query contention information.
+		return status.Errorf(
+			codes.PermissionDenied,
+			"client user %q does not have permission to view contention events",
+			sessionUser)
+	}
+	return nil
+}
+
+func (b *baseStatusServer) getLocalContentionEvents(
+	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
+) ([]contentionpb.IndexContentionEvents, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	if err := b.hasContentionEventsPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	return b.contentionRegistry.Serialize(), nil
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	*baseStatusServer
@@ -340,15 +379,17 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	contentionRegistry *contention.Registry,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: adminServer.adminPrivilegeChecker,
-			sessionRegistry:  sessionRegistry,
-			st:               st,
+			AmbientContext:     ambient,
+			privilegeChecker:   adminServer.adminPrivilegeChecker,
+			sessionRegistry:    sessionRegistry,
+			contentionRegistry: contentionRegistry,
+			st:                 st,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -1817,6 +1858,26 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
+// ListLocalContentionEvents returns a list of contention events on this node.
+//
+// On the highest level, all IndexContentionEvents objects are ordered according
+// to their importance (as defined by the number of contention events within
+// each object).
+// On the middle level, all SingleKeyContention objects are ordered by their
+// keys lexicographically.
+// On the lowest level, all SingleTxnContention objects are ordered by the
+// number of times that transaction was observed to contend with other
+// transactions.
+func (s *statusServer) ListLocalContentionEvents(
+	ctx context.Context, req *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	events, err := s.getLocalContentionEvents(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.ListContentionEventsResponse{Events: events}, nil
+}
+
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
@@ -2096,6 +2157,64 @@ func (s *statusServer) CancelQuery(
 		output.Error = err.Error()
 	}
 	return output, nil
+}
+
+// ListContentionEvents returns a list of contention events on all nodes in the
+// cluster.
+//
+// On the highest level, all IndexContentionEvents objects are ordered according
+// to their importance (as defined by the number of contention events within
+// each object).
+// On the middle level, all SingleKeyContention objects are ordered by their
+// keys lexicographically.
+// On the lowest level, all SingleTxnContention objects are ordered by the
+// number of times that transaction was observed to contend with other
+// transactions.
+func (s *statusServer) ListContentionEvents(
+	ctx context.Context, req *serverpb.ListContentionEventsRequest,
+) (*serverpb.ListContentionEventsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.hasContentionEventsPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	response := &serverpb.ListContentionEventsResponse{
+		Events: make([]contentionpb.IndexContentionEvents, 0),
+	}
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalContentionEvents(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Errors) > 0 {
+			return nil, errors.Errorf("%s", resp.Errors[0].Message)
+		}
+		return resp, nil
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		events := nodeResp.(*serverpb.ListContentionEventsResponse).Events
+		response.Events = contention.MergeSerializedRegistries(response.Events, events)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListContentionEventsError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := s.iterateNodes(ctx, "contention events list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

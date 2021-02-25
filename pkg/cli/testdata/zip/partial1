@@ -10,6 +10,7 @@ requesting data for debug/events... writing: debug/events.json
 requesting data for debug/rangelog... writing: debug/rangelog.json
 requesting data for debug/settings... writing: debug/settings.json
 requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
+retrieving SQL data for crdb_internal.cluster_contention_events... writing: debug/crdb_internal.cluster_contention_events.txt
 retrieving SQL data for crdb_internal.cluster_database_privileges... writing: debug/crdb_internal.cluster_database_privileges.txt
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
@@ -37,6 +38,7 @@ retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/1/c
 retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/1/crdb_internal.gossip_nodes.txt
 retrieving SQL data for crdb_internal.leases... writing: debug/nodes/1/crdb_internal.leases.txt
 retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/1/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_contention_events... writing: debug/nodes/1/crdb_internal.node_contention_events.txt
 retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt
 retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/1/crdb_internal.node_metrics.txt
 retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crdb_internal.node_queries.txt
@@ -118,6 +120,9 @@ writing: debug/nodes/2/crdb_internal.leases.txt.err.txt
 retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/2/crdb_internal.node_build_info.txt
 writing: debug/nodes/2/crdb_internal.node_build_info.txt.err.txt
   ^- resulted in ...
+retrieving SQL data for crdb_internal.node_contention_events... writing: debug/nodes/2/crdb_internal.node_contention_events.txt
+writing: debug/nodes/2/crdb_internal.node_contention_events.txt.err.txt
+  ^- resulted in ...
 retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing: debug/nodes/2/crdb_internal.node_inflight_trace_spans.txt
 writing: debug/nodes/2/crdb_internal.node_inflight_trace_spans.txt.err.txt
   ^- resulted in ...
@@ -174,6 +179,7 @@ retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/3/c
 retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/3/crdb_internal.gossip_nodes.txt
 retrieving SQL data for crdb_internal.leases... writing: debug/nodes/3/crdb_internal.leases.txt
 retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/3/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_contention_events... writing: debug/nodes/3/crdb_internal.node_contention_events.txt
 retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing: debug/nodes/3/crdb_internal.node_inflight_trace_spans.txt
 retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/3/crdb_internal.node_metrics.txt
 retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/3/crdb_internal.node_queries.txt
