@@ -19,6 +19,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// JobID is the ID of a job.
+type JobID int64
+
+// InvalidJobID is the zero value for JobID corresponding to no job.
+const InvalidJobID JobID = 0
+
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 

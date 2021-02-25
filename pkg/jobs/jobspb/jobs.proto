@@ -726,7 +726,7 @@ enum Type {
 }
 
 message Job {
-  int64 id = 1;
+  int64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "JobID"];
   // Keep progress first as it may bre more relevant to see when looking at a
   // running job.
   Progress progress = 2;

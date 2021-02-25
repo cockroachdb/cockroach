@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -465,7 +466,7 @@ func (p *planner) initiateDropTable(
 	// Also, changes made here do not affect schema change jobs created in this
 	// transaction with no mutation ID; they remain in the cache, and will be
 	// updated when writing the job record to drop the table.
-	jobIDs := make(map[int64]struct{})
+	jobIDs := make(map[jobspb.JobID]struct{})
 	var id descpb.MutationID
 	for _, m := range tableDesc.Mutations {
 		if id != m.MutationID {

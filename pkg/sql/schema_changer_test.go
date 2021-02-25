@@ -508,7 +508,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
@@ -787,7 +787,7 @@ func TestBackfillErrors(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 		},
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 	}
 
 	tc := serverutils.StartNewTestCluster(t, numNodes,
@@ -2166,7 +2166,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 			WriteCheckpointInterval: time.Nanosecond,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -3101,7 +3101,7 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
-			RunBeforeResume: func(jobID int64) error {
+			RunBeforeResume: func(jobID jobspb.JobID) error {
 				if !shouldAttemptCancel {
 					return nil
 				}
@@ -4018,7 +4018,7 @@ func TestTruncateInternals(t *testing.T) {
 	// Disable schema changes.
 	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -6177,13 +6177,13 @@ func TestMultipleRevert(t *testing.T) {
 				// Keep returning a retryable error until the job was actually canceled.
 				return jobs.NewRetryJobError("retry until cancel")
 			},
-			RunBeforeOnFailOrCancel: func(_ int64) error {
+			RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 				// Allow the backfill to proceed normally once the job was actually
 				// canceled.
 				shouldBlockBackfill = false
 				return nil
 			},
-			RunAfterMutationReversal: func(_ int64) error {
+			RunAfterMutationReversal: func(_ jobspb.JobID) error {
 				// Throw one retryable error right after mutations were reversed so that
 				// the mutation gets attempted to be reversed again.
 				if !shouldRetryAfterReversingMutations {
@@ -6276,7 +6276,7 @@ SELECT value
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunBeforeOnFailOrCancel: func(_ int64) error {
+				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 					onFailOrCancelStarted = true
 					return nil
 				},
@@ -6301,11 +6301,11 @@ SELECT value
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunBeforeOnFailOrCancel: func(_ int64) error {
+				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 					onFailOrCancelStarted = true
 					return nil
 				},
-				RunBeforeMutationReversal: func(_ int64) error {
+				RunBeforeMutationReversal: func(_ jobspb.JobID) error {
 					// The first time through reversing mutations, return a retriable
 					// error.
 					if !onFailOrCancelStarted || injectedError {
@@ -6337,7 +6337,7 @@ func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeOnFailOrCancel: func(_ int64) error {
+			RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 				close(beforeOnFailOrCancelNotification)
 				<-continueNotification
 				// Return a retry error, so that we can be sure to test the path where
@@ -6408,7 +6408,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 `)
 		require.Regexp(t, `violates unique constraint "i"`, err.Error())
 
-		var jobID int64
+		var jobID jobspb.JobID
 		var jobErr string
 		row := sqlDB.QueryRow("SELECT job_id, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
 		require.NoError(t, row.Scan(&jobID, &jobErr))
@@ -6430,7 +6430,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunBeforeOnFailOrCancel: func(_ int64) error {
+				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 					onFailOrCancelStarted = true
 					return nil
 				},
@@ -6457,7 +6457,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunBeforeOnFailOrCancel: func(_ int64) error {
+				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
 					onFailOrCancelStarted = true
 					return nil
 				},
@@ -6618,11 +6618,11 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	jobCancellationsToFail := struct {
 		syncutil.Mutex
-		jobs map[int64]struct{}
+		jobs map[jobspb.JobID]struct{}
 	}{
-		jobs: make(map[int64]struct{}),
+		jobs: make(map[jobspb.JobID]struct{}),
 	}
-	withJobsToFail := func(f func(m map[int64]struct{})) {
+	withJobsToFail := func(f func(m map[jobspb.JobID]struct{})) {
 		jobCancellationsToFail.Lock()
 		defer jobCancellationsToFail.Unlock()
 		f(jobCancellationsToFail.jobs)
@@ -6636,7 +6636,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			BeforeUpdate: func(orig, updated jobs.JobMetadata) (err error) {
-				withJobsToFail(func(m map[int64]struct{}) {
+				withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 					if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
 						delete(m, orig.ID)
 						err = errors.Errorf("boom")
@@ -6655,8 +6655,8 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.t (i INT PRIMARY KEY, j INT)`)
 	var schemaChangeWaitGroup sync.WaitGroup
 	var jobsErrGroup errgroup.Group
-	const numIndexes = 2                // number of indexes to add
-	jobIDs := make([]int64, numIndexes) // job IDs for the index additions
+	const numIndexes = 2                       // number of indexes to add
+	jobIDs := make([]jobspb.JobID, numIndexes) // job IDs for the index additions
 	for i := 0; i < numIndexes; i++ {
 		idxName := "t_" + strconv.Itoa(i) + "_idx"
 		schemaChangeWaitGroup.Add(1)
@@ -6675,7 +6675,7 @@ SELECT job_id FROM crdb_internal.jobs
 		})
 	}
 	require.NoError(t, jobsErrGroup.Wait())
-	withJobsToFail(func(m map[int64]struct{}) {
+	withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 		for _, id := range jobIDs {
 			m[id] = struct{}{}
 		}
@@ -6695,7 +6695,7 @@ SELECT job_id FROM crdb_internal.jobs
 			Scan(&status)
 		require.Equal(t, jobs.StatusCanceled, status)
 	}
-	withJobsToFail(func(m map[int64]struct{}) {
+	withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 		require.Len(t, m, 0)
 	})
 }
@@ -6725,8 +6725,8 @@ func TestCancelMultipleQueued(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.t (i INT PRIMARY KEY, j INT)`)
 	var schemaChangeWaitGroup sync.WaitGroup
 	var jobsErrGroup errgroup.Group
-	const numIndexes = 10               // number of indexes to add
-	jobIDs := make([]int64, numIndexes) // job IDs for the index additions
+	const numIndexes = 10                      // number of indexes to add
+	jobIDs := make([]jobspb.JobID, numIndexes) // job IDs for the index additions
 	shouldCancel := make([]bool, numIndexes)
 	for i := 0; i < numIndexes; i++ {
 		idxName := "t_" + strconv.Itoa(i) + "_idx"
@@ -6830,7 +6830,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 
 	<-beforeBackfillNotification
 
-	var jobID int64
+	var jobID jobspb.JobID
 
 	// We filter by descriptor_ids because there's a bug where we create an extra
 	// no-op job for the referenced table (#57624).

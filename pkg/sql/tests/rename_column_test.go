@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,7 +73,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 						maybeBlockOnEvent(backfill)
 						return nil
 					},
-					RunBeforeResume: func(jobID int64) error {
+					RunBeforeResume: func(jobID jobspb.JobID) error {
 						// Load the job to figure out if it's the rename or the
 						// backfill.
 						scJob, err := tc.Server(0).JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)

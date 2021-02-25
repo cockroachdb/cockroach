@@ -39,7 +39,7 @@ type ScheduledJobExecutor interface {
 	// Modifications to the ScheduledJob object will be persisted.
 	NotifyJobTermination(
 		ctx context.Context,
-		jobID int64,
+		jobID jobspb.JobID,
 		jobStatus Status,
 		details jobspb.Details,
 		env scheduledjobs.JobSchedulerEnv,
@@ -123,7 +123,7 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, fmtOrMsg string, args ...int
 func NotifyJobTermination(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
 	jobDetails jobspb.Details,
 	scheduleID int64,

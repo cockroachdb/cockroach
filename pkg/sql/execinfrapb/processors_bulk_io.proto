@@ -72,7 +72,8 @@ message BackfillerSpec {
 // JobProgress identifies the job to report progress on. This reporting
 // happens outside this package.
 message JobProgress {
-  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
+                            (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
   // contribution is the percent of work of the total this processor will
   // process.
   optional float contribution = 2 [(gogoproto.nullable) = false];
