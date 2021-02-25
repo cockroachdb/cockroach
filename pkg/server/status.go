@@ -567,12 +567,9 @@ func (s *statusServer) Allocator(
 			// because it's already exported.
 			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
 				func(desc roachpb.RangeDescriptor) error {
-					rep, err := store.GetReplica(desc.RangeID)
-					if err != nil {
-						if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-							return nil // continue
-						}
-						return err
+					rep := store.GetReplicaIfExists(desc.RangeID)
+					if rep == nil {
+						return nil // continue
 					}
 					if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 						return nil
@@ -1694,12 +1691,9 @@ func (s *statusServer) rangesHelper(
 			// because it's already exported.
 			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
 				func(desc roachpb.RangeDescriptor) error {
-					rep, err := store.GetReplica(desc.RangeID)
-					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+					rep := store.GetReplicaIfExists(desc.RangeID)
+					if rep == nil {
 						return nil // continue
-					}
-					if err != nil {
-						return err
 					}
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(

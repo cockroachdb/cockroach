@@ -2307,12 +2307,9 @@ func (s *adminServer) enqueueRangeLocal(
 	var store *kvserver.Store
 	var repl *kvserver.Replica
 	if err := s.server.node.stores.VisitStores(func(s *kvserver.Store) error {
-		r, err := s.GetReplica(req.RangeID)
-		if roachpb.IsRangeNotFoundError(err) {
+		r := s.GetReplicaIfExists(req.RangeID)
+		if r == nil {
 			return nil
-		}
-		if err != nil {
-			return err
 		}
 		repl = r
 		store = s
