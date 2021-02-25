@@ -175,6 +175,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// previous behavior we continue to ignore the soft limits for now.
 	// TODO(yuzefovich): pay attention to the soft limits.
 	recommendation := canDistribute
+	if params.LocalityOptimized {
+		recommendation = recommendation.compose(cannotDistribute)
+	}
 	planCtx := e.getPlanCtx(recommendation)
 	p := planCtx.NewPhysicalPlan()
 
@@ -589,7 +592,7 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node,
+	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
 }

@@ -530,6 +530,110 @@ pk  pk2  a   b   j
 statement error cannot drop column crdb_region as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
 ALTER TABLE regional_by_row_table DROP COLUMN crdb_region
 
+# Query with locality optimized search disabled.
+query T
+EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: regional_by_row_table@primary
+  spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# All rows are scanned at once without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/66/1/"@"/1{-/#}, /Table/66/1/"\x80"/1{-/#}, /Table/66/1/"\xc0"/1{-/#}
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+statement ok
+SET locality_optimized_partitioned_index_scan = true
+
+# Same query with locality optimized search enabled.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVEL0zAQx9_9FOF8Uclo0ylIQIhoxULdZjtQsGVkzTGLXVKTFDdGv7usRbbJJmw-3l3-l98vOYD72QCH-OsifZvMyLP3Sb7MP6fPSR6n8bsleUE-ZPNPxOKmNlo2q_V-Zc2vlZfrBsmXj3EWk_YHeUMYUNBG4Uxu0QH_BgxKCq01FTpn7LF1GA4kagc8pFDrtvPHdkmhMhaBH8DXvkHgsDxuz1AqtEEIFBR6WTfD2qsgorX1Vto9UMhbqR0nQQFFsXsdFhCwyXkRPCVSK8KI8d_RAoV55zkRjIqIiikVL6l4BWVPwXT-BOi83CBw1tPHJNijEuKPgBjh7wSObgKfODttrEKL6oKx7K8ozczEtEF0KZPW29oTdpMhvOfRMnSt0Q7_Yrm1uaSAaoOjkDOdrXBhTTVcM5bzITc0FDo_TqOxSPQwGn71PMz-Jxz9Mzy9CId92T_5HQAA__-b4SGh
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/66/1/"@"/1{-/#}
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched
+# in parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/66/1/"@"/10{-/#}
+Scan /Table/66/1/"\x80"/10{-/#}, /Table/66/1/"\xc0"/10{-/#}
+fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
+output row: [10 10 11 12 NULL]
+
+# The local region for this query is ca-central-1, so that span should be
+# scanned in the first child of the limited union all.
+query T nodeidx=3
+USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
+EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ca-central-1'/1 - /'ca-central-1'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+
+
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
 CREATE INDEX new_idx ON regional_by_row_table(a, b)
@@ -637,11 +741,18 @@ vectorized: true
 │               ├── • values
 │               │     size: 6 columns, 1 row
 │               │
-│               └── • scan
-│                     missing stats
-│                     table: regional_by_row_table@primary
-│                     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
-│                     locking strength: for update
+│               └── • union all
+│                   │ limit: 1
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: regional_by_row_table@primary
+│                   │     spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2]
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table@primary
+│                         spans: [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
 │
 ├── • constraint-check
 │   │

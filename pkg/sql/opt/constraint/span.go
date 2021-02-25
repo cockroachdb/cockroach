@@ -88,6 +88,21 @@ func (sp *Span) HasSingleKey(evalCtx *tree.EvalContext) bool {
 	return true
 }
 
+// Prefix returns the length of the longest prefix of values for which the
+// span has the same start and end values. For example, [/1/1/1 - /1/1/2]
+// has prefix 2.
+func (sp *Span) Prefix(evalCtx *tree.EvalContext) int {
+	start := sp.StartKey()
+	end := sp.EndKey()
+
+	for prefix := 0; ; prefix++ {
+		if start.Length() <= prefix || end.Length() <= prefix ||
+			start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+			return prefix
+		}
+	}
+}
+
 // StartKey returns the start key.
 func (sp *Span) StartKey() Key {
 	return sp.start

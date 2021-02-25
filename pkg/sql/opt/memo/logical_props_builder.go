@@ -670,6 +670,12 @@ func (b *logicalPropsBuilder) buildExceptAllProps(except *ExceptAllExpr, rel *pr
 	b.buildSetProps(except, rel)
 }
 
+func (b *logicalPropsBuilder) buildLocalityOptimizedSearchProps(
+	locOptSearch *LocalityOptimizedSearchExpr, rel *props.Relational,
+) {
+	b.buildSetProps(locOptSearch, rel)
+}
+
 func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relational) {
 	BuildSharedProps(setNode, &rel.Shared)
 

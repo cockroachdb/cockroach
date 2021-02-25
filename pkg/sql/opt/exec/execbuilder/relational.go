@@ -569,6 +569,7 @@ func (b *Builder) scanParams(
 		Parallelize:       parallelize,
 		Locking:           locking,
 		EstimatedRowCount: rowCount,
+		LocalityOptimized: scan.LocalityOptimized,
 	}, outputMap, nil
 }
 
@@ -1314,7 +1315,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	switch set.Op() {
 	case opt.UnionOp:
 		typ, all = tree.UnionOp, false
-	case opt.UnionAllOp:
+	case opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
 		typ, all = tree.UnionOp, true
 	case opt.IntersectOp:
 		typ, all = tree.IntersectOp, false
@@ -1328,7 +1329,21 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		panic(errors.AssertionFailedf("invalid operator %s", log.Safe(set.Op())))
 	}
 
-	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
+	hardLimit := uint64(0)
+	if set.Op() == opt.LocalityOptimizedSearchOp {
+		// If we are performing locality optimized search, set a limit equal to
+		// the maximum possible number of rows. This will tell the execution engine
+		// not to execute the right child if the limit is reached by the left
+		// child.
+		// TODO(rytaft): Store the limit in the expression.
+		hardLimit = uint64(set.Relational().Cardinality.Max)
+		if hardLimit > 1 {
+			panic(errors.AssertionFailedf(
+				"locality optimized search is not yet supported for more than one row at a time",
+			))
+		}
+	}
+	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root, hardLimit)
 	if err != nil {
 		return execPlan{}, err
 	}
