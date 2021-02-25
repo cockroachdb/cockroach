@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
+	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
@@ -206,10 +208,9 @@ func TestSpanRecordStructured(t *testing.T) {
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
 	require.NoError(t, TestingCheckRecordedSpans(rec, `
 		span: root
-			tags: _unfinished=1
 		`))
 	require.NoError(t, TestingCheckRecording(rec, `
-		=== operation:root _unfinished:1
+		=== operation:root
 	`))
 }
 
@@ -330,4 +331,35 @@ func TestSpan_UseAfterFinish(t *testing.T) {
 			}
 		})
 	}
+}
+
+type countingStringer int32
+
+func (i *countingStringer) String() string {
+	*i++ // not for concurrent use
+	return fmt.Sprint(*i)
+}
+
+func TestSpan_GetRecordingTags(t *testing.T) {
+	// Verify that tags are omitted from GetRecording if the span is
+	// not verbose when the recording is pulled. See GetRecording for
+	// details.
+	tr := NewTracer()
+	var counter countingStringer
+	logTags := logtags.SingleTagBuffer("tagfoo", "tagbar")
+	sp := tr.StartSpan("root",
+		WithForceRealSpan(),
+		WithTags(opentracing.Tag{
+			Key:   "foo1",
+			Value: &counter,
+		}),
+		WithLogTags(logTags),
+	)
+	defer sp.Finish()
+
+	require.False(t, sp.IsVerbose())
+	sp.SetTag("foo2", &counter)
+	rec := sp.GetRecording()
+	require.Empty(t, rec[0].Tags)
+	require.Zero(t, counter)
 }

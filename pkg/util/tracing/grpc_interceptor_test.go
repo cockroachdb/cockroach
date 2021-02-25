@@ -55,7 +55,9 @@ func TestGRPCInterceptors(t *testing.T) {
 		}
 
 		sp.RecordStructured(&types.Int32Value{Value: magicValue})
+		sp.SetVerbose(true) // want the tags
 		recs := sp.GetRecording()
+		sp.SetVerbose(false)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)
 		}
@@ -193,7 +195,9 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.NoError(t, sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec}))
 			sp.Finish()
 			var n int
+			sp.SetVerbose(true) // to get the tags
 			finalRecs := sp.GetRecording()
+			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
 				n += len(rec.InternalStructured)
 				// Remove all of the _unfinished tags. These crop up because
@@ -204,6 +208,7 @@ func TestGRPCInterceptors(t *testing.T) {
 				// Note that we check that we're not leaking spans at the end of
 				// the test.
 				delete(rec.Tags, "_unfinished")
+				delete(rec.Tags, "_verbose")
 			}
 			require.Equal(t, 1, n)
 
