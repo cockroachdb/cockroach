@@ -249,6 +249,46 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{
 			descTable: doctor.DescriptorTable{
+				{
+					ID: 51,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 51},
+					}}),
+				},
+				{
+					ID: 52,
+					DescBytes: func() []byte {
+						// Skip `toBytes` to produce a descriptor with unset privileges field.
+						// The purpose of this is to produce a nil dereference during validation
+						// in order to test that doctor recovers from this.
+						//
+						// Note that it might be the case that validation aught to check that
+						// this field is not nil in the first place, in which case this test case
+						// will need to craft a corrupt descriptor serialization in a more
+						// creative way. Ideally validation code should never cause runtime errors
+						// but there's no way to guarantee that short of formally verifying it. We
+						// therefore have to consider the possibility of runtime errors (sadly) and
+						// doctor should absolutely make every possible effort to continue executing
+						// in the face of these, considering its main use case!
+						desc := &descpb.Descriptor{Union: &descpb.Descriptor_Type{
+							Type: &descpb.TypeDescriptor{Name: "type", ID: 52, ParentID: 51, ParentSchemaID: keys.PublicSchemaID},
+						}}
+						res, err := protoutil.Marshal(desc)
+						require.NoError(t, err)
+						return res
+					}(),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 51},
+				{NameInfo: descpb.NameInfo{ParentID: 51, ParentSchemaID: keys.PublicSchemaID, Name: "type"}, ID: 52},
+			},
+			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID  51, ParentSchemaID 29: type "type" (52): validation: runtime error: invalid memory address or nil pointer dereference
+`,
+		},
+		{
+			descTable: doctor.DescriptorTable{
 				{ID: 1, DescBytes: toBytes(t, inSchemaValidTableDesc)},
 				{
 					ID: 2,
