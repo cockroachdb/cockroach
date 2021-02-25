@@ -2,8 +2,33 @@ import Long from "long";
 import { createMemoryHistory } from "history";
 import { noop } from "lodash";
 import { StatementDetailsProps } from "./statementDetails";
+import { ExecStats } from "../util";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
+
+const execStats: Required<ExecStats> = {
+  count: Long.fromNumber(1),
+  network_bytes: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  max_mem_usage: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  contention_time: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  network_messages: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  max_disk_usage: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+};
 
 const statementStats: any = {
   count: Long.fromNumber(36958),
@@ -73,15 +98,7 @@ const statementStats: any = {
       ],
     },
   },
-  bytes_sent_over_network: {
-    mean: 4160407,
-    squared_diffs: 47880000000000,
-  },
-  max_mem_usage: {
-    mean: 4160407,
-    squared_diffs: 47880000000000,
-  },
-  exec_stat_collection_count: 1,
+  exec_stats: execStats,
 };
 
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({

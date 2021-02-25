@@ -479,7 +479,7 @@ export class StatementDetails extends React.Component<
                       <Text type="body-strong">Max memory usage</Text>
                       <Text>
                         {formatNumberForDisplay(
-                          stats.max_mem_usage.mean,
+                          stats.exec_stats.max_mem_usage.mean,
                           Bytes,
                         )}
                       </Text>
@@ -488,7 +488,7 @@ export class StatementDetails extends React.Component<
                       <Text type="body-strong">Network usage</Text>
                       <Text>
                         {formatNumberForDisplay(
-                          stats.bytes_sent_over_network.mean,
+                          stats.exec_stats.network_bytes.mean,
                           Bytes,
                         )}
                       </Text>
@@ -663,10 +663,10 @@ export class StatementDetails extends React.Component<
                 },
                 {
                   name: "Network Bytes Sent",
-                  value: stats.bytes_sent_over_network,
+                  value: stats.exec_stats.network_bytes,
                   bar: genericBarChart(
-                    stats.bytes_sent_over_network,
-                    stats.count,
+                    stats.exec_stats.network_bytes,
+                    stats.exec_stats.count,
                     Bytes,
                   ),
                   format: Bytes,

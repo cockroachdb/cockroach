@@ -9,10 +9,35 @@ import { RequestError } from "src/util";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
+type IExecStats = protos.cockroach.sql.IExecStats;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"]});
 
-const statementStats: IStatementStatistics = {
+const execStats: Required<IExecStats> = {
+  "count": Long.fromNumber(180),
+  "network_bytes": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "max_mem_usage": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "contention_time": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "network_messages": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "max_disk_usage": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+};
+
+const statementStats: Required<IStatementStatistics> = {
   "count": Long.fromNumber(180000),
   "first_attempt_count": Long.fromNumber(50000),
   "max_retries": Long.fromNumber(10),
@@ -20,6 +45,8 @@ const statementStats: IStatementStatistics = {
     "mean": 1,
     "squared_diffs": 0,
   },
+  "legacy_last_err": "",
+  "legacy_last_err_redacted": "",
   "parse_lat": {
     "mean": 0,
     "squared_diffs": 0,
@@ -40,6 +67,15 @@ const statementStats: IStatementStatistics = {
     "mean": 0.00006233333333333315,
     "squared_diffs": 5.786666666666667e-10,
   },
+  "bytes_read": {
+    "mean": 80,
+    "squared_diffs": 0.01,
+  },
+  "rows_read": {
+    "mean": 10,
+    "squared_diffs": 1,
+  },
+  exec_stats: execStats,
   "sensitive_info": {
     "last_err": "",
     "most_recent_plan_description": {
@@ -148,23 +184,6 @@ const statementStats: IStatementStatistics = {
       ],
     },
   },
-  "bytes_read": {
-    "mean": 80,
-    "squared_diffs": 0.01,
-  },
-  "rows_read": {
-    "mean": 10,
-    "squared_diffs": 1,
-  },
-  "bytes_sent_over_network": {
-    "mean": 80,
-    "squared_diffs": 0.01,
-  },
-  "max_mem_usage": {
-    "mean": 80,
-    "squared_diffs": 0.01,
-  },
-  "exec_stat_collection_count": Long.fromNumber(180),
 };
 
 const diagnosticsReports: IStatementDiagnosticsReport[] = [
