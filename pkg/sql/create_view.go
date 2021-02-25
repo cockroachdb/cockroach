@@ -105,8 +105,8 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	var replacingDesc *tabledesc.Mutable
-
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName,
+		tree.ResolveRequireViewDesc, n.ifNotExists)
 	if err != nil {
 		switch {
 		case !sqlerrors.IsRelationAlreadyExistsError(err):
