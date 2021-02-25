@@ -29,7 +29,7 @@ type SkippableTest interface {
 func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
 	t.Skip(append([]interface{}{
-		fmt.Sprintf("https://github.com/cockroachdb/cockroach/issue/%d", githubIssueID)},
+		fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID)},
 		args...))
 }
 
