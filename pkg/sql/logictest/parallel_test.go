@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -191,6 +192,8 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		sql.DistSQLClusterExecMode.Override(&st.SV, int64(mode))
+		// Disable automatic stats - they can interfere with the test shutdown.
+		stats.AutomaticStatisticsClusterMode.Override(&st.SV, false)
 	}
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)
