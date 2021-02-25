@@ -1201,6 +1201,15 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		b = append(b, "\"FullIndexScan\":true"...)
 	}
 
+	if m.TxnCounter != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TxnCounter\":"...)
+		b = strconv.AppendUint(b, uint64(m.TxnCounter), 10)
+	}
+
 	return printComma, b
 }
 

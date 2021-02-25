@@ -244,6 +244,7 @@ a table marked as audited.
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL Execution Log
 
@@ -283,6 +284,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL Logical Schema Changes
 
@@ -1683,6 +1685,7 @@ set to a non-zero value, AND
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL Slow Query Log (Internal)
 
@@ -1727,6 +1730,7 @@ the "slow query" condition.
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL User and Role operations
 
