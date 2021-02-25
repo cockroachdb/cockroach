@@ -8,6 +8,7 @@ import {
   NumericStat,
   flattenStatementStats,
   StatementStatistics,
+  ExecStats,
   combineStatementStats,
 } from "./appStats";
 import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
@@ -159,6 +160,17 @@ function randomStat(scale = 1): NumericStat {
   };
 }
 
+function randomExecStats(count = 10): Required<ExecStats> {
+  return {
+    count: Long.fromNumber(randomInt(count)),
+    network_bytes: randomStat(),
+    max_mem_usage: randomStat(),
+    contention_time: randomStat(),
+    network_messages: randomStat(),
+    max_disk_usage: randomStat(),
+  };
+}
+
 function randomStats(
   sensitiveInfo?: ISensitiveInfo,
 ): Required<StatementStatistics> {
@@ -166,7 +178,6 @@ function randomStats(
   // tslint:disable:variable-name
   const first_attempt_count = randomInt(count);
   const max_retries = randomInt(count - first_attempt_count);
-  const exec_stat_collection_count = randomInt(count);
   // tslint:enable:variable-name
 
   return {
@@ -184,10 +195,7 @@ function randomStats(
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
-    bytes_sent_over_network: randomStat(),
-    max_mem_usage: randomStat(),
-    exec_stat_collection_count: Long.fromNumber(exec_stat_collection_count),
-    contention_time: randomStat(),
+    exec_stats: randomExecStats(count),
   };
 }
 
