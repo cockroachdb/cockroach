@@ -2433,8 +2433,8 @@ def go_deps():
         name = "com_github_twpayne_go_geom",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twpayne/go-geom",
-        sum = "h1:O27mIXZnMYiZi0ZD8ewjs/IT/ZOFVbZHBzPjA9skdmg=",
-        version = "v1.3.6",
+        sum = "h1:yh2fcro1FLk9uTYi3OSXxtI3JRzaghtsNgaku2ASZbE=",
+        version = "v1.3.7-0.20210224233516-acd1d64d533a",
     )
     go_repository(
         name = "com_github_twpayne_go_kml",
