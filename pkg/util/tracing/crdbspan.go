@@ -278,6 +278,8 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Finished = true
 	}
 
+	wantTags := s.recordingType() == RecordingVerbose
+
 	addTag := func(k, v string) {
 		if rs.Tags == nil {
 			rs.Tags = make(map[string]string)
@@ -285,13 +287,15 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Tags[k] = v
 	}
 
-	// When nobody is configured to see our spans, skip some allocations
-	// related to Span UX improvements.
-	if s.mu.duration == -1 {
-		addTag("_unfinished", "1")
-	}
-	if s.mu.recording.recordingType.load() == RecordingVerbose {
-		addTag("_verbose", "1")
+	if wantTags {
+		// When nobody is configured to see our spans, skip some allocations
+		// related to Span UX improvements.
+		if s.mu.duration == -1 {
+			addTag("_unfinished", "1")
+		}
+		if s.mu.recording.recordingType.load() == RecordingVerbose {
+			addTag("_verbose", "1")
+		}
 	}
 
 	if s.mu.stats != nil {
@@ -322,17 +326,20 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 			rs.Baggage[k] = v
 		}
 	}
-	if s.logTags != nil {
-		setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
-			addTag(remappedKey, tag.ValueStr())
-		})
-	}
-	if len(s.mu.tags) > 0 {
-		for k, v := range s.mu.tags {
-			// We encode the tag values as strings.
-			addTag(k, fmt.Sprint(v))
+	if wantTags {
+		if s.logTags != nil {
+			setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
+				addTag(remappedKey, tag.ValueStr())
+			})
+		}
+		if len(s.mu.tags) > 0 {
+			for k, v := range s.mu.tags {
+				// We encode the tag values as strings.
+				addTag(k, fmt.Sprint(v))
+			}
 		}
 	}
+
 	rs.Logs = make([]tracingpb.LogRecord, len(s.mu.recording.recordedLogs))
 	for i, r := range s.mu.recording.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp
