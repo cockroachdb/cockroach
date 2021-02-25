@@ -730,8 +730,8 @@ github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/the42/cartconvert v0.0.0-20131203171324-aae784c392b8 h1:I4DY8wLxJXCrMYzDM6lKCGc3IQwJX0PlTLsd3nQqI3c=
 github.com/the42/cartconvert v0.0.0-20131203171324-aae784c392b8/go.mod h1:fWO/msnJVhHqN1yX6OBoxSyfj7TEj1hHiL8bJSQsK30=
-github.com/twpayne/go-geom v1.3.6 h1:O27mIXZnMYiZi0ZD8ewjs/IT/ZOFVbZHBzPjA9skdmg=
-github.com/twpayne/go-geom v1.3.6/go.mod h1:XTyWHR6+l9TUYONbbK4ImUTYbWDCu2ySSPrZmmiA0Pg=
+github.com/twpayne/go-geom v1.3.7-0.20210224233516-acd1d64d533a h1:yh2fcro1FLk9uTYi3OSXxtI3JRzaghtsNgaku2ASZbE=
+github.com/twpayne/go-geom v1.3.7-0.20210224233516-acd1d64d533a/go.mod h1:XTyWHR6+l9TUYONbbK4ImUTYbWDCu2ySSPrZmmiA0Pg=
 github.com/twpayne/go-kml v1.5.1 h1:RI0JKh/VzdK/d+ZxdJzt8Ar921KMYPfg9qkw7vsbAGw=
 github.com/twpayne/go-kml v1.5.1/go.mod h1:kz8jAiIz6FIdU2Zjce9qGlVtgFYES9vt7BTPBHf5jl4=
 github.com/twpayne/go-polyline v1.0.0/go.mod h1:ICh24bcLYBX8CknfvNPKqoTbe+eg+MX1NPyJmSBo7pU=
