@@ -80,14 +80,14 @@ function makeCommonColumns(
       title: StatementTableTitle.maxMemUsage,
       className: cx("statements-table__col-max-mem-usage"),
       cell: maxMemUsageBar,
-      sort: stmt => FixLong(Number(stmt.stats.max_mem_usage.mean)),
+      sort: stmt => FixLong(Number(stmt.stats.exec_stats.max_mem_usage.mean)),
     },
     {
       name: "networkBytes",
       title: StatementTableTitle.networkBytes,
       className: cx("statements-table__col-network-bytes"),
       cell: networkBytesBar,
-      sort: stmt => FixLong(Number(stmt.stats.bytes_sent_over_network.mean)),
+      sort: stmt => FixLong(Number(stmt.stats.exec_stats.network_bytes.mean)),
     },
     {
       name: "retries",
