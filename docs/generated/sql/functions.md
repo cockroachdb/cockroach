@@ -1922,6 +1922,12 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
+<tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>, z: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X, Y, and Z coordinates.</p>
+</span></td></tr>
+<tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>, z: <a href="float.html">float</a>, m: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X, Y, Z, and M coordinates.</p>
+</span></td></tr>
+<tr><td><a name="st_makepointm"></a><code>st_makepointm(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>, m: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X, Y, and M coordinates.</p>
+</span></td></tr>
 <tr><td><a name="st_makepolygon"></a><code>st_makepolygon(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Polygon with the given outer LineString.</p>
 </span></td></tr>
 <tr><td><a name="st_makepolygon"></a><code>st_makepolygon(outer: geometry, interior: anyelement[]) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Polygon with the given outer LineString and interior (hole) LineString(s).</p>
