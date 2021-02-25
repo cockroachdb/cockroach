@@ -48,7 +48,6 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/ctxgroup",
-        "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
