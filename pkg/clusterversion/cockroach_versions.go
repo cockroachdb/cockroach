@@ -270,6 +270,8 @@ const (
 	// to ship information about reads on a range through lease changes and
 	// range merges.
 	PriorReadSummaries
+	// NonVotingReplicas enables the creation of non-voting replicas.
+	NonVotingReplicas
 
 	// Step (1): Add new versions here.
 )
@@ -463,6 +465,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     PriorReadSummaries,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 44},
+	},
+	{
+		Key:     NonVotingReplicas,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 46},
 	},
 	// Step (2): Add new versions here.
 })
