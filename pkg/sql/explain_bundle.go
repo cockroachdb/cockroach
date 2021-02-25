@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -538,14 +540,45 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 // PrintSettings appends information about session settings that can impact
 // planning decisions.
 func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
+	// Cluster setting encoded default value to session setting value conversion
+	// functions.
+	boolToOnOff := func(boolStr string) string {
+		switch boolStr {
+		case "true":
+			return "on"
+		case "false":
+			return "off"
+		}
+		return boolStr
+	}
+
+	distsqlConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil {
+			return enumVal
+		}
+		return sessiondata.DistSQLExecMode(n).String()
+	}
+
+	vectorizeConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil {
+			return enumVal
+		}
+		return sessiondatapb.VectorizeExecMode(n).String()
+	}
+
 	relevantSettings := []struct {
 		sessionSetting string
 		clusterSetting settings.WritableSetting
+		convFunc       func(string) string
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
-		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
-		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
+		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
+		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
 
 	for _, s := range relevantSettings {
@@ -554,13 +587,11 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 			return err
 		}
 		// Get the default value for the cluster setting.
-		def := s.clusterSetting.EncodedDefault()
+		//def := s.clusterSetting.EncodedDefault()
 		// Convert true/false to on/off to match what SHOW returns.
-		switch def {
-		case "true":
-			def = "on"
-		case "false":
-			def = "off"
+		def := s.clusterSetting.EncodedDefault()
+		if s.convFunc != nil {
+			def = s.convFunc(def)
 		}
 
 		if value == def {
