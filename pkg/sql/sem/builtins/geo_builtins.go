@@ -758,6 +758,76 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_makepoint": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := float64(tree.MustBeDFloat(args[0]))
+				y := float64(tree.MustBeDFloat(args[1]))
+				g, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XY, []float64{x, y})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := float64(tree.MustBeDFloat(args[0]))
+				y := float64(tree.MustBeDFloat(args[1]))
+				z := float64(tree.MustBeDFloat(args[2]))
+				g, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XYZ, []float64{x, y, z})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, and Z coordinates.`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := float64(tree.MustBeDFloat(args[0]))
+				y := float64(tree.MustBeDFloat(args[1]))
+				z := float64(tree.MustBeDFloat(args[2]))
+				m := float64(tree.MustBeDFloat(args[3]))
+				g, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XYZM, []float64{x, y, z, m})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, Z, and M coordinates.`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_makepointm": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"m", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := float64(tree.MustBeDFloat(args[0]))
+				y := float64(tree.MustBeDFloat(args[1]))
+				m := float64(tree.MustBeDFloat(args[2]))
+				g, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XYM, []float64{x, y, m})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, and M coordinates.`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_makepolygon": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -6245,7 +6315,6 @@ func initGeoBuiltins() {
 		{"st_geogfromtext", "st_geographyfromtext"},
 		{"st_geomfromtext", "st_geometryfromtext"},
 		{"st_numinteriorring", "st_numinteriorrings"},
-		{"st_makepoint", "st_point"},
 		{"st_symmetricdifference", "st_symdifference"},
 	} {
 		if _, ok := geoBuiltins[alias.builtinName]; !ok {
