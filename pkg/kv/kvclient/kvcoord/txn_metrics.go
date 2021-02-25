@@ -23,6 +23,7 @@ type TxnMetrics struct {
 	Commits         *metric.Counter
 	Commits1PC      *metric.Counter // Commits which finished in a single phase
 	ParallelCommits *metric.Counter // Commits which entered the STAGING state
+	CommitWaits     *metric.Counter // Commits that waited for linearizability
 
 	RefreshSuccess                *metric.Counter
 	RefreshFail                   *metric.Counter
@@ -68,6 +69,14 @@ var (
 	metaParallelCommitsRates = metric.Metadata{
 		Name:        "txn.parallelcommits",
 		Help:        "Number of KV transaction parallel commit attempts",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCommitWaitRates = metric.Metadata{
+		Name: "txn.commit_waits",
+		Help: "Number of KV transactions that had to commit-wait on commit " +
+			"in order to ensure linearizability. This generally happens to " +
+			"transactions writing to global ranges.",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -207,6 +216,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                       metric.NewCounter(metaCommitsRates),
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
+		CommitWaits:                   metric.NewCounter(metaCommitWaitRates),
 		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshFail:                   metric.NewCounter(metaRefreshFail),
 		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),

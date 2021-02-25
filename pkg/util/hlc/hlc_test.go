@@ -619,7 +619,30 @@ func TestLateStartForwardClockJump(t *testing.T) {
 	}
 	<-tickedCh
 	c.Now()
+}
 
+func TestSleepUntil(t *testing.T) {
+	m := NewManualClock(100000)
+	c := NewClock(m.UnixNano, 0)
+
+	before := c.Now()
+	waitDur := int64(1000)
+	waitUntil := before.Add(waitDur, 0)
+
+	doneC := make(chan struct{}, 1)
+	go func() {
+		c.SleepUntil(waitUntil)
+		doneC <- struct{}{}
+	}()
+
+	step := waitDur / 25
+	for waitLeft := waitDur; waitLeft > 0; waitLeft -= step {
+		require.Empty(t, doneC)
+
+		m.Increment(step)
+		time.Sleep(1 * time.Millisecond)
+	}
+	<-doneC
 }
 
 func BenchmarkUpdate(b *testing.B) {
