@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -368,6 +369,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 61120)
 
 	ctx := context.Background()
 	startKey := []byte("a")
@@ -773,6 +775,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 61120)
 
 	ctx := context.Background()
 	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
@@ -887,6 +890,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 61120)
 
 	ctx := context.Background()
 	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
