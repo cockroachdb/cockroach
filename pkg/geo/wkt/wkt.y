@@ -100,6 +100,7 @@ func appendMultiPolygonFlatCoordsRepr(
 	flatRepr          geomFlatCoordsRepr
 	multiPolyFlatRepr multiPolygonFlatCoordsRepr
 	geomList          []geom.T
+	geomCollect       *geom.GeometryCollection
 }
 
 // Tokens
@@ -115,7 +116,8 @@ func appendMultiPolygonFlatCoordsRepr(
 
 // Geometries
 %type <geom> geometry
-%type <geom> point linestring polygon multipoint multilinestring multipolygon geometry_collection
+%type <geom> point linestring polygon multipoint multilinestring multipolygon
+%type <geomCollect> geometry_collection
 
 // Empty representations
 %type <coordList> empty_in_base_type
@@ -200,6 +202,12 @@ geometry:
 		if !ok {
 			return 1
 		}
+		err := $1.SetLayout(wktlex.(*wktLex).curLayout())
+		if err != nil {
+			wktlex.(*wktLex).setError(err)
+			return 1
+		}
+		$$ = $1
 	}
 
 point:

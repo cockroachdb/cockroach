@@ -343,12 +343,12 @@ func TestUnmarshal(t *testing.T) {
 		{
 			desc:        "parse 2D geometrycollection with a single point",
 			equivInputs: []string{"GEOMETRYCOLLECTION(POINT(0 0))"},
-			expected:    geom.NewGeometryCollection().MustPush(geom.NewPointFlat(geom.XY, []float64{0, 0})),
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(geom.NewPointFlat(geom.XY, []float64{0, 0})),
 		},
 		{
 			desc:        "parse 2D+M base type geometrycollection",
 			equivInputs: []string{"GEOMETRYCOLLECTION M (POINT M (0 0 0))", "GEOMETRYCOLLECTION(POINT M (0 0 0))"},
-			expected:    geom.NewGeometryCollection().MustPush(geom.NewPointFlat(geom.XYM, []float64{0, 0, 0})),
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(geom.NewPointFlat(geom.XYM, []float64{0, 0, 0})),
 		},
 		{
 			desc: "parse 2D+M geometrycollection with base type empty geometry",
@@ -357,12 +357,12 @@ func TestUnmarshal(t *testing.T) {
 				"GEOMETRYCOLLECTION(LINESTRING M EMPTY)",
 				"GEOMETRYCOLLECTION M (LINESTRING M EMPTY)",
 			},
-			expected: geom.NewGeometryCollection().MustPush(geom.NewLineString(geom.XYM)),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(geom.NewLineString(geom.XYM)),
 		},
 		{
 			desc:        "parse 3D geometrycollection with base type empty geometry",
 			equivInputs: []string{"GEOMETRYCOLLECTION Z (LINESTRING EMPTY)", "GEOMETRYCOLLECTION Z (LINESTRING Z EMPTY)"},
-			expected:    geom.NewGeometryCollection().MustPush(geom.NewLineString(geom.XYZ)),
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(geom.NewLineString(geom.XYZ)),
 		},
 		{
 			desc: "parse 2D+M geometrycollection with nested geometrycollection and empty geometry",
@@ -378,8 +378,8 @@ func TestUnmarshal(t *testing.T) {
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION M (LINESTRING EMPTY), LINESTRING M EMPTY)",
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION M (LINESTRING M EMPTY), LINESTRING M EMPTY)",
 			},
-			expected: geom.NewGeometryCollection().MustPush(
-				geom.NewGeometryCollection().MustPush(geom.NewLineString(geom.XYM)),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(
+				geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(geom.NewLineString(geom.XYM)),
 				geom.NewLineString(geom.XYM),
 			),
 		},
@@ -389,7 +389,7 @@ func TestUnmarshal(t *testing.T) {
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION EMPTY)",
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION M EMPTY)",
 			},
-			expected: geom.NewGeometryCollection().MustPush(geom.NewGeometryCollection()),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(geom.NewGeometryCollection().MustSetLayout(geom.XYM)),
 		},
 		{
 			desc: "parse 3D geometry collection with nested geometrycollection and empty geometry",
@@ -400,8 +400,8 @@ func TestUnmarshal(t *testing.T) {
 				"GEOMETRYCOLLECTION Z (GEOMETRYCOLLECTION Z (POLYGON EMPTY), POINT EMPTY)",
 				"GEOMETRYCOLLECTION Z (GEOMETRYCOLLECTION Z (POLYGON Z EMPTY), POINT Z EMPTY)",
 			},
-			expected: geom.NewGeometryCollection().MustPush(
-				geom.NewGeometryCollection().MustPush(geom.NewPolygon(geom.XYZ)),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(
+				geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(geom.NewPolygon(geom.XYZ)),
 				geom.NewPointEmpty(geom.XYZ),
 			),
 		},
@@ -416,7 +416,7 @@ MULTILINESTRING((1 1, 0 0, 1 4)),
 MULTIPOLYGON(((0 0, 0 100, 100 100, 100 0, 0 0))),
 GEOMETRYCOLLECTION EMPTY
 )`},
-			expected: geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(
 				geom.NewPointFlat(geom.XY, []float64{0, 0}),
 				geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 1, 4}),
 				geom.NewPolygonFlat(geom.XY,
@@ -425,15 +425,15 @@ GEOMETRYCOLLECTION EMPTY
 				geom.NewMultiPointFlat(geom.XY, []float64{23, 24}, geom.NewMultiPointFlatOptionWithEnds([]int{2, 2})),
 				geom.NewMultiLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 1, 4}, []int{6}),
 				geom.NewMultiPolygonFlat(geom.XY, []float64{0, 0, 0, 100, 100, 100, 100, 0, 0, 0}, [][]int{{10}}),
-				geom.NewGeometryCollection(),
+				geom.NewGeometryCollection().MustSetLayout(geom.XY),
 			),
 		},
 		{
 			desc:        "parse 2D geometrycollection with nested geometrycollection",
 			equivInputs: []string{"GEOMETRYCOLLECTION(POINT(0 0), GEOMETRYCOLLECTION(MULTIPOINT(EMPTY, 2 1)))"},
-			expected: geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(
 				geom.NewPointFlat(geom.XY, []float64{0, 0}),
-				geom.NewGeometryCollection().MustPush(
+				geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(
 					geom.NewMultiPointFlat(geom.XY, []float64{2, 1}, geom.NewMultiPointFlatOptionWithEnds([]int{0, 2})),
 				),
 			),
@@ -469,7 +469,7 @@ MULTILINESTRING M ((0 -1 -2, 2 5 7)),
 MULTIPOLYGON M (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
 )`,
 			},
-			expected: geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(
 				geom.NewPointEmpty(geom.XYM),
 				geom.NewPointFlat(geom.XYM, []float64{-2, 0, 0.5}),
 				geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 200, 0.1, -1, -20}),
@@ -488,8 +488,8 @@ MULTIPOLYGON M (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION(POINT M EMPTY, LINESTRING M (0 0 0, 1 1 1)))",
 				"GEOMETRYCOLLECTION M (GEOMETRYCOLLECTION M (POINT M EMPTY, LINESTRING M (0 0 0, 1 1 1)))",
 			},
-			expected: geom.NewGeometryCollection().MustPush(
-				geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(
+				geom.NewGeometryCollection().MustSetLayout(geom.XYM).MustPush(
 					geom.NewPointEmpty(geom.XYM),
 					geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 0, 1, 1, 1}),
 				),
@@ -530,7 +530,7 @@ MULTILINESTRING Z (EMPTY, EMPTY, (1 1 1, 2 2 2, 3 3 3)),
 MULTIPOLYGON(((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
 )`,
 			},
-			expected: geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(
 				geom.NewPointFlat(geom.XYZ, []float64{2, 3, 4}),
 				geom.NewLineStringFlat(geom.XYZ, []float64{0, -1, 1, 7, -1, -9}),
 				geom.NewPolygonFlat(geom.XYZ, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
@@ -574,7 +574,7 @@ MULTILINESTRING((0 0 0 0, 1 1 1 1), (-2 -3 -4 -5, 0.5 -0.75 1 -1.25, 0 1 5 7)),
 MULTIPOLYGON(((0 0 0 0, 1 1 1 -1, 2 3 1 -2, 0 0 0 0)))
 )`,
 			},
-			expected: geom.NewGeometryCollection().MustPush(
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XYZM).MustPush(
 				geom.NewPointFlat(geom.XYZM, []float64{0, 5, -10, 15}),
 				geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, 1}),
 				geom.NewPolygonFlat(geom.XYZM, []float64{0, 0, 12, 7, 1, -1, 12, -50, 2, 0, 12, 0, 0, 0, 12, 7}, []int{16}),
@@ -583,6 +583,26 @@ MULTIPOLYGON(((0 0 0 0, 1 1 1 -1, 2 3 1 -2, 0 0 0 0)))
 					[]float64{0, 0, 0, 0, 1, 1, 1, 1, -2, -3, -4, -5, 0.5, -0.75, 1, -1.25, 0, 1, 5, 7}, []int{8, 20}),
 				geom.NewMultiPolygonFlat(geom.XYZM, []float64{0, 0, 0, 0, 1, 1, 1, -1, 2, 3, 1, -2, 0, 0, 0, 0}, [][]int{{16}}),
 			),
+		},
+		{
+			desc:        "parse empty 2D geometrycollection",
+			equivInputs: []string{"GEOMETRYCOLLECTION EMPTY"},
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XY),
+		},
+		{
+			desc:        "parse empty 2D+M geometrycollection",
+			equivInputs: []string{"GEOMETRYCOLLECTION M EMPTY", "GEOMETRYCOLLECTIONM EMPTY"},
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XYM),
+		},
+		{
+			desc:        "parse empty 3D geometrycollection",
+			equivInputs: []string{"GEOMETRYCOLLECTION Z EMPTY", "GEOMETRYCOLLECTIONZ EMPTY"},
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XYZ),
+		},
+		{
+			desc:        "parse empty 4D geometrycollection",
+			equivInputs: []string{"GEOMETRYCOLLECTION ZM EMPTY", "GEOMETRYCOLLECTIONZM EMPTY"},
+			expected:    geom.NewGeometryCollection().MustSetLayout(geom.XYZM),
 		},
 	}
 
