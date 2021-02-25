@@ -898,7 +898,7 @@ func ensureClockMonotonicity(
 	clock *hlc.Clock,
 	startTime time.Time,
 	prevHLCUpperBound int64,
-	sleepUntilFn func(until int64, currTime func() int64),
+	sleepUntilFn func(t hlc.Timestamp),
 ) {
 	var sleepUntil int64
 	if prevHLCUpperBound != 0 {
@@ -922,10 +922,7 @@ func ensureClockMonotonicity(
 		sleepUntil = startTime.UnixNano() + int64(clock.MaxOffset()) + 1
 	}
 
-	currentWallTimeFn := func() int64 { /* function to report current time */
-		return clock.Now().WallTime
-	}
-	currentWallTime := currentWallTimeFn()
+	currentWallTime := clock.Now().WallTime
 	delta := time.Duration(sleepUntil - currentWallTime)
 	if delta > 0 {
 		log.Ops.Infof(
@@ -935,7 +932,7 @@ func ensureClockMonotonicity(
 			sleepUntil,
 			delta,
 		)
-		sleepUntilFn(sleepUntil, currentWallTimeFn)
+		sleepUntilFn(hlc.Timestamp{WallTime: sleepUntil})
 	}
 }
 
@@ -1530,7 +1527,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 			s.clock,
 			s.startTime,
 			hlcUpperBound,
-			timeutil.SleepUntil,
+			s.clock.SleepUntil,
 		)
 	}
 
