@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -25,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -343,6 +346,28 @@ var generators = map[string]builtinDefinition{
 			payloadsForSpanGeneratorType,
 			makePayloadsForSpanGenerator,
 			"Returns the payload(s) of the requested span.",
+			tree.VolatilityVolatile,
+		),
+	),
+
+	"crdb_internal.show_create_all_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"dbName", types.String},
+			},
+			showCreateAllTablesGeneratorType,
+			makeShowCreateAllTablesGenerator,
+			`Returns a rows CREATE table statements followed by 
+ALTER table statements that add table constraints. The rows are ordered
+by dependencies. All foreign keys are added after the creation of the table
+in the alter statements.
+It is not recommended to perform this operation on a database with many 
+tables.
+The output can be used to recreate a database.'
+`,
 			tree.VolatilityVolatile,
 		),
 	),
@@ -1513,3 +1538,159 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 
 // Close implements the tree.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Close() {}
+
+var showCreateAllTablesGeneratorType = types.String
+
+// Phase is used to determine if CREATE statements or ALTER statements
+// are being generated for showCreateAllTables.
+type Phase int
+
+const (
+	create Phase = iota
+	alterAddFks
+	alterValidateFks
+)
+
+// showCreateAllTablesGenerator supports the execution of
+// crdb_internal.show_create_all_tables(dbName).
+type showCreateAllTablesGenerator struct {
+	ie        sqlutil.InternalExecutor
+	txn       *kv.Txn
+	timestamp string
+	ids       []int64
+	dbName    string
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// showCreateAllTablesGenerator.
+	curr           tree.Datum
+	idx            int
+	shouldValidate bool
+	alterArr       tree.Datums
+	alterArrIdx    int
+	phase          Phase
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
+	return showCreateAllTablesGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	ids, err := getTopologicallySortedTableIDs(ctx, s.ie, txn, s.dbName, s.timestamp)
+	if err != nil {
+		return err
+	}
+
+	s.ids = ids
+
+	s.txn = txn
+	s.idx = -1
+	s.phase = create
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
+	switch s.phase {
+	case create:
+		s.idx++
+		if s.idx >= len(s.ids) {
+			// Were done generating the create statements, start generating alters.
+			s.phase = alterAddFks
+			s.idx = -1
+			return s.Next(ctx)
+		}
+
+		createStmt, err := getCreateStatement(
+			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName,
+		)
+		if err != nil {
+			return false, err
+		}
+		createStmtStr := string(tree.MustBeDString(createStmt))
+		s.curr = tree.NewDString(fmt.Sprintf("%s;", createStmtStr))
+	case alterAddFks, alterValidateFks:
+		// We have existing alter statements to generate for the current
+		// table id.
+		s.alterArrIdx++
+		if s.alterArrIdx < len(s.alterArr) {
+			alterStmt := tree.MustBeDString(s.alterArr[s.alterArrIdx])
+			s.curr = tree.NewDString(
+				fmt.Sprintf("%s;", alterStmt),
+			)
+
+			// At least one FK was added, we must validate the FK.
+			s.shouldValidate = true
+			return true, nil
+		}
+		// We need to generate the alter statements for the next table.
+		s.idx++
+		if s.idx >= len(s.ids) {
+			if s.phase == alterAddFks {
+				// Were done generating the alter fk statements,
+				// start generating alter validate fk statements.
+				s.phase = alterValidateFks
+				s.idx = -1
+
+				if s.shouldValidate {
+					// Add a warning about the possibility of foreign key
+					// validation failing.
+					s.curr = tree.NewDString(foreignKeyValidationWarning)
+					return true, nil
+				}
+				return s.Next(ctx)
+			}
+			// We're done if were on phase alterValidateFks and we
+			// finish going through all the table ids.
+			return false, nil
+		}
+
+		statementType := alterAddFKStatements
+		if s.phase == alterValidateFks {
+			statementType = alterValidateFKStatements
+		}
+		alterStmt, err := getAlterStatements(
+			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementType,
+		)
+		if err != nil {
+			return false, err
+		}
+		if alterStmt == nil {
+			// There can be no ALTER statements for a given id, in this case
+			// we go next.
+			return s.Next(ctx)
+		}
+		s.alterArr = tree.MustBeDArray(alterStmt).Array
+		s.alterArrIdx = -1
+		return s.Next(ctx)
+	}
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Close() {}
+
+// makeShowCreateAllTablesGenerator creates a generator to support the
+// crdb_internal.show_create_all_tables(dbName) builtin.
+// We use the timestamp of when the generator is created as the
+// timestamp to pass to AS OF SYSTEM TIME for looking up the create table
+// and alter table statements.
+func makeShowCreateAllTablesGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	tsI, err := tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	ts := tsI.String()
+	return &showCreateAllTablesGenerator{timestamp: ts, dbName: dbName, ie: ctx.InternalExecutor.(sqlutil.InternalExecutor)}, nil
+}
