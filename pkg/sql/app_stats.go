@@ -91,6 +91,10 @@ type stmtStats struct {
 		// vectorization.
 		vectorized bool
 
+		// fullScan records whether the last instance of this statement used a
+		// full table index scan.
+		fullScan bool
+
 		data roachpb.StatementStatistics
 	}
 }
@@ -185,6 +189,7 @@ func (a *appStats) recordStatement(
 	distSQLUsed bool,
 	vectorized bool,
 	implicitTxn bool,
+	fullScan bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -245,6 +250,7 @@ func (a *appStats) recordStatement(
 	//  tracing is a thing.
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
+	s.mu.fullScan = fullScan
 	s.mu.Unlock()
 
 	return s.ID
@@ -702,6 +708,7 @@ func (s *sqlStats) getStmtStats(
 				data := stats.mu.data
 				distSQLUsed := stats.mu.distSQLUsed
 				vectorized := stats.mu.vectorized
+				fullScan := stats.mu.fullScan
 				stats.mu.Unlock()
 
 				k := roachpb.StatementStatisticsKey{
@@ -710,6 +717,7 @@ func (s *sqlStats) getStmtStats(
 					Opt:         true,
 					Vec:         vectorized,
 					ImplicitTxn: q.implicitTxn,
+					FullScan:    fullScan,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
 				}
