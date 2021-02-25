@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -599,6 +600,7 @@ func makeSQLServerArgs(
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := grpc.NewServer()
 	sessionRegistry := sql.NewSessionRegistry()
+	contentionRegistry := contention.NewRegistry()
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -629,12 +631,14 @@ func makeSQLServerArgs(
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
+		contentionRegistry:       contentionRegistry,
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer: newTenantStatusServer(
-			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor}, sessionRegistry, baseCfg.Settings,
+			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor},
+			sessionRegistry, contentionRegistry, baseCfg.Settings,
 		),
 	}, nil
 }

@@ -207,6 +207,9 @@ type sqlServerArgs struct {
 	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
 	sessionRegistry *sql.SessionRegistry
 
+	// Used to track the contention events on this node.
+	contentionRegistry *contention.Registry
+
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
 	//
@@ -225,7 +228,7 @@ type sqlServerArgs struct {
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
 
-	// Used to list sessions and cancel sessions/queries.
+	// Used to list sessions and contention events and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
 
 	// Used to watch settings and descriptor changes.
@@ -494,6 +497,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodesStatusServer:       cfg.nodesStatusServer,
 		SQLStatusServer:         cfg.sqlStatusServer,
 		SessionRegistry:         cfg.sessionRegistry,
+		ContentionRegistry:      cfg.contentionRegistry,
 		SQLLivenessReader:       cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
@@ -532,7 +536,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
-		ContentionRegistry:         contention.NewRegistry(),
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 	}
 

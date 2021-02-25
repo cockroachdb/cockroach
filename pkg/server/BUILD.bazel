@@ -107,6 +107,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/colexec",
         "//pkg/sql/contention",
+        "//pkg/sql/contentionpb",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

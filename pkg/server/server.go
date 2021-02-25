@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -601,6 +602,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	sAdmin := newAdminServer(lateBoundServer, internalExecutor)
 	sessionRegistry := sql.NewSessionRegistry()
+	contentionRegistry := contention.NewRegistry()
 
 	sStatus := newStatusServer(
 		cfg.AmbientCtx,
@@ -616,6 +618,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		node.stores,
 		stopper,
 		sessionRegistry,
+		contentionRegistry,
 		internalExecutor,
 	)
 	// TODO(tbg): don't pass all of Server into this to avoid this hack.
@@ -660,6 +663,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
+		contentionRegistry:       contentionRegistry,
 		circularInternalExecutor: internalExecutor,
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,

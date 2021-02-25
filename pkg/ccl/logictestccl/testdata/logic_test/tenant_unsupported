@@ -59,10 +59,16 @@ statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.node_queries
 
 statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.node_contention_events
+
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.cluster_sessions
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.cluster_queries
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.cluster_contention_events
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_store_status
