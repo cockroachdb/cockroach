@@ -12,6 +12,7 @@ package scjob
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -103,7 +104,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		return err
 	}
 
-	for _, s := range sc.Stages {
+	stmts := getStmtsForTestingMetadata(n.job)
+
+	for i, s := range sc.Stages {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			jt := badJobTracker{
@@ -111,8 +114,23 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
-			if err := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
+			if err := scexec.NewExecutor(
+				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs,
+			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
+				Statements: stmts,
+				Phase:      scplan.PostCommitPhase,
+			}); err != nil {
 				return err
+			}
+			// If this is the last stage, also update all the table descriptors to
+			// remove the job ID.
+			if i == len(sc.Stages)-1 {
+				if err := scexec.UpdateDescriptorJobIDs(
+					ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
+				); err != nil {
+					return err
+				}
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -160,6 +178,12 @@ func makeTargetStates(
 		}
 	}
 	return ts
+}
+
+func getStmtsForTestingMetadata(j *jobs.Job) []string {
+	// This is a hack to get individual statements back out of the concatenated
+	// statements.
+	return strings.Split(j.Payload().Statement, "; ")
 }
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {

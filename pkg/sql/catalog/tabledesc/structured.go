@@ -2027,6 +2027,17 @@ func (desc *wrapper) ValidateSelf(ctx context.Context) error {
 		}
 	}
 
+	// Validate that the presence of MutationJobs (from the old schema changer)
+	// and the presence of a NewSchemaChangeJobID are mutually exclusive. (Note
+	// the jobs themselves can be running simultaneously, since a resumer can
+	// still be running after the schema change is complete from the point of view
+	// of the descriptor, in both the new and old schema change jobs.)
+	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
+		return errors.AssertionFailedf(
+			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
+			desc.NewSchemaChangeJobID, desc.MutationJobs)
+	}
+
 	if err := desc.validateTableIfTesting(ctx); err != nil {
 		return err
 	}

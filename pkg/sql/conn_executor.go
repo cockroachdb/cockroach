@@ -2564,44 +2564,71 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangerState.nodes) == 0 {
+	scs := &ex.extraTxnState.schemaChangerState
+	if len(scs.nodes) == 0 {
 		return nil
 	}
 	executor := scexec.NewExecutor(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil, /* jobTracker */
+		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
 	)
 	after, err := runNewSchemaChanger(
-		ctx, scplan.PreCommitPhase,
+		ctx,
+		scplan.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.nodes,
 		executor,
+		scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs := &ex.extraTxnState.schemaChangerState
 	scs.nodes = after
 	targetSlice := make([]*scpb.Target, len(scs.nodes))
 	states := make([]scpb.State, len(scs.nodes))
+	// TODO(ajwerner): It may be better in the future to have the builder be
+	// responsible for determining this set of descriptors. As of the time of
+	// writing, the descriptors to be "locked," descriptors that need schema
+	// change jobs, and descriptors with schema change mutations all coincide. But
+	// there are future schema changes to be implemented in the new schema changer
+	// (e.g., RENAME TABLE) for which this may no longer be true.
+	descIDSet := catalog.MakeDescriptorIDSet()
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
+		descIDSet.Add(scs.nodes[i].Element().DescriptorID())
 	}
-	_, err = ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
+	descIDs := descIDSet.Ordered()
+	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
+		Statement:     strings.Join(scs.stmts, "; "),
 		Username:      ex.planner.User(),
-		DescriptorIDs: nil, // TODO(ajwerner): populate
-		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
+		DescriptorIDs: descIDs,
+		Details: jobspb.NewSchemaChangeDetails{
+			Targets: targetSlice,
+		},
 		Progress:      jobspb.NewSchemaChangeProgress{States: states},
 		RunningStatus: "",
 		NonCancelable: false,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Write the job ID to the affected descriptors.
+	if err := scexec.UpdateDescriptorJobIDs(
+		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
+	); err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new schema change job %d using the new schema changer", job.ID())
+	return nil
 }
 
 func runNewSchemaChanger(
-	ctx context.Context, phase scplan.Phase, nodes []*scpb.Node, executor *scexec.Executor,
+	ctx context.Context,
+	phase scplan.Phase,
+	nodes []*scpb.Node,
+	executor *scexec.Executor,
+	stmts []string,
 ) (after []*scpb.Node, _ error) {
 	sc, err := scplan.MakePlan(nodes, scplan.Params{
 		ExecutionPhase: phase,
@@ -2612,7 +2639,11 @@ func runNewSchemaChanger(
 	}
 	after = nodes
 	for _, s := range sc.Stages {
-		if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
+		if err := executor.ExecuteOps(ctx, s.Ops,
+			scexec.TestingKnobMetadata{
+				Statements: stmts,
+				Phase:      phase,
+			}); err != nil {
 			return nil, err
 		}
 		after = s.After
