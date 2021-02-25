@@ -277,7 +277,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		colList = t.Cols
 
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
-		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
+		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
 		colList = e.Private().(*SetPrivate).OutCols
 
 	default:
@@ -321,7 +321,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	// Special-case handling for set operators to show the left and right
 	// input columns that correspond to the output columns.
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
-		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
+		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
 			private := e.Private().(*SetPrivate)
 			f.formatColList(e, tp, "left columns:", private.LeftCols)
