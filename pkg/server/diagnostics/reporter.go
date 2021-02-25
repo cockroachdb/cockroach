@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -46,10 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/mitchellh/reflectwalk"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/load"
-	"github.com/shirou/gopsutil/mem"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -336,42 +330,6 @@ func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
 		return ""
 	}
 	return licenseType
-}
-
-// populateHardwareInfo populates OS, CPU, memory, etc. information about the
-// environment in which CRDB is running.
-func populateHardwareInfo(ctx context.Context, e *diagnosticspb.Environment) {
-	if platform, family, version, err := host.PlatformInformation(); err == nil {
-		e.Os.Family = family
-		e.Os.Platform = platform
-		e.Os.Version = version
-	}
-
-	if virt, role, err := host.Virtualization(); err == nil && role == "guest" {
-		e.Hardware.Virtualization = virt
-	}
-
-	if m, err := mem.VirtualMemory(); err == nil {
-		e.Hardware.Mem.Available = m.Available
-		e.Hardware.Mem.Total = m.Total
-	}
-
-	e.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
-	if cpus, err := cpu.InfoWithContext(ctx); err == nil && len(cpus) > 0 {
-		e.Hardware.Cpu.Sockets = int32(len(cpus))
-		c := cpus[0]
-		e.Hardware.Cpu.Cores = c.Cores
-		e.Hardware.Cpu.Model = c.ModelName
-		e.Hardware.Cpu.Mhz = float32(c.Mhz)
-		e.Hardware.Cpu.Features = c.Flags
-	}
-
-	if l, err := load.AvgWithContext(ctx); err == nil {
-		e.Hardware.Loadavg15 = float32(l.Load15)
-	}
-
-	e.Hardware.Provider, e.Hardware.InstanceClass = cloudinfo.GetInstanceClass(ctx)
-	e.Topology.Provider, e.Topology.Region = cloudinfo.GetInstanceRegion(ctx)
 }
 
 func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret string) {
