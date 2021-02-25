@@ -686,28 +686,33 @@ wktdefault:
 			if !ok {
 				return 1
 			}
+			err := wktDollar[1].geom.(*geom.GeometryCollection).SetLayout(wktlex.(*wktLex).curLayout())
+			if err != nil {
+				wktlex.(*wktLex).setError(err)
+				return 1
+			}
 		}
 	case 9:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:207
+//line wkt.y:212
 		{
 			wktVAL.geom = geom.NewPointFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].coordList)
 		}
 	case 10:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:211
+//line wkt.y:216
 		{
 			wktVAL.geom = geom.NewPointEmpty(wktlex.(*wktLex).curLayout())
 		}
 	case 11:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:215
+//line wkt.y:220
 		{
 			wktVAL.geom = geom.NewPointEmpty(wktlex.(*wktLex).curLayout())
 		}
 	case 14:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:225
+//line wkt.y:230
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -716,7 +721,7 @@ wktdefault:
 		}
 	case 15:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:234
+//line wkt.y:239
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -725,7 +730,7 @@ wktdefault:
 		}
 	case 16:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:241
+//line wkt.y:246
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -734,7 +739,7 @@ wktdefault:
 		}
 	case 17:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:248
+//line wkt.y:253
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -743,25 +748,25 @@ wktdefault:
 		}
 	case 18:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:257
+//line wkt.y:262
 		{
 			wktVAL.geom = geom.NewLineStringFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].coordList)
 		}
 	case 19:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:261
+//line wkt.y:266
 		{
 			wktVAL.geom = geom.NewLineString(wktlex.(*wktLex).curLayout())
 		}
 	case 20:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:265
+//line wkt.y:270
 		{
 			wktVAL.geom = geom.NewLineString(wktlex.(*wktLex).curLayout())
 		}
 	case 23:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:275
+//line wkt.y:280
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -770,7 +775,7 @@ wktdefault:
 		}
 	case 24:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:284
+//line wkt.y:289
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -779,7 +784,7 @@ wktdefault:
 		}
 	case 25:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:291
+//line wkt.y:296
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -788,7 +793,7 @@ wktdefault:
 		}
 	case 26:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:298
+//line wkt.y:303
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -797,25 +802,25 @@ wktdefault:
 		}
 	case 27:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:307
+//line wkt.y:312
 		{
 			wktVAL.geom = geom.NewPolygonFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].flatRepr.flatCoords, wktDollar[2].flatRepr.ends)
 		}
 	case 28:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:311
+//line wkt.y:316
 		{
 			wktVAL.geom = geom.NewPolygon(wktlex.(*wktLex).curLayout())
 		}
 	case 29:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:315
+//line wkt.y:320
 		{
 			wktVAL.geom = geom.NewPolygon(wktlex.(*wktLex).curLayout())
 		}
 	case 32:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:325
+//line wkt.y:330
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -824,7 +829,7 @@ wktdefault:
 		}
 	case 33:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:334
+//line wkt.y:339
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -833,7 +838,7 @@ wktdefault:
 		}
 	case 34:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:341
+//line wkt.y:346
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -842,7 +847,7 @@ wktdefault:
 		}
 	case 35:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:348
+//line wkt.y:353
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -851,7 +856,7 @@ wktdefault:
 		}
 	case 36:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:357
+//line wkt.y:362
 		{
 			wktVAL.geom = geom.NewMultiPointFlat(
 				wktlex.(*wktLex).curLayout(), wktDollar[2].flatRepr.flatCoords, geom.NewMultiPointFlatOptionWithEnds(wktDollar[2].flatRepr.ends),
@@ -859,7 +864,7 @@ wktdefault:
 		}
 	case 37:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:363
+//line wkt.y:368
 		{
 			wktVAL.geom = geom.NewMultiPointFlat(
 				wktlex.(*wktLex).curLayout(), wktDollar[2].flatRepr.flatCoords, geom.NewMultiPointFlatOptionWithEnds(wktDollar[2].flatRepr.ends),
@@ -867,19 +872,19 @@ wktdefault:
 		}
 	case 38:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:369
+//line wkt.y:374
 		{
 			wktVAL.geom = geom.NewMultiPoint(wktlex.(*wktLex).curLayout())
 		}
 	case 39:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:373
+//line wkt.y:378
 		{
 			wktVAL.geom = geom.NewMultiPoint(wktlex.(*wktLex).curLayout())
 		}
 	case 40:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:379
+//line wkt.y:384
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -888,7 +893,7 @@ wktdefault:
 		}
 	case 41:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:388
+//line wkt.y:393
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -897,7 +902,7 @@ wktdefault:
 		}
 	case 42:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:395
+//line wkt.y:400
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -906,7 +911,7 @@ wktdefault:
 		}
 	case 43:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:402
+//line wkt.y:407
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -915,31 +920,31 @@ wktdefault:
 		}
 	case 44:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:411
+//line wkt.y:416
 		{
 			wktVAL.geom = geom.NewMultiLineStringFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].flatRepr.flatCoords, wktDollar[2].flatRepr.ends)
 		}
 	case 45:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:415
+//line wkt.y:420
 		{
 			wktVAL.geom = geom.NewMultiLineStringFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].flatRepr.flatCoords, wktDollar[2].flatRepr.ends)
 		}
 	case 46:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:419
+//line wkt.y:424
 		{
 			wktVAL.geom = geom.NewMultiLineString(wktlex.(*wktLex).curLayout())
 		}
 	case 47:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:423
+//line wkt.y:428
 		{
 			wktVAL.geom = geom.NewMultiLineString(wktlex.(*wktLex).curLayout())
 		}
 	case 48:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:429
+//line wkt.y:434
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -948,7 +953,7 @@ wktdefault:
 		}
 	case 49:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:438
+//line wkt.y:443
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -957,7 +962,7 @@ wktdefault:
 		}
 	case 50:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:445
+//line wkt.y:450
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -966,7 +971,7 @@ wktdefault:
 		}
 	case 51:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:452
+//line wkt.y:457
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -975,31 +980,31 @@ wktdefault:
 		}
 	case 52:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:461
+//line wkt.y:466
 		{
 			wktVAL.geom = geom.NewMultiPolygonFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].multiPolyFlatRepr.flatCoords, wktDollar[2].multiPolyFlatRepr.endss)
 		}
 	case 53:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:465
+//line wkt.y:470
 		{
 			wktVAL.geom = geom.NewMultiPolygonFlat(wktlex.(*wktLex).curLayout(), wktDollar[2].multiPolyFlatRepr.flatCoords, wktDollar[2].multiPolyFlatRepr.endss)
 		}
 	case 54:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:469
+//line wkt.y:474
 		{
 			wktVAL.geom = geom.NewMultiPolygon(wktlex.(*wktLex).curLayout())
 		}
 	case 55:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:473
+//line wkt.y:478
 		{
 			wktVAL.geom = geom.NewMultiPolygon(wktlex.(*wktLex).curLayout())
 		}
 	case 56:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:479
+//line wkt.y:484
 		{
 			ok := wktlex.(*wktLex).validateBaseGeometryTypeAllowed()
 			if !ok {
@@ -1008,7 +1013,7 @@ wktdefault:
 		}
 	case 57:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:488
+//line wkt.y:493
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYM)
 			if !ok {
@@ -1017,7 +1022,7 @@ wktdefault:
 		}
 	case 58:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:495
+//line wkt.y:500
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZ)
 			if !ok {
@@ -1026,7 +1031,7 @@ wktdefault:
 		}
 	case 59:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:502
+//line wkt.y:507
 		{
 			ok := wktlex.(*wktLex).validateAndSetLayoutIfNoLayout(geom.XYZM)
 			if !ok {
@@ -1035,7 +1040,7 @@ wktdefault:
 		}
 	case 60:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:511
+//line wkt.y:516
 		{
 			newCollection := geom.NewGeometryCollection()
 			err := newCollection.Push(wktDollar[2].geomList...)
@@ -1047,37 +1052,37 @@ wktdefault:
 		}
 	case 61:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:521
+//line wkt.y:526
 		{
 			wktVAL.geom = geom.NewGeometryCollection()
 		}
 	case 62:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:525
+//line wkt.y:530
 		{
 			wktVAL.geom = geom.NewGeometryCollection()
 		}
 	case 63:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:531
+//line wkt.y:536
 		{
 			wktVAL.geomList = wktDollar[2].geomList
 		}
 	case 64:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:537
+//line wkt.y:542
 		{
 			wktVAL.geomList = append(wktDollar[1].geomList, wktDollar[3].geom)
 		}
 	case 65:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:541
+//line wkt.y:546
 		{
 			wktVAL.geomList = []geom.T{wktDollar[1].geom}
 		}
 	case 68:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:551
+//line wkt.y:556
 		{
 			ok := wktlex.(*wktLex).validateAndPushLayoutStackFrame(geom.NoLayout)
 			if !ok {
@@ -1086,7 +1091,7 @@ wktdefault:
 		}
 	case 69:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:560
+//line wkt.y:565
 		{
 			ok := wktlex.(*wktLex).validateAndPushLayoutStackFrame(geom.XYM)
 			if !ok {
@@ -1095,7 +1100,7 @@ wktdefault:
 		}
 	case 70:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:567
+//line wkt.y:572
 		{
 			ok := wktlex.(*wktLex).validateAndPushLayoutStackFrame(geom.XYZ)
 			if !ok {
@@ -1104,7 +1109,7 @@ wktdefault:
 		}
 	case 71:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:574
+//line wkt.y:579
 		{
 			ok := wktlex.(*wktLex).validateAndPushLayoutStackFrame(geom.XYZM)
 			if !ok {
@@ -1113,7 +1118,7 @@ wktdefault:
 		}
 	case 72:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:583
+//line wkt.y:588
 		{
 			ok := wktlex.(*wktLex).validateNonEmptyGeometryAllowed()
 			if !ok {
@@ -1122,139 +1127,139 @@ wktdefault:
 		}
 	case 73:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:592
+//line wkt.y:597
 		{
 			wktVAL.multiPolyFlatRepr = wktDollar[2].multiPolyFlatRepr
 		}
 	case 74:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:598
+//line wkt.y:603
 		{
 			wktVAL.multiPolyFlatRepr = wktDollar[2].multiPolyFlatRepr
 		}
 	case 75:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:604
+//line wkt.y:609
 		{
 			wktVAL.multiPolyFlatRepr = appendMultiPolygonFlatCoordsRepr(wktDollar[1].multiPolyFlatRepr, wktDollar[3].multiPolyFlatRepr)
 		}
 	case 77:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:611
+//line wkt.y:616
 		{
 			wktVAL.multiPolyFlatRepr = appendMultiPolygonFlatCoordsRepr(wktDollar[1].multiPolyFlatRepr, wktDollar[3].multiPolyFlatRepr)
 		}
 	case 79:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:618
+//line wkt.y:623
 		{
 			wktVAL.multiPolyFlatRepr = makeMultiPolygonFlatCoordsRepr(wktDollar[1].flatRepr)
 		}
 	case 80:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:624
+//line wkt.y:629
 		{
 			wktVAL.multiPolyFlatRepr = makeMultiPolygonFlatCoordsRepr(wktDollar[1].flatRepr)
 		}
 	case 82:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:631
+//line wkt.y:636
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 84:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:638
+//line wkt.y:643
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 85:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:644
+//line wkt.y:649
 		{
 			wktVAL.flatRepr = wktDollar[2].flatRepr
 		}
 	case 86:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:650
+//line wkt.y:655
 		{
 			wktVAL.flatRepr = wktDollar[2].flatRepr
 		}
 	case 87:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:656
+//line wkt.y:661
 		{
 			wktVAL.flatRepr = appendGeomFlatCoordsReprs(wktDollar[1].flatRepr, wktDollar[3].flatRepr)
 		}
 	case 89:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:663
+//line wkt.y:668
 		{
 			wktVAL.flatRepr = appendGeomFlatCoordsReprs(wktDollar[1].flatRepr, wktDollar[3].flatRepr)
 		}
 	case 91:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:670
+//line wkt.y:675
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 92:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:676
+//line wkt.y:681
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 97:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:690
+//line wkt.y:695
 		{
 			wktVAL.flatRepr = wktDollar[2].flatRepr
 		}
 	case 98:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:696
+//line wkt.y:701
 		{
 			wktVAL.flatRepr = wktDollar[2].flatRepr
 		}
 	case 99:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:702
+//line wkt.y:707
 		{
 			wktVAL.flatRepr = appendGeomFlatCoordsReprs(wktDollar[1].flatRepr, wktDollar[3].flatRepr)
 		}
 	case 101:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:709
+//line wkt.y:714
 		{
 			wktVAL.flatRepr = appendGeomFlatCoordsReprs(wktDollar[1].flatRepr, wktDollar[3].flatRepr)
 		}
 	case 103:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:716
+//line wkt.y:721
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 104:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:722
+//line wkt.y:727
 		{
 			wktVAL.flatRepr = makeGeomFlatCoordsRepr(wktDollar[1].coordList)
 		}
 	case 111:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:739
+//line wkt.y:744
 		{
 			wktVAL.flatRepr = wktDollar[2].flatRepr
 		}
 	case 112:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:745
+//line wkt.y:750
 		{
 			wktVAL.flatRepr = appendGeomFlatCoordsReprs(wktDollar[1].flatRepr, wktDollar[3].flatRepr)
 		}
 	case 114:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:752
+//line wkt.y:757
 		{
 			if !isValidPolygonRing(wktlex, wktDollar[1].coordList, wktlex.(*wktLex).curLayout().Stride()) {
 				return 1
@@ -1263,7 +1268,7 @@ wktdefault:
 		}
 	case 115:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:761
+//line wkt.y:766
 		{
 			if !isValidLineString(wktlex, wktDollar[1].coordList, wktlex.(*wktLex).curLayout().Stride()) {
 				return 1
@@ -1271,25 +1276,25 @@ wktdefault:
 		}
 	case 116:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:769
+//line wkt.y:774
 		{
 			wktVAL.coordList = wktDollar[2].coordList
 		}
 	case 117:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:775
+//line wkt.y:780
 		{
 			wktVAL.coordList = append(wktDollar[1].coordList, wktDollar[3].coordList...)
 		}
 	case 119:
 		wktDollar = wktS[wktpt-3 : wktpt+1]
-//line wkt.y:782
+//line wkt.y:787
 		{
 			wktVAL.coordList = wktDollar[2].coordList
 		}
 	case 120:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:788
+//line wkt.y:793
 		{
 			switch len(wktDollar[1].coordList) {
 			case 1:
@@ -1307,19 +1312,19 @@ wktdefault:
 		}
 	case 121:
 		wktDollar = wktS[wktpt-2 : wktpt+1]
-//line wkt.y:806
+//line wkt.y:811
 		{
 			wktVAL.coordList = append(wktDollar[1].coordList, wktDollar[2].coord)
 		}
 	case 122:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:810
+//line wkt.y:815
 		{
 			wktVAL.coordList = []float64{wktDollar[1].coord}
 		}
 	case 123:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:816
+//line wkt.y:821
 		{
 			ok := wktlex.(*wktLex).validateBaseTypeEmptyAllowed()
 			if !ok {
@@ -1328,7 +1333,7 @@ wktdefault:
 		}
 	case 125:
 		wktDollar = wktS[wktpt-1 : wktpt+1]
-//line wkt.y:828
+//line wkt.y:833
 		{
 			wktVAL.coordList = []float64(nil)
 		}

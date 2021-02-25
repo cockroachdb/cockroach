@@ -200,6 +200,11 @@ geometry:
 		if !ok {
 			return 1
 		}
+		err := $1.(*geom.GeometryCollection).SetLayout(wktlex.(*wktLex).curLayout())
+		if err != nil {
+			wktlex.(*wktLex).setError(err)
+			return 1
+		}
 	}
 
 point:
