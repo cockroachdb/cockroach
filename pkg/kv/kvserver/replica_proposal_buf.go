@@ -1032,7 +1032,7 @@ func (rp *replicaProposer) closeTimestampPolicy() roachpb.RangeClosedTimestampPo
 }
 
 func (rp *replicaProposer) raftTransportClosedTimestampEnabled() bool {
-	return !(*Replica)(rp).mu.state.ClosedTimestamp.IsEmpty()
+	return !(*Replica)(rp).mu.state.RaftClosedTimestamp.IsEmpty()
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
