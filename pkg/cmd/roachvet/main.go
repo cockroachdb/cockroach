@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/leaktestcall"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
@@ -55,6 +56,7 @@ func main() {
 	as = append(as, forbiddenmethod.Analyzers...)
 	as = append(as,
 		hash.Analyzer,
+		leaktestcall.Analyzer,
 		nocopy.Analyzer,
 		returnerrcheck.Analyzer,
 		timer.Analyzer,
