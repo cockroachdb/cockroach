@@ -87,11 +87,19 @@ CREATE TABLE uniq_enum (
 )
 
 statement ok
-CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
+CREATE TABLE uniq_uuid (
+  id1 UUID,
+  id2 UUID,
+  UNIQUE WITHOUT INDEX (id1),
+  UNIQUE WITHOUT INDEX (id2)
+)
+
+statement ok
+CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT, u UUID)
 
 # Insert some data into the other table.
 statement ok
-INSERT INTO other VALUES (10, 10, 1, 1, 1)
+INSERT INTO other VALUES (10, 10, 1, 1, 1, '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
 
 
 # -- Tests with INSERT --
@@ -322,6 +330,14 @@ a     b
 NULL  5
 NULL  5
 
+# Insert a couple of rows into a table with UUID columns.
+statement ok
+INSERT INTO uniq_uuid (id1, id2) SELECT gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac'
+
+# We can catch uniqueness violations on UUID columns set to a value other than
+# gen_random_uuid().
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_id2"\nDETAIL: Key \(id2\)=\('8597b0eb-7b89-4857-858a-fabf86f6a3ac'\) already exists\.
+INSERT INTO uniq_uuid (id1, id2) SELECT gen_random_uuid(), u FROM other
 
 # -- Tests with UPDATE --
 subtest Update
