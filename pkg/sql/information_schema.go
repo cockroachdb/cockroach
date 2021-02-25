@@ -458,6 +458,13 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				columnID := tree.DInt(column.GetID())
 				description := commentMap[tableID][columnID]
 
+				// udt_schema is defaulted to pg_catalog but may change for user defined types
+				udtSchema := pgCatalogNameDString
+				typeMeta := column.GetType().TypeMeta.Name
+				if typeMeta != nil {
+					udtSchema = tree.NewDString(typeMeta.Schema)
+				}
+
 				err := addRow(
 					dbNameStr,                         // table_catalog
 					scNameStr,                         // table_schema
@@ -486,23 +493,23 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					tree.DNull,                                                // domain_schema
 					tree.DNull,                                                // domain_name
 					dbNameStr,                                                 // udt_catalog
-					pgCatalogNameDString,                                      // udt_schema
-					tree.NewDString(column.GetType().PGName()),                // udt_name
-					tree.DNull,                                                // scope_catalog
-					tree.DNull,                                                // scope_schema
-					tree.DNull,                                                // scope_name
-					tree.DNull,                                                // maximum_cardinality
-					tree.DNull,                                                // dtd_identifier
-					tree.DNull,                                                // is_self_referencing
-					tree.DNull,                                                // is_identity
-					tree.DNull,                                                // identity_generation
-					tree.DNull,                                                // identity_start
-					tree.DNull,                                                // identity_increment
-					tree.DNull,                                                // identity_maximum
-					tree.DNull,                                                // identity_minimum
-					tree.DNull,                                                // identity_cycle
-					yesOrNoDatum(column.IsComputed()),                         // is_generated
-					colComputed,                                               // generation_expression
+					udtSchema,                                                 // udt_schema
+					tree.NewDString(column.GetType().PGName()), // udt_name
+					tree.DNull,                        // scope_catalog
+					tree.DNull,                        // scope_schema
+					tree.DNull,                        // scope_name
+					tree.DNull,                        // maximum_cardinality
+					tree.DNull,                        // dtd_identifier
+					tree.DNull,                        // is_self_referencing
+					tree.DNull,                        // is_identity
+					tree.DNull,                        // identity_generation
+					tree.DNull,                        // identity_start
+					tree.DNull,                        // identity_increment
+					tree.DNull,                        // identity_maximum
+					tree.DNull,                        // identity_minimum
+					tree.DNull,                        // identity_cycle
+					yesOrNoDatum(column.IsComputed()), // is_generated
+					colComputed,                       // generation_expression
 					yesOrNoDatum(table.IsTable() &&
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),
