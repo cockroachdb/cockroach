@@ -140,7 +140,7 @@ func ExamineDescriptors(
 			continue
 		}
 
-		for _, err := range catalog.Validate(ctx, descGetter, catalog.ValidationLevelSelfAndCrossReferences, desc).Errors() {
+		for _, err := range validateSafely(ctx, descGetter, desc) {
 			problemsFound = true
 			fmt.Fprint(stdout, reportMsg(desc, "%s", err))
 		}
@@ -235,6 +235,23 @@ func ExamineDescriptors(
 		problemsFound = true
 	}
 	return !problemsFound, err
+}
+
+func validateSafely(
+	ctx context.Context, descGetter catalog.MapDescGetter, desc catalog.Descriptor,
+) (errs []error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = errors.Newf("%v", r)
+			}
+			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
+			errs = append(errs, err)
+		}
+	}()
+	errs = append(errs, catalog.Validate(ctx, descGetter, catalog.ValidationLevelSelfAndCrossReferences, desc).Errors()...)
+	return errs
 }
 
 // ExamineJobs runs a suite of consistency checks over the system.jobs table.
