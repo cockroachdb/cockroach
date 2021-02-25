@@ -218,7 +218,7 @@ type jobFeed struct {
 	db      *gosql.DB
 	flushCh chan struct{}
 
-	JobID  int64
+	JobID  jobspb.JobID
 	jobErr error
 }
 

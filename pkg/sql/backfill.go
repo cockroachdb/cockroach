@@ -902,14 +902,14 @@ const (
 // up the jobs in the jobs table instead.
 func getJobIDForMutationWithDescriptor(
 	ctx context.Context, tableDesc catalog.TableDescriptor, mutationID descpb.MutationID,
-) (int64, error) {
+) (jobspb.JobID, error) {
 	for _, job := range tableDesc.GetMutationJobs() {
 		if job.MutationID == mutationID {
-			return job.JobID, nil
+			return jobspb.JobID(job.JobID), nil
 		}
 	}
 
-	return 0, errors.AssertionFailedf(
+	return jobspb.InvalidJobID, errors.AssertionFailedf(
 		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 

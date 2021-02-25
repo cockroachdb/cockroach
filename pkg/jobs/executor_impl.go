@@ -72,7 +72,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 // NotifyJobTermination implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	ctx context.Context,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
 	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,

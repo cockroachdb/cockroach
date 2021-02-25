@@ -73,7 +73,7 @@ func distStreamIngest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	nodes []roachpb.NodeID,
-	jobID int64,
+	jobID jobspb.JobID,
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
 	streamIngestionSpecs []*execinfrapb.StreamIngestionDataSpec,
@@ -140,13 +140,13 @@ func distStreamIngest(
 type streamIngestionResultWriter struct {
 	ctx          context.Context
 	registry     *jobs.Registry
-	jobID        int64
+	jobID        jobspb.JobID
 	rowsAffected int
 	err          error
 }
 
 func makeStreamIngestionResultWriter(
-	ctx context.Context, jobID int64, registry *jobs.Registry,
+	ctx context.Context, jobID jobspb.JobID, registry *jobs.Registry,
 ) *streamIngestionResultWriter {
 	return &streamIngestionResultWriter{
 		ctx:      ctx,

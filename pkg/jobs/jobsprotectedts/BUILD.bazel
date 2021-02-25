@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/kv/kvserver/protectedts/ptreconcile",

@@ -54,7 +54,7 @@ const (
 func distChangefeedFlow(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID int64,
+	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,

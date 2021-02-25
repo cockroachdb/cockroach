@@ -600,7 +600,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 // there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
 func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
-	var jobID int64
+	var jobID jobspb.JobID
 	if job != nil {
 		jobID = job.ID()
 	}
@@ -626,8 +626,8 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 		}
 
 		if payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats {
-			id := (*int64)(row[0].(*tree.DInt))
-			if *id == jobID {
+			id := jobspb.JobID(*row[0].(*tree.DInt))
+			if id == jobID {
 				break
 			}
 

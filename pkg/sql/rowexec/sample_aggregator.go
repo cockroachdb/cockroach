@@ -16,6 +16,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -212,7 +213,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 	jobID := s.spec.JobID
 	// Some tests run this code without a job, so check if the jobID is 0.
 	if jobID != 0 {
-		job, err = s.FlowCtx.Cfg.JobRegistry.LoadJob(ctx, s.spec.JobID)
+		job, err = s.FlowCtx.Cfg.JobRegistry.LoadJob(ctx, jobspb.JobID(s.spec.JobID))
 		if err != nil {
 			return false, err
 		}

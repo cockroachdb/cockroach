@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -259,12 +260,12 @@ func (m *Manager) runMigration(
 	if alreadyCompleted || err != nil {
 		return err
 	}
-	return m.jr.Run(ctx, m.ie, []int64{id})
+	return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
 }
 
 func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
-) (alreadyCompleted bool, jobID int64, _ error) {
+) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		alreadyCompleted, err = migrationjob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
@@ -290,7 +291,7 @@ func (m *Manager) getOrCreateMigrationJob(
 
 func (m *Manager) getRunningMigrationJob(
 	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion,
-) (found bool, jobID int64, _ error) {
+) (found bool, jobID jobspb.JobID, _ error) {
 	const query = `
 SELECT id, status
 	FROM (
@@ -323,8 +324,8 @@ SELECT id, status
 	if err != nil {
 		return false, 0, err
 	}
-	parseRow := func(row tree.Datums) (id int64, status jobs.Status) {
-		return int64(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
+	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.Status) {
+		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
 	}
 	switch len(rows) {
 	case 0:

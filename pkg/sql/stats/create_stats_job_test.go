@@ -181,7 +181,7 @@ func TestCreateStatsLivenessWithRestart(t *testing.T) {
 	}
 
 	// Fetch the new job ID and lease since we know it's running now.
-	var jobID int64
+	var jobID jobspb.JobID
 	originalLease := &jobspb.Progress{}
 	{
 		var expectedLeaseBytes []byte
@@ -292,7 +292,7 @@ func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 	}
 
 	// Fetch the new job ID and lease since we know it's running now.
-	var jobID int64
+	var jobID jobspb.JobID
 	originalLease := &jobspb.Payload{}
 	{
 		var expectedLeaseBytes []byte
@@ -388,7 +388,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 
 	// PAUSE JOB does not bloack until the job is paused but only requests it.
 	// Wait until the job is set to paused.
-	var jobID int64
+	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 	opts := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
@@ -527,7 +527,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE d.t (i INT8 PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 
-	getFractionCompleted := func(jobID int64) float32 {
+	getFractionCompleted := func(jobID jobspb.JobID) float32 {
 		var progress *jobspb.Progress
 		testutils.SucceedsSoon(t, func() error {
 			progress = jobutils.GetJobProgress(t, sqlDB, jobID)

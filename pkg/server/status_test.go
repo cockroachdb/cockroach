@@ -2231,7 +2231,7 @@ func TestJobStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.JobId = job.ID()
+	request.JobId = int64(job.ID())
 	response, err = client.JobStatus(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -81,7 +82,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		job, err := reg.LoadJobWithTxn(params.ctx, int64(jobID), params.p.Txn())
+		job, err := reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.Txn())
 		if err != nil {
 			return err
 		}
@@ -105,11 +106,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		switch n.desiredStatus {
 		case jobs.StatusPaused:
-			err = reg.PauseRequested(params.ctx, params.p.txn, int64(jobID))
+			err = reg.PauseRequested(params.ctx, params.p.txn, jobspb.JobID(jobID))
 		case jobs.StatusRunning:
-			err = reg.Unpause(params.ctx, params.p.txn, int64(jobID))
+			err = reg.Unpause(params.ctx, params.p.txn, jobspb.JobID(jobID))
 		case jobs.StatusCanceled:
-			err = reg.CancelRequested(params.ctx, params.p.txn, int64(jobID))
+			err = reg.CancelRequested(params.ctx, params.p.txn, jobspb.JobID(jobID))
 		default:
 			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}

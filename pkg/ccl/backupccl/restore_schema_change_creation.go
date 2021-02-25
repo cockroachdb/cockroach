@@ -207,7 +207,7 @@ func createSchemaChangeJobsFromMutations(
 		}
 		newMutationJob := descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
-			JobID:      jobID,
+			JobID:      int64(jobID),
 		}
 		mutationJobs = append(mutationJobs, newMutationJob)
 

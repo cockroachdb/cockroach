@@ -157,7 +157,8 @@ message SampleAggregatorSpec {
   // JobID is the id of the CREATE STATISTICS job.
   optional int64 job_id = 6 [
     (gogoproto.nullable) = false,
-    (gogoproto.customname) = "JobID"
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
   ];
 
   // The total number of rows expected in the table based on previous runs of

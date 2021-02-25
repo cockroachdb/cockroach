@@ -45,7 +45,7 @@ func SetSmallMaxGCIntervalForTest() func() {
 }
 
 type schemaChangeGCResumer struct {
-	jobID int64
+	jobID jobspb.JobID
 }
 
 // performGC GCs any schema elements that are in the DELETING state and returns
