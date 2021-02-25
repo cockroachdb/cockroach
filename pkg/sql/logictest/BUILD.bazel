@@ -63,6 +63,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/stats",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
