@@ -1565,3 +1565,128 @@ upsert t
                 └── filters
                      ├── i:17 = t.i:14
                      └── rowid:18 != t.rowid:15
+
+exec-ddl
+CREATE TABLE uniq_computed_pk (
+  i INT,
+  s STRING,
+  d DECIMAL,
+  c_i_expr STRING AS (CASE WHEN i < 0 THEN 'foo' ELSE 'bar' END) STORED,
+  c_s STRING AS (s) VIRTUAL,
+  c_d DECIMAL AS (d) STORED,
+  c_d_expr STRING AS (d::string) STORED,
+  PRIMARY KEY (c_i_expr, i),
+  UNIQUE (c_s, s),
+  UNIQUE (c_d_expr, d),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s),
+  UNIQUE WITHOUT INDEX (d)
+)
+----
+
+# We can eliminate uniqueness checks for i and s due to functional dependencies.
+# We cannot eliminate checks for d, since functional dependencies could not be
+# inferred due to composite sensitivity of d::string.
+build
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
+----
+upsert uniq_computed_pk
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: uniq_computed_pk.c_i_expr:17
+ ├── fetch columns: uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20
+ ├── insert-mapping:
+ │    ├── column1:9 => uniq_computed_pk.i:1
+ │    ├── column2:10 => uniq_computed_pk.s:2
+ │    ├── column3:11 => uniq_computed_pk.d:3
+ │    ├── column12:12 => uniq_computed_pk.c_i_expr:4
+ │    ├── column2:10 => uniq_computed_pk.c_s:5
+ │    ├── column3:11 => uniq_computed_pk.c_d:6
+ │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ ├── update-mapping:
+ │    ├── column2:10 => uniq_computed_pk.s:2
+ │    ├── column3:11 => uniq_computed_pk.d:3
+ │    ├── column2:10 => uniq_computed_pk.c_s:5
+ │    ├── column3:11 => uniq_computed_pk.c_d:6
+ │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_i:23 upsert_c_i_expr:24 column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21 column22:22
+ │    ├── project
+ │    │    ├── columns: column22:22 column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null
+ │    │    │    │    ├── grouping columns: column1:9!null column12:12!null
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: column12:12!null column13:13!null column1:9!null column2:10!null column3:11!null
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    │    │    │    │    ├── (1, 'a', 1.0)
+ │    │    │    │    │    │    └── (2, 'b', 2.0)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=column12:12]
+ │    │    │    │    │         └── column3:11::STRING [as=column13:13]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column2:10]
+ │    │    │    │         │    └── column2:10
+ │    │    │    │         ├── first-agg [as=column3:11]
+ │    │    │    │         │    └── column3:11
+ │    │    │    │         └── first-agg [as=column13:13]
+ │    │    │    │              └── column13:13
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: uniq_computed_pk.c_s:18 uniq_computed_pk.i:14!null uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17!null uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    │    │    ├── scan uniq_computed_pk
+ │    │    │    │    │    ├── columns: uniq_computed_pk.i:14!null uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17!null uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │         ├── uniq_computed_pk.c_i_expr:17
+ │    │    │    │    │         │    └── CASE WHEN uniq_computed_pk.i:14 < 0 THEN 'foo' ELSE 'bar' END
+ │    │    │    │    │         ├── uniq_computed_pk.c_s:18
+ │    │    │    │    │         │    └── uniq_computed_pk.s:15
+ │    │    │    │    │         ├── uniq_computed_pk.c_d:19
+ │    │    │    │    │         │    └── uniq_computed_pk.d:16
+ │    │    │    │    │         └── uniq_computed_pk.c_d_expr:20
+ │    │    │    │    │              └── uniq_computed_pk.d:16::STRING
+ │    │    │    │    └── projections
+ │    │    │    │         └── uniq_computed_pk.s:15 [as=uniq_computed_pk.c_s:18]
+ │    │    │    └── filters
+ │    │    │         ├── column1:9 = uniq_computed_pk.i:14
+ │    │    │         └── column12:12 = uniq_computed_pk.c_i_expr:17
+ │    │    └── projections
+ │    │         └── CASE WHEN uniq_computed_pk.i:14 < 0 THEN 'foo' ELSE 'bar' END [as=column22:22]
+ │    └── projections
+ │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column1:9 ELSE uniq_computed_pk.i:14 END [as=upsert_i:23]
+ │         └── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column12:12 ELSE uniq_computed_pk.c_i_expr:17 END [as=upsert_c_i_expr:24]
+ └── unique-checks
+      └── unique-checks-item: uniq_computed_pk(d)
+           └── semi-join (hash)
+                ├── columns: i:49 s:50!null d:51!null c_i_expr:52 c_s:53!null c_d:54!null c_d_expr:55!null
+                ├── with-scan &1
+                │    ├── columns: i:49 s:50!null d:51!null c_i_expr:52 c_s:53!null c_d:54!null c_d_expr:55!null
+                │    └── mapping:
+                │         ├──  upsert_i:23 => i:49
+                │         ├──  column2:10 => s:50
+                │         ├──  column3:11 => d:51
+                │         ├──  upsert_c_i_expr:24 => c_i_expr:52
+                │         ├──  column2:10 => c_s:53
+                │         ├──  column3:11 => c_d:54
+                │         └──  column13:13 => c_d_expr:55
+                ├── project
+                │    ├── columns: uniq_computed_pk.c_s:45 uniq_computed_pk.i:41!null uniq_computed_pk.s:42 uniq_computed_pk.d:43 uniq_computed_pk.c_i_expr:44!null uniq_computed_pk.c_d:46 uniq_computed_pk.c_d_expr:47
+                │    ├── scan uniq_computed_pk
+                │    │    ├── columns: uniq_computed_pk.i:41!null uniq_computed_pk.s:42 uniq_computed_pk.d:43 uniq_computed_pk.c_i_expr:44!null uniq_computed_pk.c_d:46 uniq_computed_pk.c_d_expr:47
+                │    │    └── computed column expressions
+                │    │         ├── uniq_computed_pk.c_i_expr:44
+                │    │         │    └── CASE WHEN uniq_computed_pk.i:41 < 0 THEN 'foo' ELSE 'bar' END
+                │    │         ├── uniq_computed_pk.c_s:45
+                │    │         │    └── uniq_computed_pk.s:42
+                │    │         ├── uniq_computed_pk.c_d:46
+                │    │         │    └── uniq_computed_pk.d:43
+                │    │         └── uniq_computed_pk.c_d_expr:47
+                │    │              └── uniq_computed_pk.d:43::STRING
+                │    └── projections
+                │         └── uniq_computed_pk.s:42 [as=uniq_computed_pk.c_s:45]
+                └── filters
+                     ├── d:51 = uniq_computed_pk.d:43
+                     └── (i:49 != uniq_computed_pk.i:41) OR (c_i_expr:52 != uniq_computed_pk.c_i_expr:44)
