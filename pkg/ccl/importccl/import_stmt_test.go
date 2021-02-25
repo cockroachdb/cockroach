@@ -1694,7 +1694,7 @@ func TestImportCSVStmt(t *testing.T) {
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
 		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
+			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -4196,8 +4196,8 @@ func TestImportDefaultWithResume(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
 
 			jobCtx, cancelImport := context.WithCancel(ctx)
-			jobIDCh := make(chan int64)
-			var jobID int64 = -1
+			jobIDCh := make(chan jobspb.JobID)
+			var jobID jobspb.JobID = -1
 
 			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 				// Arrange for our special job resumer to be
@@ -4831,7 +4831,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	case err := <-errCh:
 		t.Fatalf("%s: query returned before expected: %s", err, query)
 	}
-	var jobID int64
+	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 
 	// Shut down a node. This should force LoadCSV to fail in its current
@@ -4930,7 +4930,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		}
 	}
 	// Fetch the new job ID and lease since we know it's running now.
-	var jobID int64
+	var jobID jobspb.JobID
 	originalLease := &jobspb.Progress{}
 	{
 		var expectedLeaseBytes []byte
@@ -5062,7 +5062,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 		}
 	}
 	// Fetch the new job ID and lease since we know it's running now.
-	var jobID int64
+	var jobID jobspb.JobID
 	originalLease := &jobspb.Payload{}
 	{
 		var expectedLeaseBytes []byte
@@ -6455,7 +6455,9 @@ func putUserfile(
 	return tx.Commit()
 }
 
-func waitForJobResult(t *testing.T, tc *testcluster.TestCluster, id int64, expected jobs.Status) {
+func waitForJobResult(
+	t *testing.T, tc *testcluster.TestCluster, id jobspb.JobID, expected jobs.Status,
+) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 	testutils.SucceedsSoon(t, func() error {
@@ -6491,7 +6493,7 @@ func TestDetachedImport(t *testing.T) {
 	importIntoQueryDetached := importIntoQuery + " WITH DETACHED"
 
 	// DETACHED import w/out transaction is okay.
-	var jobID int64
+	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, importQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 

@@ -1056,7 +1056,7 @@ func protectTimestampForImport(
 	ctx context.Context,
 	p sql.PlanHookState,
 	txn *kv.Txn,
-	jobID int64,
+	jobID jobspb.JobID,
 	spansToProtect []roachpb.Span,
 	walltime int64,
 	importDetails jobspb.ImportDetails,

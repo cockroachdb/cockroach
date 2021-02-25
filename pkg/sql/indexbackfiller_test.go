@@ -441,8 +441,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-						RunBeforeResume: func(jobID int64) error {
-							if jobID == jobToBlock.Load().(int64) {
+						RunBeforeResume: func(jobID jobspb.JobID) error {
+							if jobID == jobToBlock.Load().(jobspb.JobID) {
 								<-blockChan
 								return errors.New("boom")
 							}
@@ -506,7 +506,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				return err
 			}
 			mut.MutationJobs = append(mut.MutationJobs, descpb.TableDescriptor_MutationJob{
-				JobID:      jobID,
+				JobID:      int64(jobID),
 				MutationID: 1,
 			})
 			jobToBlock.Store(jobID)

@@ -35,7 +35,7 @@ import (
 )
 
 // WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
+func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
 	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
@@ -78,7 +78,7 @@ func RunJob(
 	ops []string,
 	query string,
 	args ...interface{},
-) (int64, error) {
+) (jobspb.JobID, error) {
 	*allowProgressIota = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
@@ -90,7 +90,7 @@ func RunJob(
 	case err := <-errCh:
 		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
 	}
-	var jobID int64
+	var jobID jobspb.JobID
 	db.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 	for _, op := range ops {
 		db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
@@ -195,8 +195,8 @@ func VerifySystemJob(
 }
 
 // GetJobID gets a particular job's ID.
-func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
-	var jobID int64
+func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) jobspb.JobID {
+	var jobID jobspb.JobID
 	db.QueryRow(t, `
 	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
 	).Scan(&jobID)
@@ -204,8 +204,8 @@ func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
 }
 
 // GetLastJobID gets the most recent job's ID.
-func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) int64 {
-	var jobID int64
+func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
+	var jobID jobspb.JobID
 	db.QueryRow(
 		t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&jobID)
@@ -213,7 +213,7 @@ func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) int64 {
 }
 
 // GetJobProgress loads the Progress message associated with the job.
-func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
+func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}
 	var buf []byte
 	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)

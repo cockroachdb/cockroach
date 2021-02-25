@@ -223,7 +223,7 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 // SeqChunkProvider uses the import job progress to read and write its sequence
 // value chunks.
 type SeqChunkProvider struct {
-	JobID    int64
+	JobID    jobspb.JobID
 	Registry *jobs.Registry
 }
 
