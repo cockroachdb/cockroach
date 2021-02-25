@@ -3636,7 +3636,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 			name:        `drop-create`,
 			firstStmt:   `DROP TABLE t.kv`,
 			secondStmt:  `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
-			expectedErr: `relation "kv" already exists`,
+			expectedErr: `table "kv" is being dropped, try again later`,
 		},
 		// schema change followed by another statement works.
 		{

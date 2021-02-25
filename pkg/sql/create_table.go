@@ -134,7 +134,12 @@ func (p *planner) getSchemaIDForCreate(
 // as well as the schema id. It returns valid data in the case that
 // the desired object exists.
 func getTableCreateParams(
-	params runParams, dbID descpb.ID, persistence tree.Persistence, tableName *tree.TableName,
+	params runParams,
+	dbID descpb.ID,
+	persistence tree.Persistence,
+	tableName *tree.TableName,
+	kind tree.RequiredTableKind,
+	ifNotExists bool,
 ) (tKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
@@ -204,18 +209,55 @@ func getTableCreateParams(
 		if err != nil {
 			return nil, 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
+
+		// Ensure that the descriptor that does exist has the appropriate type.
+		{
+			mismatchedType := true
+			if tableDescriptor, ok := desc.(catalog.TableDescriptor); ok {
+				mismatchedType = false
+				switch kind {
+				case tree.ResolveRequireTableDesc:
+					mismatchedType = !tableDescriptor.IsTable()
+				case tree.ResolveRequireViewDesc:
+					mismatchedType = !tableDescriptor.IsView()
+				case tree.ResolveRequireSequenceDesc:
+					mismatchedType = !tableDescriptor.IsSequence()
+				}
+				// If kind any is passed then there will never be a mismatch
+				// and we can return an exists error.
+			}
+			// Only complain about mismatched types for
+			// if not exists clauses.
+			if mismatchedType && ifNotExists {
+				return nil, 0, pgerror.Newf(pgcode.WrongObjectType,
+					"%q is not a %s",
+					tableName.Table(),
+					kind)
+			}
+		}
+
+		// Check if the object already exists in a dropped state
+		if desc.Dropped() {
+			return nil, 0, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"%s %q is being dropped, try again later",
+				kind,
+				tableName.Table())
+		}
+
 		// Still return data in this case.
 		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.Table())
 	} else if err != nil {
 		return nil, 0, err
 	}
+
 	return tKey, schemaID, nil
 }
 
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table,
+		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil

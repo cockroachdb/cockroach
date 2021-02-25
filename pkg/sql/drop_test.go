@@ -1132,7 +1132,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Check that CREATE TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `relation "t" already exists`) {
+	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `table "t" is being dropped, try again later`) {
 		t.Fatal(err)
 	}
 
