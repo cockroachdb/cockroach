@@ -105,6 +105,7 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.MaxMemUsage.Record(count, float64(stats.MaxMemUsage))
 	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
+	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
 }
 
 type transactionCounts struct {
@@ -469,6 +470,7 @@ func (a *appStats) recordTransaction(
 		s.mu.data.ExecStats.MaxMemUsage.Record(s.mu.data.ExecStats.Count, float64(execStats.MaxMemUsage))
 		s.mu.data.ExecStats.ContentionTime.Record(s.mu.data.ExecStats.Count, execStats.ContentionTime.Seconds())
 		s.mu.data.ExecStats.NetworkMessages.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkMessages))
+		s.mu.data.ExecStats.MaxDiskUsage.Record(s.mu.data.ExecStats.Count, float64(execStats.MaxDiskUsage))
 	}
 }
 

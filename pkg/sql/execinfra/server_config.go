@@ -104,10 +104,12 @@ type ServerConfig struct {
 	// used by the column and index backfillers.
 	BackfillerMonitor *mon.BytesMonitor
 
-	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
-	// space used will be a small multiple (~1.1) of this because of RocksDB
-	// space amplification.
-	DiskMonitor *mon.BytesMonitor
+	// ParentDiskMonitor is normally the root disk monitor. It should only be used
+	// when setting up a server, a child monitor (usually belonging to a sql
+	// execution flow), or in tests. It is used to monitor temporary storage disk
+	// usage. Actual disk space used will be a small multiple (~1.1) of this
+	// because of RocksDB space amplification.
+	ParentDiskMonitor *mon.BytesMonitor
 
 	Metrics *DistSQLMetrics
 

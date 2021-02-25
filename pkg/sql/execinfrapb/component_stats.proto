@@ -155,4 +155,5 @@ message OutputStats {
 // FlowStats contains flow level statistics.
 message FlowStats {
   optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
+  optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
 }
