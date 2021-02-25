@@ -281,10 +281,13 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 		br.Txn = ba.Txn
 	}
 
-	// Check if the (read-only) txn was pushed above its deadline.
-	deadline := et.Deadline
-	if deadline != nil && deadline.LessEq(br.Txn.WriteTimestamp) {
-		return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
+	// Check if the (read-only) txn was pushed above its deadline, if the
+	// transaction is trying to commit.
+	if et.Commit {
+		deadline := et.Deadline
+		if deadline != nil && deadline.LessEq(br.Txn.WriteTimestamp) {
+			return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
+		}
 	}
 
 	// Update the response's transaction proto. This normally happens on the
