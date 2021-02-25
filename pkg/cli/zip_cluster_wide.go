@@ -109,11 +109,11 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	for _, table := range debugZipTablesPerCluster {
-		selectClause, ok := customSelectClause[table]
-		if !ok {
-			selectClause = "*"
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if override, ok := customQuery[table]; ok {
+			query = override
 		}
-		if err := zc.dumpTableDataForZip(zc.firstNodeSQLConn, debugBase, table, selectClause); err != nil {
+		if err := zc.dumpTableDataForZip(zc.firstNodeSQLConn, debugBase, table, query); err != nil {
 			return nil, nil, errors.Wrapf(err, "fetching %s", table)
 		}
 	}

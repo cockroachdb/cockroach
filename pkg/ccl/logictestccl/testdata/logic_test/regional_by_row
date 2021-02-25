@@ -1146,6 +1146,54 @@ pk  a     b     crdb_region_col
 statement error cannot drop column crdb_region_col as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
 ALTER TABLE regional_by_row_table_as DROP COLUMN crdb_region_col
 
+# We do not need uniqueness checks on pk since uniqueness can be inferred
+# through the functional dependency between pk and the computed region column.
+query T
+EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table_as(pk, a, b, crdb_region_col)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
+            │ equality: (lookup_join_const_col_@21, column3) = (crdb_region_col,b)
+            │ equality cols are key
+            │ pred: (column1 != pk) OR (column10 != crdb_region_col)
+            │
+            └── • cross join
+                │
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# TODO(mgartner): Update this error message to remove crdb_region (see #59504).
+statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(crdb_region_col,pk\)=\('us-east-1',1\) already exists\.
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
+
+statement ok
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (30, 1, 1)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
+
+
 # Tests for altering the survivability of a REGIONAL BY ROW table.
 statement ok
 CREATE DATABASE alter_survive_db PRIMARY REGION "us-east-1" REGIONS "ca-central-1", "ap-southeast-2" SURVIVE REGION FAILURE

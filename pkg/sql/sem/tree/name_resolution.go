@@ -343,7 +343,8 @@ func ResolveExisting(
 	// This is a naked table name. Use the search path.
 	iter := searchPath.Iter()
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, next, u.Object()); found || err != nil {
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, next,
+			u.Object()); found || err != nil {
 			if err == nil {
 				namePrefix.CatalogName = Name(curDb)
 				namePrefix.SchemaName = Name(next)

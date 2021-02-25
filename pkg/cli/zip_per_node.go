@@ -197,11 +197,11 @@ func (zc *debugZipContext) collectPerNodeData(
 	fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
 
 	for _, table := range debugZipTablesPerNode {
-		selectClause, ok := customSelectClause[table]
-		if !ok {
-			selectClause = "*"
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if override, ok := customQuery[table]; ok {
+			query = override
 		}
-		if err := zc.dumpTableDataForZip(curSQLConn, prefix, table, selectClause); err != nil {
+		if err := zc.dumpTableDataForZip(curSQLConn, prefix, table, query); err != nil {
 			return errors.Wrapf(err, "fetching %s", table)
 		}
 	}

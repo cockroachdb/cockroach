@@ -43,7 +43,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
 	for _, oldRole := range n.OldRoles {
-		roleExists, err := p.RoleExists(ctx, oldRole)
+		roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), oldRole)
 		if err != nil {
 			return nil, err
 		}

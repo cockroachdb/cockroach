@@ -417,8 +417,10 @@ func TestZipRetries(t *testing.T) {
 		}
 		if err := zc.dumpTableDataForZip(
 			sqlConn,
-			"test", `generate_series(1,15000) as t(x)`,
-			`if(x<11000,x,crdb_internal.force_retry('1h'))`); err != nil {
+			"test",
+			`generate_series(1,15000) as t(x)`,
+			`select if(x<11000,x,crdb_internal.force_retry('1h')) from generate_series(1,15000) as t(x)`,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}()

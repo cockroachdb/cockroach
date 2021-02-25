@@ -37,11 +37,15 @@ type zipRequest struct {
 	pathName string
 }
 
-// Override for the default SELECT * when dumping one of the tables above.
-var customSelectClause = map[string]string{
-	"crdb.internal.node_inflight_trace_spans": "*, WHERE duration > 10*time.Second ORDER BY trace_id ASC, duration DESC",
-	"system.jobs":       "*, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress",
-	"system.descriptor": "*, to_hex(descriptor) AS hex_descriptor",
+// Override for the default SELECT * FROM table when dumping one of the tables
+// in `debugZipTablesPerNode` or `debugZipTablesPerCluster`
+var customQuery = map[string]string{
+	"crdb_internal.node_inflight_trace_spans": "WITH spans AS (" +
+		"SELECT * FROM crdb_internal.node_inflight_trace_spans " +
+		"WHERE duration > INTERVAL '10' ORDER BY trace_id ASC, duration DESC" +
+		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
+	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
+	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
 }
 
 type debugZipContext struct {
@@ -229,10 +233,8 @@ func maybeAddProfileSuffix(name string) string {
 //
 // An error is returned by this function if it is unable to write to
 // the output file or some other unrecoverable error is encountered.
-func (zc *debugZipContext) dumpTableDataForZip(
-	conn *sqlConn, base, table, selectClause string,
-) error {
-	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT %s FROM %s`, zc.timeout, selectClause, table)
+func (zc *debugZipContext) dumpTableDataForZip(conn *sqlConn, base, table, query string) error {
+	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
 	baseName := base + "/" + table
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
@@ -250,7 +252,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return runQueryAndFormatResults(conn, w, makeQuery(query))
+			return runQueryAndFormatResults(conn, w, makeQuery(fullQuery))
 		}(); err != nil {
 			if cErr := zc.z.createError(name, err); cErr != nil {
 				return cErr

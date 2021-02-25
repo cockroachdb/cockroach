@@ -69,7 +69,7 @@ func descForTable(
 		if err != nil {
 			t.Fatal(err)
 		}
-		fks.resolver[name] = desc
+		fks.resolver.tableNameToDesc[name] = desc
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}

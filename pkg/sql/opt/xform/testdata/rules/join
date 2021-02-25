@@ -3408,6 +3408,7 @@ left-join (lookup t59738_ab)
  ├── columns: c:1 d:2 a:5 b:6
  ├── key columns: [7] = [7]
  ├── lookup columns are key
+ ├── fd: (5)~~>(6)
  ├── left-join (lookup t59738_ab@secondary)
  │    ├── columns: c:1 d:2 a:5 t59738_ab.rowid:7
  │    ├── flags: force lookup join (into right side)
@@ -3979,7 +3980,7 @@ inner-join (lookup abcd_comp)
  ├── columns: m:1!null n:2 a:5!null b:6 c:7 d:8!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── fd: ()-->(8), (1)==(5), (5)==(1)
+ ├── fd: ()-->(6,8), (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd_comp@secondary)
  │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7 abcd_comp.rowid:9!null
  │    ├── key columns: [1 11] = [5 6]
@@ -4002,7 +4003,7 @@ inner-join (lookup abcd_comp)
  ├── columns: m:1!null n:2 a:5!null b:6 c:7!null d:8!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── fd: ()-->(7,8), (1)==(5), (5)==(1)
+ ├── fd: ()-->(6-8), (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd_comp@secondary)
  │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null abcd_comp.rowid:9!null
  │    ├── key columns: [1 11 12] = [5 6 7]

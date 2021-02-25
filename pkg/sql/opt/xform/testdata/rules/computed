@@ -72,7 +72,7 @@ SELECT k_int, k_int_2, c_mult, c_mult_2, c_int FROM t_mult WHERE k_int = 5 AND k
 scan t_mult@c_mult_index
  ├── columns: k_int:1!null k_int_2:2!null c_mult:4 c_mult_2:5 c_int:3
  ├── constraint: /4/5/3/1/2/6: [/300/6/1/5/10 - /300/6/1/5/10]
- └── fd: ()-->(1,2)
+ └── fd: ()-->(1-5)
 
 # Test computed + check columns in same table.
 opt
@@ -81,7 +81,7 @@ SELECT * FROM hashed WHERE k = 'andy'
 scan hashed@secondary
  ├── columns: k:1!null hash:2
  ├── constraint: /2/1/3: [/1/'andy' - /1/'andy']
- └── fd: ()-->(1)
+ └── fd: ()-->(1,2)
 
 # Don't constrain when filter has multiple columns.
 opt
@@ -190,4 +190,4 @@ SELECT a, b FROM null_col WHERE a = 1
 scan null_col@ab
  ├── columns: a:1!null b:2
  ├── constraint: /1/2/3: [/1/NULL - /1/NULL]
- └── fd: ()-->(1)
+ └── fd: ()-->(1,2)

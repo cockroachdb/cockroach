@@ -32,7 +32,7 @@ user root
 statement ok
 BEGIN;
 SET TRANSACTION PRIORITY HIGH;
-SELECT * FROM kv
+SELECT * FROM kv ORDER BY k ASC
 
 user testuser
 
@@ -60,6 +60,19 @@ WITH spans AS (
 ) SELECT count(*) > 0
   FROM payloads
   WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+----
+true
+
+# crdb_internal.payloads_for_trace is syntactic sugar for much of the above statement.
+query B
+WITH payloads AS (
+  SELECT *
+  FROM crdb_internal.payloads_for_trace(crdb_internal.trace_id())
+) SELECT count(*) > 0
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
 ----
 true
 
