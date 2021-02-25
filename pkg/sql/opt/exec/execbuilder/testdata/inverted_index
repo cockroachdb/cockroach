@@ -1034,6 +1034,7 @@ left-join (lookup geo_table)
  ├── prune: (1,5)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
@@ -1068,6 +1069,7 @@ semi-join (lookup geo_table)
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
@@ -1103,6 +1105,7 @@ anti-join (lookup geo_table)
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]

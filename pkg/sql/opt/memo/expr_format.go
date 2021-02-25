@@ -481,6 +481,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			tp.Childf("prefix key columns: %v = %v", t.PrefixKeyCols, idxCols)
 		}
+		if t.IsFirstJoinInPairedJoiner {
+			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
+		}
 		n := tp.Child("inverted-expr")
 		f.formatExpr(t.InvertedExpr, n)
 
