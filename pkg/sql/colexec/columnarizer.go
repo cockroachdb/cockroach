@@ -132,6 +132,7 @@ func (c *Columnarizer) Init() {
 	// we have this check in place.
 	if c.initStatus == colexecop.OperatorNotInitialized {
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+		c.ctx = c.StartInternal(c.ctx, "columnarizer")
 		c.input.Start(c.ctx)
 		c.initStatus = colexecop.OperatorInitialized
 	}
@@ -235,7 +236,7 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // Close is part of the Operator interface.
 func (c *Columnarizer) Close(ctx context.Context) error {
-	c.input.ConsumerClosed()
+	c.InternalClose()
 	return nil
 }
 
