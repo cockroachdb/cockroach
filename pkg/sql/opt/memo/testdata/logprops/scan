@@ -399,6 +399,9 @@ index-join c
       └── interesting orderings: (+1) (+3,+1)
 
 # Test FDs for computed columns.
+# We add equivalencies s=c_s and d=c_d, a strict dependency i->c_i_expr, and
+# no dependency d->c_d_expr since the expression d::string is composite-
+# sensitive.
 exec-ddl
 CREATE TABLE computed (
   i INT,

@@ -1562,3 +1562,80 @@ insert uniq_partial_constraint_and_partial_index
                      ├── b:25 > 10
                      ├── uniq_partial_constraint_and_partial_index.b:21 > 10
                      └── k:23 != uniq_partial_constraint_and_partial_index.k:19
+
+exec-ddl
+CREATE TABLE uniq_computed_pk (
+  i INT,
+  s STRING,
+  d DECIMAL,
+  c_i_expr STRING AS (CASE WHEN i < 0 THEN 'foo' ELSE 'bar' END) STORED,
+  c_s STRING AS (s) VIRTUAL,
+  c_d DECIMAL AS (d) STORED,
+  c_d_expr STRING AS (d::string) STORED,
+  PRIMARY KEY (c_i_expr, i),
+  UNIQUE (c_s, s),
+  UNIQUE (c_d_expr, d),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s),
+  UNIQUE WITHOUT INDEX (d)
+)
+----
+
+# We can eliminate uniqueness checks for i and s due to functional dependencies.
+# We cannot eliminate checks for d, since functional dependencies could not be
+# inferred due to composite sensitivity of d::string.
+build
+INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
+----
+insert uniq_computed_pk
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => uniq_computed_pk.i:1
+ │    ├── column2:10 => uniq_computed_pk.s:2
+ │    ├── column3:11 => uniq_computed_pk.d:3
+ │    ├── column12:12 => uniq_computed_pk.c_i_expr:4
+ │    ├── column2:10 => uniq_computed_pk.c_s:5
+ │    ├── column3:11 => uniq_computed_pk.c_d:6
+ │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column12:12!null column13:13!null column1:9!null column2:10!null column3:11!null
+ │    ├── values
+ │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    ├── (1, 'a', 1.0)
+ │    │    └── (2, 'b', 2.0)
+ │    └── projections
+ │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=column12:12]
+ │         └── column3:11::STRING [as=column13:13]
+ └── unique-checks
+      └── unique-checks-item: uniq_computed_pk(d)
+           └── semi-join (hash)
+                ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
+                ├── with-scan &1
+                │    ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
+                │    └── mapping:
+                │         ├──  column1:9 => i:38
+                │         ├──  column2:10 => s:39
+                │         ├──  column3:11 => d:40
+                │         ├──  column12:12 => c_i_expr:41
+                │         ├──  column2:10 => c_s:42
+                │         ├──  column3:11 => c_d:43
+                │         └──  column13:13 => c_d_expr:44
+                ├── project
+                │    ├── columns: uniq_computed_pk.c_s:34 uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
+                │    ├── scan uniq_computed_pk
+                │    │    ├── columns: uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
+                │    │    └── computed column expressions
+                │    │         ├── uniq_computed_pk.c_i_expr:33
+                │    │         │    └── CASE WHEN uniq_computed_pk.i:30 < 0 THEN 'foo' ELSE 'bar' END
+                │    │         ├── uniq_computed_pk.c_s:34
+                │    │         │    └── uniq_computed_pk.s:31
+                │    │         ├── uniq_computed_pk.c_d:35
+                │    │         │    └── uniq_computed_pk.d:32
+                │    │         └── uniq_computed_pk.c_d_expr:36
+                │    │              └── uniq_computed_pk.d:32::STRING
+                │    └── projections
+                │         └── uniq_computed_pk.s:31 [as=uniq_computed_pk.c_s:34]
+                └── filters
+                     ├── d:40 = uniq_computed_pk.d:32
+                     └── (i:38 != uniq_computed_pk.i:30) OR (c_i_expr:41 != uniq_computed_pk.c_i_expr:33)
