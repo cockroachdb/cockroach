@@ -412,32 +412,37 @@ func generateTxnDeadlineExceededErr(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
 
-// commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
-// cheaper than, sending an EndTxnRequest. A read-only txn doesn't have a
-// transaction record, so there's no need to send any request to the server. An
-// EndTxnRequest for a read-only txn is elided by the txnCommitter interceptor.
-// However, calling this and short-circuting even earlier is even more efficient
-// (and shows in benchmarks).
+// finalizeReadOnlyTxnLocked finalizes a read-only txn, either marking it as
+// committed or aborted. It is equivalent, but cheaper than, sending an
+// EndTxnRequest. A read-only txn doesn't have a transaction record, so there's
+// no need to send any request to the server. An EndTxnRequest for a read-only
+// txn is elided by the txnCommitter interceptor. However, calling this and
+// short-circuting even earlier is even more efficient (and shows in
+// benchmarks).
 // TODO(nvanbenschoten): we could have this call into txnCommitter's
 // sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
-func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
+func (tc *TxnCoordSender) finalizeReadOnlyTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
-	deadline := ba.Requests[0].GetEndTxn().Deadline
-	if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
-		txn := tc.mu.txn.Clone()
-		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
-		// We need to bump the epoch and transform this retriable error.
-		ba.Txn = txn
-		return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+	et := ba.Requests[0].GetEndTxn()
+	if et.Commit {
+		deadline := et.Deadline
+		if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
+			txn := tc.mu.txn.Clone()
+			pErr := generateTxnDeadlineExceededErr(txn, *deadline)
+			// We need to bump the epoch and transform this retriable error.
+			ba.Txn = txn
+			return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+		}
+		// Mark the transaction as committed so that, in case this commit is done by
+		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
+		// Also so that the correct metric gets incremented.
+		tc.mu.txn.Status = roachpb.COMMITTED
+	} else {
+		tc.mu.txn.Status = roachpb.ABORTED
 	}
-	tc.mu.txnState = txnFinalized
-	// Mark the transaction as committed so that, in case this commit is done by
-	// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
-	// Also so that the correct metric gets incremented.
-	tc.mu.txn.Status = roachpb.COMMITTED
-	tc.cleanupTxnLocked(ctx)
+	tc.finalizeAndCleanupTxnLocked(ctx)
 	return nil
 }
 
@@ -459,7 +464,7 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
-		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
+		return nil, tc.finalizeReadOnlyTxnLocked(ctx, ba)
 	}
 
 	startNs := tc.clock.PhysicalNow()
@@ -503,17 +508,12 @@ func (tc *TxnCoordSender) Send(
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
 	if req, ok := ba.GetArg(roachpb.EndTxn); ok {
-		etReq := req.(*roachpb.EndTxnRequest)
-		if etReq.Commit {
-			if pErr == nil {
-				tc.mu.txnState = txnFinalized
-				tc.cleanupTxnLocked(ctx)
+		et := req.(*roachpb.EndTxnRequest)
+		if (et.Commit && pErr == nil) || !et.Commit {
+			tc.finalizeAndCleanupTxnLocked(ctx)
+			if et.Commit {
 				tc.maybeSleepForLinearizable(ctx, br, startNs)
 			}
-		} else {
-			// Rollbacks always move us to txnFinalized.
-			tc.mu.txnState = txnFinalized
-			tc.cleanupTxnLocked(ctx)
 		}
 	}
 
@@ -617,6 +617,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// All good.
 	}
 	return nil
+}
+
+// finalizeAndCleanupTxnLocked marks the transaction state as finalized and
+// closes all interceptors.
+func (tc *TxnCoordSender) finalizeAndCleanupTxnLocked(ctx context.Context) {
+	tc.mu.txnState = txnFinalized
+	tc.cleanupTxnLocked(ctx)
 }
 
 // cleanupTxnLocked closes all the interceptors.
