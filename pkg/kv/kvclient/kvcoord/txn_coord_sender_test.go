@@ -1156,25 +1156,32 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
-
-	value := []byte("value")
-
 	const intentionalErrText = "intentional error to cause abort"
-	// Test aborted transaction.
-	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		key := []byte("key-abort")
 
-		if err := txn.Put(ctx, key, value); err != nil {
-			t.Fatal(err)
-		}
+	// Test aborted read-write transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := txn.Put(ctx, "key", "value")
+		require.NoError(t, err)
 
 		return errors.New(intentionalErrText)
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 1 /* aborts */, 0)
+
+	// Test aborted read-only transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.Get(ctx, "key")
+		require.NoError(t, err)
+
+		return errors.New(intentionalErrText)
+	}); !testutils.IsError(err, intentionalErrText) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 2 /* aborts */, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
