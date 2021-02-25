@@ -100,8 +100,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
+		DiskMonitor: diskMonitor,
 	}
 	flowCtx.Cfg.TestingKnobs.ForceDiskSpill = args.forceDiskSpill
 

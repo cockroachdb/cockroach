@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -76,6 +77,10 @@ type FlowCtx struct {
 	// on remote nodes with a new descs.Collection. After the flow is complete,
 	// all descriptors leased from the factory must be released.
 	TypeResolverFactory *descs.DistSQLTypeResolverFactory
+
+	// DiskMonitor is this flow's disk monitor. All disk usage for this flow must
+	// be registered through this monitor.
+	DiskMonitor *mon.BytesMonitor
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.

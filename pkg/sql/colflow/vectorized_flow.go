@@ -603,7 +603,7 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 func (s *vectorizedFlowCreator) createDiskAccounts(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
-	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
 	s.monitors = append(s.monitors, diskMonitor)
 	diskAccounts := make([]*mon.BoundAccount, numAccounts)
 	for i := range diskAccounts {
@@ -964,7 +964,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 							span.SetSpanStats(&execinfrapb.ComponentStats{
 								Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
-									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+									MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+									MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
 								},
 							})
 						}

@@ -31,6 +31,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

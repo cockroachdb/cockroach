@@ -499,11 +499,19 @@ func (d tpchVecDiskTest) preTestRunHook(
 	clusterSetup []string,
 ) {
 	d.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
-	// In order to stress the disk spilling of the vectorized
-	// engine, we will set workmem limit to a random value in range
-	// [16KiB, 256KiB).
+	// In order to stress the disk spilling of the vectorized engine, we will
+	// set workmem limit to a random value in range [650KiB, 2000KiB).
+	//
+	// The lower bound of that range was determined by running all queries on a
+	// single node cluster. If we lower that further, Q1 will take extremely
+	// long time (which is the expected) because the hash aggregator spills to
+	// disk and is using the fallback strategy of external sort + ordered
+	// aggregator, with the sort processing all of the incoming data (on the
+	// order of 800MiB) in partitions of roughly workmem/4 in size. Such
+	// behavior is determined by the fact that we allocate some RAM for caches
+	// of disk queues (limiting us to use at most 2 input partitions).
 	rng, _ := randutil.NewPseudoRand()
-	workmemInKiB := 16 + rng.Intn(240)
+	workmemInKiB := 650 + rng.Intn(1350)
 	workmem := fmt.Sprintf("%dKiB", workmemInKiB)
 	t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
 	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {

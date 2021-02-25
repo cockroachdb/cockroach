@@ -281,8 +281,8 @@ func TestSorter(t *testing.T) {
 							Cfg: &execinfra.ServerConfig{
 								Settings:    cluster.MakeTestingClusterSettings(),
 								TempStorage: tempEngine,
-								DiskMonitor: diskMonitor,
 							},
+							DiskMonitor: diskMonitor,
 						}
 						// Override the default memory limit. This will result in using
 						// a memory row container which will hit this limit and fall
@@ -363,9 +363,9 @@ func TestSortInvalidLimit(t *testing.T) {
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
-				Settings:    st,
-				DiskMonitor: diskMonitor,
+				Settings: st,
 			},
+			DiskMonitor: diskMonitor,
 		}
 
 		post := execinfrapb.PostProcessSpec{}
@@ -413,9 +413,9 @@ func BenchmarkSortAll(b *testing.B) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -455,9 +455,9 @@ func BenchmarkSortLimit(b *testing.B) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -501,9 +501,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
+		DiskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

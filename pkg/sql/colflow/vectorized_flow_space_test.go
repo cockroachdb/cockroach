@@ -41,10 +41,10 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 
 	flowCtx := &execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
-		EvalCtx: &evalCtx,
+		DiskMonitor: testDiskMonitor,
+		EvalCtx:     &evalCtx,
 	}
 
 	oneInput := []execinfrapb.InputSyncSpec{
@@ -117,10 +117,10 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 
 	flowCtx := &execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: testDiskMonitor,
+			Settings: st,
 		},
-		EvalCtx: &evalCtx,
+		DiskMonitor: testDiskMonitor,
+		EvalCtx:     &evalCtx,
 	}
 
 	oneInput := []execinfrapb.InputSyncSpec{

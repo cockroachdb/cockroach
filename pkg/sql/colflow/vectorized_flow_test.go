@@ -264,8 +264,9 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 						VecFDSemaphore:  &colexecop.TestingSemaphore{},
 						Metrics:         &execinfra.DistSQLMetrics{},
 					},
-					EvalCtx: &evalCtx,
-					NodeID:  base.TestingIDContainer,
+					EvalCtx:     &evalCtx,
+					NodeID:      base.TestingIDContainer,
+					DiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
 				},
 			},
 		).(*vectorizedFlow)
