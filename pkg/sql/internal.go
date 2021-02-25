@@ -233,10 +233,14 @@ type rowsIterator struct {
 
 	lastRow tree.Datums
 	lastErr error
-	done    bool
+	// done is true when ch has been exhausted (meaning all the data has been
+	// consumed) or an error was encountered while receiving from ch.
+	done bool
+	// closed indicates whether the iterator has been Close()'d.
+	closed bool
 
-	// errCallback is an optional callback that will be called exactly once
-	// before an error is returned by Next() or Close().
+	// errCallback is an optional callback that will be called exactly once on
+	// any error returned by Next() or Close().
 	errCallback func(err error) error
 
 	// stmtBuf will be closed on Close(). This is necessary in order to tell
@@ -258,9 +262,6 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 		return false, r.lastErr
 	}
 
-	// Due to recursive calls to Next() below, this deferred function might get
-	// executed multiple times, yet it is not a problem because Close() is
-	// idempotent and we're unsetting the error callback.
 	defer func() {
 		// If the iterator has just reached its terminal state, we'll close it
 		// automatically.
@@ -276,46 +277,49 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 		retErr = r.lastErr
 	}()
 
-	select {
-	case next, ok := <-r.ch:
-		if !ok {
-			r.done = true
-			return false, nil
-		}
-		if next.row != nil {
-			r.rowsAffected++
-			// No need to make a copy because streamingCommandResult does that
-			// for us.
-			r.lastRow = next.row
-			return true, nil
-		}
-		if next.rowsAffectedIncrement != nil {
-			r.rowsAffected += *next.rowsAffectedIncrement
-			return r.Next(ctx)
-		}
-		if next.cols != nil {
-			// Ignore the result columns if they are already set on the
-			// iterator: it is possible for ROWS statement type to be executed
-			// in a 'rows affected' mode, in such case the correct columns are
-			// set manually when instantiating an iterator, but the result
-			// columns of the statement are also sent by SetColumns() (we need
-			// to keep the former).
-			if r.resultCols == nil {
-				r.resultCols = next.cols
+RECVNEXT:
+	for {
+		select {
+		case next, ok := <-r.ch:
+			if !ok {
+				r.done = true
+				return false, nil
 			}
-			return r.Next(ctx)
-		}
-		if next.err == nil {
-			next.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
-		}
-		r.lastErr = next.err
-		r.done = true
-		return false, r.lastErr
+			if next.row != nil {
+				r.rowsAffected++
+				// No need to make a copy because streamingCommandResult does that
+				// for us.
+				r.lastRow = next.row
+				return true, nil
+			}
+			if next.rowsAffectedIncrement != nil {
+				r.rowsAffected += *next.rowsAffectedIncrement
+				continue RECVNEXT
+			}
+			if next.cols != nil {
+				// Ignore the result columns if they are already set on the
+				// iterator: it is possible for ROWS statement type to be executed
+				// in a 'rows affected' mode, in such case the correct columns are
+				// set manually when instantiating an iterator, but the result
+				// columns of the statement are also sent by SetColumns() (we need
+				// to keep the former).
+				if r.resultCols == nil {
+					r.resultCols = next.cols
+				}
+				continue RECVNEXT
+			}
+			if next.err == nil {
+				next.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
+			}
+			r.lastErr = next.err
+			r.done = true
+			return false, r.lastErr
 
-	case <-ctx.Done():
-		r.lastErr = ctx.Err()
-		r.done = true
-		return false, r.lastErr
+		case <-ctx.Done():
+			r.lastErr = ctx.Err()
+			r.done = true
+			return false, r.lastErr
+		}
 	}
 }
 
@@ -324,6 +328,9 @@ func (r *rowsIterator) Cur() tree.Datums {
 }
 
 func (r *rowsIterator) Close() error {
+	if r.closed {
+		return r.lastErr
+	}
 	// Closing the stmtBuf will tell the connExecutor to stop executing commands
 	// (if it hasn't exited yet).
 	r.stmtBuf.Close()
@@ -335,6 +342,7 @@ func (r *rowsIterator) Close() error {
 			r.sp.Finish()
 			r.sp = nil
 		}
+		r.closed = true
 	}()
 
 	// We also need to exhaust the channel since the connExecutor goroutine
@@ -343,18 +351,24 @@ func (r *rowsIterator) Close() error {
 	// execution of the current command right away when the stmtBuf is closed
 	// (e.g. if it is currently executing ExecStmt command, all rows will still
 	// be pushed into the channel). Improve this.
+
+	// errToReturn tracks the error that we want to return. This is needed since
+	// we only want to return errors from this method iff Next() hasn't returned
+	// an error already.
+	var errToReturn error
 	for res := range r.ch {
 		// We are only interested in possible errors if we haven't already seen
 		// one. All other things are simply ignored.
 		if res.err != nil && r.lastErr == nil {
-			r.lastErr = res.err
+			errToReturn = res.err
 			if r.errCallback != nil {
-				r.lastErr = r.errCallback(r.lastErr)
+				errToReturn = r.errCallback(errToReturn)
 				r.errCallback = nil
 			}
+			r.lastErr = errToReturn
 		}
 	}
-	return r.lastErr
+	return errToReturn
 }
 
 func (r *rowsIterator) Types() colinfo.ResultColumns {

@@ -131,6 +131,9 @@ type InternalRows interface {
 	// Close closes this iterator, releasing any resources it held open. Close
 	// is idempotent and *must* be called once the caller is done with the
 	// iterator.
+	//
+	// Close might return an error iff Next() didn't (if the latter did, then
+	// all errors encountered while closing the iterator are ignored).
 	Close() error
 
 	// Types returns the types of the columns returned by this iterator. The
