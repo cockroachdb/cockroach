@@ -116,6 +116,22 @@ func (n *createViewNode) startExec(params runParams) error {
 		case !sqlerrors.IsRelationAlreadyExistsError(err):
 			return err
 		case n.ifNotExists:
+			// Get the descriptor to check if its in a dropping state
+			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
+			if err != nil {
+				return err
+			}
+			desc, err := params.p.Descriptors().GetMutableTableVersionByID(params.ctx, id, params.p.txn)
+			if err != nil {
+				return err
+			}
+
+			if desc.Dropped() {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"view %q is being dropped, try again later",
+					desc.Name)
+			}
+
 			return nil
 		case n.replace:
 			// If we are replacing an existing view see if what we are

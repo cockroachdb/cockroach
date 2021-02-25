@@ -560,6 +560,36 @@ INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3)
 statement ok
 INSERT INTO cd VALUES (2, 2), (3, 3), (4, 4)
 
+
+# Unit test for #60737
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
+CREATE VIEW v1 AS SELECT a, b FROM t
+
+statement ok
+BEGIN
+
+statement ok
+DROP VIEW v1
+
+statement error pgcode 55000 view "v1" is being dropped, try again later
+CREATE VIEW IF NOT EXISTS v1 AS SELECT a, b FROM t
+
+statement ok
+END
+
+statement ok
+DROP VIEW v1
+
+statement ok
+DROP TABLE t
+
+
 # View containing a correlated subquery.
 statement ok
 CREATE VIEW v1 AS SELECT a, b, EXISTS(SELECT c FROM cd WHERE cd.c=ab.a) FROM ab;
