@@ -20,6 +20,10 @@
 # double-hash (##) comments throughout this Makefile. Please submit
 # improvements!
 
+ifneq (,$(findstring v3.,v$(MAKE_VERSION)))
+$(info $(yellow)Warning: your version of `make` seems old; your build may fail!$(term-reset))
+endif
+
 # We need to define $(GO) early because it's needed for defs.mk.
 GO      ?= go
 # xgo is needed also for defs.mk.
