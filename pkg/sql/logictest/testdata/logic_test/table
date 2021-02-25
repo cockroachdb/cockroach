@@ -1,7 +1,7 @@
 statement ok
 SET DATABASE = ""
 
-statement error no database specified
+statement error no database or schema specified
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error invalid table name: test.""
@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query T colnames
+query TTTTIT colnames
 SHOW TABLES FROM test
 ----
-table_name
-a
+schema_name  table_name  type   owner  estimated_row_count  locality
+public       a           table  root   0                    NULL
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -67,31 +67,31 @@ query TTBITTBB colnames
 SHOW INDEXES FROM c
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
-c           primary        false       1             id           ASC        false    false
+c           c_bar_key      false       1             bar          ASC        false    false
+c           c_bar_key      false       2             id           ASC        false    true
+c           c_foo_bar_idx  true        1             foo          ASC        false    false
+c           c_foo_bar_idx  true        2             bar          DESC       false    false
+c           c_foo_bar_idx  true        3             id           ASC        false    true
 c           c_foo_idx      true        1             foo          ASC        false    false
 c           c_foo_idx      true        2             id           ASC        false    true
 c           c_foo_idx1     true        1             foo          ASC        false    false
 c           c_foo_idx1     true        2             id           ASC        false    true
-c           c_foo_bar_idx  true        1             foo          ASC        false    false
-c           c_foo_bar_idx  true        2             bar          DESC       false    false
-c           c_foo_bar_idx  true        3             id           ASC        false    true
-c           c_bar_key      false       1             bar          ASC        false    false
-c           c_bar_key      false       2             id           ASC        false    true
+c           primary        false       1             id           ASC        false    false
 
 query TTBITTBBT colnames
 SHOW INDEXES FROM c WITH COMMENT
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
-c           primary        false       1             id           ASC        false    false     NULL
+c           c_bar_key      false       1             bar          ASC        false    false     NULL
+c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
+c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
+c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
 c           c_foo_idx      true        1             foo          ASC        false    false     index_comment
 c           c_foo_idx      true        2             id           ASC        false    true      index_comment
 c           c_foo_idx1     true        1             foo          ASC        false    false     NULL
 c           c_foo_idx1     true        2             id           ASC        false    true      NULL
-c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
-c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
-c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
-c           c_bar_key      false       1             bar          ASC        false    false     NULL
-c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           primary        false       1             id           ASC        false    false     NULL
 
 # primary keys can never be null
 
@@ -133,15 +133,16 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TT
+query TTTTITT colnames
 SHOW TABLES FROM test WITH COMMENT
 ----
-a  a_comment
-b  ·
-c  ·
-d  ·
-e  ·
-f  ·
+schema_name  table_name  type   owner  estimated_row_count  locality  comment
+public       a           table  root   0                    NULL      a_comment
+public       b           table  root   0                    NULL      ·
+public       c           table  root   0                    NULL      ·
+public       d           table  root   0                    NULL      ·
+public       e           table  root   0                    NULL      ·
+public       f           table  root   0                    NULL      ·
 
 statement ok
 SET DATABASE = ""
@@ -179,8 +180,8 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM test.users
 ----
 column_name  data_type     is_nullable  column_default  generation_expression  indices            is_hidden
-id           INT8          false        NULL            ·                      {primary,foo,bar}  false
-name         VARCHAR       false        NULL            ·                      {foo,bar}          false
+id           INT8          false        NULL            ·                      {bar,foo,primary}  false
+name         VARCHAR       false        NULL            ·                      {bar,foo}          false
 title        VARCHAR       true         NULL            ·                      {}                 false
 nickname     STRING        true         NULL            ·                      {}                 false
 username     STRING(10)    true         NULL            ·                      {}                 false
@@ -190,11 +191,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM test.users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
@@ -208,7 +209,7 @@ CREATE TABLE test.precision (x DECIMAL(2, 4))
 query TT
 SHOW CREATE TABLE test.users
 ----
-test.public.users  CREATE TABLE users (
+test.public.users  CREATE TABLE public.users (
                    id INT8 NOT NULL,
                    name VARCHAR NOT NULL,
                    title VARCHAR NULL,
@@ -223,7 +224,7 @@ test.public.users  CREATE TABLE users (
                    FAMILY fam_2_nickname (nickname),
                    FAMILY fam_3_username_email (username, email),
                    CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
-                   CONSTRAINT check_nickname CHECK (length(nickname) < 10)
+                   CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
 )
 
 statement ok
@@ -264,7 +265,7 @@ CREATE TABLE test.named_constraints (
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
-test.public.named_constraints  CREATE TABLE named_constraints (
+test.public.named_constraints  CREATE TABLE public.named_constraints (
                                id INT8 NOT NULL,
                                name VARCHAR NOT NULL,
                                title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
@@ -281,7 +282,7 @@ test.public.named_constraints  CREATE TABLE named_constraints (
                                FAMILY fam_2_nickname (nickname),
                                FAMILY fam_3_username_email (username, email),
                                CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
-                               CONSTRAINT ck1 CHECK (length(nickname) < 10)
+                               CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
 )
 
 query TTTTB colnames
@@ -478,8 +479,10 @@ CREATE TABLE test.null_default (
 query TT
 SHOW CREATE TABLE test.null_default
 ----
-test.public.null_default  CREATE TABLE null_default (
+test.public.null_default  CREATE TABLE public.null_default (
                           ts TIMESTAMP NULL,
+                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                           FAMILY "primary" (ts, rowid)
 )
 
@@ -497,3 +500,384 @@ query I
 SELECT a.public.c.d FROM a.public.c
 ----
 1
+
+statement ok
+CREATE TABLE t0 (a INT)
+
+statement ok
+GRANT ALL ON t0 to testuser
+
+statement ok
+CREATE DATABASE rowtest
+
+statement ok
+GRANT ALL ON DATABASE rowtest TO testuser
+
+user testuser
+
+statement ok
+SET DATABASE = rowtest
+
+statement ok
+CREATE TABLE t1 (a INT)
+
+statement ok
+INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
+
+# only tables from current database
+query TTTTIT
+SHOW TABLES
+----
+public  t1  table  testuser  0  NULL
+
+# see only virtual tables (estimated_row_count is NULL)
+# and tables testuser has access to (estimated_row_count >= 0)
+query TI rowsort
+select table_name, estimated_row_count from crdb_internal.table_row_statistics;
+----
+backward_dependencies                      NULL
+builtin_functions                          NULL
+cluster_contention_events                  NULL
+cluster_database_privileges                NULL
+cluster_queries                            NULL
+cluster_sessions                           NULL
+cluster_settings                           NULL
+cluster_transactions                       NULL
+create_statements                          NULL
+create_type_statements                     NULL
+databases                                  NULL
+feature_usage                              NULL
+forward_dependencies                       NULL
+gossip_alerts                              NULL
+gossip_liveness                            NULL
+gossip_network                             NULL
+gossip_nodes                               NULL
+index_columns                              NULL
+invalid_objects                            NULL
+jobs                                       NULL
+kv_node_status                             NULL
+kv_store_status                            NULL
+leases                                     NULL
+node_build_info                            NULL
+node_contention_events                     NULL
+node_inflight_trace_spans                  NULL
+node_metrics                               NULL
+node_queries                               NULL
+node_runtime_info                          NULL
+node_sessions                              NULL
+node_statement_statistics                  NULL
+node_transaction_statistics                NULL
+node_transactions                          NULL
+node_txn_stats                             NULL
+partitions                                 NULL
+predefined_comments                        NULL
+ranges                                     NULL
+ranges_no_leases                           NULL
+schema_changes                             NULL
+session_trace                              NULL
+session_variables                          NULL
+table_columns                              NULL
+table_indexes                              NULL
+table_row_statistics                       NULL
+tables                                     NULL
+zones                                      NULL
+administrable_role_authorizations          NULL
+applicable_roles                           NULL
+character_sets                             NULL
+check_constraints                          NULL
+collation_character_set_applicability      NULL
+collations                                 NULL
+column_privileges                          NULL
+column_udt_usage                           NULL
+columns                                    NULL
+constraint_column_usage                    NULL
+enabled_roles                              NULL
+key_column_usage                           NULL
+parameters                                 NULL
+referential_constraints                    NULL
+role_table_grants                          NULL
+routines                                   NULL
+schema_privileges                          NULL
+schemata                                   NULL
+sequences                                  NULL
+session_variables                          NULL
+statistics                                 NULL
+table_constraints                          NULL
+table_privileges                           NULL
+tables                                     NULL
+type_privileges                            NULL
+user_privileges                            NULL
+views                                      NULL
+pg_aggregate                               NULL
+pg_aggregate_fnoid_index                   NULL
+pg_am                                      NULL
+pg_am_oid_index                            NULL
+pg_amop                                    NULL
+pg_amop_fam_strat_index                    NULL
+pg_amop_oid_index                          NULL
+pg_amop_opr_fam_index                      NULL
+pg_amproc                                  NULL
+pg_amproc_fam_proc_index                   NULL
+pg_amproc_oid_index                        NULL
+pg_attrdef                                 NULL
+pg_attrdef_adrelid_adnum_index             NULL
+pg_attrdef_oid_index                       NULL
+pg_attribute                               NULL
+pg_attribute_relid_attnum_index            NULL
+pg_auth_members                            NULL
+pg_auth_members_member_role_index          NULL
+pg_auth_members_role_member_index          NULL
+pg_authid                                  NULL
+pg_authid_oid_index                        NULL
+pg_available_extension_versions            NULL
+pg_available_extensions                    NULL
+pg_cast                                    NULL
+pg_cast_oid_index                          NULL
+pg_cast_source_target_index                NULL
+pg_class                                   NULL
+pg_class_oid_index                         NULL
+pg_class_tblspc_relfilenode_index          NULL
+pg_collation                               NULL
+pg_collation_oid_index                     NULL
+pg_config                                  NULL
+pg_constraint                              NULL
+pg_constraint_conparentid_index            NULL
+pg_constraint_contypid_index               NULL
+pg_constraint_oid_index                    NULL
+pg_conversion                              NULL
+pg_conversion_default_index                NULL
+pg_conversion_oid_index                    NULL
+pg_cursors                                 NULL
+pg_database                                NULL
+pg_database_oid_index                      NULL
+pg_db_role_setting                         NULL
+pg_db_role_setting_databaseid_rol_index    NULL
+pg_default_acl                             NULL
+pg_default_acl_oid_index                   NULL
+pg_default_acl_role_nsp_obj_index          NULL
+pg_depend                                  NULL
+pg_depend_depender_index                   NULL
+pg_depend_reference_index                  NULL
+pg_description                             NULL
+pg_description_o_c_o_index                 NULL
+pg_enum                                    NULL
+pg_enum_oid_index                          NULL
+pg_enum_typid_sortorder_index              NULL
+pg_event_trigger                           NULL
+pg_event_trigger_oid_index                 NULL
+pg_extension                               NULL
+pg_extension_oid_index                     NULL
+pg_file_settings                           NULL
+pg_foreign_data_wrapper                    NULL
+pg_foreign_data_wrapper_oid_index          NULL
+pg_foreign_server                          NULL
+pg_foreign_server_oid_index                NULL
+pg_foreign_table                           NULL
+pg_foreign_table_relid_index               NULL
+pg_group                                   NULL
+pg_hba_file_rules                          NULL
+pg_index                                   NULL
+pg_index_indexrelid_index                  NULL
+pg_index_indrelid_index                    NULL
+pg_indexes                                 NULL
+pg_inherits                                NULL
+pg_inherits_parent_index                   NULL
+pg_inherits_relid_seqno_index              NULL
+pg_init_privs_o_c_o_index                  NULL
+pg_language                                NULL
+pg_language_oid_index                      NULL
+pg_largeobject                             NULL
+pg_largeobject_loid_pn_index               NULL
+pg_largeobject_metadata_oid_index          NULL
+pg_locks                                   NULL
+pg_matviews                                NULL
+pg_namespace                               NULL
+pg_namespace_oid_index                     NULL
+pg_opclass                                 NULL
+pg_opclass_oid_index                       NULL
+pg_operator                                NULL
+pg_operator_oid_index                      NULL
+pg_opfamily                                NULL
+pg_opfamily_oid_index                      NULL
+pg_partitioned_table_partrelid_index       NULL
+pg_policies                                NULL
+pg_policy_oid_index                        NULL
+pg_prepared_statements                     NULL
+pg_prepared_xacts                          NULL
+pg_proc                                    NULL
+pg_proc_oid_index                          NULL
+pg_publication                             NULL
+pg_publication_oid_index                   NULL
+pg_publication_rel                         NULL
+pg_publication_rel_oid_index               NULL
+pg_publication_rel_prrelid_prpubid_index   NULL
+pg_publication_tables                      NULL
+pg_range                                   NULL
+pg_range_rngtypid_index                    NULL
+pg_replication_origin                      NULL
+pg_replication_origin_roiident_index       NULL
+pg_replication_origin_roname_index         NULL
+pg_rewrite                                 NULL
+pg_rewrite_oid_index                       NULL
+pg_roles                                   NULL
+pg_rules                                   NULL
+pg_seclabel                                NULL
+pg_seclabel_object_index                   NULL
+pg_seclabels                               NULL
+pg_sequence                                NULL
+pg_sequence_seqrelid_index                 NULL
+pg_settings                                NULL
+pg_shadow                                  NULL
+pg_shdepend                                NULL
+pg_shdepend_depender_index                 NULL
+pg_shdepend_reference_index                NULL
+pg_shdescription                           NULL
+pg_shdescription_o_c_index                 NULL
+pg_shmem_allocations                       NULL
+pg_shseclabel                              NULL
+pg_shseclabel_object_index                 NULL
+pg_stat_activity                           NULL
+pg_stat_all_indexes                        NULL
+pg_stat_all_tables                         NULL
+pg_stat_archiver                           NULL
+pg_stat_bgwriter                           NULL
+pg_stat_database                           NULL
+pg_stat_database_conflicts                 NULL
+pg_stat_gssapi                             NULL
+pg_stat_progress_analyze                   NULL
+pg_stat_progress_basebackup                NULL
+pg_stat_progress_cluster                   NULL
+pg_stat_progress_create_index              NULL
+pg_stat_progress_vacuum                    NULL
+pg_stat_slru                               NULL
+pg_stat_ssl                                NULL
+pg_stat_sys_indexes                        NULL
+pg_stat_sys_tables                         NULL
+pg_stat_user_functions                     NULL
+pg_stat_user_indexes                       NULL
+pg_stat_user_tables                        NULL
+pg_stat_xact_all_tables                    NULL
+pg_stat_xact_sys_tables                    NULL
+pg_stat_xact_user_functions                NULL
+pg_stat_xact_user_tables                   NULL
+pg_statio_all_indexes                      NULL
+pg_statio_all_sequences                    NULL
+pg_statio_all_tables                       NULL
+pg_statio_sys_indexes                      NULL
+pg_statio_sys_sequences                    NULL
+pg_statio_sys_tables                       NULL
+pg_statio_user_indexes                     NULL
+pg_statio_user_sequences                   NULL
+pg_statio_user_tables                      NULL
+pg_statistic_ext                           NULL
+pg_statistic_ext_data_stxoid_index         NULL
+pg_statistic_ext_oid_index                 NULL
+pg_statistic_ext_relid_index               NULL
+pg_statistic_relid_att_inh_index           NULL
+pg_subscription                            NULL
+pg_subscription_oid_index                  NULL
+pg_subscription_rel_srrelid_srsubid_index  NULL
+pg_tables                                  NULL
+pg_tablespace                              NULL
+pg_tablespace_oid_index                    NULL
+pg_timezone_abbrevs                        NULL
+pg_timezone_names                          NULL
+pg_transform                               NULL
+pg_transform_oid_index                     NULL
+pg_transform_type_lang_index               NULL
+pg_trigger                                 NULL
+pg_trigger_oid_index                       NULL
+pg_trigger_tgconstraint_index              NULL
+pg_ts_config                               NULL
+pg_ts_config_map                           NULL
+pg_ts_config_map_index                     NULL
+pg_ts_config_oid_index                     NULL
+pg_ts_dict                                 NULL
+pg_ts_dict_oid_index                       NULL
+pg_ts_parser                               NULL
+pg_ts_parser_oid_index                     NULL
+pg_ts_template                             NULL
+pg_ts_template_oid_index                   NULL
+pg_type                                    NULL
+pg_type_oid_index                          NULL
+pg_user                                    NULL
+pg_user_mapping                            NULL
+pg_user_mapping_oid_index                  NULL
+pg_user_mapping_user_server_index          NULL
+pg_user_mappings                           NULL
+pg_views                                   NULL
+geography_columns                          NULL
+geometry_columns                           NULL
+spatial_ref_sys                            NULL
+t1                                         0
+
+statement ok
+ANALYZE t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES] where table_name = 't1'
+----
+1024
+
+statement ok
+DELETE FROM rowtest.t1 WHERE a > 1000;
+
+statement ok
+ANALYZE rowtest.t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
+----
+1000
+
+user root
+
+# Unit test for #60737
+
+statement ok
+CREATE TABLE t1  (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TYPE t2 as enum('foo')
+
+# Case 1: Both t1's are tables and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TABLE t1
+
+statement error pgcode 55000 table "t1" is being dropped, try again later
+CREATE TABLE IF NOT EXISTS t1 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+# Case 2: Both t2's are different types and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TYPE t2
+
+statement error pgcode 42809 "t2" is not a table
+CREATE TABLE IF NOT EXISTS t2 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+# Case 3: Both s2's are a different type
+statement ok
+BEGIN
+
+statement error pgcode 42809 "t2" is not a table
+CREATE TABLE IF NOT EXISTS t2 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+statement ok
+DROP table t1
+
+statement ok
+DROP TYPE t2

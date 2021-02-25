@@ -1,3 +1,6 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
 # NOTE: Keep this table at the beginning of the file to ensure that its numeric
 #       reference is 53 (the numeric reference of the first table). If the
 #       numbering scheme in cockroach changes, this test will break.
@@ -183,27 +186,27 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2  CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.public.t
+v2  CREATE VIEW public.v2 (x, y) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6  CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.public.v1
+v6  CREATE VIEW public.v6 (x, y) AS SELECT a, b FROM test.public.v1
 
 query TT
 SHOW CREATE VIEW v7
 ----
-v7  CREATE VIEW v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
+v7  CREATE VIEW public.v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.public.v1  CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.public.v2
+test2.public.v1  CREATE VIEW public.v1 (x, y) AS SELECT x, y FROM test.public.v2
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -252,7 +255,7 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
 
 user root
 
@@ -524,7 +527,7 @@ CREATE VIEW w AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 query T
 SELECT create_statement FROM [SHOW CREATE w]
 ----
-CREATE VIEW w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+CREATE VIEW public.w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 
 statement ok
 CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
@@ -532,7 +535,7 @@ CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
 query T
 SELECT create_statement FROM [SHOW CREATE w2]
 ----
-CREATE VIEW w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+CREATE VIEW public.w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
 
 statement ok
 CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
@@ -540,7 +543,7 @@ CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
 query T
 SELECT create_statement FROM [SHOW CREATE w3]
 ----
-CREATE VIEW w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+CREATE VIEW public.w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT)
@@ -584,7 +587,318 @@ CREATE VIEW v47704 AS
 query T
 SELECT create_statement FROM [ SHOW CREATE VIEW v47704 ]
 ----
-CREATE VIEW v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
+CREATE VIEW public.v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
 
 statement ok
 SELECT * FROM v47704
+
+subtest create_or_replace
+
+user root
+
+statement ok
+DROP TABLE IF EXISTS t, t2;
+CREATE TABLE t (x INT);
+INSERT INTO t VALUES (1), (2);
+CREATE TABLE t2 (x INT);
+INSERT INTO t2 VALUES (3), (4);
+
+# Test some error cases.
+
+statement error pq: \"t\" is not a view
+CREATE OR REPLACE VIEW t AS VALUES (1)
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2 FROM t
+
+# Test cases where new columns don't line up.
+
+statement error pq: cannot drop columns from view
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1 FROM t
+
+statement error pq: cannot change name of view column \"x\" to \"xy\"
+CREATE OR REPLACE VIEW tview AS SELECT x AS xy, x+1 AS x1, x+2 AS x2 FROM t
+
+statement error pq: cannot change type of view column "x1" from int to string
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, (x+1)::STRING AS x1, x+2 AS x2 FROM t
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t
+
+query IIII rowsort
+SELECT * FROM tview
+----
+1 2 3 4
+2 3 4 5
+
+# Test cases where back references get updated.
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+query IIII rowsort
+SELECT * FROM tview
+----
+3 4 5 6
+4 5 6 7
+
+# After remaking tview, it no longer depends on t.
+statement ok
+DROP TABLE t
+
+# However, we now depend on t2.
+statement error cannot drop relation "t2" because view "tview" depends on it
+DROP TABLE t2
+
+# Test that if we add a reference to something in t2 and use it when replacing
+# the view that we now reference that object as well.
+statement ok
+CREATE INDEX i ON t2 (x);
+CREATE INDEX i2 ON t2 (x);
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i
+
+statement error pq: cannot drop index \"i\" because view \"tview\" depends on it
+DROP INDEX t2@i
+
+# However, if we change the view, we should be able to drop i.
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i2;
+DROP INDEX t2@i
+
+# ... and not i2.
+statement error pq: cannot drop index \"i2\" because view \"tview\" depends on it
+DROP INDEX t2@i2
+
+# Ensure that users can't replace views they don't have privilege to.
+statement ok
+GRANT CREATE ON DATABASE test TO testuser;
+GRANT CREATE, SELECT ON TABLE tview, t2 TO testuser
+
+user testuser
+
+statement error pq: user testuser does not have DROP privilege on relation tview
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+# Give privilege now.
+user root
+
+statement ok
+GRANT DROP ON TABLE tview TO testuser
+
+user testuser
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+user root
+
+# Ensure a view that contains a table that is referenced multiple times with
+# different column sets depends on the correct columns.
+# Depended on columns should not be droppable.
+
+# Only column a should be depended on in this case.
+statement ok
+DROP TABLE ab CASCADE;
+CREATE TABLE ab (a INT, b INT);
+CREATE VIEW vab (x) AS SELECT ab.a FROM ab, ab AS ab2
+
+statement ok
+ALTER TABLE ab DROP COLUMN b
+
+statement error pq: cannot drop column "a" because view "vab" depends on it
+ALTER TABLE ab DROP COLUMN a
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT);
+CREATE VIEW vabc AS SELECT abc.a, abc2.b, abc3.c FROM abc, abc AS abc2, abc AS abc3
+
+# All three columns a,b,c should not be droppable.
+statement error pq: cannot drop column "a" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN a
+
+statement error pq: cannot drop column "b" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN b
+
+statement error pq: cannot drop column "c" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN c
+
+# RegClass objects used in expressions should be added to view dependencies.
+statement ok
+CREATE TABLE toreg();
+CREATE VIEW vregclass AS SELECT 'toreg'::regclass
+
+statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
+DROP TABLE toreg;
+
+statement ok
+DROP VIEW vregclass;
+CREATE VIEW vregclass AS SELECT x FROM (SELECT CAST('toreg' AS regclass) AS x)
+
+statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
+DROP TABLE toreg;
+
+statement ok
+DROP VIEW vregclass;
+CREATE SEQUENCE s_reg;
+CREATE VIEW vregclass AS SELECT x FROM [SELECT 's_reg'::REGCLASS AS x]
+
+statement error pq: cannot drop sequence s_reg because other objects depend on it
+DROP SEQUENCE s_reg
+
+# RegClass dependencies should not be added if the RegClass expression contains
+# a variable.
+statement ok
+DROP VIEW vregclass;
+CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 's_reg' AS x);
+DROP SEQUENCE s_reg;
+
+statement ok
+DROP VIEW vregclass;
+CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 'does_not_exist' AS x);
+
+statement error pq: relation "does_not_exist" does not exist
+SELECT * FROM vregclass
+
+statement ok
+DROP VIEW vregclass;
+CREATE table tregclass();
+CREATE VIEW vregclass AS SELECT 1 FROM (SELECT 1) AS foo WHERE 'tregclass'::regclass = 'tregclass'::regclass;
+
+statement error pq: cannot drop relation "tregclass" because view "vregclass" depends on it
+DROP TABLE tregclass
+
+# Test that we disallow cross-database references from views, depending on the
+# cluster setting.
+subtest cross_db_views
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+USE db1
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+CREATE VIEW v1 AS SELECT a+b FROM ab
+
+statement ok
+CREATE VIEW db1.public.v2 AS SELECT a+b FROM db1.public.ab
+
+statement error the view cannot refer to other databases
+CREATE VIEW db2.v AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE VIEW db2.replace AS SELECT 1
+
+statement error the view cannot refer to other databases
+CREATE OR REPLACE VIEW db2.replace AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE SEQUENCE db2.seq
+
+statement error the view cannot refer to other databases
+CREATE VIEW v2 AS SELECT last_value FROM db2.seq
+
+# Verify that cross-schema views are allowed.
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE VIEW db1.sc2.v AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE TABLE db1.sc2.cd (c INT, d INT)
+
+statement ok
+CREATE VIEW db1.public.v3 AS SELECT a+b+c+d FROM db1.public.ab, db1.sc2.cd
+
+# Verify that views involving system tables are allowed.
+
+statement ok
+CREATE VIEW sys AS SELECT id FROM system.descriptor
+
+statement ok
+CREATE VIEW sys2 AS SELECT id, a+b FROM system.descriptor, ab
+
+statement ok
+USE db2
+
+statement ok
+CREATE TABLE cd (c INT, d INT)
+
+statement error the view cannot refer to other databases
+CREATE VIEW v AS SELECT a+b+c+d FROM cd, db1.public.ab
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement ok
+CREATE VIEW db2.v1 AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE VIEW db2.v2 AS SELECT a+b+c+d FROM cd, db1.public.ab
+
+# Unit test for #60737
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
+CREATE VIEW v3 AS SELECT a, b FROM t
+
+statement ok
+CREATE TYPE v4 as enum('foo')
+
+# Case 1: Both v3's are views and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP VIEW v3
+
+statement error pgcode 55000 view "v3" is being dropped, try again later
+CREATE VIEW IF NOT EXISTS v3 AS SELECT a, b FROM t
+
+statement ok
+END
+
+# Case 2: Both v4's are different types and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TYPE v4
+
+statement error pgcode 42809 "v4" is not a view
+CREATE VIEW IF NOT EXISTS v4 AS SELECT a, b FROM t
+
+statement ok
+END
+
+# Case 3: Both v4's are a different type
+statement ok
+BEGIN
+
+statement error pgcode 42809 "v4" is not a view
+CREATE VIEW IF NOT EXISTS v4 AS SELECT a, b FROM t
+
+statement ok
+END
+
+statement ok
+DROP VIEW v3
+
+statement ok
+DROP TYPE v4
+
+statement ok
+DROP TABLE t

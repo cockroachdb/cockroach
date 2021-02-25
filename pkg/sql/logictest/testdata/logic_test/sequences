@@ -4,6 +4,9 @@
 # (at the top because it requires a session in which `lastval` has never been called)
 
 statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
 SET DATABASE = test
 
 statement ok
@@ -55,6 +58,32 @@ SELECT lastval()
 ----
 11
 
+let $lastval_test_id
+SELECT 'lastval_test'::regclass::int
+
+query I
+SELECT nextval($lastval_test_id::regclass)
+----
+3
+
+query I
+SELECT lastval()
+----
+3
+
+let $lastval_test_2_id
+SELECT 'lastval_test_2'::regclass::int
+
+query I
+SELECT nextval($lastval_test_2_id::regclass)
+----
+12
+
+query I
+SELECT lastval()
+----
+12
+
 # SEQUENCE CREATION
 
 statement ok
@@ -93,37 +122,28 @@ CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
 statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
 CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
 
-statement error pgcode 22023 CACHE \(-1\) must be greater than zero
-CREATE SEQUENCE cache_test CACHE -1
-
-statement error pgcode 22023 CACHE \(0\) must be greater than zero
-CREATE SEQUENCE cache_test CACHE 0
-
-statement error pgcode 0A000 CACHE values larger than 1 are not supported, found 5
-CREATE SEQUENCE cache_test CACHE 5
-
 statement error pgcode 0A000 CYCLE option is not supported
 CREATE SEQUENCE cycle_test CYCLE
 
 statement ok
-CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
+CREATE SEQUENCE ignored_options_test NO CYCLE
 
 # Verify presence in crdb_internal.create_statements.
 
 statement ok
 CREATE SEQUENCE show_create_test
 
-query ITTITTTTTTTT colnames
+query ITTITTTTTTTBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state   create_nofks                                                                                  alter_statements  validate_statements zone_configuration_statements
-52           test           public       66             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                  {}
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions  is_multi_region
+52           test           public       63             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
 table_name        create_statement
-show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 # DML ERRORS
 
@@ -143,25 +163,33 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
+# Create a sequence on another schema
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE SEQUENCE other_schema.seq
+
 # List sequences with SHOW
 
-query T
+query TT rowsort
 SHOW SEQUENCES
 ----
-foo
-high_minvalue_test
-ignored_options_test
-lastval_test
-lastval_test_2
-show_create_test
+public        foo
+public        high_minvalue_test
+public        ignored_options_test
+public        lastval_test
+public        lastval_test_2
+other_schema  seq
+public        show_create_test
 
 statement ok
 CREATE DATABASE seqdb; USE seqdb; CREATE SEQUENCE otherseq; USE test
 
-query T
+query TT rowsort
 SHOW SEQUENCES FROM seqdb
 ----
-otherseq
+public  otherseq
 
 # You can select from a sequence to get its value.
 
@@ -212,6 +240,19 @@ SELECT currval('foo')
 ----
 2
 
+let $foo_id
+SELECT 'foo'::regclass::int
+
+query I
+SELECT nextval($foo_id::regclass)
+----
+3
+
+query I
+SELECT currval($foo_id::regclass)
+----
+3
+
 query T
 SELECT pg_sequence_parameters('foo'::regclass::oid)
 ----
@@ -252,6 +293,14 @@ SELECT nextval('baz')
 ----
 7
 
+let $baz_id
+SELECT 'baz'::regclass::int
+
+query I
+SELECT nextval($baz_id::regclass)
+----
+12
+
 query T
 SELECT pg_sequence_parameters('baz'::regclass::oid)
 ----
@@ -271,6 +320,14 @@ query I
 SELECT nextval('down_test')
 ----
 -6
+
+let $down_test_id
+SELECT 'down_test'::regclass::int
+
+query I
+SELECT nextval($down_test_id::regclass)
+----
+-7
 
 query T
 SELECT pg_sequence_parameters('down_test'::regclass::oid)
@@ -387,6 +444,25 @@ SELECT lastval()
 ----
 11
 
+let $setval_test_id
+SELECT 'setval_test'::regclass::int
+
+query I
+SELECT setval($setval_test_id::regclass, 20)
+----
+20
+
+# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+query I
+SELECT currval($setval_test_id::regclass)
+----
+11
+
+query I
+SELECT nextval($setval_test_id::regclass)
+----
+21
+
 # setval doesn't let you set values outside the bounds.
 
 statement ok
@@ -443,6 +519,39 @@ SELECT nextval('setval_is_called_test')
 ----
 22
 
+let $setval_is_called_test_id
+SELECT 'setval_is_called_test'::regclass::int
+
+query I
+SELECT setval($setval_is_called_test_id::regclass, 30, false)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+31
+
+query I
+SELECT setval($setval_is_called_test_id::regclass, 30, true)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+31
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+32
+
 # You can use setval to reset to minvalue.
 
 statement ok
@@ -495,6 +604,12 @@ SELECT nextval('limit_test')
 
 statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
 SELECT nextval('limit_test')
+
+let $limit_test_id
+SELECT 'limit_test'::regclass::int
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval($limit_test_id::regclass)
 
 query I
 SELECT currval('limit_test')
@@ -853,7 +968,7 @@ CREATE SEQUENCE sv VIRTUAL
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
 ----
-CREATE SEQUENCE sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
 
 statement ok
 CREATE TABLE svals(x INT)
@@ -890,7 +1005,7 @@ DROP SEQUENCE sv
 subtest generator_timeout
 
 statement ok
-SET statement_timeout = 1
+SET statement_timeout = 10
 
 statement error pq: query execution canceled due to statement timeout
 select * from generate_series(1,10000000) where generate_series = 0;
@@ -1071,6 +1186,17 @@ DROP TABLE b;
 
 statement ok
 DROP TABLE a;
+
+# A dependency on a sequence should be added if the sequence is used in a
+# currval call. (Regression #50033)
+
+statement ok
+CREATE SEQUENCE currval_dep_test;
+CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
+
+statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
+DROP SEQUENCE currval_dep_test
+
 subtest regression_50649
 
 statement ok
@@ -1218,3 +1344,452 @@ ALTER TABLE t_50711 DROP COLUMN a
 
 statement ok
 ALTER TABLE t_50711 DROP COLUMN b
+
+# Verify that we don't allow OWNED BY to refer to other databases (depending on
+# the cluster setting).
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+CREATE TABLE db1.t (a INT)
+
+statement ok
+CREATE SEQUENCE db1.seq OWNED BY db1.t.a
+
+statement error OWNED BY cannot refer to other databases
+CREATE SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE TABLE db2.t (a INT)
+
+statement ok
+CREATE SEQUENCE db2.seq OWNED BY db2.t.a
+
+statement error OWNED BY cannot refer to other databases
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
+
+statement error invalid OWNED BY option
+ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
+
+# Test that passing a descriptor other than a sequence
+# returns an appropriate error.
+subtest invalid_ids
+
+statement ok
+CREATE TABLE t (i SERIAL PRIMARY KEY)
+
+let $t_id
+SELECT 't'::regclass::int
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT nextval($t_id::regclass)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT setval($t_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT currval($t_id::regclass)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+let $v_id
+SELECT 'v'::regclass::int
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT nextval($v_id::regclass)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT setval($v_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT currval($v_id::regclass)
+
+statement ok
+CREATE SCHEMA sc
+
+let $sc_id
+SELECT id FROM system.namespace WHERE name='sc'
+
+statement error does not exist
+SELECT nextval($sc_id::regclass)
+
+statement error does not exist
+SELECT setval($sc_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($sc_id::regclass)
+
+statement ok
+CREATE DATABASE db
+
+let $db_id
+SELECT id FROM system.namespace WHERE name='db'
+
+statement error does not exist
+SELECT nextval($db_id::regclass)
+
+statement error does not exist
+SELECT setval($db_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($db_id::regclass)
+
+statement ok
+CREATE TYPE e AS ENUM ('foo', 'bar')
+
+let $e_id
+SELECT id FROM system.namespace WHERE name='e'
+
+statement error does not exist
+SELECT nextval($e_id::regclass)
+
+statement error does not exist
+SELECT setval($e_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($e_id::regclass)
+
+statement error does not exist
+SELECT nextval(12345::regclass) # Bogus ID
+
+statement error does not exist
+SELECT setval(12345::regclass, 30, false) # Bogus ID
+
+statement error does not exist
+SELECT currval(12345::regclass) # Bogus ID
+
+subtest cached_sequences
+
+statement error pgcode 22023 CACHE \(-1\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE -1
+
+statement error pgcode 22023 CACHE \(0\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE 0
+
+statement ok
+CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
+
+# Verify cache invalidation with schema changes.
+
+# 10 values (1,2,...,10) are cached, and the underlying sequence is incremented to 10.
+query I
+SELECT nextval('cache_test')
+----
+1
+
+# sanity checks
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT currval('cache_test')
+----
+1
+
+query I
+SELECT last_value FROM cache_test
+----
+10
+
+statement ok
+BEGIN
+
+statement ok
+ALTER SEQUENCE cache_test INCREMENT 5
+
+# The cache is invalidated due to the above schema change, and 10 new values (15,20,...,60) are cached.
+query I
+SELECT nextval('cache_test')
+----
+15
+
+# Rollback the schema change to use the old INCREMENT amount.
+statement ok
+ABORT
+
+# The underlying sequence was still incremented despite the txn being aborted.
+query I
+SELECT last_value FROM cache_test
+----
+60
+
+# 10 new values (61,62,...,70) are cached.
+query I
+SELECT nextval('cache_test')
+----
+61
+
+query I
+SELECT last_value FROM cache_test
+----
+70
+
+statement ok
+DROP SEQUENCE cache_test
+
+subtest cached_sequences_with_bounds_increasing
+
+statement ok
+CREATE SEQUENCE cached_upper_bound_test MAXVALUE 4 START WITH 2 CACHE 5 INCREMENT BY 2;
+
+# Without this MAXVALUE CONSTRAINT, the values 2,4,6,8,10 would be cached
+# and the underlying sequence would be set to 10. Given the constraint, only
+# 2 and 4 are cached, but the underlying sequence is still set to 10.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+2
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+10
+
+# nextval() should return errors while still incrementing the underlying sequence
+# by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
+# currval() and lastval() should not change.
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+query I
+SELECT lastval();
+----
+4
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+30
+
+# Performing a schema change on the sequence to increase the bounds should reset the underlying
+# sequence to its original MAXVALUE.
+
+statement ok
+ALTER SEQUENCE cached_upper_bound_test MAXVALUE 100;
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+4
+
+# Calling nextval() should cache the values 6,8,10,12,14 while incrementing
+# the underlying sequence to 14.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+6
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+14
+
+query I
+SELECT lastval();
+----
+6
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+6
+
+statement ok
+drop sequence cached_upper_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_increasing, except it uses negative values.
+subtest cached_sequences_with_bounds_decreasing
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-2
+
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-30
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-4
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-6
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-14
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_decreasing, except it uses both positive and negative values.
+subtest cached_sequences_with_bounds_middle
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test_2 MINVALUE -2 MAXVALUE 2 START WITH 2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+2
+
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+0
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-2
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-6
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-26
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test_2 MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-2
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-12
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test_2;
+
+# Unit test for #60737
+
+statement ok
+CREATE SEQUENCE s1 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+statement ok
+CREATE TABLE s2 (A int)
+
+# Case 1: Both s1's are sequences and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP SEQUENCE s1
+
+statement error pgcode 55000 sequence "s1" is being dropped, try again later
+CREATE SEQUENCE IF NOT EXISTS s1 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+statement ok
+END
+
+# Case 2: Both s2's are different types and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TABLE s2
+
+statement error pgcode 42809 "s2" is not a sequence
+CREATE SEQUENCE IF NOT EXISTS s2 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+statement ok
+END
+
+# Case 3: Both s2's are a different type
+statement ok
+BEGIN
+
+statement error pgcode 42809 "s2" is not a sequence
+CREATE SEQUENCE IF NOT EXISTS s2 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+statement ok
+END
+
+statement ok
+DROP SEQUENCE s1
+
+statement ok
+DROP TABLE s2
