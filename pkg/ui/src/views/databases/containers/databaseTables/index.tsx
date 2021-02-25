@@ -153,7 +153,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                   sort: (tableInfo) => tableInfo.numColumns,
                 },
                 {
-                  title: "# of Indices",
+                  title: "# of Indexes",
                   cell: (tableInfo) => tableInfo.numIndices,
                   sort: (tableInfo) => tableInfo.numIndices,
                 },
