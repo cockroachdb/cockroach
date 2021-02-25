@@ -116,3 +116,62 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS tba"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE tba (x te[])"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare a query and use the binary format (ParameterFormatCodes = [1])
+# This is crdb_only because the OID is part of the binary encoding, but
+# PG and CRDB assign different OIDs for custom types.
+send crdb_only
+Parse {"Name": "s3", "Query": "SELECT '{hi}'::te[]"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ResultFormatCodes": [1]}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000186d40000000100000001000000026869"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Prepare a query and use the binary format (ParameterFormatCodes = [1])
+# This is crdb_only because the OID is part of the binary encoding, but
+# PG and CRDB assign different OIDs for custom types.
+# The "Parameters" field is the byte array representation of the binary string above.
+send crdb_only
+Parse {"Name": "s4", "Query": "INSERT INTO tba VALUES ($1)"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [[0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 134, 212, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 2, 104, 105]]}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
