@@ -33,7 +33,7 @@ var MaxBytes = settings.RegisterIntSetting(
 var MaxSpans = settings.RegisterIntSetting(
 	"kv.protectedts.max_spans",
 	"if non-zero the limit of the number of spans which can be protected",
-	4096,
+	32768,
 	settings.NonNegativeInt,
 )
 
