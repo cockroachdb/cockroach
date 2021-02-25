@@ -28,7 +28,7 @@ import (
 )
 
 func TestForeignKeyMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	/*
 	   These descriptors were crafted in v19.1 with the following SQL:
