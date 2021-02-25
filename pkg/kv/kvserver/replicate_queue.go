@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -555,6 +556,11 @@ func (rq *replicateQueue) addNonVoter(
 	existingReplicas, liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	dryRun bool,
 ) (requeue bool, _ error) {
+	// Non-voter creation is disabled before 21.1.
+	if v, st := clusterversion.NonVotingReplicas, repl.ClusterSettings(); !st.Version.IsActive(ctx, v) {
+		return false, errors.AssertionFailedf("non-voting replicas cannot be created pre-21.1")
+	}
+
 	desc, zone := repl.DescAndZone()
 
 	newStore, details, err := rq.allocator.AllocateNonVoter(ctx, zone, liveVoterReplicas, liveNonVoterReplicas)

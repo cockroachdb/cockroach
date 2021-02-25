@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -172,6 +173,11 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			if !ok {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
+			}
+			if (opt.Key == "num_voters" || opt.Key == "voter_constraints") &&
+				!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NonVotingReplicas) {
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"num_voters and voter_constraints cannot be used until cluster version is finalized")
 			}
 			telemetry.Inc(
 				sqltelemetry.SchemaSetZoneConfigCounter(
