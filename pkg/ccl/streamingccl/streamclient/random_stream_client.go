@@ -260,7 +260,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 // ConsumePartition implements the Client interface.
 func (m *randomStreamClient) ConsumePartition(
 	ctx context.Context, partitionAddress streamingccl.PartitionAddress, startTime time.Time,
-) (chan streamingccl.Event, error) {
+) (chan streamingccl.Event, chan error, error) {
 	eventCh := make(chan streamingccl.Event)
 	now := timeutil.Now()
 	if startTime.After(now) {
@@ -269,17 +269,17 @@ func (m *randomStreamClient) ConsumePartition(
 
 	partitionURL, err := partitionAddress.URL()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var partitionTableID int
 	partitionTableID, err = strconv.Atoi(partitionURL.Host)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	tableDesc, systemKVs, err := m.getDescriptorAndNamespaceKVForTableID(descpb.ID(partitionTableID))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	go func() {
 		defer close(eventCh)
@@ -346,7 +346,7 @@ func (m *randomStreamClient) ConsumePartition(
 		}
 	}()
 
-	return eventCh, nil
+	return eventCh, nil, nil
 }
 
 func rekey(tenantID roachpb.TenantID, k roachpb.Key) roachpb.Key {
@@ -394,7 +394,7 @@ func (m *randomStreamClient) makeRandomKey(
 	}
 }
 
-// RegisterInterception implements streamingest.interceptableStreamClient.
+// RegisterInterception implements the InterceptableStreamClient interface.
 func (m *randomStreamClient) RegisterInterception(fn interceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -14,8 +14,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -496,6 +498,11 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	}
 
 	// Create a non-corrupted backup.
+	// Populate system.jobs.
+	// Note: this is not the backup under test, this just serves as a job which
+	// should appear in the restore.
+	// This job will eventually fail since it will run from a new cluster.
+	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
@@ -523,6 +530,53 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		)
 	})
 
+	// This test retries the job (by injected a retry error) after restoring a
+	// every system table that has a custom restore function. This tried to tease
+	// out any errors that may occur if some of the system table restoration
+	// functions are not idempotent (e.g. jobs table), but are retried by the
+	// restore anyway.
+	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
+		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+		customRestoreSystemTables := make([]string, 0)
+		for table, config := range backupbase.SystemTableBackupConfiguration {
+			if config.CustomRestoreFunc != nil {
+				customRestoreSystemTables = append(customRestoreSystemTables, table)
+			}
+		}
+		for _, customRestoreSystemTable := range customRestoreSystemTables {
+			t.Run(customRestoreSystemTable, func(t *testing.T) {
+				_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+				defer cleanupEmptyCluster()
+
+				// Inject a retry error
+				for _, server := range tcRestore.Servers {
+					registry := server.JobRegistry().(*jobs.Registry)
+					registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+						jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+							r := raw.(*restoreResumer)
+							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
+								if systemTableName == customRestoreSystemTable {
+									return jobs.NewRetryJobError("injected error")
+								}
+								return nil
+							}
+							return r
+						},
+					}
+				}
+
+				// The initial restore will fail, and restart.
+				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
+				// Expect the job to succeed. If the job fails, it's likely due to
+				// attempting to restore the same system table data twice.
+				sqlDBRestore.CheckQueryResultsRetry(t,
+					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' AND status = 'succeeded'`,
+					[][]string{{"1"}})
+			})
+		}
+	})
+
 	t.Run("during system table restoration", func(t *testing.T) {
 		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
@@ -533,7 +587,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
-					r.testingKnobs.duringSystemTableRestoration = func() error {
+					r.testingKnobs.duringSystemTableRestoration = func(_ string) error {
 						return errors.New("injected error")
 					}
 					return r
