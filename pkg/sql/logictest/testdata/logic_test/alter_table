@@ -1515,6 +1515,41 @@ ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_without_index_c_key
 
+statement ok
+CREATE TABLE unique_without_index_partial (
+  a INT,
+  b INT,
+  c INT
+);
+INSERT INTO unique_without_index_partial VALUES
+  (1, 1, 1),
+  (2, 2, 2),
+  (1, 3, -3),
+  (2, -2, -2),
+  (NULL, 4, 4),
+  (NULL, 5, 5);
+
+# Trying to add a partial unique constraint fails when there are duplicates.
+statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
+
+# We can create not-valid constraints, however.
+statement ok
+ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0 NOT VALID
+
+# Trying to validate the constraint will fail.
+statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
+
+# But after we delete a row, validation should succeed.
+statement ok
+DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
+ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1;
+
+# Creating a new validated constraint should also succeed.
+statement ok
+ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_2 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
+
 query TTTTB colnames
 SHOW CONSTRAINTS FROM unique_without_index
 ----

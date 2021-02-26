@@ -714,7 +714,7 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
 				case descpb.ConstraintToUpdate_NOT_NULL:
@@ -1641,6 +1641,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 							tableDesc,
 							idx.GetName(),
 							idx.ColumnIDs[idx.Partitioning.NumImplicitColumns:],
+							idx.Predicate,
 							ie,
 							txn,
 						); err != nil {
@@ -2045,7 +2046,7 @@ func runSchemaChangesInTxn(
 		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 			if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.Descriptors().LeaseManager(), planner.EvalContext(), tableDesc, planner.txn, constraint.Name,
+					ctx, planner.EvalContext(), tableDesc, planner.txn, constraint.Name,
 				); err != nil {
 					return err
 				}
@@ -2194,7 +2195,6 @@ func validateFkInTxn(
 // reuse an existing kv.Txn safely.
 func validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
-	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2219,7 +2219,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 	}
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateUniqueConstraint(ctx, tableDesc, uc.Name, uc.ColumnIDs, ie, txn)
+		return validateUniqueConstraint(ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn)
 	})
 }
 
