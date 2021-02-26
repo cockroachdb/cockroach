@@ -36,11 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// closingPeriod dictates how often the Sender will close timestamps.
-// TODO(andrei): make this a cluster setting which, when set to 0, disables
-// the sidetransport.
-const closingPeriod = 200 * time.Millisecond
-
 // Sender represents the sending-side of the closed timestamps "side-transport".
 // Its role is to periodically advance the closed timestamps of all the ranges
 // with leases on the current node and to communicate these closed timestamps to
@@ -162,6 +157,7 @@ func NewSender(
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
+	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
 
 	confCh := make(chan struct{}, 1)
 	confChanged := func() {
@@ -192,8 +188,11 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
 						continue
+					} else if waitForUpgrade {
+						waitForUpgrade = false
+						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
 					}
 					s.publish(ctx)
 				case <-confCh:
@@ -247,6 +246,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	log.VEventf(ctx, 2, "side-transport publishing a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -271,7 +271,7 @@ func (s *Sender) publish(ctx context.Context) {
 		target := closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
 		s.trackedMu.lastClosed[pol] = target
 		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
-			Policy:          roachpb.RangeClosedTimestampPolicy(pol),
+			Policy:          pol,
 			ClosedTimestamp: target,
 		}
 	}
@@ -378,6 +378,7 @@ func (s *Sender) publish(ctx context.Context) {
 	})
 
 	// Publish the new message to all connections.
+	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
 }
 

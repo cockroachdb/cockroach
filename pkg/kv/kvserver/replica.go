@@ -1222,6 +1222,10 @@ func (r *Replica) checkExecutionCanProceed(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
+	var update replicaUpdate
+	// When we're done, apply the update (if any) after releasing r.mu.
+	defer update.apply(ctx, r)
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -1271,7 +1275,9 @@ func (r *Replica) checkExecutionCanProceed(
 			// If not, can we serve this request on a follower?
 			// TODO(nvanbenschoten): once we make this check cheaper
 			// than leaseGoodToGoRLocked, invert these checks.
-			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
+			var ok bool
+			ok, update = r.canServeFollowerReadRLocked(ctx, ba, err)
+			if !ok {
 				return st, err
 			}
 			err = nil                     // ignore error
