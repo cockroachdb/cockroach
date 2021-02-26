@@ -107,12 +107,14 @@ func TestImportCLI(t *testing.T) {
 			"pgdump-with-options",
 			"PGDUMP",
 			"testdata/import/db.sql",
-			"--max-row-size=1000 --skip-foreign-keys=true",
+			"--max-row-size=1000 --skip-foreign-keys=true --row-limit=10 " +
+				"--ignore-unsupported-statements=true --log-ignored-statements='foo://bar'",
 			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
-				"sql' WITH max_row_size='1000', skip_foreign_keys",
+				"sql' WITH max_row_size='1000', skip_foreign_keys, row_limit='10', ignore_unsupported_statements, " +
+				"log_ignored_statements='foo://bar'",
 			"IMPORT TABLE foo FROM PGDUMP " +
 				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH max_row_size='1000', " +
-				"skip_foreign_keys",
+				"skip_foreign_keys, row_limit='10', ignore_unsupported_statements, log_ignored_statements='foo://bar'",
 		},
 		{
 			"mysql",
@@ -120,18 +122,17 @@ func TestImportCLI(t *testing.T) {
 			"testdata/import/db.sql",
 			"",
 			"IMPORT MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
-			"IMPORT TABLE foo FROM MYSQLDUMP " +
-				"'userfile://defaultdb.public.userfiles_root/db.sql'",
+			"IMPORT TABLE foo FROM MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
 		},
 		{
 			"mysql-with-options",
 			"MYSQLDUMP",
 			"testdata/import/db.sql",
-			"--skip-foreign-keys=true",
+			"--skip-foreign-keys=true --row-limit=10",
 			"IMPORT MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db." +
-				"sql' WITH skip_foreign_keys",
+				"sql' WITH skip_foreign_keys, row_limit='10'",
 			"IMPORT TABLE foo FROM MYSQLDUMP " +
-				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH skip_foreign_keys",
+				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH skip_foreign_keys, row_limit='10'",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,7 +143,7 @@ func TestImportCLI(t *testing.T) {
 
 			output := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
 
-			require.Equal(t, output, tc.expectedImportQuery)
+			require.Equal(t, tc.expectedImportQuery, output)
 		})
 
 		t.Run(tc.name+"_table", func(t *testing.T) {
@@ -153,7 +154,7 @@ func TestImportCLI(t *testing.T) {
 
 			output := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
 
-			require.Equal(t, output, tc.expectedImportTableQuery)
+			require.Equal(t, tc.expectedImportTableQuery, output)
 		})
 	}
 }
