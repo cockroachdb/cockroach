@@ -118,22 +118,6 @@ func (rec *SpanSetReplicaEvalContext) GetTracker() closedts.TrackerI {
 	return rec.i.GetTracker()
 }
 
-// GetFrozenClosedTimestamp is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetFrozenClosedTimestamp() hlc.Timestamp {
-	// To capture a closed timestamp, all keys must be latched to prevent any
-	// concurrent writes (which could advance the closed timestamp).
-	desc := rec.i.Desc()
-	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
-		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
-		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
-	})
-	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
-		Key:    desc.StartKey.AsRawKey(),
-		EndKey: desc.EndKey.AsRawKey(),
-	})
-	return rec.i.GetFrozenClosedTimestamp()
-}
-
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()
@@ -228,7 +212,7 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() rspb.ReadSummary {
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
