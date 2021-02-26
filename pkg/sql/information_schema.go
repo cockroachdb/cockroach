@@ -1957,8 +1957,8 @@ type virtualOpts int
 const (
 	// virtualMany iterates over virtual schemas in every catalog/database.
 	virtualMany virtualOpts = iota
-	// virtualOnce iterates over virtual schemas once, in the nil database.
-	virtualOnce
+	// virtualCurrentDB iterates over virtual schemas in the current database.
+	virtualCurrentDB
 	// hideVirtual completely hides virtual schemas during iteration.
 	hideVirtual
 )
@@ -2118,7 +2118,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
 		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
-	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
+	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
 		vEntries := vt.getEntries()
@@ -2137,8 +2137,8 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		}
 
 		switch virtualOpts {
-		case virtualOnce:
-			if err := iterate(nil); err != nil {
+		case virtualCurrentDB:
+			if err := iterate(dbContext); err != nil {
 				return err
 			}
 		case virtualMany:

@@ -3510,3 +3510,10 @@ WHERE indexrelid IN (SELECT crdb_oid FROM pg_catalog.pg_indexes WHERE indexname 
 ----
 indoption
 1
+
+# Regression #59561.
+# database_name would not be populated even when the SELECT does not use the virtual index.
+query TTI
+SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
+----
+test  pg_views  4294967022
