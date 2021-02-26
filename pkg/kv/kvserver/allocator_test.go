@@ -1075,8 +1075,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	}{
 		// 3/3 live -> 3/4 live: ok
 		{replicas(1, 2, 3), 6},
-		// 2/3 live -> 2/4 live: nope
-		{replicas(1, 2, 7), 0},
 		// 4/4 live -> 4/5 live: ok
 		{replicas(1, 2, 3, 4), 6},
 		// 3/4 live -> 3/5 live: ok
@@ -1085,8 +1083,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 		{replicas(1, 2, 3, 4, 5), 6},
 		// 4/5 live -> 4/6 live: ok
 		{replicas(1, 2, 3, 4, 7), 6},
-		// 3/5 live -> 3/6 live: nope
-		{replicas(1, 2, 3, 7, 8), 0},
 	}
 
 	for _, c := range testCases {
