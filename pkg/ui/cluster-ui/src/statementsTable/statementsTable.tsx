@@ -8,6 +8,7 @@ import {
   rowsReadBarChart,
   bytesReadBarChart,
   latencyBarChart,
+  contentionBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -42,6 +43,7 @@ function makeCommonColumns(
   const rowsReadBar = rowsReadBarChart(statements, barChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, barChartOptions);
   const latencyBar = latencyBarChart(statements, barChartOptions);
+  const contentionBar = contentionBarChart(statements, barChartOptions);
   const maxMemUsageBar = maxMemUsageBarChart(statements, barChartOptions);
   const networkBytesBar = networkBytesBarChart(statements, barChartOptions);
   const retryBar = retryBarChart(statements, barChartOptions);
@@ -64,7 +66,6 @@ function makeCommonColumns(
     {
       name: "bytesRead",
       title: StatementTableTitle.bytesRead,
-      className: cx("statements-table__col-bytes-read"),
       cell: bytesReadBar,
       sort: stmt => FixLong(Number(stmt.stats.bytes_read.mean)),
     },
@@ -76,16 +77,20 @@ function makeCommonColumns(
       sort: stmt => stmt.stats.service_lat.mean,
     },
     {
+      name: "contention",
+      title: StatementTableTitle.contention,
+      cell: contentionBar,
+      sort: stmt => FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
+    },
+    {
       name: "maxMemoryUsage",
       title: StatementTableTitle.maxMemUsage,
-      className: cx("statements-table__col-max-mem-usage"),
       cell: maxMemUsageBar,
       sort: stmt => FixLong(Number(stmt.stats.exec_stats.max_mem_usage.mean)),
     },
     {
       name: "networkBytes",
       title: StatementTableTitle.networkBytes,
-      className: cx("statements-table__col-network-bytes"),
       cell: networkBytesBar,
       sort: stmt => FixLong(Number(stmt.stats.exec_stats.network_bytes.mean)),
     },
