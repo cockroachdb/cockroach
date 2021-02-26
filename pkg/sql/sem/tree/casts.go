@@ -1271,43 +1271,13 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 	case types.OidFamily:
 		switch v := d.(type) {
 		case *DOid:
-			switch t.Oid() {
-			case oid.T_oid:
-				return &DOid{semanticType: t, DInt: v.DInt}, nil
-			case oid.T_regtype:
-				// Mapping an oid to a regtype is easy: we have a hardcoded map.
-				typ, ok := types.OidToType[oid.Oid(v.DInt)]
-				ret := &DOid{semanticType: t, DInt: v.DInt}
-				if !ok {
-					return ret, nil
-				}
-				ret.name = typ.PGName()
-				return ret, nil
-			default:
-				oid, err := queryOid(ctx, t, v)
-				if err != nil {
-					oid = NewDOid(v.DInt)
-					oid.semanticType = t
-				}
-				return oid, nil
-			}
+			return performIntToOidCast(ctx, t, v.DInt)
 		case *DInt:
 			// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 			// store OIDs as signed 32-bit integers, so we implement the cast
 			// by converting to a uint32 first. This matches Postgres behavior.
 			i := DInt(uint32(*v))
-			switch t.Oid() {
-			case oid.T_oid:
-				return &DOid{semanticType: t, DInt: i}, nil
-			default:
-				tmpOid := NewDOid(i)
-				oid, err := queryOid(ctx, t, tmpOid)
-				if err != nil {
-					oid = tmpOid
-					oid.semanticType = t
-				}
-				return oid, nil
-			}
+			return performIntToOidCast(ctx, t, i)
 		case *DString:
 			return ParseDOid(ctx, string(*v), t)
 		}
@@ -1315,4 +1285,40 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 
 	return nil, pgerror.Newf(
 		pgcode.CannotCoerce, "invalid cast: %s -> %s", d.ResolvedType(), t)
+}
+
+// performIntToOidCast casts the input integer to the OID type given by the
+// input types.T.
+func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
+	switch t.Oid() {
+	case oid.T_oid:
+		return &DOid{semanticType: t, DInt: v}, nil
+	case oid.T_regtype:
+		// Mapping an oid to a regtype is easy: we have a hardcoded map.
+		typ, ok := types.OidToType[oid.Oid(v)]
+		ret := &DOid{semanticType: t, DInt: v}
+		if !ok {
+			return ret, nil
+		}
+		ret.name = typ.PGName()
+		return ret, nil
+
+	case oid.T_regproc, oid.T_regprocedure:
+		// Mapping an oid to a regproc is easy: we have a hardcoded map.
+		name, ok := OidToBuiltinName[oid.Oid(v)]
+		ret := &DOid{semanticType: t, DInt: v}
+		if !ok {
+			return ret, nil
+		}
+		ret.name = name
+		return ret, nil
+
+	default:
+		oid, err := queryOid(ctx, t, NewDOid(v))
+		if err != nil {
+			oid = NewDOid(v)
+			oid.semanticType = t
+		}
+		return oid, nil
+	}
 }

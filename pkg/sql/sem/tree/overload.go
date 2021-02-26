@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // SpecializedVectorizedBuiltin is used to map overloads
@@ -85,6 +86,10 @@ type Overload struct {
 	// volatility against Postgres's volatility at test time.
 	// This should be used with caution.
 	IgnoreVolatilityCheck bool
+
+	// Oid is the cached oidHasher.BuiltinOid result for this Overload. It's
+	// populated at init-time.
+	Oid oid.Oid
 }
 
 // params implements the overloadImpl interface.
