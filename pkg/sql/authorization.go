@@ -431,7 +431,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
+	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(

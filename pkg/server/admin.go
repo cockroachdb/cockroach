@@ -184,13 +184,6 @@ func (s *adminServer) serverErrorf(format string, args ...interface{}) error {
 	return errAdminAPIError
 }
 
-// serverErrors logs the provided errors and returns an error that should be returned by
-// the RPC endpoint method.
-func (s *adminServer) serverErrors(errors []error) error {
-	log.ErrorfDepth(context.TODO(), 1, "%v", errors)
-	return errAdminAPIError
-}
-
 // isNotFoundError returns true if err is a table/database not found error.
 func (s *adminServer) isNotFoundError(err error) bool {
 	// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
@@ -232,7 +225,16 @@ func (s *adminServer) ChartCatalog(
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
-) (*serverpb.DatabasesResponse, error) {
+) (_ *serverpb.DatabasesResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	ctx = s.server.AnnotateCtx(ctx)
 
 	sessionUser, err := userFromContext(ctx)
@@ -240,23 +242,31 @@ func (s *adminServer) Databases(
 		return nil, err
 	}
 
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: sessionUser},
 		"SHOW DATABASES",
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	var resp serverpb.DatabasesResponse
-	for _, row := range rows {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		dbDatum, ok := tree.AsDString(row[0])
 		if !ok {
-			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
+			return nil, errors.Errorf("type assertion failed on db name: %T", row[0])
 		}
 		dbName := string(dbDatum)
 		resp.Databases = append(resp.Databases, dbName)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -983,7 +993,7 @@ func (s *adminServer) Users(
 		return nil, err
 	}
 	query := `SELECT username FROM system.users WHERE "isRole" = false`
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-users", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		query,
@@ -993,13 +1003,27 @@ func (s *adminServer) Users(
 	}
 
 	var resp serverpb.UsersResponse
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 	return &resp, nil
 }
 
 var eventSetClusterSettingName = eventpb.GetEventTypeName(&eventpb.SetClusterSetting{})
+
+// combineAllErrors combines all passed-in errors into a single object.
+func combineAllErrors(errs []error) error {
+	var combinedErrors error
+	for _, err := range errs {
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
+	return combinedErrors
+}
 
 // Events is an endpoint that returns the latest event log entries, with the following
 // optional URL parameters:
@@ -1009,6 +1033,15 @@ var eventSetClusterSettingName = eventpb.GetEventTypeName(&eventpb.SetClusterSet
 func (s *adminServer) Events(
 	ctx context.Context, req *serverpb.EventsRequest,
 ) (_ *serverpb.EventsResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	ctx = s.server.AnnotateCtx(ctx)
 
 	userName, err := s.requireAdminUser(ctx)
@@ -1038,29 +1071,24 @@ func (s *adminServer) Events(
 		q.Append("LIMIT $", limit)
 	}
 	if len(q.Errors()) > 0 {
-		return nil, s.serverErrors(q.Errors())
+		return nil, combineAllErrors(q.Errors())
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-events", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		q.String(), q.QueryArguments()...)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil && closeErr != nil {
-			retErr = s.serverError(closeErr)
-		}
-	}()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// Marshal response.
 	var resp serverpb.EventsResponse
 	ok, err := it.Next(ctx)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	if !ok {
 		// The query returned 0 rows.
@@ -1102,7 +1130,7 @@ func (s *adminServer) Events(
 		resp.Events = append(resp.Events, event)
 	}
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	return &resp, nil
 }
@@ -1141,6 +1169,15 @@ func redactStatement(info string) string {
 func (s *adminServer) RangeLog(
 	ctx context.Context, req *serverpb.RangeLogRequest,
 ) (_ *serverpb.RangeLogResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	ctx = s.server.AnnotateCtx(ctx)
 
 	// Range keys, even when pretty-printed, contain PII.
@@ -1169,7 +1206,7 @@ func (s *adminServer) RangeLog(
 		q.Append("LIMIT $", tree.NewDInt(tree.DInt(limit)))
 	}
 	if len(q.Errors()) > 0 {
-		return nil, s.serverErrors(q.Errors())
+		return nil, combineAllErrors(q.Errors())
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-range-log", nil, /* txn */
@@ -1177,22 +1214,17 @@ func (s *adminServer) RangeLog(
 		q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil && closeErr != nil {
-			retErr = s.serverError(closeErr)
-		}
-	}()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// Marshal response.
 	var resp serverpb.RangeLogResponse
 	ok, err := it.Next(ctx)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	if !ok {
 		// The query returned 0 rows.
@@ -1278,16 +1310,19 @@ func (s *adminServer) RangeLog(
 		})
 	}
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	return &resp, nil
 }
 
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
+//
+// Note that the function returns plain errors, and it is the caller's
+// responsibility to convert them to serverErrors.
 func (s *adminServer) getUIData(
 	ctx context.Context, userName security.SQLUsername, keys []string,
-) (*serverpb.GetUIDataResponse, error) {
+) (_ *serverpb.GetUIDataResponse, retErr error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
 	}
@@ -1303,40 +1338,48 @@ func (s *adminServer) getUIData(
 	}
 	query.Append(");")
 	if err := query.Errors(); err != nil {
-		return nil, s.serverErrorf("error constructing query: %v", err)
+		return nil, errors.Errorf("error constructing query: %v", err)
 	}
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
-	for _, row := range rows {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		dKey, ok := tree.AsDString(row[0])
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
+			return nil, errors.Errorf("unexpected type for UI key: %T", row[0])
 		}
 		_, key := splitUIKey(string(dKey))
 		dKey = tree.DString(key)
 
 		dValue, ok := row[1].(*tree.DBytes)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI value: %T", row[1])
+			return nil, errors.Errorf("unexpected type for UI value: %T", row[1])
 		}
 		dLastUpdated, ok := row[2].(*tree.DTimestamp)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row[2])
+			return nil, errors.Errorf("unexpected type for UI lastUpdated: %T", row[2])
 		}
 
 		resp.KeyValues[string(dKey)] = serverpb.GetUIDataResponse_Value{
 			Value:       []byte(*dValue),
 			LastUpdated: dLastUpdated.Time,
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &resp, nil
 }
@@ -1596,6 +1639,15 @@ func (s *adminServer) Liveness(
 func (s *adminServer) Jobs(
 	ctx context.Context, req *serverpb.JobsRequest,
 ) (_ *serverpb.JobsResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	ctx = s.server.AnnotateCtx(ctx)
 
 	userName, err := userFromContext(ctx)
@@ -1630,20 +1682,15 @@ func (s *adminServer) Jobs(
 		q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil && closeErr != nil {
-			retErr = s.serverError(closeErr)
-		}
-	}()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	ok, err := it.Next(ctx)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 
 	var resp serverpb.JobsResponse
@@ -1676,12 +1723,12 @@ func (s *adminServer) Jobs(
 			&highwaterOrNil,
 			&job.Error,
 		); err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 		if highwaterOrNil != nil {
 			highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
 			if err != nil {
-				return nil, s.serverError(errors.Wrap(err, "highwater timestamp had unexpected format"))
+				return nil, errors.Wrap(err, "highwater timestamp had unexpected format")
 			}
 			goTime := highwaterTimestamp.GoTime()
 			job.HighwaterTimestamp = &goTime
@@ -1697,7 +1744,7 @@ func (s *adminServer) Jobs(
 	}
 
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	return &resp, nil
 }
@@ -1705,6 +1752,15 @@ func (s *adminServer) Jobs(
 func (s *adminServer) Locations(
 	ctx context.Context, req *serverpb.LocationsRequest,
 ) (_ *serverpb.LocationsResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	ctx = s.server.AnnotateCtx(ctx)
 
 	_, err := userFromContext(ctx)
@@ -1720,20 +1776,15 @@ func (s *adminServer) Locations(
 		q.String(),
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil && closeErr != nil {
-			retErr = s.serverError(closeErr)
-		}
-	}()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	ok, err := it.Next(ctx)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 
 	var resp serverpb.LocationsResponse
@@ -1748,19 +1799,19 @@ func (s *adminServer) Locations(
 		lat, lon := new(apd.Decimal), new(apd.Decimal)
 		if err := scanner.ScanAll(
 			row, &loc.LocalityKey, &loc.LocalityValue, lat, lon); err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 		if loc.Latitude, err = lat.Float64(); err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 		if loc.Longitude, err = lon.Float64(); err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 		resp.Locations = append(resp.Locations, loc)
 	}
 
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 	return &resp, nil
 }
@@ -1790,7 +1841,7 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"EXPLAIN (DISTSQL, JSON) %s",
 		strings.Trim(req.Query, ";"))
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "admin-query-plan", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		explain,
@@ -1798,8 +1849,10 @@ func (s *adminServer) QueryPlan(
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	if row == nil {
+		return nil, s.serverError(errors.New("failed to query the physical plan"))
+	}
 
-	row := rows[0]
 	dbDatum, ok := tree.AsDString(row[0])
 	if !ok {
 		return nil, s.serverErrorf("type assertion failed on json: %T", row)
@@ -1958,7 +2011,16 @@ func (s *adminServer) Decommission(
 // DataDistribution returns a count of replicas on each node for each table.
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
-) (*serverpb.DataDistributionResponse, error) {
+) (_ *serverpb.DataDistributionResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1984,19 +2046,24 @@ func (s *adminServer) DataDistribution(
 	// excluding virtual tables (like crdb_internal.tables itself, for example).
 	tablesQuery := `SELECT name, schema_name, table_id, database_name, drop_time FROM
 									"".crdb_internal.tables WHERE database_name IS NOT NULL`
-	rows1, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		tablesQuery,
 	)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
 	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
 
-	for _, row := range rows1 {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		tableName := (*string)(row[0].(*tree.DString))
 		schemaName := (*string)(row[1].(*tree.DString))
 		fqTableName := fmt.Sprintf("%s.%s",
@@ -2029,22 +2096,21 @@ func (s *adminServer) DataDistribution(
 				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s.%s]`,
 				(*tree.Name)(dbName), (*tree.Name)(schemaName), (*tree.Name)(tableName),
 			)
-			rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+			row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 				ctx, "admin-replica-matrix", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: userName},
 				zoneConfigQuery,
 			)
 			if err != nil {
-				return nil, s.serverError(err)
+				return nil, err
+			}
+			if row == nil {
+				return nil, errors.Errorf(
+					"could not get zone config for table %s; 0 rows returned", *tableName,
+				)
 			}
 
-			if len(rows) != 1 {
-				return nil, s.serverError(fmt.Errorf(
-					"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
-				))
-			}
-			zcRow := rows[0]
-			zcID = int64(tree.MustBeDInt(zcRow[0]))
+			zcID = int64(tree.MustBeDInt(row[0]))
 		}
 
 		// Insert table.
@@ -2055,6 +2121,9 @@ func (s *adminServer) DataDistribution(
 		}
 		dbInfo.TableInfo[fqTableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// Get replica counts.
@@ -2086,8 +2155,8 @@ func (s *adminServer) DataDistribution(
 			}
 
 			for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
-				tableInfo, ok := tableInfosByTableID[tableID]
-				if !ok {
+				tableInfo, found := tableInfosByTableID[tableID]
+				if !found {
 					// This is a database, skip.
 					continue
 				}
@@ -2096,7 +2165,7 @@ func (s *adminServer) DataDistribution(
 		}
 		return nil
 	}); err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
 
 	// Get zone configs.
@@ -2106,21 +2175,25 @@ func (s *adminServer) DataDistribution(
 		FROM crdb_internal.zones
 		WHERE target IS NOT NULL
 	`
-	rows2, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err = s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		zoneConfigsQuery)
 	if err != nil {
-		return nil, s.serverError(err)
+		return nil, err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
-	for _, row := range rows2 {
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		target := string(tree.MustBeDString(row[0]))
 		zcSQL := tree.MustBeDString(row[1])
 		zcBytes := tree.MustBeDBytes(row[2])
 		var zcProto zonepb.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 
 		resp.ZoneConfigs[target] = serverpb.DataDistributionResponse_ZoneConfig{
@@ -2128,6 +2201,9 @@ func (s *adminServer) DataDistribution(
 			Config:    zcProto,
 			ConfigSQL: string(zcSQL),
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return resp, nil

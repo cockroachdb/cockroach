@@ -187,21 +187,28 @@ func (r *Reporter) CreateReport(
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, err := r.InternalExec.QueryEx(
+	if it, err := r.InternalExec.QueryIteratorEx(
 		ctx, "read-setting", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
-		info.AlteredSettings = make(map[string]string, len(datums))
-		for _, row := range datums {
+		info.AlteredSettings = make(map[string]string)
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
 			name := string(tree.MustBeDString(row[0]))
 			info.AlteredSettings[name] = settings.RedactedValue(name, &r.Settings.SV)
 		}
+		if err != nil {
+			// No need to clear AlteredSettings map since we only make best
+			// effort to populate it.
+			log.Warningf(ctx, "failed to read settings: %s", err)
+		}
 	}
 
-	if datums, err := r.InternalExec.QueryEx(
+	if it, err := r.InternalExec.QueryIteratorEx(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
@@ -211,7 +218,9 @@ func (r *Reporter) CreateReport(
 		log.Warningf(ctx, "%v", err)
 	} else {
 		info.ZoneConfigs = make(map[int64]zonepb.ZoneConfig)
-		for _, row := range datums {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
 			id := int64(tree.MustBeDInt(row[0]))
 			var zone zonepb.ZoneConfig
 			if bytes, ok := row[1].(*tree.DBytes); !ok {
@@ -225,6 +234,11 @@ func (r *Reporter) CreateReport(
 			var anonymizedZone zonepb.ZoneConfig
 			anonymizeZoneConfig(&anonymizedZone, zone, secret)
 			info.ZoneConfigs[id] = anonymizedZone
+		}
+		if err != nil {
+			// No need to clear ZoneConfigs map since we only make best effort
+			// to populate it.
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 
