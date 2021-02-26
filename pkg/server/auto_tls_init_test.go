@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -84,8 +85,5 @@ func TestDummyCertLoader(t *testing.T) {
 	scb := ServiceCertificateBundle{}
 	_ = scb.loadServiceCertAndKey("", "")
 	_ = scb.loadCACertAndKey("", "")
-
-	cb := CertificateBundle{}
-	cb.InterNode.copyOnlyCAs(&scb)
-	_ = cb.ToPeerInitBundle()
+	_ = scb.rotateServiceCert("", "", time.Minute, "", []string{""})
 }
