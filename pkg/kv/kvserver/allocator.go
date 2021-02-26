@@ -884,34 +884,6 @@ func (a Allocator) RebalanceTarget(
 	sl, _, _ := a.storePool.getStoreList(filter)
 
 	zero := roachpb.ReplicationTarget{}
-
-	// We're going to add another replica to the range which will change the
-	// quorum size. Verify that the number of existing live replicas is sufficient
-	// to meet the new quorum. For a range configured for 3 replicas, this will
-	// disable rebalancing if one of the replicas is on a down node. Instead,
-	// we'll have to wait for the down node to be declared dead and go through the
-	// dead-node removal dance: remove dead replica, add new replica.
-	//
-	// NB: The len(replicas) > 1 check allows rebalancing of ranges with only a
-	// single replica. This is a corner case which could happen in practice and
-	// also affects tests.
-	if len(existingReplicas) > 1 {
-		var numLiveReplicas int
-		for _, s := range sl.stores {
-			for _, repl := range existingReplicas {
-				if s.StoreID == repl.StoreID {
-					numLiveReplicas++
-					break
-				}
-			}
-		}
-		newQuorum := computeQuorum(len(existingReplicas) + 1)
-		if numLiveReplicas < newQuorum {
-			// Don't rebalance as we won't be able to make quorum after the rebalance
-			// until the new replica has been caught up.
-			return zero, zero, "", false
-		}
-	}
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, *zone.NumReplicas, zone.Constraints)
 	options := a.scorerOptions()
