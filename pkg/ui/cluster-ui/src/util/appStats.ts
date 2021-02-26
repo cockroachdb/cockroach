@@ -13,7 +13,7 @@ export interface NumericStat {
 }
 
 export function variance(stat: NumericStat, count: number) {
-  return stat.squared_diffs / (count - 1);
+  return (stat?.squared_diffs || 0) / (count - 1);
 }
 
 export function stdDev(stat: NumericStat, count: number) {
