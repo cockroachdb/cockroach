@@ -81,7 +81,7 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
 
 // UpdateOffsetsToBeNonDecreasing makes sure that b.offsets[:n+1] are
 // non-decreasing which is an invariant that we need to maintain. It must be
-// called by the colexec.Operator that is modifying this Bytes before
+// called by the colexecop.Operator that is modifying this Bytes before
 // returning it as an output. A convenient place for this is Batch.SetLength()
 // method - we assume that *always*, before returning a batch, the length is
 // set on it.

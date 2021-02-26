@@ -234,7 +234,7 @@ func TestOutboxInbox(t *testing.T) {
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
-		inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -275,13 +275,16 @@ func TestOutboxInbox(t *testing.T) {
 		inputBatches := colexecutils.NewDeselectorOp(
 			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
-		inputBatches.Init()
+		inputBatches.Init(ctx)
 		outputBatches := colexecop.NewBatchBuffer()
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
 			if err := colexecerror.CatchVectorizedRuntimeError(func() {
-				outputBatch = inbox.Next(readerCtx)
+				// Note that it is ok that we call Init on every iteration - it
+				// is a noop every time except for the first one.
+				inbox.Init(readerCtx)
+				outputBatch = inbox.Next()
 			}); err != nil {
 				readerErr = err
 				break
@@ -332,8 +335,8 @@ func TestOutboxInbox(t *testing.T) {
 			// If no cancellation happened, the output can be fully verified against
 			// the input.
 			for batchNum := 0; ; batchNum++ {
-				outputBatch := outputBatches.Next(ctx)
-				inputBatch := inputBatches.Next(ctx)
+				outputBatch := outputBatches.Next()
+				inputBatch := inputBatches.Next()
 				require.Equal(t, outputBatch.Length(), inputBatch.Length())
 				if outputBatch.Length() == 0 {
 					break
@@ -431,7 +434,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				// Simulate the inbox flow calling Next an arbitrary amount of times
 				// (including none).
 				for i := 0; i < numNextsBeforeDrain; i++ {
-					inbox.Next(ctx)
+					inbox.Next()
 				}
 				return inbox.DrainMeta(ctx)
 			},
@@ -443,7 +446,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			numBatches: 4,
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
 				for {
-					b := inbox.Next(ctx)
+					b := inbox.Next()
 					if b.Length() == 0 {
 						break
 					}
@@ -464,7 +467,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				for {
 					var b coldata.Batch
 					if err := colexecerror.CatchVectorizedRuntimeError(func() {
-						b = inbox.Next(ctx)
+						b = inbox.Next()
 					}); err != nil {
 						return []execinfrapb.ProducerMetadata{{Err: err}}
 					}
@@ -516,7 +519,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
-			inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+			inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
@@ -531,6 +534,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			streamHanderErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
+			inbox.Init(ctx)
 			meta := tc.test(ctx, inbox)
 
 			wg.Wait()
@@ -592,7 +596,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
-	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -604,10 +608,11 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
+	inbox.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inbox.Next(ctx)
+		inbox.Next()
 	}
 	b.StopTimer()
 
@@ -639,7 +644,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	var inTags *logtags.Buffer
 
 	nextDone := make(chan struct{})
-	input := &colexecop.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+	input := &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
 		b := testAllocator.NewMemBatchWithFixedCapacity(typs, 0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}
@@ -697,7 +702,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 			// CtxTaggedInNext verifies that Next adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInNext",
 			test: func(ctx context.Context, inbox *Inbox) {
-				inbox.Next(ctx)
+				inbox.Next()
 			},
 		},
 		{
@@ -716,7 +721,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			typs := []*types.T{types.Int}
 
-			inbox, err := NewInbox(ctx, testAllocator, typs, streamID)
+			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)
 
 			ctxExtract := make(chan struct{})
@@ -732,6 +737,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			inboxTested := make(chan struct{})
 			go func() {
+				inbox.Init(ctx)
 				tc.test(ctx, inbox)
 				inboxTested <- struct{}{}
 			}()
