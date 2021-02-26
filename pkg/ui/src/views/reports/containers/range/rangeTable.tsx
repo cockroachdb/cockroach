@@ -48,6 +48,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "id", display: "ID", compareToLeader: false },
   { variable: "keyRange", display: "Key Range", compareToLeader: true },
   { variable: "problems", display: "Problems", compareToLeader: true },
+  { variable: "replicaType", display: "Replica Type", compareToLeader: true },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
   { variable: "quiescent", display: "Quiescent", compareToLeader: true },
   { variable: "ticking", display: "Ticking", compareToLeader: true },
@@ -194,6 +195,10 @@ const rangeTableQuiescent: RangeTableCellContent = {
   value: ["quiescent"],
   className: ["range-table__cell--quiescent"],
 };
+
+function contentReplicaType(replicaType: protos.cockroach.roachpb.ReplicaType) {
+  return protos.cockroach.roachpb.ReplicaType[replicaType];
+}
 
 function convertLeaseState(
   leaseState: protos.cockroach.kv.kvserver.storagepb.LeaseState,
@@ -627,6 +632,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           `${info.span.start_key} to ${info.span.end_key}`,
         ),
         problems: this.contentProblems(info.problems, awaitingGC),
+        replicaType: this.createContent(contentReplicaType(localReplica.type)),
         raftState: raftState,
         quiescent: info.quiescent
           ? rangeTableQuiescent

@@ -158,13 +158,13 @@ type Registry struct {
 		// propagated to jobs via the .Progressed call. This function should not be
 		// used to cancel a job in that way.
 		// TODO(spaskob): add deprecated notice.
-		deprecatedJobs map[int64]context.CancelFunc
+		deprecatedJobs map[jobspb.JobID]context.CancelFunc
 
 		// adoptedJobs holds a map from job id to its context cancel func and epoch.
 		// It contains the that are adopted and rpobably being run. One exception is
 		// jobs scheduled inside a transaction, they will show in this map but will
 		// only be run when the transaction commits.
-		adoptedJobs map[int64]*adoptedJob
+		adoptedJobs map[jobspb.JobID]*adoptedJob
 	}
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
@@ -224,8 +224,8 @@ func MakeRegistry(
 		r.knobs = *knobs
 	}
 	r.mu.deprecatedEpoch = 1
-	r.mu.deprecatedJobs = make(map[int64]context.CancelFunc)
-	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
+	r.mu.deprecatedJobs = make(map[jobspb.JobID]context.CancelFunc)
+	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.metrics.init(histogramWindowInterval)
 	return r
 }
@@ -252,10 +252,10 @@ func (r *Registry) MetricsStruct() *Metrics {
 }
 
 // CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
-func (r *Registry) CurrentlyRunningJobs() []int64 {
+func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	jobs := make([]int64, len(r.mu.deprecatedJobs)+len(r.mu.adoptedJobs))
+	jobs := make([]jobspb.JobID, len(r.mu.deprecatedJobs)+len(r.mu.adoptedJobs))
 	i := 0
 	// The following are maps keyed by job id.
 	for jID := range r.mu.deprecatedJobs {
@@ -282,8 +282,8 @@ func (r *Registry) makeCtx() (context.Context, func()) {
 }
 
 // MakeJobID generates a new job ID.
-func (r *Registry) MakeJobID() int64 {
-	return int64(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
+func (r *Registry) MakeJobID() jobspb.JobID {
+	return jobspb.JobID(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
 }
 
 // NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
@@ -300,7 +300,9 @@ func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
 
 // Run starts previously unstarted jobs from a list of scheduled
 // jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
-func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []int64) error {
+func (r *Registry) Run(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
 	if len(jobs) == 0 {
 		return nil
 	}
@@ -370,7 +372,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 }
 
 // NewJob creates a new Job.
-func (r *Registry) NewJob(record Record, jobID int64) *Job {
+func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 	job := &Job{
 		id:        jobID,
 		registry:  r,
@@ -395,7 +397,7 @@ func (r *Registry) NewJob(record Record, jobID int64) *Job {
 // the job in the jobs table, marks it pending and gives the current node a
 // lease.
 func (r *Registry) CreateJobWithTxn(
-	ctx context.Context, record Record, jobID int64, txn *kv.Txn,
+	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
 	j := r.NewJob(record, jobID)
 
@@ -449,7 +451,7 @@ const invalidNodeID = 0
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
 // at a later time by some node in the cluster.
 func (r *Registry) CreateAdoptableJobWithTxn(
-	ctx context.Context, record Record, jobID int64, txn *kv.Txn,
+	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
 	j := r.NewJob(record, jobID)
 
@@ -489,7 +491,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 // span is created and the job registered exactly once, if and only if the
 // transaction commits. This is a fragile API.
 func (r *Registry) CreateStartableJobWithTxn(
-	ctx context.Context, sj **StartableJob, jobID int64, txn *kv.Txn, record Record,
+	ctx context.Context, sj **StartableJob, jobID jobspb.JobID, txn *kv.Txn, record Record,
 ) error {
 	alreadyInitialized := *sj != nil
 	if alreadyInitialized {
@@ -558,14 +560,16 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
 // table.
-func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
+func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
 	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
 // LoadJobWithTxn does the same as above, but using the transaction passed in
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.
-func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn) (*Job, error) {
+func (r *Registry) LoadJobWithTxn(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn,
+) (*Job, error) {
 	j := &Job{
 		id:       jobID,
 		registry: r,
@@ -580,7 +584,7 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn)
 // a transaction passed in the txn argument. Passing a nil transaction means
 // that a txn will be automatically created.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID int64, txn *kv.Txn, updateFunc UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, updateFunc UpdateFn,
 ) error {
 	j := &Job{
 		id:       jobID,
@@ -888,7 +892,7 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 const cleanupPageSize = 100
 
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
-	var maxID int64
+	var maxID jobspb.JobID
 	for {
 		var done bool
 		var err error
@@ -903,8 +907,8 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 // minID is supposed to be the maximum ID returned by the previous page (0 if no
 // previous page).
 func (r *Registry) cleanupOldJobsPage(
-	ctx context.Context, olderThan time.Time, minID int64, pageSize int,
-) (done bool, maxID int64, retErr error) {
+	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
+) (done bool, maxID jobspb.JobID, retErr error) {
 	const stmt = "SELECT id, payload, status, created FROM system.jobs " +
 		"WHERE created < $1 AND id > $2 " +
 		"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
@@ -975,13 +979,15 @@ func (r *Registry) cleanupOldJobsPage(
 	// Track the highest ID we encounter, so it can serve as the bottom of the
 	// next page.
 	lastRow := it.Cur()
-	maxID = int64(*(lastRow[0].(*tree.DInt)))
+	maxID = jobspb.JobID(*(lastRow[0].(*tree.DInt)))
 	return !morePages, maxID, nil
 }
 
 // getJobFn attempts to get a resumer from the given job id. If the job id
 // does not have a resumer then it returns an error message suitable for users.
-func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, Resumer, error) {
+func (r *Registry) getJobFn(
+	ctx context.Context, txn *kv.Txn, id jobspb.JobID,
+) (*Job, Resumer, error) {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return nil, nil, err
@@ -994,7 +1000,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, R
 }
 
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) error {
+func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		// Special case schema change jobs to mark the job as canceled.
@@ -1019,7 +1025,7 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) e
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
-func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) error {
+func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
 	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -1032,7 +1038,7 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) er
 }
 
 // Succeeded marks the job with id as succeeded.
-func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
+func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -1041,7 +1047,9 @@ func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
 }
 
 // Failed marks the job with id as failed.
-func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingError error) error {
+func (r *Registry) Failed(
+	ctx context.Context, txn *kv.Txn, id jobspb.JobID, causingError error,
+) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -1051,7 +1059,7 @@ func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingErr
 
 // Unpause changes the paused job with id to running or reverting using the
 // specified txn (may be nil).
-func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id int64) error {
+func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -1310,10 +1318,10 @@ func (r *Registry) cancelAllAdoptedJobs() {
 	for _, aj := range r.mu.adoptedJobs {
 		aj.cancel()
 	}
-	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
+	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 }
 
-func (r *Registry) unregister(jobID int64) {
+func (r *Registry) unregister(jobID jobspb.JobID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cancel, ok := r.mu.deprecatedJobs[jobID]

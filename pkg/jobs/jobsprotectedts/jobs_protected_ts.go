@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -54,7 +55,7 @@ func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
 // MakeRecord makes a protected timestamp record to protect a timestamp on
 // behalf of this job.
 func MakeRecord(
-	id uuid.UUID, jobID int64, tsToProtect hlc.Timestamp, spans []roachpb.Span,
+	id uuid.UUID, jobID jobspb.JobID, tsToProtect hlc.Timestamp, spans []roachpb.Span,
 ) *ptpb.Record {
 	return &ptpb.Record{
 		ID:        id,
@@ -66,14 +67,15 @@ func MakeRecord(
 	}
 }
 
-func encodeJobID(jobID int64) []byte {
-	return []byte(strconv.FormatInt(jobID, 10))
+func encodeJobID(jobID jobspb.JobID) []byte {
+	return []byte(strconv.FormatInt(int64(jobID), 10))
 }
 
-func decodeJobID(meta []byte) (jobID int64, err error) {
-	jobID, err = strconv.ParseInt(string(meta), 10, 64)
+func decodeJobID(meta []byte) (jobID jobspb.JobID, err error) {
+	var id int64
+	id, err = strconv.ParseInt(string(meta), 10, 64)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to interpret meta %q as bytes", meta)
 	}
-	return jobID, err
+	return jobspb.JobID(id), err
 }

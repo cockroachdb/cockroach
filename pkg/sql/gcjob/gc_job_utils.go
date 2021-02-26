@@ -59,7 +59,7 @@ func markIndexGCed(
 // initDetailsAndProgress sets up the job progress if not already populated and
 // validates that the job details is properly formatted.
 func initDetailsAndProgress(
-	ctx context.Context, execCfg *sql.ExecutorConfig, jobID int64,
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
 ) (*jobspb.SchemaChangeGCDetails, *jobspb.SchemaChangeGCProgress, error) {
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
@@ -91,7 +91,7 @@ func initDetailsAndProgress(
 func initializeProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
+	jobID jobspb.JobID,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
@@ -252,7 +252,7 @@ func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
+	jobID jobspb.JobID,
 	progress *jobspb.SchemaChangeGCProgress,
 	runningStatus jobs.RunningStatus,
 ) {

@@ -2461,7 +2461,7 @@ func (s *statusServer) JobRegistryStatus(
 	}
 	for _, jID := range s.admin.server.sqlServer.jobRegistry.CurrentlyRunningJobs() {
 		job := serverpb.JobRegistryStatusResponse_Job{
-			Id: jID,
+			Id: int64(jID),
 		}
 		resp.RunningJobs = append(resp.RunningJobs, &job)
 	}
@@ -2479,7 +2479,7 @@ func (s *statusServer) JobStatus(
 		return nil, err
 	}
 
-	j, err := s.admin.server.sqlServer.jobRegistry.LoadJob(ctx, req.JobId)
+	j, err := s.admin.server.sqlServer.jobRegistry.LoadJob(ctx, jobspb.JobID(req.JobId))
 	if err != nil {
 		return nil, err
 	}

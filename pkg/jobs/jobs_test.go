@@ -67,7 +67,7 @@ type expectation struct {
 	Error             string
 }
 
-func (expected *expectation) verify(id int64, expectedStatus jobs.Status) error {
+func (expected *expectation) verify(id jobspb.JobID, expectedStatus jobs.Status) error {
 	var statusString string
 	var created time.Time
 	var payloadBytes []byte
@@ -1418,7 +1418,7 @@ func TestShowJobs(t *testing.T) {
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
 	type row struct {
-		id                int64
+		id                jobspb.JobID
 		typ               string
 		status            string
 		description       string
@@ -1565,7 +1565,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
 	type row struct {
-		id      int64
+		id      jobspb.JobID
 		typ     string
 		status  string
 		details jobspb.Details
@@ -1663,7 +1663,7 @@ func TestShowJobsWithError(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id of the ADD COLUMN job to use later.
-	var jobID int64
+	var jobID jobspb.JobID
 	if err := sqlDB.QueryRow(`SELECT id FROM system.jobs ORDER BY id DESC LIMIT 1`).Scan(&jobID); err != nil {
 		t.Fatal(err)
 	}
@@ -1830,7 +1830,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 		})
 
 	type row struct {
-		id     int64
+		id     jobspb.JobID
 		status string
 	}
 	var out row

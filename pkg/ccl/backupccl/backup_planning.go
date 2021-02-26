@@ -1119,7 +1119,7 @@ func backupPlanHook(
 		//  2. Verifies we can write to destination location.
 		// This temporary checkpoint file gets renamed to real checkpoint
 		// file when the backup jobs starts execution.
-		doWriteBackupManifestCheckpoint := func(ctx context.Context, jobID int64) error {
+		doWriteBackupManifestCheckpoint := func(ctx context.Context, jobID jobspb.JobID) error {
 			if err := writeBackupManifest(
 				ctx, p.ExecCfg().Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
 				encryptionOptions, &backupManifest,
@@ -1335,7 +1335,7 @@ func protectTimestampForBackup(
 	ctx context.Context,
 	p sql.PlanHookState,
 	txn *kv.Txn,
-	jobID int64,
+	jobID jobspb.JobID,
 	spans []roachpb.Span,
 	startTime, endTime hlc.Timestamp,
 	backupDetails jobspb.BackupDetails,

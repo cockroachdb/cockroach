@@ -994,6 +994,6 @@ func checkForPreviousBackup(
 }
 
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
-func tempCheckpointFileNameForJob(jobID int64) string {
+func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
 }

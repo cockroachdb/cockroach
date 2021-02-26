@@ -43,7 +43,7 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id        int64
+	id        jobspb.JobID
 	createdBy *CreatedByInfo
 	sessionID sqlliveness.SessionID
 	mu        struct {
@@ -179,7 +179,7 @@ func (s Status) Terminal() bool {
 // InvalidStatusError is the error returned when the desired operation is
 // invalid given the job's current status.
 type InvalidStatusError struct {
-	id     int64
+	id     jobspb.JobID
 	status Status
 	op     string
 	err    string
@@ -202,7 +202,7 @@ func SimplifyInvalidStatusError(err error) error {
 }
 
 // ID returns the ID of the job.
-func (j *Job) ID() int64 {
+func (j *Job) ID() jobspb.JobID {
 	return j.id
 }
 
@@ -701,7 +701,7 @@ func (j *Job) runInTxn(
 
 // JobNotFoundError is returned from load when the job does not exist.
 type JobNotFoundError struct {
-	jobID int64
+	jobID jobspb.JobID
 }
 
 // Error makes JobNotFoundError an error.
@@ -849,14 +849,16 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	if !sj.txn.IsCommitted() {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
-	if err := sj.started(ctx, nil /* txn */); err != nil {
-		return err
-	}
 
 	finishSpan := func() {
 		if sj.span != nil {
 			sj.span.Finish()
 		}
+	}
+
+	if err := sj.started(ctx, nil /* txn */); err != nil {
+		finishSpan()
+		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {

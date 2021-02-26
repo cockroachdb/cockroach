@@ -37,7 +37,7 @@ type UpdateFn func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error
 
 // JobMetadata groups the job metadata values passed to UpdateFn.
 type JobMetadata struct {
-	ID       int64
+	ID       jobspb.JobID
 	Status   Status
 	Payload  *jobspb.Payload
 	Progress *jobspb.Progress

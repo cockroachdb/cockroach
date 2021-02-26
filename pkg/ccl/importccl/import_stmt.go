@@ -1070,7 +1070,7 @@ func protectTimestampForImport(
 	ctx context.Context,
 	p sql.PlanHookState,
 	txn *kv.Txn,
-	jobID int64,
+	jobID jobspb.JobID,
 	spansToProtect []roachpb.Span,
 	walltime int64,
 	importDetails jobspb.ImportDetails,
@@ -1270,14 +1270,14 @@ func writeNonDropDatabaseChange(
 	descsCol *descs.Collection,
 	p sql.JobExecContext,
 	jobDesc string,
-) ([]int64, error) {
+) ([]jobspb.JobID, error) {
 	var job *jobs.Job
 	var err error
 	if job, err = createNonDropDatabaseChangeJob(p.User(), desc.ID, jobDesc, p, txn); err != nil {
 		return nil, err
 	}
 
-	queuedJob := []int64{job.ID()}
+	queuedJob := []jobspb.JobID{job.ID()}
 	b := txn.NewBatch()
 	dg := catalogkv.NewOneLevelUncachedDescGetter(txn, p.ExecCfg().Codec)
 	if err := desc.Validate(ctx, dg); err != nil {
@@ -1801,7 +1801,7 @@ type preparedSchemaMetadata struct {
 	schemaRewrites        backupccl.DescRewriteMap
 	newSchemaIDToName     map[descpb.ID]string
 	oldSchemaIDToName     map[descpb.ID]string
-	queuedSchemaJobs      []int64
+	queuedSchemaJobs      []jobspb.JobID
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -2143,7 +2143,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
-	var jobsToRunAfterTxnCommit []int64
+	var jobsToRunAfterTxnCommit []jobspb.JobID
 	if err := descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
@@ -2205,7 +2205,7 @@ func (r *importResumer) dropSchemas(
 	descsCol *descs.Collection,
 	execCfg *sql.ExecutorConfig,
 	p sql.JobExecContext,
-) ([]int64, error) {
+) ([]jobspb.JobID, error) {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// If the prepare step of the import job was not completed then the

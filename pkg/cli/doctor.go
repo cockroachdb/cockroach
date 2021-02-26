@@ -216,7 +216,7 @@ FROM system.namespace`
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		md := jobs.JobMetadata{}
-		md.ID = vals[0].(int64)
+		md.ID = jobspb.JobID(vals[0].(int64))
 		md.Status = jobs.Status(vals[1].(string))
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(vals[2].([]byte), md.Payload); err != nil {
@@ -329,7 +329,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		if err != nil {
 			return errors.Errorf("failed to parse job id %s: %v", fields[0], err)
 		}
-		md.ID = int64(id)
+		md.ID = jobspb.JobID(id)
 
 		last := len(fields) - 1
 		payloadBytes, err := hx.DecodeString(fields[last-1])

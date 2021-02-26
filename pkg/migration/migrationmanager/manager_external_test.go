@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -98,7 +99,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 
 	// Inject a second job for the same migration and ensure that that causes
 	// an error. This is pretty gnarly.
-	var secondID int64
+	var secondID jobspb.JobID
 	require.NoError(t, tc.ServerConn(0).QueryRow(`
    INSERT
      INTO system.jobs
@@ -130,7 +131,7 @@ RETURNING id;`).Scan(&secondID))
 			Run(
 				ctx,
 				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
-				[]int64{secondID},
+				[]jobspb.JobID{secondID},
 			)
 	}()
 	fakeJobBlockChan := <-ch
