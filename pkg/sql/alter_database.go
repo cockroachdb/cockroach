@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -138,6 +138,17 @@ func (p *planner) AlterDatabaseAddRegion(
 	return &alterDatabaseAddRegionNode{n: n, desc: dbDesc}, nil
 }
 
+// GetMultiRegionEnumAddValuePlacementCCL is the public hook point for the
+// CCL-licensed code to determine the placement for a new region inside
+// a region enum.
+var GetMultiRegionEnumAddValuePlacementCCL = func(
+	execCfg *ExecutorConfig, typeDesc *typedesc.Mutable, region tree.Name,
+) (tree.AlterTypeAddValue, error) {
+	return tree.AlterTypeAddValue{}, sqlerrors.NewCCLRequiredError(
+		errors.New("adding regions to a multi-region database requires a CCL binary"),
+	)
+}
+
 func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
 	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
@@ -185,22 +196,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Find the location in the enum where we should insert the new value. We much search
-	// for the location (and not append to the end), as we want to keep the values in sorted
-	// order.
-	loc := sort.Search(
-		len(typeDesc.EnumMembers),
-		func(i int) bool {
-			return string(n.n.Region) < typeDesc.EnumMembers[i].LogicalRepresentation
-		},
+	placement, err := GetMultiRegionEnumAddValuePlacementCCL(
+		params.p.ExecCfg(),
+		typeDesc,
+		n.n.Region,
 	)
-
-	// If the above search couldn't find a value greater than the region being added, add the
-	// new region at the end of the enum.
-	before := true
-	if loc == len(typeDesc.EnumMembers) {
-		before = false
-		loc = len(typeDesc.EnumMembers) - 1
+	if err != nil {
+		return err
 	}
 
 	// Add the new region value to the enum. This function adds the value to the enum and
@@ -209,14 +211,9 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	if err := params.p.addEnumValue(
 		params.ctx,
 		typeDesc,
-		&tree.AlterTypeAddValue{
-			IfNotExists: false,
-			NewVal:      tree.EnumValue(n.n.Region),
-			Placement: &tree.AlterTypeAddValuePlacement{
-				Before:      before,
-				ExistingVal: tree.EnumValue(typeDesc.EnumMembers[loc].LogicalRepresentation),
-			}},
-		jobDesc); err != nil {
+		&placement,
+		jobDesc,
+	); err != nil {
 		return err
 	}
 
