@@ -819,7 +819,7 @@ END;
 			name: "fk",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
-			with: "WITH ignore_unsupported",
+			with: "WITH ignore_unsupported_statements",
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -898,7 +898,7 @@ END;
 			name: "fk-skip",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys, ignore_unsupported`,
+			with: `WITH skip_foreign_keys, ignore_unsupported_statements`,
 			query: map[string][][]string{
 				getTablesQuery: {
 					{"public", "cities", "table"},
@@ -913,14 +913,14 @@ END;
 			name: "fk unreferenced",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
-			with: "WITH ignore_unsupported",
+			with: "WITH ignore_unsupported_statements",
 			err:  `table "public.cities" not found`,
 		},
 		{
 			name: "fk unreferenced skipped",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
-			with: `WITH skip_foreign_keys, ignore_unsupported`,
+			with: `WITH skip_foreign_keys, ignore_unsupported_statements`,
 			query: map[string][][]string{
 				getTablesQuery: {{"public", "weather", "table"}},
 			},
@@ -939,7 +939,7 @@ END;
 		{
 			name: "sequence",
 			typ:  "PGDUMP",
-			with: "WITH ignore_unsupported",
+			with: "WITH ignore_unsupported_statements",
 			data: `
 					CREATE TABLE t (a INT8);
 					CREATE SEQUENCE public.i_seq
@@ -968,7 +968,7 @@ END;
 					INSERT INTO "bob" ("c", "b") VALUES (3, 2);
 					COMMIT
 			`,
-			with: `WITH ignore_unsupported`,
+			with: `WITH ignore_unsupported_statements`,
 			query: map[string][][]string{
 				`SELECT * FROM bob`: {
 					{"1", "NULL", "2"},
@@ -1585,7 +1585,7 @@ func TestImportRowLimit(t *testing.T) {
 		expectedRowLimit := 4
 
 		// Import a single table `second` and verify number of rows imported.
-		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`,
+		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d",ignore_unsupported_statements`,
 			expectedRowLimit)
 		sqlDB.Exec(t, importQuery, second...)
 
@@ -1597,7 +1597,7 @@ func TestImportRowLimit(t *testing.T) {
 
 		// Import multiple tables including `simple` and `second`.
 		expectedRowLimit = 3
-		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`, expectedRowLimit)
+		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d",ignore_unsupported_statements`, expectedRowLimit)
 		sqlDB.Exec(t, importQuery, multitable...)
 		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
 		require.Equal(t, expectedRowLimit, numRows)
@@ -5520,14 +5520,14 @@ func TestImportPgDump(t *testing.T) {
 				CONSTRAINT simple_pkey PRIMARY KEY (i),
 				UNIQUE INDEX simple_b_s_idx (b, s),
 				INDEX simple_s_idx (s)
-			) PGDUMP DATA ($1) WITH ignore_unsupported`,
+			) PGDUMP DATA ($1) WITH ignore_unsupported_statements`,
 			simple,
 		},
-		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, simple},
-		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, second},
-		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
-		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
-		{`all from multi`, expectAll, `IMPORT PGDUMP ($1) WITH ignore_unsupported`, multitable},
+		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported_statements`, simple},
+		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported_statements`, second},
+		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported_statements`, multitable},
+		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported_statements`, multitable},
+		{`all from multi`, expectAll, `IMPORT PGDUMP ($1) WITH ignore_unsupported_statements`, multitable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
@@ -5725,7 +5725,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	defer srv.Close()
 	t.Run("ignore-unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo; USE foo;")
-		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", srv.URL)
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", srv.URL)
 		// Check that statements which are not expected to be ignored, are still
 		// processed.
 		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
@@ -5739,14 +5739,14 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	t.Run("require-both-unsupported-options", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo2; USE foo2;")
 		ignoredLog := `userfile:///ignore.log`
-		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported` option",
-			"IMPORT PGDUMP ($1) WITH ignored_stmt_log=$2", srv.URL, ignoredLog)
+		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported_statements` option",
+			"IMPORT PGDUMP ($1) WITH log_ignored_statements=$2", srv.URL, ignoredLog)
 	})
 
 	t.Run("log-unsupported-stmts", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo3; USE foo3;")
 		ignoredLog := `userfile:///ignore.log`
-		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported, ignored_stmt_log=$2",
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements, log_ignored_statements=$2",
 			srv.URL, ignoredLog)
 		// Check that statements which are not expected to be ignored, are still
 		// processed.
@@ -5818,7 +5818,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql' WITH ignore_unsupported")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql' WITH ignore_unsupported_statements")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
@@ -5861,7 +5861,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql' WITH ignore_unsupported")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql' WITH ignore_unsupported_statements")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
 		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
@@ -5981,7 +5981,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE schemadb; SET DATABASE = schemadb`)
-		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/schema.sql' WITH ignore_unsupported")
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/schema.sql' WITH ignore_unsupported_statements")
 
 		// Check that we have imported 4 schemas.
 		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
@@ -6029,7 +6029,8 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 
 		sqlDB.Exec(t, `CREATE DATABASE schemadb; SET DATABASE = schemadb`)
 		sqlDB.ExpectErr(t, "does not exist: \"schemadb.bar.test\"",
-			"IMPORT TABLE schemadb.bar.test FROM PGDUMP ('nodelocal://0/schema.sql') WITH ignore_unsupported")
+			"IMPORT TABLE schemadb.bar.test FROM PGDUMP ('nodelocal://0/schema."+
+				"sql') WITH ignore_unsupported_statements")
 
 		// Create the user defined schema so that we can get past the "not found"
 		// error.
@@ -6037,11 +6038,13 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 		// a UDS.
 		sqlDB.Exec(t, `CREATE SCHEMA bar`)
 		sqlDB.ExpectErr(t, "cannot use IMPORT with a user defined schema",
-			"IMPORT TABLE schemadb.bar.test FROM PGDUMP ('nodelocal://0/schema.sql') WITH ignore_unsupported")
+			"IMPORT TABLE schemadb.bar.test FROM PGDUMP ('nodelocal://0/schema."+
+				"sql') WITH ignore_unsupported_statements")
 
 		// We expect the import of a target table in the public schema to work.
 		for _, target := range []string{"schemadb.public.test", "schemadb.test", "test"} {
-			sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE %s FROM PGDUMP ('nodelocal://0/schema.sql') WITH ignore_unsupported", target))
+			sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE %s FROM PGDUMP ('nodelocal://0/schema."+
+				"sql') WITH ignore_unsupported_statements", target))
 
 			// Check that we have a test table in each schema with the expected content.
 			expectedContent := [][]string{{"1", "abc"}, {"2", "def"}}
@@ -6089,7 +6092,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 		sqlDB.Exec(t, `CREATE DATABASE failedimportpgdump; SET DATABASE = failedimportpgdump`)
 		// Hit a failure during import.
 		sqlDB.ExpectErr(
-			t, `testing injected failure`, `IMPORT PGDUMP 'nodelocal://0/schema.sql' WITH ignore_unsupported`,
+			t, `testing injected failure`, `IMPORT PGDUMP 'nodelocal://0/schema.sql' WITH ignore_unsupported_statements`,
 		)
 		// Nudge the registry to quickly adopt the job.
 		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -6178,7 +6181,7 @@ func TestImportCockroachDump(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://0/cockroachdump/dump.sql")
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY i", [][]string{
 		{"1", "test"},
 		{"2", "other"},
@@ -6234,7 +6237,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", "nodelocal://0/cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://0/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
 	sqlDB.CheckQueryResultsRetry(t,
