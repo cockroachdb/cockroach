@@ -2721,7 +2721,7 @@ func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
 	}
 	region := desc.LocalityConfig.GetRegionalByTable().Region
 	if region == nil {
-		return descpb.RegionName(tree.PrimaryRegionLocalityName), nil
+		return descpb.RegionName(tree.PrimaryRegionNotSpecifiedName), nil
 	}
 	return *region, nil
 }
@@ -2749,14 +2749,14 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() bool {
 	if desc.IsLocalityRegionalByTable() {
 		regionName, _ := desc.GetRegionalByTableRegion()
-		return regionName != descpb.RegionName(tree.PrimaryRegionLocalityName)
+		return regionName != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName)
 	}
 	return false
 }
 
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
-// (or its alias PrimaryRegionLocalityName) denotes that the table is homed in
+// (or its alias PrimaryRegionNotSpecifiedName) denotes that the table is homed in
 // the primary region.
 // SetTableLocalityRegionalByTable doesn't account for the locality config that
 // was previously set on the descriptor. Instead, you may want to use:
@@ -2771,7 +2771,7 @@ func LocalityConfigRegionalByTable(region tree.Name) descpb.TableDescriptor_Loca
 	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
 	}
-	if region != tree.PrimaryRegionLocalityName {
+	if region != tree.PrimaryRegionNotSpecifiedName {
 		regionName := descpb.RegionName(region)
 		l.RegionalByTable.Region = &regionName
 	}
