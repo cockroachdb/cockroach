@@ -565,7 +565,7 @@ func addDefaultLocalityConfigToAllTables(
 			}
 
 			if err := p.alterTableDescLocalityToRegionalByTable(
-				ctx, tree.PrimaryRegionLocalityName, mutDesc, regionEnumID,
+				ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
 			); err != nil {
 				return err
 			}
