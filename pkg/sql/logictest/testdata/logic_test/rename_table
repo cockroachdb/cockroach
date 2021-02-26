@@ -129,8 +129,8 @@ SHOW TABLES
 query TTTTI
 SHOW TABLES FROM test2
 ----
-public  t   table  root  NULL
-public  t2  table  root  NULL
+public  t   table  root  0
+public  t2  table  root  0
 
 user root
 
