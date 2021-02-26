@@ -120,7 +120,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "latency",
-      title: StatementTableTitle.latency,
+      title: StatementTableTitle.transactionTime,
       cell: latencyBar,
       className: latencyClasses.column,
       sort: (item: Transaction) => item.stats_data.stats.service_lat.mean,
