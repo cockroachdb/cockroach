@@ -544,3 +544,19 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDe
 	}
 	return nil
 }
+
+// ReplicationChangesForPromotion returns the replication changes that
+// correspond to the promotion of a non-voter to a voter.
+func ReplicationChangesForPromotion(target ReplicationTarget) []ReplicationChange {
+	return []ReplicationChange{
+		{ChangeType: ADD_VOTER, Target: target}, {ChangeType: REMOVE_NON_VOTER, Target: target},
+	}
+}
+
+// ReplicationChangesForDemotion returns the replication changes that correspond
+// to the demotion of a voter to a non-voter.
+func ReplicationChangesForDemotion(target ReplicationTarget) []ReplicationChange {
+	return []ReplicationChange{
+		{ChangeType: ADD_NON_VOTER, Target: target}, {ChangeType: REMOVE_VOTER, Target: target},
+	}
+}

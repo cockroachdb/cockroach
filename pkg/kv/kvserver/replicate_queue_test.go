@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -287,6 +288,17 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	}
 }
 
+func scanAndGetNumNonVoters(
+	t *testing.T, tc *testcluster.TestCluster, store *kvserver.Store, scratchKey roachpb.Key,
+) int {
+	// Nudge the replicateQueue to up/down-replicate our scratch range.
+	if err := store.ForceReplicationScanAndProcess(); err != nil {
+		t.Fatal(err)
+	}
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	return len(scratchRange.Replicas().NonVoterDescriptors())
+}
+
 // TestReplicateQueueUpAndDownReplicateNonVoters is an end-to-end test ensuring
 // that the replicateQueue will add or remove non-voter(s) to a range based on
 // updates to its zone configuration.
@@ -320,18 +332,9 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
 
-	get := func() int {
-		// Nudge the replicateQueue to up/down-replicate our scratch range.
-		if err := store.ForceReplicationScanAndProcess(); err != nil {
-			t.Fatal(err)
-		}
-		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-		return len(scratchRange.Replicas().NonVoterDescriptors())
-	}
-
 	var expectedNonVoterCount = 2
 	testutils.SucceedsSoon(t, func() error {
-		if found := get(); found != expectedNonVoterCount {
+		if found := scanAndGetNumNonVoters(t, tc, store, scratchKey); found != expectedNonVoterCount {
 			return errors.Errorf("expected upreplication to %d non-voters; found %d",
 				expectedNonVoterCount, found)
 		}
@@ -344,12 +347,141 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 	require.NoError(t, err)
 	expectedNonVoterCount = 0
 	testutils.SucceedsSoon(t, func() error {
-		if found := get(); found != expectedNonVoterCount {
+		if found := scanAndGetNumNonVoters(t, tc, store, scratchKey); found != expectedNonVoterCount {
 			return errors.Errorf("expected downreplication to %d non-voters; found %d",
 				expectedNonVoterCount, found)
 		}
 		return nil
 	})
+}
+
+// TestReplicateQueueSwapVoterWithNonVoters tests that voting replicas can
+// rebalance to stores that already have a non-voter by "swapping" with them.
+// "Swapping" in this context means simply changing the `ReplicaType` on the
+// receiving store from non-voter to voter and changing it on the other side
+// from voter to non-voter.
+func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	serverArgs := make(map[int]base.TestServerArgs)
+	// Assign each store a rack number so we can constrain individual voting and
+	// non-voting replicas to them.
+	for i := 0; i < 5; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key: "rack", Value: fmt.Sprintf("%d", i),
+					},
+				},
+			},
+		}
+	}
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: serverArgs,
+	}
+
+	synthesizeRandomConstraints := func() (
+		constraints string, voterStores, nonVoterStores []roachpb.StoreID,
+	) {
+		storeList := []roachpb.StoreID{1, 2, 3, 4, 5}
+		// Shuffle the list of stores and designate the first 3 as voters and the
+		// rest as non-voters.
+		rand.Shuffle(5, func(i, j int) {
+			storeList[i], storeList[j] = storeList[j], storeList[i]
+		})
+		voterStores = storeList[:3]
+		nonVoterStores = storeList[3:5]
+
+		var overallConstraints, voterConstraints []string
+		for _, store := range nonVoterStores {
+			overallConstraints = append(overallConstraints, fmt.Sprintf(`"+rack=%d": 1`, store-1))
+		}
+		for _, store := range voterStores {
+			voterConstraints = append(voterConstraints, fmt.Sprintf(`"+rack=%d": 1`, store-1))
+		}
+		return fmt.Sprintf(
+			"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 5, num_voters = 3,"+
+				" constraints = '{%s}', voter_constraints = '{%s}'",
+			strings.Join(overallConstraints, ","), strings.Join(voterConstraints, ","),
+		), voterStores, nonVoterStores
+	}
+
+	tc := testcluster.StartTestCluster(t, 5, clusterArgs)
+	defer tc.Stopper().Stop(context.Background())
+
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			return err
+		}
+		if voters := scratchRange.Replicas().VoterDescriptors(); len(voters) != 5 {
+			return errors.Newf("expected 5 voters; got %v", voters)
+		}
+		return nil
+	})
+
+	checkRelocated := func(t *testing.T, voterStores, nonVoterStores []roachpb.StoreID) {
+		testutils.SucceedsSoon(t, func() error {
+			scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+			if err := forceScanOnAllReplicationQueues(tc); err != nil {
+				return err
+			}
+
+			if n := len(scratchRange.Replicas().VoterDescriptors()); n != 3 {
+				return errors.Newf("number of voters %d does not match expectation", n)
+			}
+			if n := len(scratchRange.Replicas().NonVoterDescriptors()); n != 2 {
+				return errors.Newf("number of non-voters %d does not match expectation", n)
+			}
+
+			// Check that each replica set is present on the stores designated by
+			// synthesizeRandomConstraints.
+			for _, store := range voterStores {
+				replDesc, ok := scratchRange.GetReplicaDescriptor(store)
+				if !ok {
+					return errors.Newf("no replica found on store %d", store)
+				}
+				if typ := replDesc.GetType(); typ != roachpb.VOTER_FULL {
+					return errors.Newf("replica on store %d does not match expectation;"+
+						" expected VOTER_FULL, got %s", typ)
+				}
+			}
+			for _, store := range nonVoterStores {
+				replDesc, ok := scratchRange.GetReplicaDescriptor(store)
+				if !ok {
+					return errors.Newf("no replica found on store %d", store)
+				}
+				if typ := replDesc.GetType(); typ != roachpb.NON_VOTER {
+					return errors.Newf("replica on store %d does not match expectation;"+
+						" expected NON_VOTER, got %s", typ)
+				}
+			}
+			return nil
+		})
+	}
+
+	const numIterations = 10
+	for i := 0; i < numIterations; i++ {
+		// Generate random (but valid) constraints for the 3 voters and 2 non_voters
+		// and check that the replicate queue achieves conformance.
+		//
+		// NB: `synthesizeRandomConstraints` sets up the default zone configs such
+		// that every range should have 3 voting replica and 2 non-voting replicas.
+		// The crucial thing to note here is that we have 5 stores and 5 replicas,
+		// and since we never allow a single store to have >1 replica for a range at
+		// any given point, any change in the configuration of these 5 replicas
+		// _must_ go through non-voter promotions and voter demotions.
+		alterStatement, voterStores, nonVoterStores := synthesizeRandomConstraints()
+		log.Infof(ctx, "applying: %s", alterStatement)
+		_, err := tc.ServerConn(0).Exec(alterStatement)
+		require.NoError(t, err)
+		checkRelocated(t, voterStores, nonVoterStores)
+	}
 }
 
 // queryRangeLog queries the range log. The query must be of type:
@@ -408,6 +540,15 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 			return nil
 		})
 	}
+}
+
+func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
+	for _, s := range tc.Servers {
+		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
+			return store.ForceReplicationScanAndProcess()
+		})
+	}
+	return err
 }
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
