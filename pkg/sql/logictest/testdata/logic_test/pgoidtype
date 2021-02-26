@@ -355,3 +355,18 @@ FROM
       (d.adrelid = a.attrelid AND d.adnum = a.attnum)
   JOIN (SELECT 1 AS oid, 1 AS attnum) AS vals ON
       (c.oid = vals.oid AND a.attnum = vals.attnum);
+
+query O
+SELECT (-1)::OID
+----
+4294967295
+
+query O
+SELECT (-1)::REGPROC
+----
+4294967295
+
+query O
+SELECT (-1)::REGCLASS
+----
+4294967295

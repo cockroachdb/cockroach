@@ -2619,11 +2619,13 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 // pg_catalog tables, allowing for reliable joins across tables.
 //
 // In Postgres, oids are physical properties of database objects which are
-// sequentially generated and naturally unique across all objects. See:
-// https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
+// sequentially generated. Postgres does not guarantee database-wide uniqueness
+// of OIDs, especially in large databases, but they are frequently used as the
+// key of unique indexes for pg_catalog tables.
+// See: https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
 // Because Cockroach does not have an equivalent concept, we generate arbitrary
 // fingerprints for database objects with the only requirements being that they
-// are unique across all objects and that they are stable across accesses.
+// are 32 bits and that they are stable across accesses.
 //
 // The type has a few layers of methods:
 // - write<go_type> methods write concrete types to the underlying running hash.

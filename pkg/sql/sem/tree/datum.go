@@ -678,6 +678,7 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
+	thisInt := *d
 	var v DInt
 	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DInt:
@@ -685,14 +686,18 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 	case *DFloat, *DDecimal:
 		return -t.Compare(ctx, d)
 	case *DOid:
+		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
+		// compare OIDs to signed 32-bit integers, so we implement the comparison
+		// by converting to a uint32 first. This matches Postgres behavior.
+		thisInt = DInt(uint32(thisInt))
 		v = t.DInt
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < v {
+	if thisInt < v {
 		return -1
 	}
-	if *d > v {
+	if thisInt > v {
 		return 1
 	}
 	return 0
@@ -4185,7 +4190,10 @@ func (d *DEnum) MinWriteable() (Datum, bool) {
 }
 
 // DOid is the Postgres OID datum. It can represent either an OID type or any
-// of the reg* types, such as regproc or regclass.
+// of the reg* types, such as regproc or regclass. An OID must only be
+// 32 bits, since this width encoding is enforced in the pgwire protocol.
+// OIDs are not guaranteed to be globally unique.
+// TODO(rafi): make this use a uint32 instead of a DInt.
 type DOid struct {
 	// A DOid embeds a DInt, the underlying integer OID for this OID datum.
 	DInt
@@ -4263,7 +4271,10 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 	case *DOid:
 		v = t.DInt
 	case *DInt:
-		v = *t
+		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
+		// compare OIDs to signed 32-bit integers, so we implement the comparison
+		// by converting to a uint32 first. This matches Postgres behavior.
+		v = DInt(uint32(*t))
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
