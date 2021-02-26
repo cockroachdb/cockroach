@@ -1,6 +1,7 @@
 CREATE TABLE everything (
   i     INT4 PRIMARY KEY,
 
+  ex    INT4 DEFAULT 4:::INT4 * 4:::INT4 + 4:::INT4,
   c     CHAR(10) NOT NULL,
   s     VARCHAR(100) NULL DEFAULT e'this is s\'s default value':::STRING,
   tx    TEXT,

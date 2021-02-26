@@ -211,7 +211,7 @@ func mysqlValueToDatum(
 			return tree.DBoolTrue, nil
 		}
 		return tree.DBoolFalse, nil
-	case *mysql.SQLVal:
+	case *mysql.Literal:
 		switch v.Type {
 		case mysql.StrVal:
 			s := string(v.Val)
@@ -249,7 +249,7 @@ func mysqlValueToDatum(
 
 	case *mysql.UnaryExpr:
 		switch v.Operator {
-		case "-":
+		case mysql.UMinusOp:
 			parsed, err := mysqlValueToDatum(v.Expr, desired, evalContext)
 			if err != nil {
 				return nil, err
@@ -267,7 +267,7 @@ func mysqlValueToDatum(
 			default:
 				return nil, errors.Errorf("unsupported negation of %T", i)
 			}
-		case "_binary", "_binary ":
+		case mysql.UBinaryOp:
 			// TODO(dt): do we want to use this hint to change our decoding logic?
 			return mysqlValueToDatum(v.Expr, desired, evalContext)
 		default:
@@ -324,8 +324,8 @@ func readMysqlCreateTable(
 		if err != nil {
 			return nil, errors.Wrap(err, "mysql parse error")
 		}
-		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
-			name := safeString(i.NewName.Name)
+		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateDDLAction {
+			name := safeString(i.Table.Name)
 			if match != "" && match != name {
 				names = append(names, name)
 				continue
@@ -668,20 +668,26 @@ func mysqlColToCockroach(
 
 	case mysqltypes.Date:
 		def.Type = types.Date
-		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroDate)) {
-			col.Default = nil
+		if col.Default != nil {
+			if lit, ok := col.Default.(*mysql.Literal); ok && bytes.Equal(lit.Val, []byte(zeroDate)) {
+				col.Default = nil
+			}
 		}
 	case mysqltypes.Time:
 		def.Type = types.Time
 	case mysqltypes.Timestamp:
 		def.Type = types.TimestampTZ
-		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
-			col.Default = nil
+		if col.Default != nil {
+			if lit, ok := col.Default.(*mysql.Literal); ok && bytes.Equal(lit.Val, []byte(zeroTime)) {
+				col.Default = nil
+			}
 		}
 	case mysqltypes.Datetime:
 		def.Type = types.TimestampTZ
-		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
-			col.Default = nil
+		if col.Default != nil {
+			if lit, ok := col.Default.(*mysql.Literal); ok && bytes.Equal(lit.Val, []byte(zeroTime)) {
+				col.Default = nil
+			}
 		}
 	case mysqltypes.Year:
 		def.Type = types.Int2
@@ -722,16 +728,20 @@ func mysqlColToCockroach(
 		def.Nullable.Nullability = tree.Null
 	}
 
-	if col.Default != nil && !bytes.EqualFold(col.Default.Val, []byte("null")) {
-		exprString := string(col.Default.Val)
-		if col.Default.Type == mysql.StrVal {
-			def.DefaultExpr.Expr = tree.NewStrVal(exprString)
-		} else {
-			expr, err := parser.ParseExpr(exprString)
-			if err != nil {
-				return nil, unimplemented.Newf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+	if col.Default != nil {
+		if _, ok := col.Default.(*mysql.NullVal); !ok {
+			if literal, ok := col.Default.(*mysql.Literal); ok && literal.Type == mysql.StrVal {
+				// mysql.String(col.Default) returns a quoted string for string
+				// literals. We should use the literal's Val instead.
+				def.DefaultExpr.Expr = tree.NewStrVal(string(literal.Val))
+			} else {
+				exprString := mysql.String(col.Default)
+				expr, err := parser.ParseExpr(exprString)
+				if err != nil {
+					return nil, unimplemented.Newf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+				}
+				def.DefaultExpr.Expr = expr
 			}
-			def.DefaultExpr.Expr = expr
 		}
 	}
 	return def, nil
