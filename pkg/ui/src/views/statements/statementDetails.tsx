@@ -163,6 +163,7 @@ export const selectStatement = createSelector(
       vec: fractionMatching(results, (s) => s.vec),
       opt: fractionMatching(results, (s) => s.opt),
       implicit_txn: fractionMatching(results, (s) => s.implicit_txn),
+      full_scan: fractionMatching(results, (s) => s.full_scan),
       failed: fractionMatching(results, (s) => s.failed),
       node_id: _.uniq(results.map((s) => s.node_id)),
     };
